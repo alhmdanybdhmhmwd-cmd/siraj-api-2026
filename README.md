@@ -1,1 +1,2 @@
-# siraj-api-2026
+# Siraj API
+Cloudflare Worker backend for Siraj application.
