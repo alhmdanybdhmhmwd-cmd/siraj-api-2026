@@ -683,7 +683,7 @@ export default {
         }, 201);
       }
 
-      const mediaMatch = path.match(/^\\/api\\/media\\/([^/]+)$/);
+      const mediaMatch = path.match(/^\/api\/media\/([^/]+)$/);
       if (method === "GET" && mediaMatch) {
         const asset = await env.DB.prepare(
           "SELECT id, owner_id, recipient_id, group_id, object_key, file_name, content_type, size_bytes, storage_deleted FROM media_assets WHERE id = ?"
