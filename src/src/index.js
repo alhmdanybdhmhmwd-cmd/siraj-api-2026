@@ -2,7 +2,8 @@
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-File-Name, X-Recipient-Id, X-Group-Id",
+  "Access-Control-Expose-Headers": "Content-Disposition, Content-Length",
   "Content-Type": "application/json; charset=utf-8"
 };
 
@@ -519,6 +520,124 @@ export default {
 
         return json({
           friends: (friends.results || []).map(cleanUser)
+        });
+      }
+
+      // Private attachment upload/download (requires the MEDIA R2 binding and D1 migration).
+      if (method === "POST" && path === "/api/media") {
+        if (!env.MEDIA) return json({ error: "Media storage is not configured yet" }, 503);
+
+        const recipientId = (request.headers.get("X-Recipient-Id") || "").trim();
+        const groupId = (request.headers.get("X-Group-Id") || "").trim();
+        if (!!recipientId === !!groupId) {
+          return json({ error: "Choose exactly one recipient or group" }, 400);
+        }
+
+        if (recipientId) {
+          const friendship = await env.DB.prepare(
+            `SELECT 1 FROM friendships
+             WHERE user_id = ? AND friend_id = ?`
+          ).bind(currentUser.sub, recipientId).first();
+          if (!friendship) return json({ error: "You can only send attachments to contacts" }, 403);
+        } else {
+          const membership = await env.DB.prepare(
+            `SELECT 1 FROM group_members
+             WHERE group_id = ? AND user_id = ?`
+          ).bind(groupId, currentUser.sub).first();
+          if (!membership) return json({ error: "Group not found" }, 404);
+        }
+
+        const contentType = (request.headers.get("Content-Type") || "application/octet-stream").split(";")[0].trim().toLowerCase();
+        const allowedType =
+          contentType.startsWith("image/") ||
+          contentType.startsWith("video/") ||
+          contentType.startsWith("audio/") ||
+          ["application/pdf", "application/zip", "application/msword",
+           "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+           "application/vnd.ms-excel",
+           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+           "application/vnd.ms-powerpoint",
+           "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+           "text/plain"].includes(contentType);
+
+        if (!allowedType) return json({ error: "This file type is not allowed" }, 415);
+
+        const declaredSize = Number(request.headers.get("Content-Length") || 0);
+        if (declaredSize > 20 * 1024 * 1024) {
+          return json({ error: "Maximum attachment size is 20 MB" }, 413);
+        }
+
+        const bytes = await request.arrayBuffer();
+        if (!bytes.byteLength || bytes.byteLength > 20 * 1024 * 1024) {
+          return json({ error: "File is empty or exceeds 20 MB" }, 413);
+        }
+
+        let fileName = request.headers.get("X-File-Name") || "attachment";
+        try { fileName = decodeURIComponent(fileName); } catch {}
+        fileName = fileName.replace(/[\\/\\r\\n\\0]/g, "_").slice(0, 180) || "attachment";
+
+        const id = crypto.randomUUID();
+        const objectKey = "private/" + id;
+        await env.MEDIA.put(objectKey, bytes, {
+          httpMetadata: { contentType },
+          customMetadata: { ownerId: currentUser.sub, fileName }
+        });
+
+        try {
+          await env.DB.prepare(
+            `INSERT INTO media_assets
+             (id, owner_id, recipient_id, group_id, object_key, file_name, content_type, size_bytes)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+          ).bind(id, currentUser.sub, recipientId || null, groupId || null,
+            objectKey, fileName, contentType, bytes.byteLength).run();
+        } catch (error) {
+          await env.MEDIA.delete(objectKey);
+          throw error;
+        }
+
+        return json({
+          attachment: {
+            id, fileName, contentType, sizeBytes: bytes.byteLength,
+            downloadPath: "/api/media/" + id
+          }
+        }, 201);
+      }
+
+      const mediaMatch = path.match(/^\\/api\\/media\\/([^/]+)$/);
+      if (method === "GET" && mediaMatch) {
+        if (!env.MEDIA) return json({ error: "Media storage is not configured yet" }, 503);
+
+        const asset = await env.DB.prepare(
+          `SELECT id, owner_id, recipient_id, group_id, object_key,
+                  file_name, content_type, size_bytes
+           FROM media_assets WHERE id = ?`
+        ).bind(mediaMatch[1]).first();
+
+        if (!asset) return json({ error: "Attachment not found" }, 404);
+
+        let allowed = asset.owner_id === currentUser.sub ||
+          asset.recipient_id === currentUser.sub;
+        if (!allowed && asset.group_id) {
+          const membership = await env.DB.prepare(
+            `SELECT 1 FROM group_members
+             WHERE group_id = ? AND user_id = ?`
+          ).bind(asset.group_id, currentUser.sub).first();
+          allowed = !!membership;
+        }
+        if (!allowed) return json({ error: "Attachment not found" }, 404);
+
+        const object = await env.MEDIA.get(asset.object_key);
+        if (!object) return json({ error: "Attachment data is missing" }, 404);
+
+        const safeName = asset.file_name.replace(/["\\r\\n]/g, "_");
+        return new Response(object.body, {
+          headers: {
+            ...corsHeaders,
+            "Content-Type": asset.content_type,
+            "Content-Length": String(asset.size_bytes),
+            "Content-Disposition": "attachment; filename*=UTF-8''" + encodeURIComponent(safeName),
+            "Cache-Control": "private, no-store"
+          }
         });
       }
 
