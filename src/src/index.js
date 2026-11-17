@@ -325,6 +325,49 @@ export default {
         });
       }
 
+      // Add contact directly (without a friend-request workflow)
+      if (method === "POST" && path === "/api/contacts") {
+        const body = await request.json();
+        const target = String(
+          body.username || body.phone || body.target || body.userId || body.user_id || ""
+        ).trim();
+
+        if (!target || target.length > 100) {
+          return json({ error: "Enter a valid username or phone number" }, 400);
+        }
+
+        const receiver = await env.DB.prepare(
+          `SELECT id, username, display_name, phone
+           FROM users
+           WHERE username = ? OR phone = ? OR id = ?
+           LIMIT 1`
+        ).bind(target.toLowerCase(), target, target).first();
+
+        if (!receiver) {
+          return json({ error: "User not found" }, 404);
+        }
+
+        if (receiver.id === currentUser.sub) {
+          return json({ error: "Cannot add yourself" }, 400);
+        }
+
+        await env.DB.batch([
+          env.DB.prepare(
+            `INSERT OR IGNORE INTO friendships (user_id, friend_id)
+             VALUES (?, ?)`
+          ).bind(currentUser.sub, receiver.id),
+          env.DB.prepare(
+            `INSERT OR IGNORE INTO friendships (user_id, friend_id)
+             VALUES (?, ?)`
+          ).bind(receiver.id, currentUser.sub)
+        ]);
+
+        return json({
+          message: "Contact added",
+          user: cleanUser(receiver)
+        }, 200);
+      }
+
       // Send friend request
       if (method === "POST" && path === "/api/friends/requests") {
         const body = await request.json();
