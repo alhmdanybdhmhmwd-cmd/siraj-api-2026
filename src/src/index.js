@@ -265,7 +265,27 @@ export default {
       if (!currentUser) {
         return json({ error: "Unauthorized" }, 401);
       }
+      // Register Firebase device token
+      if (method === "POST" && path === "/api/devices/token") {
+        const body = await request.json();
+        const fcmToken = String(body.fcmToken || "").trim();
 
+        if (!fcmToken || fcmToken.length > 4096) {
+          return json({ error: "Invalid device token" }, 400);
+        }
+
+        await env.DB.prepare(
+          `INSERT INTO device_tokens
+           (user_id, fcm_token, updated_at)
+           VALUES (?, ?, CURRENT_TIMESTAMP)
+           ON CONFLICT(fcm_token)
+           DO UPDATE SET
+             user_id = excluded.user_id,
+             updated_at = CURRENT_TIMESTAMP`
+        ).bind(currentUser.sub, fcmToken).run();
+
+        return json({ message: "Device token registered" });
+      }
       // Current user
       if (method === "GET" && path === "/api/me") {
         const user = await env.DB.prepare(
