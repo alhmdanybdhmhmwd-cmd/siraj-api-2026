@@ -522,6 +522,126 @@ export default {
         });
       }
 
+      // Group conversations (requires migrations/0001_groups_media.sql)
+      if (method === "GET" && path === "/api/groups") {
+        const result = await env.DB.prepare(
+          `SELECT g.id, g.name, g.description, g.created_by, g.created_at,
+                  (SELECT COUNT(*) FROM group_members gm2
+                   WHERE gm2.group_id = g.id) AS member_count
+           FROM groups g
+           INNER JOIN group_members gm ON gm.group_id = g.id
+           WHERE gm.user_id = ?
+           ORDER BY g.updated_at DESC`
+        ).bind(currentUser.sub).all();
+
+        return json({ groups: result.results || [] });
+      }
+
+      if (method === "POST" && path === "/api/groups") {
+        const body = await request.json();
+        const name = String(body.name || "").trim();
+        const description = String(body.description || "").trim();
+
+        if (!name || name.length > 80 || description.length > 500) {
+          return json({ error: "Group name (1-80) and description (up to 500) are required" }, 400);
+        }
+
+        const id = crypto.randomUUID();
+        await env.DB.batch([
+          env.DB.prepare(
+            `INSERT INTO groups (id, name, description, created_by)
+             VALUES (?, ?, ?, ?)`
+          ).bind(id, name, description, currentUser.sub),
+          env.DB.prepare(
+            `INSERT INTO group_members (group_id, user_id, role)
+             VALUES (?, ?, 'owner')`
+          ).bind(id, currentUser.sub)
+        ]);
+
+        return json({
+          group: {
+            id, name, description, created_by: currentUser.sub,
+            member_count: 1
+          }
+        }, 201);
+      }
+
+      const groupMemberMatch = path.match(/^\\/api\\/groups\\/([^/]+)\\/members$/);
+      if (method === "POST" && groupMemberMatch) {
+        const groupId = groupMemberMatch[1];
+        const body = await request.json();
+        const targetId = String(body.userId || body.user_id || "").trim();
+
+        if (!targetId) return json({ error: "User ID is required" }, 400);
+
+        const actor = await env.DB.prepare(
+          `SELECT role FROM group_members
+           WHERE group_id = ? AND user_id = ?`
+        ).bind(groupId, currentUser.sub).first();
+
+        if (!actor || !["owner", "admin"].includes(actor.role)) {
+          return json({ error: "Only group admins can add members" }, 403);
+        }
+
+        const target = await env.DB.prepare(
+          "SELECT id FROM users WHERE id = ?"
+        ).bind(targetId).first();
+        if (!target) return json({ error: "User not found" }, 404);
+
+        await env.DB.prepare(
+          `INSERT OR IGNORE INTO group_members (group_id, user_id, role)
+           VALUES (?, ?, 'member')`
+        ).bind(groupId, targetId).run();
+
+        return json({ message: "Member added" });
+      }
+
+      const groupMessagesMatch = path.match(/^\\/api\\/groups\\/([^/]+)\\/messages$/);
+      if (groupMessagesMatch) {
+        const groupId = groupMessagesMatch[1];
+        const membership = await env.DB.prepare(
+          `SELECT 1 FROM group_members
+           WHERE group_id = ? AND user_id = ?`
+        ).bind(groupId, currentUser.sub).first();
+
+        if (!membership) return json({ error: "Group not found" }, 404);
+
+        if (method === "GET") {
+          const result = await env.DB.prepare(
+            `SELECT gm.id, gm.group_id, gm.sender_id, gm.body, gm.created_at,
+                    u.username, u.display_name
+             FROM group_messages gm
+             INNER JOIN users u ON u.id = gm.sender_id
+             WHERE gm.group_id = ?
+             ORDER BY gm.created_at ASC
+             LIMIT 200`
+          ).bind(groupId).all();
+
+          return json({ messages: result.results || [] });
+        }
+
+        if (method === "POST") {
+          const body = await request.json();
+          const message = String(body.body || "").trim();
+
+          if (!message || message.length > 5000) {
+            return json({ error: "Message must be 1-5000 characters" }, 400);
+          }
+
+          const id = crypto.randomUUID();
+          await env.DB.prepare(
+            `INSERT INTO group_messages (id, group_id, sender_id, body)
+             VALUES (?, ?, ?, ?)`
+          ).bind(id, groupId, currentUser.sub, message).run();
+
+          await env.DB.prepare(
+            "UPDATE groups SET updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+          ).bind(groupId).run();
+
+          return json({ message: "Message sent", id }, 201);
+        }
+      }
+
       // Send message
       if (method === "POST" && path === "/api/messages") {
         const body = await request.json();
