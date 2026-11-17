@@ -4,7 +4,7 @@ ALTER TABLE media_assets ADD COLUMN expires_at TEXT;
 ALTER TABLE media_assets ADD COLUMN storage_deleted INTEGER NOT NULL DEFAULT 0;
 
 UPDATE media_assets
-SET expires_at = datetime(created_at, '+7 days')
+SET expires_at = strftime('%Y-%m-%dT%H:%M:%fZ', created_at, '+7 days')
 WHERE expires_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS media_recipients (
