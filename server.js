@@ -7,7 +7,8 @@ const server = http.createServer(async (req, res) => {
   const cors = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-File-Name, X-Recipient-Id, X-Group-Id",
+    "Access-Control-Expose-Headers": "Content-Disposition, Content-Length",
   };
 
   if (req.method === "OPTIONS") {
@@ -31,6 +32,9 @@ const server = http.createServer(async (req, res) => {
         headers: {
           "Content-Type": req.headers["content-type"] || "application/json",
           "Authorization": req.headers.authorization || "",
+          ...(req.headers["x-file-name"] ? { "X-File-Name": req.headers["x-file-name"] } : {}),
+          ...(req.headers["x-recipient-id"] ? { "X-Recipient-Id": req.headers["x-recipient-id"] } : {}),
+          ...(req.headers["x-group-id"] ? { "X-Group-Id": req.headers["x-group-id"] } : {}),
         },
         body: ["GET", "HEAD"].includes(req.method) ? undefined : body,
       }
