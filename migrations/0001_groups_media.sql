@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS group_messages (
 CREATE INDEX IF NOT EXISTS idx_group_messages_group_time
   ON group_messages(group_id, created_at);
 
--- Metadata for attachments. Actual binary objects are stored in Cloudflare R2,
+-- Metadata for attachments. Actual binary objects are stored in private Tigris,
 -- not in D1. The R2 binding and upload/download routes are a separate deployment step.
 CREATE TABLE IF NOT EXISTS media_assets (
   id TEXT PRIMARY KEY,
