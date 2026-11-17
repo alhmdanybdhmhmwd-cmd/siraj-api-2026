@@ -15,6 +15,79 @@ const json = (data, status = 200) =>
 
 const encoder = new TextEncoder();
 
+function hex(bytes) { return [...new Uint8Array(bytes)].map(b => b.toString(16).padStart(2, "0")).join(""); }
+async function sha256Hex(data) { return hex(await crypto.subtle.digest("SHA-256", data)); }
+async function hmac(key, value) {
+  const k = await crypto.subtle.importKey("raw", key, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return new Uint8Array(await crypto.subtle.sign("HMAC", k, encoder.encode(value)));
+}
+async function tigrisRequest(env, method, objectKey, body = undefined, contentType = "") {
+  const accessKey = env.TIGRIS_ACCESS_KEY_ID;
+  const secretKey = env.TIGRIS_SECRET_ACCESS_KEY;
+  const bucket = env.TIGRIS_BUCKET || "siraj-media";
+  if (!accessKey || !secretKey || !bucket) throw new Error("Tigris storage credentials are not configured");
+  const host = "t3.storage.dev";
+  const path = "/" + bucket + "/" + objectKey.split("/").map(encodeURIComponent).join("/");
+  const url = "https://" + host + path;
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
+  const dateStamp = amzDate.slice(0, 8);
+  const payloadHash = await sha256Hex(body === undefined ? new Uint8Array(0) : body);
+  const headers = { "x-amz-content-sha256": payloadHash, "x-amz-date": amzDate };
+  if (contentType) headers["content-type"] = contentType;
+  const signedNames = contentType
+    ? "content-type;host;x-amz-content-sha256;x-amz-date"
+    : "host;x-amz-content-sha256;x-amz-date";
+  const canonicalHeaders =
+    (contentType ? "content-type:" + contentType.trim() + "\n" : "") +
+    "host:" + host + "\n" +
+    "x-amz-content-sha256:" + payloadHash + "\n" +
+    "x-amz-date:" + amzDate + "\n";
+  const canonicalRequest = method + "\n" + path + "\n\n" + canonicalHeaders + "\n" + signedNames + "\n" + payloadHash;
+  const scope = dateStamp + "/auto/s3/aws4_request";
+  const stringToSign = "AWS4-HMAC-SHA256\n" + amzDate + "\n" + scope + "\n" + await sha256Hex(encoder.encode(canonicalRequest));
+  const kDate = await hmac(encoder.encode("AWS4" + secretKey), dateStamp);
+  const kRegion = await hmac(kDate, "auto");
+  const kService = await hmac(kRegion, "s3");
+  const kSigning = await hmac(kService, "aws4_request");
+  const signature = hex(await hmac(kSigning, stringToSign));
+  headers.Authorization = "AWS4-HMAC-SHA256 Credential=" + accessKey + "/" + scope + ", SignedHeaders=" + signedNames + ", Signature=" + signature;
+  return fetch(url, { method, headers, body });
+}
+async function deleteTigrisObject(env, objectKey) {
+  const response = await tigrisRequest(env, "DELETE", objectKey);
+  if (!response.ok && response.status !== 404) throw new Error("Tigris delete failed: " + response.status);
+}
+async function finishMediaDownload(env, asset, userId) {
+  await env.DB.prepare(
+    "INSERT OR IGNORE INTO media_downloads (media_id, user_id) VALUES (?, ?)"
+  ).bind(asset.id, userId).run();
+  const counts = await env.DB.prepare(
+    "SELECT (SELECT COUNT(*) FROM media_recipients WHERE media_id = ?) AS total, (SELECT COUNT(*) FROM media_downloads WHERE media_id = ?) AS done"
+  ).bind(asset.id, asset.id).first();
+  if (counts && counts.total > 0 && counts.done >= counts.total) {
+    await deleteTigrisObject(env, asset.object_key);
+    await env.DB.prepare(
+      "UPDATE media_assets SET storage_deleted = 1 WHERE id = ?"
+    ).bind(asset.id).run();
+  }
+}
+async function cleanupExpiredMedia(env) {
+  const now = new Date().toISOString();
+  const expired = await env.DB.prepare(
+    "SELECT id, object_key FROM media_assets WHERE storage_deleted = 0 AND expires_at <= ? LIMIT 100"
+  ).bind(now).all();
+  for (const asset of expired.results || []) {
+    try {
+      await deleteTigrisObject(env, asset.object_key);
+      await env.DB.prepare("UPDATE media_assets SET storage_deleted = 1 WHERE id = ?").bind(asset.id).run();
+    } catch (error) {
+      console.error("Siraj media cleanup failed", asset.id, error);
+    }
+  }
+}
+
+
 function base64url(bytes) {
   let binary = "";
   for (const b of bytes) binary += String.fromCharCode(b);
@@ -144,7 +217,7 @@ function cleanUser(user) {
 }
 
 export default {
-  async fetch(request, env) {
+  async scheduled(controller, env, ctx) {\n    ctx.waitUntil(cleanupExpiredMedia(env));\n  },\n  async fetch(request, env) {
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders });
     }
@@ -523,50 +596,39 @@ export default {
         });
       }
 
-      // Private attachment upload/download (requires the MEDIA R2 binding and D1 migration).
-      if (method === "POST" && path === "/api/media") {
-        if (!env.MEDIA) return json({ error: "Media storage is not configured yet" }, 503);
 
+      // Private attachments stored in Tigris S3-compatible object storage.
+      if (method === "POST" && path === "/api/media") {
+        if (!env.TIGRIS_ACCESS_KEY_ID || !env.TIGRIS_SECRET_ACCESS_KEY) {
+          return json({ error: "Tigris storage is not configured yet" }, 503);
+        }
         const recipientId = (request.headers.get("X-Recipient-Id") || "").trim();
         const groupId = (request.headers.get("X-Group-Id") || "").trim();
-        if (!!recipientId === !!groupId) {
-          return json({ error: "Choose exactly one recipient or group" }, 400);
-        }
+        if (!!recipientId === !!groupId) return json({ error: "Choose exactly one recipient or group" }, 400);
 
         if (recipientId) {
           const friendship = await env.DB.prepare(
-            `SELECT 1 FROM friendships
-             WHERE user_id = ? AND friend_id = ?`
+            "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
           ).bind(currentUser.sub, recipientId).first();
           if (!friendship) return json({ error: "You can only send attachments to contacts" }, 403);
         } else {
           const membership = await env.DB.prepare(
-            `SELECT 1 FROM group_members
-             WHERE group_id = ? AND user_id = ?`
+            "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
           ).bind(groupId, currentUser.sub).first();
           if (!membership) return json({ error: "Group not found" }, 404);
         }
 
         const contentType = (request.headers.get("Content-Type") || "application/octet-stream").split(";")[0].trim().toLowerCase();
-        const allowedType =
-          contentType.startsWith("image/") ||
-          contentType.startsWith("video/") ||
-          contentType.startsWith("audio/") ||
-          ["application/pdf", "application/zip", "application/msword",
-           "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-           "application/vnd.ms-excel",
-           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-           "application/vnd.ms-powerpoint",
-           "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-           "text/plain", "text/csv", "application/rtf", "application/octet-stream"].includes(contentType);
-
+        const allowedType = contentType.startsWith("image/") || contentType.startsWith("video/") ||
+          contentType.startsWith("audio/") || ["application/pdf", "application/zip", "application/msword",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-powerpoint",
+          "application/vnd.openxmlformats-officedocument.presentationml.presentation", "text/plain", "text/csv",
+          "application/rtf", "application/octet-stream"].includes(contentType);
         if (!allowedType) return json({ error: "This file type is not allowed" }, 415);
 
         const declaredSize = Number(request.headers.get("Content-Length") || 0);
-        if (declaredSize > 20 * 1024 * 1024) {
-          return json({ error: "Maximum attachment size is 20 MB" }, 413);
-        }
-
+        if (declaredSize > 20 * 1024 * 1024) return json({ error: "Maximum attachment size is 20 MB" }, 413);
         const bytes = await request.arrayBuffer();
         if (!bytes.byteLength || bytes.byteLength > 20 * 1024 * 1024) {
           return json({ error: "File is empty or exceeds 20 MB" }, 413);
@@ -575,95 +637,94 @@ export default {
         let fileName = request.headers.get("X-File-Name") || "attachment";
         try { fileName = decodeURIComponent(fileName); } catch {}
         fileName = fileName.replace(/[\\/\\r\\n\\0]/g, "_").slice(0, 180) || "attachment";
-
         const id = crypto.randomUUID();
         const objectKey = "private/" + id;
-        await env.MEDIA.put(objectKey, bytes, {
-          httpMetadata: { contentType },
-          customMetadata: { ownerId: currentUser.sub, fileName }
-        });
-
-        const attachmentBody = JSON.stringify({
-          type: "attachment",
-          attachmentId: id,
-          fileName,
-          contentType,
-          sizeBytes: bytes.byteLength
-        });
-
-        try {
-          await env.DB.batch([
-            env.DB.prepare(
-              `INSERT INTO media_assets
-               (id, owner_id, recipient_id, group_id, object_key, file_name, content_type, size_bytes)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-            ).bind(id, currentUser.sub, recipientId || null, groupId || null,
-              objectKey, fileName, contentType, bytes.byteLength),
-            ...(recipientId ? [
-              env.DB.prepare(
-                `INSERT INTO messages (id, sender_id, receiver_id, body)
-                 VALUES (?, ?, ?, ?)`
-              ).bind(crypto.randomUUID(), currentUser.sub, recipientId, attachmentBody)
-            ] : [
-              env.DB.prepare(
-                `INSERT INTO group_messages (id, group_id, sender_id, body)
-                 VALUES (?, ?, ?, ?)`
-              ).bind(crypto.randomUUID(), groupId, currentUser.sub, attachmentBody),
-              env.DB.prepare(
-                "UPDATE groups SET updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-              ).bind(groupId)
-            ])
-          ]);
-        } catch (error) {
-          await env.MEDIA.delete(objectKey);
-          throw error;
+        const upload = await tigrisRequest(env, "PUT", objectKey, bytes, contentType);
+        if (!upload.ok) {
+          const detail = await upload.text();
+          console.error("Tigris upload failed", upload.status, detail.slice(0, 500));
+          return json({ error: "Could not upload attachment to storage" }, 502);
         }
 
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        const attachmentBody = JSON.stringify({
+          type: "attachment", attachmentId: id, fileName, contentType, sizeBytes: bytes.byteLength
+        });
+        try {
+          const statements = [
+            env.DB.prepare(
+              "INSERT INTO media_assets (id, owner_id, recipient_id, group_id, object_key, file_name, content_type, size_bytes, expires_at, storage_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"
+            ).bind(id, currentUser.sub, recipientId || null, groupId || null, objectKey, fileName, contentType, bytes.byteLength, expiresAt)
+          ];
+          if (recipientId) {
+            statements.push(env.DB.prepare(
+              "INSERT INTO media_recipients (media_id, user_id) VALUES (?, ?)"
+            ).bind(id, recipientId));
+            statements.push(env.DB.prepare(
+              "INSERT INTO messages (id, sender_id, receiver_id, body) VALUES (?, ?, ?, ?)"
+            ).bind(crypto.randomUUID(), currentUser.sub, recipientId, attachmentBody));
+          } else {
+            statements.push(env.DB.prepare(
+              "INSERT INTO media_recipients (media_id, user_id) SELECT ?, user_id FROM group_members WHERE group_id = ? AND user_id != ?"
+            ).bind(id, groupId, currentUser.sub));
+            statements.push(env.DB.prepare(
+              "INSERT INTO group_messages (id, group_id, sender_id, body) VALUES (?, ?, ?, ?)"
+            ).bind(crypto.randomUUID(), groupId, currentUser.sub, attachmentBody));
+            statements.push(env.DB.prepare("UPDATE groups SET updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(groupId));
+          }
+          await env.DB.batch(statements);
+        } catch (error) {
+          try { await deleteTigrisObject(env, objectKey); } catch (cleanupError) { console.error("Tigris rollback cleanup failed", cleanupError); }
+          throw error;
+        }
         return json({
-          attachment: {
-            id, fileName, contentType, sizeBytes: bytes.byteLength,
-            downloadPath: "/api/media/" + id
-          },
+          attachment: { id, fileName, contentType, sizeBytes: bytes.byteLength, downloadPath: "/api/media/" + id, expiresAt },
           message: "Attachment sent"
         }, 201);
       }
 
       const mediaMatch = path.match(/^\\/api\\/media\\/([^/]+)$/);
       if (method === "GET" && mediaMatch) {
-        if (!env.MEDIA) return json({ error: "Media storage is not configured yet" }, 503);
-
         const asset = await env.DB.prepare(
-          `SELECT id, owner_id, recipient_id, group_id, object_key,
-                  file_name, content_type, size_bytes
-           FROM media_assets WHERE id = ?`
+          "SELECT id, owner_id, recipient_id, group_id, object_key, file_name, content_type, size_bytes, storage_deleted FROM media_assets WHERE id = ?"
         ).bind(mediaMatch[1]).first();
+        if (!asset || asset.storage_deleted) return json({ error: "Attachment has expired or was already downloaded" }, 404);
 
-        if (!asset) return json({ error: "Attachment not found" }, 404);
-
-        let allowed = asset.owner_id === currentUser.sub ||
-          asset.recipient_id === currentUser.sub;
-        if (!allowed && asset.group_id) {
-          const membership = await env.DB.prepare(
-            `SELECT 1 FROM group_members
-             WHERE group_id = ? AND user_id = ?`
-          ).bind(asset.group_id, currentUser.sub).first();
-          allowed = !!membership;
-        }
+        const recipient = await env.DB.prepare(
+          "SELECT 1 FROM media_recipients WHERE media_id = ? AND user_id = ?"
+        ).bind(asset.id, currentUser.sub).first();
+        const allowed = asset.owner_id === currentUser.sub || !!recipient;
         if (!allowed) return json({ error: "Attachment not found" }, 404);
 
-        const object = await env.MEDIA.get(asset.object_key);
-        if (!object) return json({ error: "Attachment data is missing" }, 404);
-
+        const object = await tigrisRequest(env, "GET", asset.object_key);
+        if (!object.ok) {
+          if (object.status === 404) return json({ error: "Attachment data is missing" }, 404);
+          console.error("Tigris download failed", object.status, (await object.text()).slice(0, 300));
+          return json({ error: "Could not download attachment" }, 502);
+        }
         const safeName = asset.file_name.replace(/["\\r\\n]/g, "_");
-        return new Response(object.body, {
-          headers: {
-            ...corsHeaders,
-            "Content-Type": asset.content_type,
-            "Content-Length": String(asset.size_bytes),
-            "Content-Disposition": "attachment; filename*=UTF-8''" + encodeURIComponent(safeName),
-            "Cache-Control": "private, no-store"
-          }
+        const headers = {
+          ...corsHeaders, "Content-Type": asset.content_type, "Content-Length": String(asset.size_bytes),
+          "Content-Disposition": "attachment; filename*=UTF-8''" + encodeURIComponent(safeName),
+          "Cache-Control": "private, no-store"
+        };
+        const reader = object.body.getReader();
+        const stream = new ReadableStream({
+          async pull(controller) {
+            try {
+              const part = await reader.read();
+              if (part.done) {
+                controller.close();
+                if (recipient) {
+                  try { await finishMediaDownload(env, asset, currentUser.sub); }
+                  catch (error) { console.error("Siraj download receipt failed", error); }
+                }
+              } else controller.enqueue(part.value);
+            } catch (error) { controller.error(error); }
+          },
+          async cancel(reason) { try { await reader.cancel(reason); } catch {} }
         });
+        return new Response(stream, { headers });
       }
 
       // Group conversations (requires migrations/0001_groups_media.sql)
