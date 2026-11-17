@@ -43,12 +43,16 @@ CREATE INDEX IF NOT EXISTS idx_group_messages_group_time
 CREATE TABLE IF NOT EXISTS media_assets (
   id TEXT PRIMARY KEY,
   owner_id TEXT NOT NULL,
+  recipient_id TEXT,
+  group_id TEXT,
   object_key TEXT NOT NULL UNIQUE,
   file_name TEXT NOT NULL,
   content_type TEXT NOT NULL,
   size_bytes INTEGER NOT NULL,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+  FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (recipient_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_media_assets_owner
