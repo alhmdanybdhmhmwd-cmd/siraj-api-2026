@@ -583,13 +583,37 @@ export default {
           customMetadata: { ownerId: currentUser.sub, fileName }
         });
 
+        const attachmentBody = JSON.stringify({
+          type: "attachment",
+          attachmentId: id,
+          fileName,
+          contentType,
+          sizeBytes: bytes.byteLength
+        });
+
         try {
-          await env.DB.prepare(
-            `INSERT INTO media_assets
-             (id, owner_id, recipient_id, group_id, object_key, file_name, content_type, size_bytes)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-          ).bind(id, currentUser.sub, recipientId || null, groupId || null,
-            objectKey, fileName, contentType, bytes.byteLength).run();
+          await env.DB.batch([
+            env.DB.prepare(
+              `INSERT INTO media_assets
+               (id, owner_id, recipient_id, group_id, object_key, file_name, content_type, size_bytes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+            ).bind(id, currentUser.sub, recipientId || null, groupId || null,
+              objectKey, fileName, contentType, bytes.byteLength),
+            ...(recipientId ? [
+              env.DB.prepare(
+                `INSERT INTO messages (id, sender_id, receiver_id, body)
+                 VALUES (?, ?, ?, ?)`
+              ).bind(crypto.randomUUID(), currentUser.sub, recipientId, attachmentBody)
+            ] : [
+              env.DB.prepare(
+                `INSERT INTO group_messages (id, group_id, sender_id, body)
+                 VALUES (?, ?, ?, ?)`
+              ).bind(crypto.randomUUID(), groupId, currentUser.sub, attachmentBody),
+              env.DB.prepare(
+                "UPDATE groups SET updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+              ).bind(groupId)
+            ])
+          ]);
         } catch (error) {
           await env.MEDIA.delete(objectKey);
           throw error;
@@ -599,7 +623,8 @@ export default {
           attachment: {
             id, fileName, contentType, sizeBytes: bytes.byteLength,
             downloadPath: "/api/media/" + id
-          }
+          },
+          message: "Attachment sent"
         }, 201);
       }
 
