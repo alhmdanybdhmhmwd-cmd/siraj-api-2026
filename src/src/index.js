@@ -43,7 +43,7 @@ async function tigrisRequest(env, method, objectKey, body = undefined, contentTy
     "host:" + host + "\n" +
     "x-amz-content-sha256:" + payloadHash + "\n" +
     "x-amz-date:" + amzDate + "\n";
-  const canonicalRequest = method + "\n" + path + "\n\n" + canonicalHeaders + "\n" + signedNames + "\n" + payloadHash;
+  const canonicalRequest = method + "\n" + path + "\n\n" + canonicalHeaders + signedNames + "\n" + payloadHash;
   const scope = dateStamp + "/auto/s3/aws4_request";
   const stringToSign = "AWS4-HMAC-SHA256\n" + amzDate + "\n" + scope + "\n" + await sha256Hex(encoder.encode(canonicalRequest));
   const kDate = await hmac(encoder.encode("AWS4" + secretKey), dateStamp);
