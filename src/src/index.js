@@ -217,7 +217,10 @@ function cleanUser(user) {
 }
 
 export default {
-  async scheduled(controller, env, ctx) {\n    ctx.waitUntil(cleanupExpiredMedia(env));\n  },\n  async fetch(request, env) {
+  async scheduled(controller, env, ctx) {
+    ctx.waitUntil(cleanupExpiredMedia(env));
+  },
+  async fetch(request, env) {
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders });
     }
