@@ -639,7 +639,7 @@ export default {
 
         let fileName = request.headers.get("X-File-Name") || "attachment";
         try { fileName = decodeURIComponent(fileName); } catch {}
-        fileName = fileName.replace(/[\\/\\r\\n\\0]/g, "_").slice(0, 180) || "attachment";
+        fileName = fileName.replace(/[\/\\r\\n\\0]/g, "_").slice(0, 180) || "attachment";
         const id = crypto.randomUUID();
         const objectKey = "private/" + id;
         const upload = await tigrisRequest(env, "PUT", objectKey, bytes, contentType);
@@ -774,7 +774,7 @@ export default {
         }, 201);
       }
 
-      const groupMemberMatch = path.match(/^\\/api\\/groups\\/([^/]+)\\/members$/);
+      const groupMemberMatch = path.match(/^\/api\/groups\/([^/]+)\/members$/);
       if (method === "POST" && groupMemberMatch) {
         const groupId = groupMemberMatch[1];
         const body = await request.json();
@@ -804,7 +804,7 @@ export default {
         return json({ message: "Member added" });
       }
 
-      const groupMessagesMatch = path.match(/^\\/api\\/groups\\/([^/]+)\\/messages$/);
+      const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
       if (groupMessagesMatch) {
         const groupId = groupMessagesMatch[1];
         const membership = await env.DB.prepare(
