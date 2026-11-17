@@ -639,7 +639,7 @@ export default {
 
         let fileName = request.headers.get("X-File-Name") || "attachment";
         try { fileName = decodeURIComponent(fileName); } catch {}
-        fileName = fileName.replace(/[\/\\r\\n\\0]/g, "_").slice(0, 180) || "attachment";
+        fileName = fileName.replace(/[\\\/\r\n\0]/g, "_").slice(0, 180) || "attachment";
         const id = crypto.randomUUID();
         const objectKey = "private/" + id;
         const upload = await tigrisRequest(env, "PUT", objectKey, bytes, contentType);
@@ -705,7 +705,7 @@ export default {
           console.error("Tigris download failed", object.status, (await object.text()).slice(0, 300));
           return json({ error: "Could not download attachment" }, 502);
         }
-        const safeName = asset.file_name.replace(/["\\r\\n]/g, "_");
+        const safeName = asset.file_name.replace(/["\r\n]/g, "_");
         const headers = {
           ...corsHeaders, "Content-Type": asset.content_type, "Content-Length": String(asset.size_bytes),
           "Content-Disposition": "attachment; filename*=UTF-8''" + encodeURIComponent(safeName),
