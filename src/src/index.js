@@ -558,7 +558,7 @@ export default {
            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
            "application/vnd.ms-powerpoint",
            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-           "text/plain"].includes(contentType);
+           "text/plain", "text/csv", "application/rtf", "application/octet-stream"].includes(contentType);
 
         if (!allowedType) return json({ error: "This file type is not allowed" }, 415);
 
