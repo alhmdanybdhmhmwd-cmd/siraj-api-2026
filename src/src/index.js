@@ -15,6 +15,7 @@ const json = (data, status = 200) =>
   });
 
 const encoder = new TextEncoder();
+const RECOVERY_CODE_TTL_SECONDS = 90 * 24 * 60 * 60;
 
 function base64url(bytes) {
   let binary = "";
@@ -277,8 +278,8 @@ async function generateRecoveryCode() {
 
 async function saveRecoveryCode(env, userId, recovery) {
   const now = Math.floor(Date.now() / 1000);
-  await env.DB.prepare("INSERT INTO recovery_codes (user_id, code_hash, code_salt, expires_at, consumed_at, created_at) VALUES (?, ?, ?, NULL, NULL, ?) ON CONFLICT(user_id) DO UPDATE SET code_hash = excluded.code_hash, code_salt = excluded.code_salt, expires_at = NULL, consumed_at = NULL, created_at = excluded.created_at")
-    .bind(userId, recovery.codeHash, recovery.salt, now).run();
+  await env.DB.prepare("INSERT INTO recovery_codes (user_id, code_hash, code_salt, expires_at, consumed_at, created_at) VALUES (?, ?, ?, ?, NULL, ?) ON CONFLICT(user_id) DO UPDATE SET code_hash = excluded.code_hash, code_salt = excluded.code_salt, expires_at = excluded.expires_at, consumed_at = NULL, created_at = excluded.created_at")
+    .bind(userId, recovery.codeHash, recovery.salt, now + RECOVERY_CODE_TTL_SECONDS, now).run();
 }
 
 async function consumeRecoveryAttempt(env, scope, identifier, maxAttempts = 5) {
@@ -356,8 +357,8 @@ export default {
         await env.DB.batch([
           env.DB.prepare(`INSERT INTO users (id, username, display_name, password_hash, password_salt, phone) VALUES (?, ?, ?, ?, ?, ?)`)
             .bind(id, username, displayName, passwordHash, salt, phone || null),
-          env.DB.prepare(`INSERT INTO recovery_codes (user_id, code_hash, code_salt, expires_at, consumed_at, created_at) VALUES (?, ?, ?, NULL, NULL, ?)`)
-            .bind(id, recovery.codeHash, recovery.salt, createdAt)
+          env.DB.prepare(`INSERT INTO recovery_codes (user_id, code_hash, code_salt, expires_at, consumed_at, created_at) VALUES (?, ?, ?, ?, NULL, ?)`)
+            .bind(id, recovery.codeHash, recovery.salt, createdAt + RECOVERY_CODE_TTL_SECONDS, createdAt)
         ]);
 
         const user = {
