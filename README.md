@@ -9,6 +9,7 @@ The Worker expects the D1 schema migrations to be applied before deploying code 
 For the recovery-code feature, the migration is:
 
 - `migrations/0001_recovery_codes.sql`
+- `migrations/0002_recovery_token_revocations.sql`
 
 After authenticating Wrangler with the Cloudflare account that owns the `siraj-db` database, review the target database and apply the migration:
 
@@ -17,7 +18,7 @@ npx wrangler d1 migrations list siraj-db --remote
 npx wrangler d1 migrations apply siraj-db --remote
 ```
 
-Do not deploy the Worker until the migration has completed successfully. The migration only creates recovery-related tables and indexes; it does not alter or delete existing user, message, contact, or group data.
+Do not deploy the Worker until the migration has completed successfully. These migrations only create recovery-related tables and indexes; they do not alter or delete existing user, message, contact, or group data.
 
 ## Recovery-code behavior
 
