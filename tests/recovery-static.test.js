@@ -9,6 +9,7 @@ const config = await readFile(new URL("../wrangler.toml", import.meta.url), "utf
 test("recovery migration creates only additive recovery tables", () => {
   assert.match(migration, /CREATE TABLE IF NOT EXISTS recovery_codes/i);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS recovery_rate_limits/i);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS recovery_token_revocations/i);
   assert.match(migration, /CREATE INDEX IF NOT EXISTS idx_recovery_rate_limits_window/i);
   assert.doesNotMatch(migration, /\b(DROP|DELETE|UPDATE|ALTER)\s+(TABLE|FROM|users|messages|friendships)\b/i);
   assert.match(migration, /FOREIGN KEY \(user_id\) REFERENCES users\(id\) ON DELETE CASCADE/i);
@@ -30,6 +31,9 @@ test("recovery codes are generated with cryptographic randomness, salted hashes,
   assert.match(worker, /code_hash/);
   assert.match(worker, /code_salt/);
   assert.match(worker, /constantTimeHexEqual/);
+  assert.match(worker, /iat_ms: Date\.now\(\)/);
+  assert.match(worker, /recovery_token_revocations/);
+  assert.match(worker, /revoked_at_ms/);
 });
 
 test("recovery attempts are rate limited by normalized identifier and account, and codes are consumed", () => {
