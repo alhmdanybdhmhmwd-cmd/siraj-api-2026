@@ -478,7 +478,7 @@ export default {
           const createdAt = new Date().toISOString();
           const expiresAt = new Date(Date.now() + 86400000).toISOString();
           await env.DB.prepare(
-            "INSERT INTO status_posts (id, user_id, content, expires_at) VALUES (?, ?, ?, ?)"
+            "INSERT INTO status_posts (id, user_id, content, expires_at) VALUES (?, ?, ?, datetime('now', '+24 hours'))"
           ).bind(id, currentUser.sub, content, expiresAt).run();
           return json({ status: { id, content, createdAt, expiresAt } }, 201);
         }
