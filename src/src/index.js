@@ -41,6 +41,7 @@ async function signToken(user, secret) {
     encoder.encode(JSON.stringify({
       sub: user.id,
       username: user.username,
+      iat_ms: Date.now(),
       exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30
     }))
   );
@@ -133,7 +134,16 @@ async function authenticate(request, env) {
 
   if (!token) return null;
 
-  return verifyToken(token, env.JWT_SECRET);
+  const payload = await verifyToken(token, env.JWT_SECRET);
+  if (!payload) return null;
+
+  const revocation = await env.DB.prepare(
+    "SELECT revoked_at_ms FROM recovery_token_revocations WHERE user_id = ?"
+  ).bind(payload.sub).first();
+  if (revocation && Number(payload.iat_ms || 0) <= Number(revocation.revoked_at_ms)) {
+    return null;
+  }
+  return payload;
 }
 
 function cleanUser(user) {
@@ -415,9 +425,11 @@ export default {
           env.DB.prepare("UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ? AND EXISTS (SELECT 1 FROM recovery_codes WHERE user_id = ? AND code_hash = ? AND consumed_at IS NULL AND (expires_at IS NULL OR expires_at > ?))")
             .bind(newHash, newSalt, user.id, user.id, stored.code_hash, now),
           env.DB.prepare("UPDATE recovery_codes SET consumed_at = ? WHERE user_id = ? AND code_hash = ? AND consumed_at IS NULL")
-            .bind(now, user.id, stored.code_hash)
+            .bind(now, user.id, stored.code_hash),
+          env.DB.prepare("INSERT INTO recovery_token_revocations (user_id, revoked_at_ms) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET revoked_at_ms = excluded.revoked_at_ms")
+            .bind(user.id, Date.now())
         ]);
-        if (Number(results?.[0]?.meta?.changes || 0) !== 1 || Number(results?.[1]?.meta?.changes || 0) !== 1) {
+        if (Number(results?.[0]?.meta?.changes || 0) !== 1 || Number(results?.[1]?.meta?.changes || 0) !== 1 || Number(results?.[2]?.meta?.changes || 0) !== 1) {
           return json({ error: "تعذر استرداد الحساب. تحقق من البيانات وحاول مجددًا." }, 400);
         }
         return json({ message: "Password updated" });
