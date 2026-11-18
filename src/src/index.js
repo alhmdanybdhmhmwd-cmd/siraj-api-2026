@@ -300,6 +300,71 @@ export default {
         return json({ user: cleanUser(user) });
       }
 
+      // Publish a 24-hour text status
+      if (method === "POST" && path === "/api/statuses") {
+        const body = await request.json();
+        const content = String(body.content || "").trim();
+
+        if (!content || content.length > 1000) {
+          return json({ error: "Status text must be between 1 and 1000 characters" }, 400);
+        }
+
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_posts (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+
+        const id = crypto.randomUUID();
+        await env.DB.prepare(
+          `INSERT INTO status_posts (id, user_id, content, expires_at)
+           VALUES (?, ?, ?, datetime('now', '+24 hours'))`
+        ).bind(id, currentUser.sub, content).run();
+
+        return json({
+          status: { id, content, createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 86400000).toISOString() }
+        }, 201);
+      }
+
+      // List active statuses from the current user and their friends
+      if (method === "GET" && path === "/api/statuses") {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_posts (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+
+        const result = await env.DB.prepare(
+          `SELECT s.id, s.user_id AS userId, u.username,
+                  u.display_name AS displayName, s.content,
+                  s.created_at AS createdAt, s.expires_at AS expiresAt
+           FROM status_posts s
+           JOIN users u ON u.id = s.user_id
+           WHERE s.expires_at > CURRENT_TIMESTAMP
+             AND (
+               s.user_id = ?
+               OR EXISTS (
+                 SELECT 1 FROM friendships f
+                 WHERE f.user_id = ? AND f.friend_id = s.user_id
+               )
+             )
+           ORDER BY s.created_at DESC
+           LIMIT 100`
+        ).bind(currentUser.sub, currentUser.sub).all();
+
+        return json({ statuses: result.results || [] });
+      }
+
       // Search users
       if (method === "GET" && path === "/api/users/search") {
         const q = (url.searchParams.get("q") || "").trim();
