@@ -246,6 +246,46 @@ async function sendSirajPush(env, recipientId, senderId, senderName, messageText
   }
 }
 
+function randomHex(byteLength) {
+  return Array.from(crypto.getRandomValues(new Uint8Array(byteLength)))
+    .map(value => value.toString(16).padStart(2, "0")).join("");
+}
+
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(value));
+  return Array.from(new Uint8Array(digest))
+    .map(value => value.toString(16).padStart(2, "0")).join("");
+}
+
+async function ensureRecoveryTables(env) {
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS recovery_codes (user_id TEXT PRIMARY KEY, code_hash TEXT NOT NULL, code_salt TEXT NOT NULL, expires_at INTEGER, consumed_at INTEGER, created_at INTEGER NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS recovery_rate_limits (bucket_key TEXT PRIMARY KEY, window_started INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0)").run();
+}
+
+async function generateRecoveryCode() {
+  const code = randomHex(20).toUpperCase();
+  const salt = randomHex(16);
+  const codeHash = await sha256Hex(salt + ":" + code);
+  return { code, salt, codeHash };
+}
+
+async function saveRecoveryCode(env, userId, recovery) {
+  const now = Math.floor(Date.now() / 1000);
+  await env.DB.prepare("INSERT INTO recovery_codes (user_id, code_hash, code_salt, expires_at, consumed_at, created_at) VALUES (?, ?, ?, NULL, NULL, ?) ON CONFLICT(user_id) DO UPDATE SET code_hash = excluded.code_hash, code_salt = excluded.code_salt, expires_at = NULL, consumed_at = NULL, created_at = excluded.created_at")
+    .bind(userId, recovery.codeHash, recovery.salt, now).run();
+}
+
+async function consumeRecoveryAttempt(env, identifier) {
+  const normalized = identifier.toLowerCase().replace(/[\\s()+.-]/g, "");
+  const bucketKey = await sha256Hex("recovery-identifier:" + normalized);
+  const now = Math.floor(Date.now() / 1000);
+  const windowStart = now - 15 * 60;
+  await env.DB.prepare("INSERT INTO recovery_rate_limits (bucket_key, window_started, attempts) VALUES (?, ?, 1) ON CONFLICT(bucket_key) DO UPDATE SET window_started = CASE WHEN recovery_rate_limits.window_started <= ? THEN excluded.window_started ELSE recovery_rate_limits.window_started END, attempts = CASE WHEN recovery_rate_limits.window_started <= ? THEN 1 ELSE recovery_rate_limits.attempts + 1 END")
+    .bind(bucketKey, now, windowStart, windowStart).run();
+  const row = await env.DB.prepare("SELECT attempts FROM recovery_rate_limits WHERE bucket_key = ?").bind(bucketKey).first();
+  return Number(row?.attempts || 0) <= 5;
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") {
@@ -304,21 +344,16 @@ export default {
         const salt = base64url(
           crypto.getRandomValues(new Uint8Array(16))
         );
-
         const passwordHash = await hashPassword(password, salt);
-
-        await env.DB.prepare(
-          `INSERT INTO users
-           (id, username, display_name, password_hash, password_salt, phone)
-           VALUES (?, ?, ?, ?, ?, ?)`
-        ).bind(
-          id,
-          username,
-          displayName,
-          passwordHash,
-          salt,
-          phone || null
-        ).run();
+        await ensureRecoveryTables(env);
+        const recovery = await generateRecoveryCode();
+        const createdAt = Math.floor(Date.now() / 1000);
+        await env.DB.batch([
+          env.DB.prepare(`INSERT INTO users (id, username, display_name, password_hash, password_salt, phone) VALUES (?, ?, ?, ?, ?, ?)`)
+            .bind(id, username, displayName, passwordHash, salt, phone || null),
+          env.DB.prepare(`INSERT INTO recovery_codes (user_id, code_hash, code_salt, expires_at, consumed_at, created_at) VALUES (?, ?, ?, NULL, NULL, ?)`)
+            .bind(id, recovery.codeHash, recovery.salt, createdAt)
+        ]);
 
         const user = {
           id,
@@ -331,8 +366,52 @@ export default {
 
         return json({
           user: cleanUser(user),
-          token
+          token,
+          recoveryCode: recovery.code
         }, 201);
+      }
+
+      // One-time recovery code password reset; does not use SMS or email.
+      if (method === "POST" && path === "/api/password/recover") {
+        const body = await request.json();
+        const identifier = String(body.identifier || body.username || body.phone || "").trim().toLowerCase();
+        const recoveryCode = String(body.recoveryCode || "").replace(/[\\s-]/g, "").toUpperCase();
+        const newPassword = String(body.newPassword || "");
+        if (!identifier || !/^[A-F0-9]{40}$/.test(recoveryCode)) {
+          return json({ error: "تعذر استرداد الحساب. تحقق من البيانات وحاول مجددًا." }, 400);
+        }
+        if (newPassword.length < 8 || newPassword.length > 128) {
+          return json({ error: "كلمة المرور يجب أن تكون بين 8 و128 حرفًا" }, 400);
+        }
+        await ensureRecoveryTables(env);
+        if (!(await consumeRecoveryAttempt(env, identifier))) {
+          return json({ error: "محاولات كثيرة. انتظر 15 دقيقة ثم حاول مجددًا." }, 429);
+        }
+        const user = await env.DB.prepare("SELECT id FROM users WHERE username = ? OR phone = ? LIMIT 1").bind(identifier, identifier).first();
+        if (!user) {
+          return json({ error: "تعذر استرداد الحساب. تحقق من البيانات وحاول مجددًا." }, 400);
+        }
+        const stored = await env.DB.prepare("SELECT code_hash, code_salt, consumed_at, expires_at FROM recovery_codes WHERE user_id = ?").bind(user.id).first();
+        if (!stored || (stored.consumed_at !== null && stored.consumed_at !== undefined)) {
+          return json({ error: "تعذر استرداد الحساب. تحقق من البيانات وحاول مجددًا." }, 400);
+        }
+        const suppliedHash = await sha256Hex(stored.code_salt + ":" + recoveryCode);
+        const now = Math.floor(Date.now() / 1000);
+        if (suppliedHash !== stored.code_hash || (stored.expires_at !== null && stored.expires_at !== undefined && Number(stored.expires_at) <= now)) {
+          return json({ error: "تعذر استرداد الحساب. تحقق من البيانات وحاول مجددًا." }, 400);
+        }
+        const newSalt = base64url(crypto.getRandomValues(new Uint8Array(16)));
+        const newHash = await hashPassword(newPassword, newSalt);
+        const results = await env.DB.batch([
+          env.DB.prepare("UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ? AND EXISTS (SELECT 1 FROM recovery_codes WHERE user_id = ? AND code_hash = ? AND consumed_at IS NULL AND (expires_at IS NULL OR expires_at > ?))")
+            .bind(newHash, newSalt, user.id, user.id, stored.code_hash, now),
+          env.DB.prepare("UPDATE recovery_codes SET consumed_at = ? WHERE user_id = ? AND code_hash = ? AND consumed_at IS NULL")
+            .bind(now, user.id, stored.code_hash)
+        ]);
+        if (Number(results?.[0]?.meta?.changes || 0) !== 1) {
+          return json({ error: "تعذر استرداد الحساب. تحقق من البيانات وحاول مجددًا." }, 400);
+        }
+        return json({ message: "Password updated" });
       }
 
       // Login
@@ -368,6 +447,20 @@ export default {
 
       if (!currentUser) {
         return json({ error: "Unauthorized" }, 401);
+      }
+
+      // Issue a new recovery code only after confirming the current password.
+      if (method === "POST" && path === "/api/recovery-code") {
+        const body = await request.json();
+        const password = String(body.password || "");
+        const user = await env.DB.prepare("SELECT password_hash, password_salt FROM users WHERE id = ?").bind(currentUser.sub).first();
+        if (!user || !password || await hashPassword(password, user.password_salt) !== user.password_hash) {
+          return json({ error: "كلمة المرور الحالية غير صحيحة" }, 401);
+        }
+        await ensureRecoveryTables(env);
+        const recovery = await generateRecoveryCode();
+        await saveRecoveryCode(env, currentUser.sub, recovery);
+        return json({ recoveryCode: recovery.code, message: "احفظ رمز الاسترداد في مكان آمن؛ لن يظهر مرة أخرى." });
       }
       // Update current user's editable profile fields
       if (method === "POST" && path === "/api/profile") {
