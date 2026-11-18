@@ -321,6 +321,41 @@ export default {
         });
       }
 
+      // Per-account notification preferences (delivery is handled by the push service).
+      if ((method === "GET" || method === "POST") && path === "/api/notification-settings") {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS notification_preferences (
+            user_id TEXT PRIMARY KEY,
+            messages INTEGER NOT NULL DEFAULT 1,
+            groups INTEGER NOT NULL DEFAULT 1,
+            statuses INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        if (method === "POST") {
+          const body = await request.json();
+          await env.DB.prepare(`
+            INSERT INTO notification_preferences (user_id, messages, groups, statuses)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+              messages = excluded.messages,
+              groups = excluded.groups,
+              statuses = excluded.statuses,
+              updated_at = CURRENT_TIMESTAMP
+          `).bind(currentUser.sub, body.messages === false ? 0 : 1,
+            body.groups === false ? 0 : 1, body.statuses === false ? 0 : 1).run();
+        }
+        const settings = await env.DB.prepare(
+          "SELECT messages, groups, statuses FROM notification_preferences WHERE user_id = ?"
+        ).bind(currentUser.sub).first();
+        return json({ settings: {
+          messages: settings ? settings.messages === 1 : true,
+          groups: settings ? settings.groups === 1 : true,
+          statuses: settings ? settings.statuses === 1 : true
+        }});
+      }
+
       // Register Firebase device token
       if (method === "POST" && path === "/api/devices/token") {
         const body = await request.json();
