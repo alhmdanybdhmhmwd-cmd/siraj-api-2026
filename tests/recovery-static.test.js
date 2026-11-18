@@ -21,7 +21,10 @@ test("recovery endpoint validates a 160-bit hexadecimal code and password length
   assert.match(worker, /newPassword\.length > 128/);
 });
 
-test("recovery codes are generated with cryptographic randomness and stored as salted hashes", () => {
+test("recovery codes are generated with cryptographic randomness, salted hashes, and 90-day expiry", () => {
+  assert.match(worker, /RECOVERY_CODE_TTL_SECONDS = 90 \* 24 \* 60 \* 60/);
+  assert.match(worker, /now \+ RECOVERY_CODE_TTL_SECONDS/);
+  assert.match(worker, /createdAt \+ RECOVERY_CODE_TTL_SECONDS/);
   assert.match(worker, /crypto\.getRandomValues\(new Uint8Array\(byteLength\)\)/);
   assert.match(worker, /crypto\.subtle\.digest\("SHA-256"/);
   assert.match(worker, /code_hash/);
