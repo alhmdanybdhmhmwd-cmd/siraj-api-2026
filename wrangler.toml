@@ -8,6 +8,5 @@ binding = "DB"
 database_name = "siraj-db"
 database_id = "0db93afd-4bf5-4423-9e25-7a2f4f4bdbe0"
 
-[[r2_buckets]]
-binding = "MEDIA"
-bucket_name = "siraj-media"
+[vars]
+TIGRIS_BUCKET = "siraj-media"
