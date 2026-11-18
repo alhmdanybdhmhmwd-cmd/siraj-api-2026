@@ -18,6 +18,8 @@ jobs:
         with:
           node-version: 24
       - run: npm install --ignore-scripts
+      - name: Apply D1 migrations to an isolated local database
+        run: npx wrangler d1 migrations apply siraj-db --local
       - run: npm test
       - name: Validate Worker bundle without deploying
         run: npx wrangler deploy --dry-run
