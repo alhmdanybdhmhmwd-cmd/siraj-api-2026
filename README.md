@@ -17,7 +17,7 @@ npx wrangler d1 migrations list siraj-db --remote
 npx wrangler d1 migrations apply siraj-db --remote
 ```
 
-Do not deploy the Worker until the migration has completed successfully. The migration only creates the two recovery-related tables and an index; it does not alter or delete existing user, message, contact, or group data.
+Do not deploy the Worker until the migration has completed successfully. The migration only creates recovery-related tables and indexes; it does not alter or delete existing user, message, contact, or group data.
 
 ## Recovery-code behavior
 
@@ -26,6 +26,7 @@ Do not deploy the Worker until the migration has completed successfully. The mig
 - Existing users can rotate/create a code after authenticating and confirming their current password.
 - Recovery attempts are rate-limited by normalized account identifier and account ID. IP-based limiting is deferred until the Vercel-to-Worker proxy can pass a verifiable client identity.
 - Newly issued recovery codes expire automatically after 90 days and can be used only once. Issuing a replacement invalidates the previous code.
+- A successful password recovery revokes all previously issued login sessions for that account; the user must sign in again.
 
 The current companion Flutter source includes registration-time code display/copy, a password-recovery form, and authenticated code rotation. These client flows still require end-to-end verification against a deployed Worker after the D1 migration is applied.
 
