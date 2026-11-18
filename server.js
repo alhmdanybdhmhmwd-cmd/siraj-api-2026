@@ -31,6 +31,9 @@ const server = http.createServer(async (req, res) => {
         headers: {
           "Content-Type": req.headers["content-type"] || "application/json",
           "Authorization": req.headers.authorization || "",
+          ...(req.headers["x-file-name"] ? { "X-File-Name": req.headers["x-file-name"] } : {}),
+          ...(req.headers["x-recipient-id"] ? { "X-Recipient-Id": req.headers["x-recipient-id"] } : {}),
+          ...(req.headers["x-group-id"] ? { "X-Group-Id": req.headers["x-group-id"] } : {}),
         },
         body: ["GET", "HEAD"].includes(req.method) ? undefined : body,
       }
@@ -42,6 +45,12 @@ const server = http.createServer(async (req, res) => {
       ...cors,
       "Content-Type":
         response.headers.get("content-type") || "application/json",
+      ...(response.headers.get("content-disposition")
+        ? { "Content-Disposition": response.headers.get("content-disposition") }
+        : {}),
+      ...(response.headers.get("cache-control")
+        ? { "Cache-Control": response.headers.get("cache-control") }
+        : {}),
     });
 
     res.end(Buffer.from(responseBody));
