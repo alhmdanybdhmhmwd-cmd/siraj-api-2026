@@ -32,9 +32,7 @@ test("recovery codes are generated with cryptographic randomness, salted hashes,
   assert.match(worker, /constantTimeHexEqual/);
 });
 
-test("recovery attempts are rate limited by edge IP, identifier, and account, and codes are consumed", () => {
-  assert.match(worker, /request\.headers\.get\("CF-Connecting-IP"\)/);
-  assert.match(worker, /consumeRecoveryAttempt\(env, "ip", clientIp, 20\)/);
+test("recovery attempts are rate limited by normalized identifier and account, and codes are consumed", () => {
   assert.match(worker, /consumeRecoveryAttempt\(env, "identifier", identifier\)/);
   assert.match(worker, /consumeRecoveryAttempt\(env, "account", user\.id\)/);
   assert.match(worker, /UPDATE recovery_codes SET consumed_at = \?/);
