@@ -909,6 +909,26 @@ export default {
           try { await deleteTigrisObject(env, objectKey); } catch (cleanupError) { console.error("Tigris rollback cleanup failed", cleanupError); }
           throw error;
         }
+
+        const sender = await env.DB.prepare(
+          "SELECT display_name, username FROM users WHERE id = ?"
+        ).bind(currentUser.sub).first();
+        const senderName = sender?.display_name || sender?.username || currentUser.username;
+        if (recipientId) {
+          await sendSirajPush(env, recipientId, currentUser.sub, senderName,
+            "أرسل ملفًا: " + fileName, "direct_message");
+        } else {
+          const [group, recipients] = await Promise.all([
+            env.DB.prepare("SELECT name FROM groups WHERE id = ?").bind(groupId).first(),
+            env.DB.prepare("SELECT user_id FROM group_members WHERE group_id = ? AND user_id != ?")
+              .bind(groupId, currentUser.sub).all()
+          ]);
+          await Promise.all((recipients.results || []).map(member =>
+            sendSirajPush(env, member.user_id, currentUser.sub, senderName,
+              "أرسل ملفًا: " + fileName, "group_message", groupId, group?.name || "مجموعة سراج")
+          ));
+        }
+
         return json({
           attachment: { id, fileName, contentType, sizeBytes: bytes.byteLength, downloadPath: "/api/media/" + id, expiresAt },
           message: "Attachment sent"
