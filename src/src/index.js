@@ -210,8 +210,8 @@ async function sendSirajPush(env, recipientId, senderId, senderName, messageText
   try {
     const account = JSON.parse(env.FCM_SERVICE_ACCOUNT_JSON);
     const now = Math.floor(Date.now() / 1000);
-    const pem = String(account.private_key || "").replace(/\\\\n/g, "\n");
-    const keyText = pem.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\\s/g, "");
+    const pem = String(account.private_key || "").replaceAll("\\n", "\n");
+    const keyText = pem.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g, "");
     const keyBytes = Uint8Array.from(atob(keyText), c => c.charCodeAt(0));
     const signingKey = await crypto.subtle.importKey(
       "pkcs8", keyBytes, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]
