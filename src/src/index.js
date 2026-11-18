@@ -1,3 +1,5 @@
+import { AwsClient } from "aws4fetch";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -22,37 +24,24 @@ async function hmac(key, value) {
   return new Uint8Array(await crypto.subtle.sign("HMAC", k, encoder.encode(value)));
 }
 async function tigrisRequest(env, method, objectKey, body = undefined, contentType = "") {
-  const accessKey = env.TIGRIS_ACCESS_KEY_ID;
-  const secretKey = env.TIGRIS_SECRET_ACCESS_KEY;
+  const accessKeyId = env.TIGRIS_ACCESS_KEY_ID;
+  const secretAccessKey = env.TIGRIS_SECRET_ACCESS_KEY;
   const bucket = env.TIGRIS_BUCKET || "siraj-media";
-  if (!accessKey || !secretKey || !bucket) throw new Error("Tigris storage credentials are not configured");
-  const host = "t3.storage.dev";
-  const path = "/" + bucket + "/" + objectKey.split("/").map(encodeURIComponent).join("/");
-  const url = "https://" + host + path;
-  const now = new Date();
-  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
-  const dateStamp = amzDate.slice(0, 8);
-  const payloadHash = await sha256Hex(body === undefined ? new Uint8Array(0) : body);
-  const headers = { "x-amz-content-sha256": payloadHash, "x-amz-date": amzDate };
-  if (contentType) headers["content-type"] = contentType;
-  const signedNames = contentType
-    ? "content-type;host;x-amz-content-sha256;x-amz-date"
-    : "host;x-amz-content-sha256;x-amz-date";
-  const canonicalHeaders =
-    (contentType ? "content-type:" + contentType.trim() + "\n" : "") +
-    "host:" + host + "\n" +
-    "x-amz-content-sha256:" + payloadHash + "\n" +
-    "x-amz-date:" + amzDate + "\n";
-  const canonicalRequest = method + "\n" + path + "\n\n" + canonicalHeaders + signedNames + "\n" + payloadHash;
-  const scope = dateStamp + "/auto/s3/aws4_request";
-  const stringToSign = "AWS4-HMAC-SHA256\n" + amzDate + "\n" + scope + "\n" + await sha256Hex(encoder.encode(canonicalRequest));
-  const kDate = await hmac(encoder.encode("AWS4" + secretKey), dateStamp);
-  const kRegion = await hmac(kDate, "auto");
-  const kService = await hmac(kRegion, "s3");
-  const kSigning = await hmac(kService, "aws4_request");
-  const signature = hex(await hmac(kSigning, stringToSign));
-  headers.Authorization = "AWS4-HMAC-SHA256 Credential=" + accessKey + "/" + scope + ", SignedHeaders=" + signedNames + ", Signature=" + signature;
-  return fetch(url, { method, headers, body });
+  if (!accessKeyId || !secretAccessKey || !bucket) {
+    throw new Error("Tigris storage credentials are not configured");
+  }
+  const objectPath = objectKey.split("/").map(encodeURIComponent).join("/");
+  const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
+  const storage = new AwsClient({
+    accessKeyId,
+    secretAccessKey,
+    service: "s3",
+    region: "auto",
+    retries: 2
+  });
+  const headers = {};
+  if (contentType) headers["Content-Type"] = contentType;
+  return storage.fetch(storageUrl, { method, headers, body });
 }
 async function deleteTigrisObject(env, objectKey) {
   const response = await tigrisRequest(env, "DELETE", objectKey);
