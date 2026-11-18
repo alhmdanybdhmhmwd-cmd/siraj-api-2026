@@ -19,9 +19,3 @@ CREATE TABLE IF NOT EXISTS recovery_rate_limits (
 CREATE INDEX IF NOT EXISTS idx_recovery_rate_limits_window
   ON recovery_rate_limits(window_started);
 
--- Revoke existing sessions immediately after a recovery-code password reset.
-CREATE TABLE IF NOT EXISTS recovery_token_revocations (
-  user_id TEXT PRIMARY KEY,
-  revoked_at_ms INTEGER NOT NULL,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
