@@ -380,12 +380,6 @@ export default {
       // One-time recovery code password reset; does not use SMS or email.
       if (method === "POST" && path === "/api/password/recover") {
         const body = await request.json();
-        // Cloudflare supplies this header at the edge; never trust a client-provided
-        // forwarded-for header for security decisions.
-        const clientIp = request.headers.get("CF-Connecting-IP");
-        if (clientIp && !(await consumeRecoveryAttempt(env, "ip", clientIp, 20))) {
-          return json({ error: "محاولات كثيرة من هذا الاتصال. انتظر 15 دقيقة ثم حاول مجددًا." }, 429);
-        }
         const identifier = String(body.identifier || body.username || body.phone || "").trim().toLowerCase();
         const recoveryCode = String(body.recoveryCode || "").replace(/[\s-]/g, "").toUpperCase();
         const newPassword = String(body.newPassword || "");
