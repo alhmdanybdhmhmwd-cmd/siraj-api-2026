@@ -1046,7 +1046,24 @@ export default {
             contentType
           }
         });
-        return json({ attachment: { id: key, fileName: suppliedName, contentType, size: bytes.byteLength } }, 201);
+        const attachmentBody = JSON.stringify({
+          type: "attachment",
+          attachmentId: key,
+          fileName: suppliedName,
+          contentType,
+          size: bytes.byteLength
+        });
+        const messageId = crypto.randomUUID();
+        if (recipientId) {
+          await env.DB.prepare(
+            "INSERT INTO messages (id, sender_id, receiver_id, body) VALUES (?, ?, ?, ?)"
+          ).bind(messageId, currentUser.sub, recipientId, attachmentBody).run();
+        } else {
+          await env.DB.prepare(
+            "INSERT INTO group_messages (id, group_id, sender_id, body) VALUES (?, ?, ?, ?)"
+          ).bind(messageId, groupId, currentUser.sub, attachmentBody).run();
+        }
+        return json({ attachment: { id: key, fileName: suppliedName, contentType, size: bytes.byteLength }, messageId }, 201);
       }
 
       const mediaMatch = path.match(/^\/api\/media\/(.+)$/);
