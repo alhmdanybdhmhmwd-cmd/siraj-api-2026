@@ -205,7 +205,7 @@ function cleanUser(user) {
   };
 }
 
-async function sendSirajPush(env, recipientId, senderId, senderName, messageText) {
+async function sendSirajPush(env, recipientId, senderId, senderName, messageText, notificationType = "direct_message", groupId = null, groupName = null) {
   if (!env.FCM_SERVICE_ACCOUNT_JSON) return;
   try {
     const account = JSON.parse(env.FCM_SERVICE_ACCOUNT_JSON);
@@ -247,10 +247,11 @@ async function sendSirajPush(env, recipientId, senderId, senderName, messageText
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       )
     `).run();
+    const preferenceColumn = notificationType === "group_message" ? "groups" : "messages";
     const pref = await env.DB.prepare(
-      "SELECT messages FROM notification_preferences WHERE user_id = ?"
+      `SELECT ${preferenceColumn} AS enabled FROM notification_preferences WHERE user_id = ?`
     ).bind(recipientId).first();
-    if (pref && pref.messages === 0) return;
+    if (pref && pref.enabled === 0) return;
 
     await env.DB.prepare(`
       CREATE TABLE IF NOT EXISTS device_tokens (
@@ -272,10 +273,18 @@ async function sendSirajPush(env, recipientId, senderId, senderName, messageText
           body: JSON.stringify({ message: {
             token: device.fcm_token,
             notification: {
-              title: "رسالة من " + String(senderName || "مستخدم سراج").slice(0, 80),
-              body: preview || "لديك رسالة جديدة"
+              title: notificationType === "group_message"
+                ? String(groupName || "مجموعة سراج").slice(0, 60)
+                : "رسالة من " + String(senderName || "مستخدم سراج").slice(0, 80),
+              body: notificationType === "group_message"
+                ? (String(senderName || "عضو") + ": " + (preview || "رسالة جديدة")).slice(0, 120)
+                : (preview || "لديك رسالة جديدة")
             },
-            data: { type: "direct_message", senderId: String(senderId || "") },
+            data: {
+              type: notificationType,
+              senderId: String(senderId || ""),
+              ...(groupId ? { groupId: String(groupId) } : {})
+            },
             android: { priority: "HIGH", notification: { channel_id: "siraj_messages" } }
           }})
         }
@@ -1065,6 +1074,20 @@ export default {
           await env.DB.prepare(
             "UPDATE groups SET updated_at = CURRENT_TIMESTAMP WHERE id = ?"
           ).bind(groupId).run();
+
+          const [sender, group, recipients] = await Promise.all([
+            env.DB.prepare("SELECT display_name, username FROM users WHERE id = ?")
+              .bind(currentUser.sub).first(),
+            env.DB.prepare("SELECT name FROM groups WHERE id = ?")
+              .bind(groupId).first(),
+            env.DB.prepare("SELECT user_id FROM group_members WHERE group_id = ? AND user_id != ?")
+              .bind(groupId, currentUser.sub).all()
+          ]);
+          const senderName = sender?.display_name || sender?.username || currentUser.username;
+          await Promise.all((recipients.results || []).map(member =>
+            sendSirajPush(env, member.user_id, currentUser.sub, senderName, message,
+              "group_message", groupId, group?.name || "مجموعة سراج")
+          ));
 
           return json({ message: "Message sent", id }, 201);
         }
