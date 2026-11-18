@@ -52,3 +52,35 @@ test("production D1 binding and migrations directory remain configured", () => {
   assert.match(config, /database_name\s*=\s*"siraj-db"/);
   assert.match(config, /migrations_dir\s*=\s*"migrations"/);
 });
+
+test("password recovery performs the password update, one-time consume, and session revocation in one D1 batch", () => {
+  const start = worker.indexOf('if (method === "POST" && path === "/api/password/recover")');
+  const end = worker.indexOf('// Login', start);
+  assert.ok(start >= 0 && end > start, "recovery endpoint block exists");
+  const endpoint = worker.slice(start, end);
+  assert.match(endpoint, /env\.DB\.batch\(\[/);
+  assert.match(endpoint, /UPDATE users SET password_hash = \?, password_salt = \? WHERE id = \? AND EXISTS/);
+  assert.match(endpoint, /UPDATE recovery_codes SET consumed_at = \? WHERE user_id = \? AND code_hash = \? AND consumed_at IS NULL/);
+  assert.match(endpoint, /INSERT INTO recovery_token_revocations/);
+  assert.match(endpoint, /results\?\.\[0\]\?\.meta\?\.changes/);
+  assert.match(endpoint, /results\?\.\[1\]\?\.meta\?\.changes/);
+});
+
+test("authenticated requests reject sessions issued before or at the password-reset revocation time", () => {
+  const start = worker.indexOf("async function authenticate(");
+  const end = worker.indexOf("\nfunction cleanUser", start);
+  assert.ok(start >= 0 && end > start, "authenticate function exists");
+  const auth = worker.slice(start, end);
+  assert.match(auth, /SELECT revoked_at_ms FROM recovery_token_revocations WHERE user_id = \?/);
+  assert.match(auth, /payload\.iat_ms\s*\|\|\s*0\)\s*<=\s*Number\(revocation\.revoked_at_ms/);
+});
+
+test("recovery-code rotation replaces the previous code only after password confirmation", () => {
+  const start = worker.indexOf('if (method === "POST" && path === "/api/recovery-code")');
+  const end = worker.indexOf("// Update current user's editable profile fields", start);
+  assert.ok(start >= 0 && end > start, "recovery-code rotation endpoint exists");
+  const endpoint = worker.slice(start, end);
+  assert.match(endpoint, /hashPassword\(password, user\.password_salt\)/);
+  assert.match(endpoint, /saveRecoveryCode\(env, currentUser\.sub, recovery\)/);
+  assert.match(worker, /ON CONFLICT\(user_id\) DO UPDATE SET code_hash = excluded\.code_hash/);
+});
