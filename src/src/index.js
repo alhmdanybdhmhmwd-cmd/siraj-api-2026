@@ -331,8 +331,100 @@ export default {
       if (!currentUser) {
         return json({ error: "Unauthorized" }, 401);
       }
-      // Register Firebase device token
+      // Update profile fields used by the Flutter client.
+      if (method === "POST" && path === "/api/profile") {
+        const body = await request.json();
+        const displayName = String(body.displayName || "").trim();
+        const phone = String(body.phone || "").trim();
+        if (!displayName || displayName.length > 60) return json({ error: "Display name must be 1-60 characters" }, 400);
+        if (phone.length > 25) return json({ error: "Phone number is too long" }, 400);
+        await env.DB.prepare(
+          "UPDATE users SET display_name = ?, phone = ? WHERE id = ?"
+        ).bind(displayName, phone || null, currentUser.sub).run();
+        const user = await env.DB.prepare(
+          "SELECT id, username, display_name, phone FROM users WHERE id = ?"
+        ).bind(currentUser.sub).first();
+        if (!user) return json({ error: "User not found" }, 404);
+        return json({ user: cleanUser(user), message: "Profile updated" });
+      }
+
+      // Privacy preferences are stored per account and default to enabled.
+      if ((method === "GET" || method === "POST") && path === "/api/privacy") {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS user_privacy (
+            user_id TEXT PRIMARY KEY,
+            searchable INTEGER NOT NULL DEFAULT 1,
+            read_receipts INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        if (method === "POST") {
+          const body = await request.json();
+          await env.DB.prepare(`
+            INSERT INTO user_privacy (user_id, searchable, read_receipts)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+              searchable = excluded.searchable,
+              read_receipts = excluded.read_receipts,
+              updated_at = CURRENT_TIMESTAMP
+          `).bind(currentUser.sub, body.searchable === false ? 0 : 1,
+            body.readReceipts === false ? 0 : 1).run();
+        }
+        const settings = await env.DB.prepare(
+          "SELECT searchable, read_receipts FROM user_privacy WHERE user_id = ?"
+        ).bind(currentUser.sub).first();
+        return json({ privacy: {
+          searchable: settings ? settings.searchable === 1 : true,
+          readReceipts: settings ? settings.read_receipts === 1 : true
+        }});
+      }
+
+      // Per-account notification preferences.
+      if ((method === "GET" || method === "POST") && path === "/api/notification-settings") {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS notification_preferences (
+            user_id TEXT PRIMARY KEY,
+            messages INTEGER NOT NULL DEFAULT 1,
+            groups INTEGER NOT NULL DEFAULT 1,
+            statuses INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        if (method === "POST") {
+          const body = await request.json();
+          await env.DB.prepare(`
+            INSERT INTO notification_preferences (user_id, messages, groups, statuses)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+              messages = excluded.messages,
+              groups = excluded.groups,
+              statuses = excluded.statuses,
+              updated_at = CURRENT_TIMESTAMP
+          `).bind(currentUser.sub, body.messages === false ? 0 : 1,
+            body.groups === false ? 0 : 1, body.statuses === false ? 0 : 1).run();
+        }
+        const settings = await env.DB.prepare(
+          "SELECT messages, groups, statuses FROM notification_preferences WHERE user_id = ?"
+        ).bind(currentUser.sub).first();
+        return json({ settings: {
+          messages: settings ? settings.messages === 1 : true,
+          groups: settings ? settings.groups === 1 : true,
+          statuses: settings ? settings.statuses === 1 : true
+        }});
+      }
+
+      // Register Firebase device token.
       if (method === "POST" && path === "/api/devices/token") {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS device_tokens (
+            user_id TEXT NOT NULL,
+            fcm_token TEXT PRIMARY KEY,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
         const body = await request.json();
         const fcmToken = String(body.fcmToken || "").trim();
 
@@ -366,6 +458,47 @@ export default {
         return json({ user: cleanUser(user) });
       }
 
+      // Publish and list 24-hour text statuses.
+      if ((method === "GET" || method === "POST") && path === "/api/statuses") {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_posts (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        if (method === "POST") {
+          const body = await request.json();
+          const content = String(body.content || "").trim();
+          if (!content || content.length > 1000) return json({ error: "Status text must be between 1 and 1000 characters" }, 400);
+          const id = crypto.randomUUID();
+          const createdAt = new Date().toISOString();
+          const expiresAt = new Date(Date.now() + 86400000).toISOString();
+          await env.DB.prepare(
+            "INSERT INTO status_posts (id, user_id, content, expires_at) VALUES (?, ?, ?, ?)"
+          ).bind(id, currentUser.sub, content, expiresAt).run();
+          return json({ status: { id, content, createdAt, expiresAt } }, 201);
+        }
+        const result = await env.DB.prepare(`
+          SELECT s.id, s.user_id AS userId, u.username,
+                 u.display_name AS displayName, s.content,
+                 s.created_at AS createdAt, s.expires_at AS expiresAt
+          FROM status_posts s
+          JOIN users u ON u.id = s.user_id
+          WHERE s.expires_at > CURRENT_TIMESTAMP
+            AND (s.user_id = ? OR EXISTS (
+              SELECT 1 FROM friendships f
+              WHERE f.user_id = ? AND f.friend_id = s.user_id
+            ))
+          ORDER BY s.created_at DESC
+          LIMIT 100
+        `).bind(currentUser.sub, currentUser.sub).all();
+        return json({ statuses: result.results || [] });
+      }
+
       // Search users
       if (method === "GET" && path === "/api/users/search") {
         const q = (url.searchParams.get("q") || "").trim();
@@ -374,11 +507,22 @@ export default {
           return json({ users: [] });
         }
 
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS user_privacy (
+            user_id TEXT PRIMARY KEY,
+            searchable INTEGER NOT NULL DEFAULT 1,
+            read_receipts INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+
         const users = await env.DB.prepare(
           `SELECT id, username, display_name, phone
            FROM users
            WHERE id != ?
            AND (username LIKE ? OR phone LIKE ?)
+           AND COALESCE((SELECT searchable FROM user_privacy WHERE user_id = users.id), 1) = 1
            LIMIT 30`
         ).bind(
           currentUser.sub,
@@ -913,13 +1057,24 @@ export default {
           }, 403);
         }
 
-        await env.DB.prepare(
-          `UPDATE messages
-           SET read_at = CURRENT_TIMESTAMP
-           WHERE sender_id = ?
-           AND receiver_id = ?
-           AND read_at IS NULL`
-        ).bind(friendId, currentUser.sub).run();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS user_privacy (
+            user_id TEXT PRIMARY KEY,
+            searchable INTEGER NOT NULL DEFAULT 1,
+            read_receipts INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        const privacy = await env.DB.prepare(
+          "SELECT read_receipts FROM user_privacy WHERE user_id = ?"
+        ).bind(currentUser.sub).first();
+        if (!privacy || privacy.read_receipts === 1) {
+          await env.DB.prepare(
+            `UPDATE messages SET read_at = CURRENT_TIMESTAMP
+             WHERE sender_id = ? AND receiver_id = ? AND read_at IS NULL`
+          ).bind(friendId, currentUser.sub).run();
+        }
 
         const result = await env.DB.prepare(
           `SELECT id, sender_id, receiver_id,
