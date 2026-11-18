@@ -45,3 +45,4 @@ Do not delete or recreate the existing D1 database. Migrations add tables/column
 - The 7-day expiry is a fallback; it is not a promise that a file remains available if every recipient downloads it earlier.
 - This is not end-to-end encryption. Transport security and access checks do not replace E2E encryption.
 - Do not upload secrets, tokens or passwords into this repository.
+<!-- Trigger Cloudflare production build -->
