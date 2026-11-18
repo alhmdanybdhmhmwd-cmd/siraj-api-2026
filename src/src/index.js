@@ -1027,7 +1027,7 @@ export default {
           if (!member) return json({ error: "Group not found" }, 404);
         }
         const contentType = (request.headers.get("Content-Type") || "application/octet-stream").split(";")[0].toLowerCase();
-        const allowedTypes = /^(image\/(jpeg|png|webp|gif)|video\/(mp4|webm|quicktime)|audio\/(mpeg|mp4|aac|wav|ogg|webm)|application\/(pdf|zip|vnd\.openxmlformats-officedocument\.[a-z0-9.]+)|text\/plain)$/;
+        const allowedTypes = /^(image\/(jpeg|png|webp|gif)|video\/(mp4|webm|quicktime)|audio\/(mpeg|mp4|aac|wav|ogg|webm)|application\/(octet-stream|pdf|zip|msword|vnd\.ms-excel|vnd\.ms-powerpoint|vnd\.openxmlformats-officedocument\.[a-z0-9.]+)|text\/plain)$/;
         if (!allowedTypes.test(contentType)) return json({ error: "Unsupported media type" }, 415);
         const bytes = await request.arrayBuffer();
         if (!bytes.byteLength || bytes.byteLength > 20 * 1024 * 1024) {
