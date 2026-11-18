@@ -1042,7 +1042,7 @@ export default {
         const key = currentUser.sub + "/" + id;
         const bucket = env.TIGRIS_BUCKET || "siraj-media";
         const objectPath = key.split("/").map(encodeURIComponent).join("/");
-        const storageUrl = "https://t3.storage.dev/" + encodeURIComponent(bucket) + "/" + objectPath;
+        const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
         const storage = new AwsClient({
           accessKeyId: env.TIGRIS_ACCESS_KEY_ID,
           secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY,
@@ -1093,7 +1093,7 @@ export default {
         const key = decodeURIComponent(mediaMatch[1]);
         const bucket = env.TIGRIS_BUCKET || "siraj-media";
         const objectPath = key.split("/").map(encodeURIComponent).join("/");
-        const storageUrl = "https://t3.storage.dev/" + encodeURIComponent(bucket) + "/" + objectPath;
+        const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
         const storage = new AwsClient({
           accessKeyId: env.TIGRIS_ACCESS_KEY_ID,
           secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY,
