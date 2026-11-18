@@ -1,3 +1,5 @@
+import { AwsClient } from "aws4fetch";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1007,9 +1009,11 @@ export default {
         });
       }
 
-      // Binary media upload/download backed by Cloudflare R2 (MEDIA binding).
+      // Private media storage backed by the existing Tigris bucket (S3-compatible).
       if (path === "/api/media" && method === "POST") {
-        if (!env.MEDIA) return json({ error: "Media storage is not configured" }, 503);
+        if (!env.TIGRIS_ACCESS_KEY_ID || !env.TIGRIS_SECRET_ACCESS_KEY) {
+          return json({ error: "Media storage credentials are not configured" }, 503);
+        }
         const recipientId = (request.headers.get("X-Recipient-Id") || "").trim();
         const groupId = (request.headers.get("X-Group-Id") || "").trim();
         if ((recipientId ? 1 : 0) + (groupId ? 1 : 0) !== 1) {
@@ -1036,16 +1040,31 @@ export default {
         const suppliedName = decodeURIComponent(request.headers.get("X-File-Name") || "attachment").replace(/[\\/\\r\\n]/g, "_").slice(0, 180);
         const id = crypto.randomUUID();
         const key = currentUser.sub + "/" + id;
-        await env.MEDIA.put(key, bytes, {
-          httpMetadata: { contentType },
-          customMetadata: {
-            ownerId: currentUser.sub,
-            recipientId,
-            groupId,
-            fileName: suppliedName,
-            contentType
-          }
+        const bucket = env.TIGRIS_BUCKET || "siraj-media";
+        const objectPath = key.split("/").map(encodeURIComponent).join("/");
+        const storageUrl = "https://t3.storage.dev/" + encodeURIComponent(bucket) + "/" + objectPath;
+        const storage = new AwsClient({
+          accessKeyId: env.TIGRIS_ACCESS_KEY_ID,
+          secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY,
+          service: "s3",
+          region: "auto",
+          retries: 2
         });
+        const putResponse = await storage.fetch(storageUrl, {
+          method: "PUT",
+          headers: {
+            "Content-Type": contentType,
+            "x-amz-meta-ownerid": currentUser.sub,
+            "x-amz-meta-recipientid": recipientId,
+            "x-amz-meta-groupid": groupId,
+            "x-amz-meta-filename": encodeURIComponent(suppliedName),
+            "x-amz-meta-contenttype": contentType
+          },
+          body: bytes
+        });
+        if (!putResponse.ok) {
+          return json({ error: "Media storage upload failed", storageStatus: putResponse.status }, 502);
+        }
         const attachmentBody = JSON.stringify({
           type: "attachment",
           attachmentId: key,
@@ -1068,30 +1087,48 @@ export default {
 
       const mediaMatch = path.match(/^\/api\/media\/(.+)$/);
       if (mediaMatch && method === "GET") {
-        if (!env.MEDIA) return json({ error: "Media storage is not configured" }, 503);
+        if (!env.TIGRIS_ACCESS_KEY_ID || !env.TIGRIS_SECRET_ACCESS_KEY) {
+          return json({ error: "Media storage credentials are not configured" }, 503);
+        }
         const key = decodeURIComponent(mediaMatch[1]);
-        const object = await env.MEDIA.get(key);
-        if (!object) return json({ error: "Attachment not found" }, 404);
-        const meta = object.customMetadata || {};
-        let permitted = meta.ownerId === currentUser.sub;
-        if (!permitted && meta.recipientId === currentUser.sub) {
+        const bucket = env.TIGRIS_BUCKET || "siraj-media";
+        const objectPath = key.split("/").map(encodeURIComponent).join("/");
+        const storageUrl = "https://t3.storage.dev/" + encodeURIComponent(bucket) + "/" + objectPath;
+        const storage = new AwsClient({
+          accessKeyId: env.TIGRIS_ACCESS_KEY_ID,
+          secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY,
+          service: "s3",
+          region: "auto",
+          retries: 2
+        });
+        const storageResponse = await storage.fetch(storageUrl, { method: "GET" });
+        if (storageResponse.status === 404) return json({ error: "Attachment not found" }, 404);
+        if (!storageResponse.ok) return json({ error: "Media storage download failed", storageStatus: storageResponse.status }, 502);
+        const ownerId = storageResponse.headers.get("x-amz-meta-ownerid") || "";
+        const recipientId = storageResponse.headers.get("x-amz-meta-recipientid") || "";
+        const groupId = storageResponse.headers.get("x-amz-meta-groupid") || "";
+        let permitted = ownerId === currentUser.sub;
+        if (!permitted && recipientId === currentUser.sub) {
           const friendship = await env.DB.prepare(
             "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
-          ).bind(currentUser.sub, meta.ownerId).first();
+          ).bind(currentUser.sub, ownerId).first();
           permitted = !!friendship;
         }
-        if (!permitted && meta.groupId) {
+        if (!permitted && groupId) {
           const member = await env.DB.prepare(
             "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
-          ).bind(meta.groupId, currentUser.sub).first();
+          ).bind(groupId, currentUser.sub).first();
           permitted = !!member;
         }
         if (!permitted) return json({ error: "Attachment access denied" }, 403);
         const headers = new Headers(corsHeaders);
-        headers.set("Content-Type", object.httpMetadata?.contentType || meta.contentType || "application/octet-stream");
-        headers.set("Content-Disposition", "attachment; filename*=UTF-8''" + encodeURIComponent(meta.fileName || "attachment"));
+        headers.set("Content-Type", storageResponse.headers.get("content-type") || "application/octet-stream");
+        const encodedName = storageResponse.headers.get("x-amz-meta-filename") || "attachment";
+        let fileName = "attachment";
+        try { fileName = decodeURIComponent(encodedName); } catch (_) { fileName = encodedName; }
+        headers.set("Content-Disposition", "attachment; filename*=UTF-8''" + encodeURIComponent(fileName));
         headers.set("Cache-Control", "private, no-store");
-        return new Response(object.body, { status: 200, headers });
+        return new Response(storageResponse.body, { status: 200, headers });
       }
 
       return json({ error: "Route not found" }, 404);
