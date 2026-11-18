@@ -391,6 +391,10 @@ export default {
         if (!user) {
           return json({ error: "تعذر استرداد الحساب. تحقق من البيانات وحاول مجددًا." }, 400);
         }
+        // Also limit by account ID so switching between phone and username cannot bypass the limit.
+        if (!(await consumeRecoveryAttempt(env, "account:" + user.id))) {
+          return json({ error: "محاولات كثيرة. انتظر 15 دقيقة ثم حاول مجددًا." }, 429);
+        }
         const stored = await env.DB.prepare("SELECT code_hash, code_salt, consumed_at, expires_at FROM recovery_codes WHERE user_id = ?").bind(user.id).first();
         if (!stored || (stored.consumed_at !== null && stored.consumed_at !== undefined)) {
           return json({ error: "تعذر استرداد الحساب. تحقق من البيانات وحاول مجددًا." }, 400);
