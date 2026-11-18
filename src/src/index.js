@@ -143,7 +143,7 @@ function cleanUser(user) {
 }
 
 
-async function sendSirajPush(env, recipientId, senderName, messageText) {
+async function sendSirajPush(env, recipientId, senderId, senderName, messageText) {
   if (!env.FCM_SERVICE_ACCOUNT_JSON) return;
   try {
     const account = JSON.parse(env.FCM_SERVICE_ACCOUNT_JSON);
@@ -215,7 +215,7 @@ async function sendSirajPush(env, recipientId, senderName, messageText) {
                 title: "رسالة من " + String(senderName || "مستخدم سراج").slice(0, 80),
                 body: preview || "لديك رسالة جديدة"
               },
-              data: { type: "direct_message", senderId: String(senderName || "") },
+              data: { type: "direct_message", senderId: String(senderId || "") },
               android: { priority: "HIGH", notification: { channel_id: "siraj_messages" } }
             }
           })
@@ -797,7 +797,7 @@ export default {
         const sender = await env.DB.prepare(
           "SELECT display_name FROM users WHERE id = ?"
         ).bind(currentUser.sub).first();
-        await sendSirajPush(env, receiverId, sender?.display_name || currentUser.username, message);
+        await sendSirajPush(env, receiverId, currentUser.sub, sender?.display_name || currentUser.username, message);
 
         return json({
           message: "Message sent",
