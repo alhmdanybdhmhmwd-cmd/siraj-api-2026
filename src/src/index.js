@@ -286,6 +286,41 @@ export default {
         return json({ user: cleanUser(user), message: "Profile updated" });
       }
 
+      // Privacy settings for the authenticated account
+      if ((method === "GET" || method === "POST") && path === "/api/privacy") {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS user_privacy (
+            user_id TEXT PRIMARY KEY,
+            searchable INTEGER NOT NULL DEFAULT 1,
+            read_receipts INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        if (method === "POST") {
+          const body = await request.json();
+          const searchable = body.searchable === false ? 0 : 1;
+          const readReceipts = body.readReceipts === false ? 0 : 1;
+          await env.DB.prepare(`
+            INSERT INTO user_privacy (user_id, searchable, read_receipts)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+              searchable = excluded.searchable,
+              read_receipts = excluded.read_receipts,
+              updated_at = CURRENT_TIMESTAMP
+          `).bind(currentUser.sub, searchable, readReceipts).run();
+        }
+        const settings = await env.DB.prepare(
+          "SELECT searchable, read_receipts FROM user_privacy WHERE user_id = ?"
+        ).bind(currentUser.sub).first();
+        return json({
+          privacy: {
+            searchable: settings ? settings.searchable === 1 : true,
+            readReceipts: settings ? settings.read_receipts === 1 : true
+          }
+        });
+      }
+
       // Register Firebase device token
       if (method === "POST" && path === "/api/devices/token") {
         const body = await request.json();
@@ -399,6 +434,7 @@ export default {
            FROM users
            WHERE id != ?
            AND (username LIKE ? OR phone LIKE ?)
+           AND COALESCE((SELECT searchable FROM user_privacy WHERE user_id = users.id), 1) = 1
            LIMIT 30`
         ).bind(
           currentUser.sub,
@@ -639,13 +675,18 @@ export default {
           }, 403);
         }
 
-        await env.DB.prepare(
-          `UPDATE messages
-           SET read_at = CURRENT_TIMESTAMP
-           WHERE sender_id = ?
-           AND receiver_id = ?
-           AND read_at IS NULL`
-        ).bind(friendId, currentUser.sub).run();
+        const privacy = await env.DB.prepare(
+          "SELECT read_receipts FROM user_privacy WHERE user_id = ?"
+        ).bind(currentUser.sub).first();
+        if (!privacy || privacy.read_receipts === 1) {
+          await env.DB.prepare(
+            `UPDATE messages
+             SET read_at = CURRENT_TIMESTAMP
+             WHERE sender_id = ?
+             AND receiver_id = ?
+             AND read_at IS NULL`
+          ).bind(friendId, currentUser.sub).run();
+        }
 
         const result = await env.DB.prepare(
           `SELECT id, sender_id, receiver_id,
