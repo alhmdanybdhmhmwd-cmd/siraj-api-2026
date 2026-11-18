@@ -257,9 +257,15 @@ async function sha256Hex(value) {
     .map(value => value.toString(16).padStart(2, "0")).join("");
 }
 
-async function ensureRecoveryTables(env) {
-  await env.DB.prepare("CREATE TABLE IF NOT EXISTS recovery_codes (user_id TEXT PRIMARY KEY, code_hash TEXT NOT NULL, code_salt TEXT NOT NULL, expires_at INTEGER, consumed_at INTEGER, created_at INTEGER NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
-  await env.DB.prepare("CREATE TABLE IF NOT EXISTS recovery_rate_limits (bucket_key TEXT PRIMARY KEY, window_started INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0)").run();
+function constantTimeHexEqual(left, right) {
+  const a = String(left || "");
+  const b = String(right || "");
+  let difference = a.length ^ b.length;
+  const length = Math.max(a.length, b.length);
+  for (let i = 0; i < length; i++) {
+    difference |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  }
+  return difference === 0;
 }
 
 async function generateRecoveryCode() {
@@ -275,15 +281,15 @@ async function saveRecoveryCode(env, userId, recovery) {
     .bind(userId, recovery.codeHash, recovery.salt, now).run();
 }
 
-async function consumeRecoveryAttempt(env, identifier) {
-  const normalized = identifier.toLowerCase().replace(/[\s()+.-]/g, "");
-  const bucketKey = await sha256Hex("recovery-identifier:" + normalized);
+async function consumeRecoveryAttempt(env, scope, identifier, maxAttempts = 5) {
+  const normalized = String(identifier).toLowerCase().replace(/[\s()+.-]/g, "");
+  const bucketKey = await sha256Hex("recovery:" + scope + ":" + normalized);
   const now = Math.floor(Date.now() / 1000);
   const windowStart = now - 15 * 60;
   await env.DB.prepare("INSERT INTO recovery_rate_limits (bucket_key, window_started, attempts) VALUES (?, ?, 1) ON CONFLICT(bucket_key) DO UPDATE SET window_started = CASE WHEN recovery_rate_limits.window_started <= ? THEN excluded.window_started ELSE recovery_rate_limits.window_started END, attempts = CASE WHEN recovery_rate_limits.window_started <= ? THEN 1 ELSE recovery_rate_limits.attempts + 1 END")
     .bind(bucketKey, now, windowStart, windowStart).run();
   const row = await env.DB.prepare("SELECT attempts FROM recovery_rate_limits WHERE bucket_key = ?").bind(bucketKey).first();
-  return Number(row?.attempts || 0) <= 5;
+  return Number(row?.attempts || 0) <= maxAttempts;
 }
 
 export default {
@@ -345,7 +351,6 @@ export default {
           crypto.getRandomValues(new Uint8Array(16))
         );
         const passwordHash = await hashPassword(password, salt);
-        await ensureRecoveryTables(env);
         const recovery = await generateRecoveryCode();
         const createdAt = Math.floor(Date.now() / 1000);
         await env.DB.batch([
@@ -383,8 +388,7 @@ export default {
         if (newPassword.length < 8 || newPassword.length > 128) {
           return json({ error: "كلمة المرور يجب أن تكون بين 8 و128 حرفًا" }, 400);
         }
-        await ensureRecoveryTables(env);
-        if (!(await consumeRecoveryAttempt(env, identifier))) {
+        if (!(await consumeRecoveryAttempt(env, "identifier", identifier))) {
           return json({ error: "محاولات كثيرة. انتظر 15 دقيقة ثم حاول مجددًا." }, 429);
         }
         const user = await env.DB.prepare("SELECT id FROM users WHERE username = ? OR phone = ? LIMIT 1").bind(identifier, identifier).first();
@@ -392,7 +396,7 @@ export default {
           return json({ error: "تعذر استرداد الحساب. تحقق من البيانات وحاول مجددًا." }, 400);
         }
         // Also limit by account ID so switching between phone and username cannot bypass the limit.
-        if (!(await consumeRecoveryAttempt(env, "account:" + user.id))) {
+        if (!(await consumeRecoveryAttempt(env, "account", user.id))) {
           return json({ error: "محاولات كثيرة. انتظر 15 دقيقة ثم حاول مجددًا." }, 429);
         }
         const stored = await env.DB.prepare("SELECT code_hash, code_salt, consumed_at, expires_at FROM recovery_codes WHERE user_id = ?").bind(user.id).first();
@@ -401,7 +405,7 @@ export default {
         }
         const suppliedHash = await sha256Hex(stored.code_salt + ":" + recoveryCode);
         const now = Math.floor(Date.now() / 1000);
-        if (suppliedHash !== stored.code_hash || (stored.expires_at !== null && stored.expires_at !== undefined && Number(stored.expires_at) <= now)) {
+        if (!constantTimeHexEqual(suppliedHash, stored.code_hash) || (stored.expires_at !== null && stored.expires_at !== undefined && Number(stored.expires_at) <= now)) {
           return json({ error: "تعذر استرداد الحساب. تحقق من البيانات وحاول مجددًا." }, 400);
         }
         const newSalt = base64url(crypto.getRandomValues(new Uint8Array(16)));
@@ -412,7 +416,7 @@ export default {
           env.DB.prepare("UPDATE recovery_codes SET consumed_at = ? WHERE user_id = ? AND code_hash = ? AND consumed_at IS NULL")
             .bind(now, user.id, stored.code_hash)
         ]);
-        if (Number(results?.[0]?.meta?.changes || 0) !== 1) {
+        if (Number(results?.[0]?.meta?.changes || 0) !== 1 || Number(results?.[1]?.meta?.changes || 0) !== 1) {
           return json({ error: "تعذر استرداد الحساب. تحقق من البيانات وحاول مجددًا." }, 400);
         }
         return json({ message: "Password updated" });
@@ -461,7 +465,6 @@ export default {
         if (!user || !password || await hashPassword(password, user.password_salt) !== user.password_hash) {
           return json({ error: "كلمة المرور الحالية غير صحيحة" }, 401);
         }
-        await ensureRecoveryTables(env);
         const recovery = await generateRecoveryCode();
         await saveRecoveryCode(env, currentUser.sub, recovery);
         return json({ recoveryCode: recovery.code, message: "احفظ رمز الاسترداد في مكان آمن؛ لن يظهر مرة أخرى." });
