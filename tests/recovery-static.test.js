@@ -4,15 +4,20 @@ import { readFile } from "node:fs/promises";
 
 const worker = await readFile(new URL("../src/src/index.js", import.meta.url), "utf8");
 const migration = await readFile(new URL("../migrations/0001_recovery_codes.sql", import.meta.url), "utf8");
+const sessionMigration = await readFile(new URL("../migrations/0002_recovery_token_revocations.sql", import.meta.url), "utf8");
 const config = await readFile(new URL("../wrangler.toml", import.meta.url), "utf8");
 
 test("recovery migration creates only additive recovery tables", () => {
   assert.match(migration, /CREATE TABLE IF NOT EXISTS recovery_codes/i);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS recovery_rate_limits/i);
-  assert.match(migration, /CREATE TABLE IF NOT EXISTS recovery_token_revocations/i);
   assert.match(migration, /CREATE INDEX IF NOT EXISTS idx_recovery_rate_limits_window/i);
   assert.doesNotMatch(migration, /\b(DROP|DELETE|UPDATE|ALTER)\s+(TABLE|FROM|users|messages|friendships)\b/i);
   assert.match(migration, /FOREIGN KEY \(user_id\) REFERENCES users\(id\) ON DELETE CASCADE/i);
+});
+
+test("session revocation uses a separate additive migration", () => {
+  assert.match(sessionMigration, /CREATE TABLE IF NOT EXISTS recovery_token_revocations/i);
+  assert.match(sessionMigration, /FOREIGN KEY \(user_id\) REFERENCES users\(id\) ON DELETE CASCADE/i);
 });
 
 test("recovery endpoint validates a 160-bit hexadecimal code and password length", () => {
