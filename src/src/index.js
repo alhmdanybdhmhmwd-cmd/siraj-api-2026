@@ -605,6 +605,28 @@ export default {
         });
       }
 
+      // Add a contact directly (no friend-request workflow).
+      if (method === "POST" && path === "/api/contacts") {
+        const body = await request.json();
+        const userId = String(body.userId || "").trim();
+        if (!userId || userId === currentUser.sub) {
+          return json({ error: "Invalid contact" }, 400);
+        }
+        const target = await env.DB.prepare(
+          "SELECT id FROM users WHERE id = ?"
+        ).bind(userId).first();
+        if (!target) return json({ error: "User not found" }, 404);
+        await env.DB.batch([
+          env.DB.prepare(
+            "INSERT OR IGNORE INTO friendships (user_id, friend_id) VALUES (?, ?)"
+          ).bind(currentUser.sub, userId),
+          env.DB.prepare(
+            "INSERT OR IGNORE INTO friendships (user_id, friend_id) VALUES (?, ?)"
+          ).bind(userId, currentUser.sub)
+        ]);
+        return json({ message: "Contact added", userId }, 201);
+      }
+
       // Send friend request
       if (method === "POST" && path === "/api/friends/requests") {
         const body = await request.json();
@@ -757,6 +779,120 @@ export default {
         return json({
           friends: (friends.results || []).map(cleanUser)
         });
+      }
+
+      // Group chat tables and membership helpers.
+      if (path === "/api/groups" || path.startsWith("/api/groups/")) {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS chat_groups (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            owner_id TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS group_members (
+            group_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            joined_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (group_id, user_id),
+            FOREIGN KEY (group_id) REFERENCES chat_groups(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS group_messages (
+            id TEXT PRIMARY KEY,
+            group_id TEXT NOT NULL,
+            sender_id TEXT NOT NULL,
+            body TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (group_id) REFERENCES chat_groups(id) ON DELETE CASCADE,
+            FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+      }
+
+      if (method === "GET" && path === "/api/groups") {
+        const result = await env.DB.prepare(`
+          SELECT g.id, g.name, g.description, g.owner_id,
+                 g.created_at,
+                 (SELECT COUNT(*) FROM group_members m WHERE m.group_id = g.id) AS member_count
+          FROM chat_groups g
+          JOIN group_members mine ON mine.group_id = g.id
+          WHERE mine.user_id = ?
+          ORDER BY g.created_at DESC
+        `).bind(currentUser.sub).all();
+        return json({ groups: result.results || [] });
+      }
+
+      if (method === "POST" && path === "/api/groups") {
+        const body = await request.json();
+        const name = String(body.name || "").trim();
+        const description = String(body.description || "").trim();
+        if (!name || name.length > 80 || description.length > 300) {
+          return json({ error: "Invalid group name or description" }, 400);
+        }
+        const id = crypto.randomUUID();
+        await env.DB.batch([
+          env.DB.prepare(
+            "INSERT INTO chat_groups (id, name, description, owner_id) VALUES (?, ?, ?, ?)"
+          ).bind(id, name, description, currentUser.sub),
+          env.DB.prepare(
+            "INSERT INTO group_members (group_id, user_id) VALUES (?, ?)"
+          ).bind(id, currentUser.sub)
+        ]);
+        return json({ group: { id, name, description, owner_id: currentUser.sub, member_count: 1 } }, 201);
+      }
+
+      const groupMemberMatch = path.match(/^\/api\/groups\/([^/]+)\/members$/);
+      if (method === "POST" && groupMemberMatch) {
+        const groupId = groupMemberMatch[1];
+        const body = await request.json();
+        const userId = String(body.userId || "").trim();
+        const member = await env.DB.prepare(
+          "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
+        ).bind(groupId, currentUser.sub).first();
+        const target = await env.DB.prepare("SELECT id FROM users WHERE id = ?").bind(userId).first();
+        if (!member) return json({ error: "Group not found" }, 404);
+        if (!target) return json({ error: "User not found" }, 404);
+        await env.DB.prepare(
+          "INSERT OR IGNORE INTO group_members (group_id, user_id) VALUES (?, ?)"
+        ).bind(groupId, userId).run();
+        return json({ message: "Member added" }, 201);
+      }
+
+      const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
+      if (groupMessagesMatch) {
+        const groupId = groupMessagesMatch[1];
+        const member = await env.DB.prepare(
+          "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
+        ).bind(groupId, currentUser.sub).first();
+        if (!member) return json({ error: "Group not found" }, 404);
+        if (method === "GET") {
+          const result = await env.DB.prepare(`
+            SELECT gm.id, gm.group_id, gm.sender_id, gm.body, gm.created_at,
+                   u.username, u.display_name
+            FROM group_messages gm
+            JOIN users u ON u.id = gm.sender_id
+            WHERE gm.group_id = ?
+            ORDER BY gm.created_at ASC LIMIT 100
+          `).bind(groupId).all();
+          return json({ messages: result.results || [] });
+        }
+        if (method === "POST") {
+          const body = await request.json();
+          const message = String(body.body || "").trim();
+          if (!message || message.length > 5000) return json({ error: "Invalid message" }, 400);
+          const id = crypto.randomUUID();
+          await env.DB.prepare(
+            "INSERT INTO group_messages (id, group_id, sender_id, body) VALUES (?, ?, ?, ?)"
+          ).bind(id, groupId, currentUser.sub, message).run();
+          return json({ message: "Message sent", id }, 201);
+        }
       }
 
       // Send message
