@@ -2,7 +2,7 @@
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-File-Name, X-Recipient-Id, X-Group-Id",
   "Content-Type": "application/json; charset=utf-8"
 };
 
@@ -1005,6 +1005,76 @@ export default {
         return json({
           messages: result.results || []
         });
+      }
+
+      // Binary media upload/download backed by Cloudflare R2 (MEDIA binding).
+      if (path === "/api/media" && method === "POST") {
+        if (!env.MEDIA) return json({ error: "Media storage is not configured" }, 503);
+        const recipientId = (request.headers.get("X-Recipient-Id") || "").trim();
+        const groupId = (request.headers.get("X-Group-Id") || "").trim();
+        if ((recipientId ? 1 : 0) + (groupId ? 1 : 0) !== 1) {
+          return json({ error: "Choose one conversation destination" }, 400);
+        }
+        if (recipientId) {
+          const friendship = await env.DB.prepare(
+            "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
+          ).bind(currentUser.sub, recipientId).first();
+          if (!friendship) return json({ error: "Contact not found" }, 403);
+        } else {
+          const member = await env.DB.prepare(
+            "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
+          ).bind(groupId, currentUser.sub).first();
+          if (!member) return json({ error: "Group not found" }, 404);
+        }
+        const contentType = (request.headers.get("Content-Type") || "application/octet-stream").split(";")[0].toLowerCase();
+        const allowedTypes = /^(image\/(jpeg|png|webp|gif)|video\/(mp4|webm|quicktime)|audio\/(mpeg|mp4|aac|wav|ogg|webm)|application\/(pdf|zip|vnd\.openxmlformats-officedocument\.[a-z0-9.]+)|text\/plain)$/;
+        if (!allowedTypes.test(contentType)) return json({ error: "Unsupported media type" }, 415);
+        const bytes = await request.arrayBuffer();
+        if (!bytes.byteLength || bytes.byteLength > 20 * 1024 * 1024) {
+          return json({ error: "File must be between 1 byte and 20 MB" }, 413);
+        }
+        const suppliedName = decodeURIComponent(request.headers.get("X-File-Name") || "attachment").replace(/[\\/\\r\\n]/g, "_").slice(0, 180);
+        const id = crypto.randomUUID();
+        const key = currentUser.sub + "/" + id;
+        await env.MEDIA.put(key, bytes, {
+          httpMetadata: { contentType },
+          customMetadata: {
+            ownerId: currentUser.sub,
+            recipientId,
+            groupId,
+            fileName: suppliedName,
+            contentType
+          }
+        });
+        return json({ attachment: { id: key, fileName: suppliedName, contentType, size: bytes.byteLength } }, 201);
+      }
+
+      const mediaMatch = path.match(/^\/api\/media\/(.+)$/);
+      if (mediaMatch && method === "GET") {
+        if (!env.MEDIA) return json({ error: "Media storage is not configured" }, 503);
+        const key = decodeURIComponent(mediaMatch[1]);
+        const object = await env.MEDIA.get(key);
+        if (!object) return json({ error: "Attachment not found" }, 404);
+        const meta = object.customMetadata || {};
+        let permitted = meta.ownerId === currentUser.sub;
+        if (!permitted && meta.recipientId === currentUser.sub) {
+          const friendship = await env.DB.prepare(
+            "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
+          ).bind(currentUser.sub, meta.ownerId).first();
+          permitted = !!friendship;
+        }
+        if (!permitted && meta.groupId) {
+          const member = await env.DB.prepare(
+            "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
+          ).bind(meta.groupId, currentUser.sub).first();
+          permitted = !!member;
+        }
+        if (!permitted) return json({ error: "Attachment access denied" }, 403);
+        const headers = new Headers(corsHeaders);
+        headers.set("Content-Type", object.httpMetadata?.contentType || meta.contentType || "application/octet-stream");
+        headers.set("Content-Disposition", "attachment; filename*=UTF-8''" + encodeURIComponent(meta.fileName || "attachment"));
+        headers.set("Cache-Control", "private, no-store");
+        return new Response(object.body, { status: 200, headers });
       }
 
       return json({ error: "Route not found" }, 404);
