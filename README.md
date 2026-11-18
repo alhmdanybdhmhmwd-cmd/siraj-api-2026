@@ -27,7 +27,7 @@ Do not deploy the Worker until the migration has completed successfully. The mig
 - Recovery attempts are rate-limited by normalized account identifier and account ID. IP-based limiting is deferred until the Vercel-to-Worker proxy can pass a verifiable client identity.
 - Newly issued recovery codes expire automatically after 90 days and can be used only once. Issuing a replacement invalidates the previous code.
 
-The Flutter client must securely display and let the user save/copy the code, and must provide the recovery form before this feature is considered ready for release.
+The current companion Flutter source includes registration-time code display/copy, a password-recovery form, and authenticated code rotation. These client flows still require end-to-end verification against a deployed Worker after the D1 migration is applied.
 
 ## Cloudflare Worker Previews (safe D1 isolation)
 
