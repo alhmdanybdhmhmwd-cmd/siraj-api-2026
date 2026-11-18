@@ -12,3 +12,6 @@ TIGRIS_BUCKET = "siraj-media"
 
 [triggers]
 crons = ["0 * * * *"]
+
+# Preview deployments are isolated; do not reuse production bindings here.
+[previews]
