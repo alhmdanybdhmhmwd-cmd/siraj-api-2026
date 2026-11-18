@@ -181,6 +181,16 @@ async function sendSirajPush(env, recipientId, senderId, senderName, messageText
     const projectId = account.project_id || env.FCM_PROJECT_ID;
     if (!projectId || !tokenData.access_token) throw new Error("FCM project or access token missing");
 
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS notification_preferences (
+        user_id TEXT PRIMARY KEY,
+        messages INTEGER NOT NULL DEFAULT 1,
+        groups INTEGER NOT NULL DEFAULT 1,
+        statuses INTEGER NOT NULL DEFAULT 1,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `).run();
     const pref = await env.DB.prepare(
       "SELECT messages FROM notification_preferences WHERE user_id = ?"
     ).bind(recipientId).first();
