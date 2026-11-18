@@ -206,7 +206,10 @@ function cleanUser(user) {
 }
 
 async function sendSirajPush(env, recipientId, senderId, senderName, messageText, notificationType = "direct_message", groupId = null, groupName = null) {
-  if (!env.FCM_SERVICE_ACCOUNT_JSON) return;
+  if (!env.FCM_SERVICE_ACCOUNT_JSON) {
+    console.warn("FCM_SERVICE_ACCOUNT_JSON is not configured; push notification skipped");
+    return;
+  }
   try {
     const account = JSON.parse(env.FCM_SERVICE_ACCOUNT_JSON);
     const now = Math.floor(Date.now() / 1000);
@@ -289,9 +292,11 @@ async function sendSirajPush(env, recipientId, senderId, senderName, messageText
           }})
         }
       );
-      if (response.status === 404 || response.status === 400) {
-        const detail = await response.clone().text();
-        if (/UNREGISTERED|INVALID_ARGUMENT/i.test(detail)) {
+      if (!response.ok) {
+        const detail = await response.text();
+        console.error("Siraj FCM message delivery failed", response.status, detail.slice(0, 500));
+        if ((response.status === 404 || response.status === 400) &&
+            /UNREGISTERED|INVALID_ARGUMENT/i.test(detail)) {
           await env.DB.prepare("DELETE FROM device_tokens WHERE fcm_token = ?").bind(device.fcm_token).run();
         }
       }
