@@ -24,8 +24,8 @@ Do not deploy the Worker until the migration has completed successfully. The mig
 - New registrations receive a one-time display of a high-entropy recovery code.
 - Only a salted SHA-256 digest and salt are stored in D1; the plaintext code is never stored.
 - Existing users can rotate/create a code after authenticating and confirming their current password.
-- Recovery attempts are rate-limited by normalized account identifier and account ID.
-- Recovery codes currently do not expire automatically; they remain valid until consumed or replaced. Users should keep them private and rotate them if exposed.
+- Recovery attempts are rate-limited by Cloudflare's client IP header (when available), normalized account identifier, and account ID.
+- Newly issued recovery codes expire automatically after 90 days and can be used only once. Issuing a replacement invalidates the previous code.
 
 The Flutter client must securely display and let the user save/copy the code, and must provide the recovery form before this feature is considered ready for release.
 
