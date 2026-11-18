@@ -421,6 +421,19 @@ export default {
         return json({ statuses: result.results || [] });
       }
 
+      // Ensure privacy preferences table exists for all authenticated accounts.
+      if (path === "/api/users/search" || path === "/api/messages") {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS user_privacy (
+            user_id TEXT PRIMARY KEY,
+            searchable INTEGER NOT NULL DEFAULT 1,
+            read_receipts INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+      }
+
       // Search users
       if (method === "GET" && path === "/api/users/search") {
         const q = (url.searchParams.get("q") || "").trim();
