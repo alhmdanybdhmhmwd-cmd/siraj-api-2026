@@ -265,6 +265,27 @@ export default {
       if (!currentUser) {
         return json({ error: "Unauthorized" }, 401);
       }
+      // Update current user's editable profile fields
+      if (method === "POST" && path === "/api/profile") {
+        const body = await request.json();
+        const displayName = String(body.displayName || "").trim();
+        const phone = String(body.phone || "").trim();
+        if (!displayName || displayName.length > 60) {
+          return json({ error: "Display name must be 1-60 characters" }, 400);
+        }
+        if (phone.length > 25) {
+          return json({ error: "Phone number is too long" }, 400);
+        }
+        await env.DB.prepare(
+          "UPDATE users SET display_name = ?, phone = ? WHERE id = ?"
+        ).bind(displayName, phone || null, currentUser.sub).run();
+        const user = await env.DB.prepare(
+          "SELECT id, username, display_name, phone FROM users WHERE id = ?"
+        ).bind(currentUser.sub).first();
+        if (!user) return json({ error: "User not found" }, 404);
+        return json({ user: cleanUser(user), message: "Profile updated" });
+      }
+
       // Register Firebase device token
       if (method === "POST" && path === "/api/devices/token") {
         const body = await request.json();
