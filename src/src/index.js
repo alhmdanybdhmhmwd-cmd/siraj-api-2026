@@ -565,7 +565,7 @@ export default {
           const createdAt = new Date().toISOString();
           const expiresAt = new Date(Date.now() + 86400000).toISOString();
           await env.DB.prepare(
-            "INSERT INTO status_posts (id, user_id, content, expires_at) VALUES (?, ?, ?, datetime('now', '+24 hours'))"
+            "INSERT INTO status_posts (id, user_id, content, expires_at) VALUES (?, ?, ?, ?)"
           ).bind(id, currentUser.sub, content, expiresAt).run();
           return json({ status: { id, content, createdAt, expiresAt } }, 201);
         }
@@ -575,7 +575,7 @@ export default {
                  s.created_at AS createdAt, s.expires_at AS expiresAt
           FROM status_posts s
           JOIN users u ON u.id = s.user_id
-          WHERE s.expires_at > CURRENT_TIMESTAMP
+          WHERE datetime(s.expires_at) > CURRENT_TIMESTAMP
             AND (s.user_id = ? OR EXISTS (
               SELECT 1 FROM friendships f
               WHERE f.user_id = ? AND f.friend_id = s.user_id
