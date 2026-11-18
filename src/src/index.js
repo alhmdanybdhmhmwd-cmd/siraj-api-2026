@@ -142,6 +142,98 @@ function cleanUser(user) {
   };
 }
 
+
+async function sendSirajPush(env, recipientId, senderName, messageText) {
+  if (!env.FCM_SERVICE_ACCOUNT_JSON) return;
+  try {
+    const account = JSON.parse(env.FCM_SERVICE_ACCOUNT_JSON);
+    const now = Math.floor(Date.now() / 1000);
+    const pem = String(account.private_key || "").replace(/\\n/g, "\n");
+    const keyBytes = Uint8Array.from(
+      atob(pem.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\\s/g, "")),
+      c => c.charCodeAt(0)
+    );
+    const signingKey = await crypto.subtle.importKey(
+      "pkcs8", keyBytes,
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false, ["sign"]
+    );
+    const assertionHeader = base64url(encoder.encode(JSON.stringify({ alg: "RS256", typ: "JWT" })));
+    const assertionPayload = base64url(encoder.encode(JSON.stringify({
+      iss: account.client_email,
+      scope: "https://www.googleapis.com/auth/firebase.messaging",
+      aud: account.token_uri || "https://oauth2.googleapis.com/token",
+      iat: now, exp: now + 3600
+    })));
+    const unsigned = assertionHeader + "." + assertionPayload;
+    const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", signingKey, encoder.encode(unsigned));
+    const assertion = unsigned + "." + base64url(new Uint8Array(signature));
+    const tokenResponse = await fetch(account.token_uri || "https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        assertion
+      })
+    });
+    if (!tokenResponse.ok) throw new Error("FCM OAuth token request failed: " + tokenResponse.status);
+    const tokenData = await tokenResponse.json();
+    const projectId = account.project_id || env.FCM_PROJECT_ID;
+    if (!projectId || !tokenData.access_token) throw new Error("FCM project or access token missing");
+
+    const pref = await env.DB.prepare(
+      "SELECT messages FROM notification_preferences WHERE user_id = ?"
+    ).bind(recipientId).first();
+    if (pref && pref.messages === 0) return;
+
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS device_tokens (
+        user_id TEXT NOT NULL,
+        fcm_token TEXT PRIMARY KEY,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `).run();
+    const devices = await env.DB.prepare(
+      "SELECT fcm_token FROM device_tokens WHERE user_id = ?"
+    ).bind(recipientId).all();
+
+    const preview = String(messageText || "").slice(0, 120);
+    await Promise.all((devices.results || []).map(async device => {
+      const response = await fetch(
+        `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/messages:send`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": "Bearer " + tokenData.access_token,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            message: {
+              token: device.fcm_token,
+              notification: {
+                title: "رسالة من " + String(senderName || "مستخدم سراج").slice(0, 80),
+                body: preview || "لديك رسالة جديدة"
+              },
+              data: { type: "direct_message", senderId: String(senderName || "") },
+              android: { priority: "HIGH", notification: { channel_id: "siraj_messages" } }
+            }
+          })
+        }
+      );
+      if (response.status === 404 || response.status === 400) {
+        const detail = await response.clone().text();
+        if (/UNREGISTERED|INVALID_ARGUMENT/i.test(detail)) {
+          await env.DB.prepare("DELETE FROM device_tokens WHERE fcm_token = ?")
+            .bind(device.fcm_token).run();
+        }
+      }
+    }));
+  } catch (error) {
+    console.error("Siraj push delivery failed:", error);
+  }
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") {
@@ -358,6 +450,14 @@ export default {
 
       // Register Firebase device token
       if (method === "POST" && path === "/api/devices/token") {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS device_tokens (
+            user_id TEXT NOT NULL,
+            fcm_token TEXT PRIMARY KEY,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
         const body = await request.json();
         const fcmToken = String(body.fcmToken || "").trim();
 
@@ -693,6 +793,11 @@ export default {
           receiverId,
           message
         ).run();
+
+        const sender = await env.DB.prepare(
+          "SELECT display_name FROM users WHERE id = ?"
+        ).bind(currentUser.sub).first();
+        await sendSirajPush(env, receiverId, sender?.display_name || currentUser.username, message);
 
         return json({
           message: "Message sent",
