@@ -28,3 +28,22 @@ Do not deploy the Worker until the migration has completed successfully. The mig
 - Recovery codes currently do not expire automatically; they remain valid until consumed or replaced. Users should keep them private and rotate them if exposed.
 
 The Flutter client must securely display and let the user save/copy the code, and must provide the recovery form before this feature is considered ready for release.
+
+## Cloudflare Worker Previews (safe D1 isolation)
+
+The Cloudflare Preview build must **not** bind to the production `siraj-db` database. Create a separate D1 database named `siraj-preview-db` in the Cloudflare account, then add the generated ID to this branch's `wrangler.toml`:
+
+```toml
+[[previews.d1_databases]]
+binding = "DB"
+database_name = "siraj-preview-db"
+database_id = "<ID returned by wrangler d1 create>"
+```
+
+Create the preview database with:
+
+```bash
+npx wrangler d1 create siraj-preview-db
+```
+
+Keep the existing top-level `[[d1_databases]]` entry unchanged; it is the production binding. Never copy the production `siraj-db` ID into `previews.d1_databases`. Apply the recovery migration to the preview database before testing the Preview. Production migration and deployment remain separate release steps.
