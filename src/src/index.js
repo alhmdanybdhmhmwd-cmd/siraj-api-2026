@@ -802,10 +802,23 @@ export default {
         if (!userId || userId === currentUser.sub) {
           return json({ error: "Invalid contact" }, 400);
         }
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS user_privacy (
+            user_id TEXT PRIMARY KEY,
+            searchable INTEGER NOT NULL DEFAULT 1,
+            read_receipts INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
         const target = await env.DB.prepare(
-          "SELECT id FROM users WHERE id = ?"
+          `SELECT u.id,
+                  COALESCE((SELECT searchable FROM user_privacy WHERE user_id = u.id), 1) AS searchable
+           FROM users u WHERE u.id = ?`
         ).bind(userId).first();
-        if (!target) return json({ error: "User not found" }, 404);
+        if (!target || target.searchable !== 1) {
+          return json({ error: "User not found" }, 404);
+        }
         await env.DB.batch([
           env.DB.prepare(
             "INSERT OR IGNORE INTO friendships (user_id, friend_id) VALUES (?, ?)"
