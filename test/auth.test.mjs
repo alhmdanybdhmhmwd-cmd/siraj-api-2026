@@ -824,7 +824,10 @@ class FakeReadReceiptDB extends FakeDB {
       return run();
     };
     statement.all = async () => sql.includes("FROM (") && sql.includes("receiver_id")
-      ? { results: [] } : all();
+      ? { results: [{
+          id: "incoming-1", sender_id: "friend-1", receiver_id: user.id,
+          created_at: "2026-11-18 10:00:00", read_at: null
+        }] } : all();
     return statement;
   }
 }
@@ -883,7 +886,7 @@ test("private history fetches the newest 100 messages in chronological order", a
     headers: { Authorization: "Bearer " + token }
   }), { DB: db, JWT_SECRET: secret });
   assert.equal(response.status, 200);
-  assert.match(db.privateHistoryQuery, /ORDER BY created_at DESC, id DESC\s+LIMIT 100/i);
+  assert.match(db.privateHistoryQuery, /ORDER BY created_at DESC, id DESC\s+LIMIT 101/i);
   assert.match(db.privateHistoryQuery, /ORDER BY created_at ASC, id ASC/i);
 });
 
@@ -894,7 +897,7 @@ test("group history fetches the newest 100 messages in chronological order", asy
     headers: { Authorization: "Bearer " + token }
   }), { DB: db, JWT_SECRET: secret });
   assert.equal(response.status, 200);
-  assert.match(db.groupHistoryQuery, /ORDER BY gm\.created_at DESC, gm\.id DESC\s+LIMIT 100/i);
+  assert.match(db.groupHistoryQuery, /ORDER BY gm\.created_at DESC, gm\.id DESC\s+LIMIT 101/i);
   assert.match(db.groupHistoryQuery, /ORDER BY created_at ASC, id ASC/i);
 });
 
