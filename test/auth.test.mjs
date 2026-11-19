@@ -688,6 +688,34 @@ test("private message remains successful when notification sender lookup fails",
   assert.equal(db.savedMessages, 1);
 });
 
+test("private message remains successful when FCM credentials are invalid", async () => {
+  const db = new PrivateMessageFailureDB();
+  // Allow sender lookup so dispatch reaches the FCM configuration parser.
+  const originalPrepare = db.prepare.bind(db);
+  db.prepare = sql => {
+    const statement = originalPrepare(sql);
+    const first = statement.first.bind(statement);
+    statement.first = async () => sql.includes("SELECT display_name FROM users")
+      ? { display_name: "Tester" } : first();
+    return statement;
+  };
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/messages", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ receiverId: "friend-1", body: "Keep this message" })
+  }), {
+    DB: db,
+    JWT_SECRET: secret,
+    FCM_SERVICE_ACCOUNT_JSON: "not-valid-json"
+  });
+  assert.equal(response.status, 201);
+  assert.equal(db.savedMessages, 1);
+});
+
 test("group message remains successful when push recipient lookup fails", async () => {
   const db = new FakeGroupDB(true);
   db.failGroupNotificationLookup = true;
