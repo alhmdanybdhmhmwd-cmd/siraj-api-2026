@@ -797,6 +797,83 @@ test("private message remains successful when FCM credentials are invalid", asyn
   assert.equal(db.savedMessages, 1);
 });
 
+class PrivateMessageFcmHttpFailureDB extends FakeDB {
+  constructor() {
+    super();
+    this.savedMessages = 0;
+    this.deletedTokens = 0;
+  }
+  prepare(sql) {
+    const statement = super.prepare(sql);
+    const first = statement.first.bind(statement);
+    const all = statement.all.bind(statement);
+    const run = statement.run.bind(statement);
+    statement.first = async () => {
+      if (sql.includes("SELECT 1 FROM friendships")) return { ok: 1 };
+      if (sql.includes("SELECT display_name FROM users")) return { display_name: "Tester" };
+      return first();
+    };
+    statement.all = async () => sql.includes("SELECT fcm_token FROM device_tokens")
+      ? { results: [{ fcm_token: "test-device-token" }] } : all();
+    statement.run = async () => {
+      if (sql.includes("INSERT INTO messages")) this.savedMessages++;
+      if (sql.includes("DELETE FROM device_tokens")) this.deletedTokens++;
+      return run();
+    };
+    return statement;
+  }
+}
+
+test("private message remains successful when FCM returns an HTTP server error", async () => {
+  const db = new PrivateMessageFcmHttpFailureDB();
+  const token = await worker.signToken(user, secret, 0);
+  const pair = await crypto.subtle.generateKey({
+    name: "RSASSA-PKCS1-v1_5",
+    modulusLength: 2048,
+    publicExponent: new Uint8Array([1, 0, 1]),
+    hash: "SHA-256"
+  }, true, ["sign", "verify"]);
+  const pkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", pair.privateKey));
+  const pem = "-----BEGIN PRIVATE KEY-----\\n" +
+    Buffer.from(pkcs8).toString("base64").match(/.{1,64}/g).join("\\n") +
+    "\\n-----END PRIVATE KEY-----";
+  const originalFetch = globalThis.fetch;
+  const originalError = console.error;
+  const logged = [];
+  globalThis.fetch = async url => String(url).includes("oauth.example.test")
+    ? new Response(JSON.stringify({ access_token: "test-access-token" }), {
+        status: 200, headers: { "Content-Type": "application/json" }
+      })
+    : new Response("temporary FCM outage", { status: 503 });
+  console.error = (...args) => logged.push(args);
+  try {
+    const response = await worker.default.fetch(new Request("https://api.example.test/api/messages", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + token,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ receiverId: "friend-1", body: "Persist despite FCM outage" })
+    }), {
+      DB: db,
+      JWT_SECRET: secret,
+      FCM_SERVICE_ACCOUNT_JSON: JSON.stringify({
+        client_email: "barq-test@example.test",
+        private_key: pem,
+        token_uri: "https://oauth.example.test/token",
+        project_id: "barq-test"
+      })
+    });
+    assert.equal(response.status, 201);
+    assert.equal(db.savedMessages, 1);
+    assert.equal(db.deletedTokens, 0);
+    assert.ok(logged.some(args => args[0] === "FCM message send failed:" && args[1] === 503));
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.error = originalError;
+  }
+});
+
 test("group message remains successful when FCM credentials are invalid", async () => {
   const db = new FakeGroupDB(true);
   const token = await worker.signToken(user, secret, 0);
