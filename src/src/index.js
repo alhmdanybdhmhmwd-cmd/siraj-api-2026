@@ -1327,6 +1327,24 @@ export default {
       }
 
       const groupMemberMatch = path.match(/^\/api\/groups\/([^/]+)\/members$/);
+      if (method === "GET" && groupMemberMatch) {
+        const groupId = groupMemberMatch[1];
+        const member = await env.DB.prepare(
+          "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
+        ).bind(groupId, currentUser.sub).first();
+        if (!member) return json({ error: "Group not found" }, 404);
+        const result = await env.DB.prepare(`
+          SELECT u.id, u.username, u.display_name, u.phone, m.joined_at,
+                 CASE WHEN g.owner_id = u.id THEN 1 ELSE 0 END AS is_owner
+          FROM group_members m
+          JOIN users u ON u.id = m.user_id
+          JOIN chat_groups g ON g.id = m.group_id
+          WHERE m.group_id = ?
+          ORDER BY is_owner DESC, u.display_name ASC
+        `).bind(groupId).all();
+        return json({ members: result.results || [] });
+      }
+
       if (method === "POST" && groupMemberMatch) {
         const groupId = groupMemberMatch[1];
         const body = await request.json();
