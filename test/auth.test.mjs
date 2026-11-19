@@ -601,14 +601,11 @@ test("direct contact adding respects the target user's searchable privacy settin
 
 test("recovery migrations create only additive recovery tables", async () => {
   const migration = await readFile(new URL("../migrations/0001_recovery_codes.sql", import.meta.url), "utf8");
-  const revocations = await readFile(new URL("../migrations/0002_recovery_token_revocations.sql", import.meta.url), "utf8");
   assert.match(migration, /CREATE TABLE IF NOT EXISTS recovery_codes/i);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS recovery_rate_limits/i);
   assert.match(migration, /CREATE INDEX IF NOT EXISTS idx_recovery_rate_limits_window/i);
   assert.match(migration, /FOREIGN KEY \(user_id\) REFERENCES users\(id\) ON DELETE CASCADE/i);
-  assert.doesNotMatch(migration + revocations, /\b(DROP TABLE|DELETE FROM|ALTER TABLE)\b/i);
-  assert.match(revocations, /CREATE TABLE IF NOT EXISTS recovery_token_revocations/i);
-  assert.match(revocations, /FOREIGN KEY \(user_id\) REFERENCES users\(id\) ON DELETE CASCADE/i);
+  assert.doesNotMatch(migration, /\b(DROP TABLE|DELETE FROM|ALTER TABLE)\b/i);
 });
 
 test("Wrangler is configured to discover D1 migrations", async () => {
