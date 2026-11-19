@@ -30,7 +30,7 @@ This phase establishes a safe development foundation and verifies the existing a
 ## Phase 2 completion criteria
 - A separately provisioned preview D1 database is configured and verified not to equal the production database ID.
 - A preview API deployment/origin is established and Android can select it without changing production defaults.
-- Existing `test/auth.test.mjs` contains 65 Node test cases, including registration, local/international phone login, token/session invalidation, one-time recovery, and rate limiting. The new health tests are included automatically by `npm test` (`node --test`). These suites still require a recorded passing CI run.
+- Existing `test/auth.test.mjs` contains 65 Node test cases. The new `test/health.test.mjs` adds 4 probe tests. GitHub Actions run `44637999231` completed successfully on commit `87460f7693af8787131e51319b1647bd404f3bd7`: all 72 Node tests passed, both Python migration/schema test scripts passed (3 + 1 tests), and `node --check src/src/index.js` passed.
 - Token persistence, offline startup behavior, and logout semantics are explicitly tested.
 - The Android package ID and Firebase configuration are verified together; no package rename is made without migration planning.
 - No secrets are embedded in the APK or repository.
@@ -59,6 +59,18 @@ Until the preview D1 database and preview API are available, work is limited to 
 ## Remaining work before phase completion
 - Provision and verify a distinct preview D1 database ID; the current Wrangler binding still points at the production database.
 - Establish a preview Worker/API URL and supply the verified values to the Android build-time environment selectors.
-- Added isolated Node tests for `/health/live` and `/health/ready`, including missing configuration, successful read-only `SELECT 1`, and database failure paths (`test/health.test.mjs`). The repository's `npm test` command discovers this file automatically. The test suite has not yet produced a verified passing CI run.
-- Run the repository test workflow and Flutter analyze/tests/build in a suitable toolchain.
+- Added isolated Node tests for `/health/live` and `/health/ready`, including missing configuration, successful read-only `SELECT 1`, and database failure paths (`test/health.test.mjs`). The repository's `npm test` command discovers this file automatically. All 72 Node tests passed in GitHub Actions run `44637999231`.
+- Flutter analyze/tests/build remain unrun because Flutter/Dart tooling is unavailable in the current execution environment; run them in a Flutter-enabled environment before closing this phase.
 - Verify API, media, and realtime origin routing and the Android package/Firebase identity.
+
+
+## CI verification record
+
+- Workflow: `Backend tests`, run `44637999231`.
+- Commit: `87460f7693af8787131e51319b1647bd404f3bd7`.
+- Result: success.
+- Node test runner: 72 passed, 0 failed, 0 skipped.
+- Migration SQL tests: 3 passed.
+- D1 schema inspection tests: 1 passed.
+- Worker JavaScript syntax check: passed.
+- This CI run uses SQLite-based migration/schema tests and mocked health-probe bindings; it does not connect to or validate a live D1 database or deployed Worker.
