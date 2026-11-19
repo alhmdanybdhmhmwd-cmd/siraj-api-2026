@@ -590,7 +590,12 @@ export default {
         if (newPassword.length < 8 || newPassword.length > 128) {
           return json({ error: "كلمة المرور يجب أن تكون بين 8 و128 حرفًا" }, 400);
         }
-        if (!(await consumeRecoveryAttempt(env, "identifier", identifier))) {
+        const clientIp = request.headers.get("CF-Connecting-IP") || "unknown";
+        const [identifierAllowed, clientAllowed] = await Promise.all([
+          consumeRecoveryAttempt(env, "identifier", identifier, 5),
+          consumeRecoveryAttempt(env, "client", clientIp, 20)
+        ]);
+        if (!identifierAllowed || !clientAllowed) {
           return json({ error: "محاولات كثيرة. انتظر 15 دقيقة ثم حاول مجددًا." }, 429);
         }
 
