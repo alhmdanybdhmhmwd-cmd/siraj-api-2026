@@ -173,7 +173,7 @@ async function authenticate(request, env) {
 
 
 function phoneVariants(value) {
-  const digits = String(value || "").replace(/\\D/g, "");
+  const digits = String(value || "").replace(/\D/g, "");
   const variants = new Set();
   if (digits.length >= 7 && digits.length <= 15) variants.add(digits);
   if (digits.startsWith("00") && digits.length >= 9) variants.add(digits.slice(2));
