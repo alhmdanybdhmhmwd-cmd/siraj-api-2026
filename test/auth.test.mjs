@@ -1144,6 +1144,76 @@ test("media expiration cleanup deletes only objects whose individual 72-hour dea
   }
 });
 
+test("media expiration cleanup continues after one storage deletion fails", async () => {
+  const cutoff = Date.parse("2026-11-22T12:00:00.000Z");
+  const rows = [
+    { object_key: "user-1/failing-video", expires_at: "2026-11-22T11:00:00.000Z" },
+    { object_key: "user-1/expired-photo", expires_at: "2026-11-22T11:30:00.000Z" }
+  ];
+  const removedRows = [];
+  const db = {
+    prepare(sql) {
+      const statement = {
+        params: [],
+        bind(...params) { this.params = params; return this; },
+        async run() {
+          if (sql.startsWith("DELETE FROM media_expirations")) removedRows.push(this.params[0]);
+          return { meta: { changes: 1 } };
+        },
+        async all() { return { results: rows.filter(row => row.expires_at <= this.params[0]) }; }
+      };
+      return statement;
+    }
+  };
+  const attempted = [];
+  globalThis.__fakeTigrisHandler = async (url, options) => {
+    const key = String(url).split("/").pop();
+    attempted.push(key);
+    if (key === "failing-video") throw new Error("temporary storage failure");
+    return new Response(null, { status: 204 });
+  };
+  try {
+    const result = await worker.cleanupExpiredMedia({
+      DB: db, TIGRIS_ACCESS_KEY_ID: "test-access", TIGRIS_SECRET_ACCESS_KEY: "test-secret"
+    }, cutoff);
+    assert.deepEqual(result, { checked: 2, deleted: 1 });
+    assert.deepEqual(attempted, ["failing-video", "expired-photo"]);
+    assert.deepEqual(removedRows, ["user-1/expired-photo"]);
+  } finally {
+    delete globalThis.__fakeTigrisHandler;
+  }
+});
+
+test("unauthorized users cannot trigger deletion of an expired attachment", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  const methods = [];
+  globalThis.__fakeTigrisHandler = async (_url, options) => {
+    methods.push(options.method);
+    if (options.method === "HEAD") {
+      return new Response(null, { status: 200, headers: {
+        "x-amz-meta-ownerid": "someone-else",
+        "x-amz-meta-recipientid": "another-user",
+        "x-amz-meta-expiresat": "2020-01-01T00:00:00.000Z"
+      }});
+    }
+    return new Response(null, { status: 204 });
+  };
+  try {
+    const response = await worker.default.fetch(new Request(
+      "https://api.example.test/api/media/someone-else/old-file",
+      { headers: { Authorization: "Bearer " + token } }
+    ), {
+      DB: db, JWT_SECRET: secret,
+      TIGRIS_ACCESS_KEY_ID: "test-access", TIGRIS_SECRET_ACCESS_KEY: "test-secret"
+    });
+    assert.equal(response.status, 403);
+    assert.deepEqual(methods, ["HEAD"]);
+  } finally {
+    delete globalThis.__fakeTigrisHandler;
+  }
+});
+
 test("media expiration cleanup schedule runs every 15 minutes", async () => {
   const config = await readFile(new URL("../wrangler.toml", import.meta.url), "utf8");
   assert.match(config, /crons\s*=\s*\["\*\/15 \* \* \* \*"\]/);
