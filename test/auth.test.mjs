@@ -100,7 +100,7 @@ test("password recovery consumes the code and invalidates the old session", asyn
     },
     body: JSON.stringify({
       identifier: user.username,
-      recoveryCode: code,
+      recoveryCode: "A1B2-C3D4 E5F6",
       newPassword: "new-secure-password"
     })
   });
