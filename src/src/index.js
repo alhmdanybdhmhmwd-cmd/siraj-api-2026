@@ -565,6 +565,14 @@ export default {
         if (phone.length > 25) {
           return json({ error: "Phone number is too long" }, 400);
         }
+        if (phone) {
+          const existingPhone = await env.DB.prepare(
+            "SELECT id FROM users WHERE phone = ? AND id != ? LIMIT 1"
+          ).bind(phone, currentUser.sub).first();
+          if (existingPhone) {
+            return json({ error: "Phone number is already in use" }, 409);
+          }
+        }
         await env.DB.prepare(
           "UPDATE users SET display_name = ?, phone = ? WHERE id = ?"
         ).bind(displayName, phone || null, currentUser.sub).run();
