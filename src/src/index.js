@@ -400,6 +400,30 @@ async function sendSirajPush(env, recipientId, senderId, senderName, messageText
 }
 
 
+async function ensureReferralTables(env) {
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS referral_codes (
+      user_id TEXT PRIMARY KEY,
+      code TEXT NOT NULL UNIQUE,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `).run();
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS referrals (
+      referred_user_id TEXT PRIMARY KEY,
+      referrer_user_id TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (referred_user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (referrer_user_id) REFERENCES users(id) ON DELETE CASCADE,
+      CHECK (referred_user_id != referrer_user_id)
+    )
+  `).run();
+  await env.DB.prepare(
+    "CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_user_id, created_at)"
+  ).run();
+}
+
 const RECOVERY_CODE_TTL_SECONDS = 90 * 24 * 60 * 60;
 
 function randomHex(byteLength) {
@@ -627,6 +651,18 @@ export default {
         if (phone.length > 25) {
           return json({ error: "Invalid phone number" }, 400);
         }
+        await ensureReferralTables(env);
+        const inviteCode = String(body.inviteCode || "").trim().toUpperCase();
+        let referrerId = null;
+        if (inviteCode) {
+          const referrer = await env.DB.prepare(
+            "SELECT user_id FROM referral_codes WHERE code = ?"
+          ).bind(inviteCode).first();
+          if (!referrer || !referrer.user_id) {
+            return json({ error: "رمز الدعوة غير صالح أو منتهي." }, 400);
+          }
+          referrerId = String(referrer.user_id);
+        }
         if (phone && await phoneAlreadyInUse(env, phone)) {
           return json({ error: "Phone number is already registered" }, 409);
         }
@@ -650,7 +686,8 @@ export default {
 
         const recovery = await generateRecoveryCode();
         const createdAt = Math.floor(Date.now() / 1000);
-        const registrationResults = await env.DB.batch([
+        const referralCode = randomHex(6).toUpperCase();
+        const registrationStatements = [
           (() => {
             const phoneConflict = phone ? phoneConflictCondition("phone", phone) : { sql: "0", bindings: [] };
             return env.DB.prepare(`INSERT INTO users
@@ -665,8 +702,21 @@ export default {
             (user_id, code_hash, code_salt, expires_at, consumed_at, created_at)
             SELECT ?, ?, ?, ?, NULL, ?
             WHERE EXISTS (SELECT 1 FROM users WHERE id = ?)`)
-            .bind(id, recovery.codeHash, recovery.salt, createdAt + RECOVERY_CODE_TTL_SECONDS, createdAt, id)
-        ]);
+            .bind(id, recovery.codeHash, recovery.salt, createdAt + RECOVERY_CODE_TTL_SECONDS, createdAt, id),
+          env.DB.prepare(`INSERT OR IGNORE INTO referral_codes (user_id, code, created_at)
+            SELECT ?, ?, ? WHERE EXISTS (SELECT 1 FROM users WHERE id = ?)`)
+            .bind(id, referralCode, createdAt, id)
+        ];
+        if (referrerId) {
+          registrationStatements.push(env.DB.prepare(`INSERT OR IGNORE INTO referrals
+            (referred_user_id, referrer_user_id, created_at)
+            SELECT ?, ?, ?
+            WHERE EXISTS (SELECT 1 FROM users WHERE id = ?)
+              AND EXISTS (SELECT 1 FROM users WHERE id = ?)
+              AND ? != ?`)
+            .bind(id, referrerId, createdAt, id, referrerId, id, referrerId));
+        }
+        const registrationResults = await env.DB.batch(registrationStatements);
         if (Number(registrationResults?.[0]?.meta?.changes || 0) !== 1) {
           return json({ error: phone ? "Phone number is already registered" : "Unable to create account" }, 409);
         }
@@ -964,6 +1014,34 @@ export default {
           return json({ messages: rows });
         }
         return json({ error: "Method not allowed" }, 405);
+      }
+
+      // Referral code and verified registration count for the signed-in account.
+      if (method === "GET" && path === "/api/referrals") {
+        await ensureReferralTables(env);
+        let ownCode = await env.DB.prepare(
+          "SELECT code FROM referral_codes WHERE user_id = ?"
+        ).bind(currentUser.sub).first();
+        for (let attempt = 0; !ownCode && attempt < 5; attempt++) {
+          const candidate = randomHex(6).toUpperCase();
+          await env.DB.prepare(
+            "INSERT OR IGNORE INTO referral_codes (user_id, code, created_at) VALUES (?, ?, ?)"
+          ).bind(currentUser.sub, candidate, Math.floor(Date.now() / 1000)).run();
+          ownCode = await env.DB.prepare(
+            "SELECT code FROM referral_codes WHERE user_id = ?"
+          ).bind(currentUser.sub).first();
+        }
+        if (!ownCode?.code) return json({ error: "تعذر إنشاء رابط الدعوة حاليًا." }, 503);
+        const countRow = await env.DB.prepare(
+          "SELECT COUNT(*) AS referral_count FROM referrals WHERE referrer_user_id = ?"
+        ).bind(currentUser.sub).first();
+        const referralCount = Number(countRow?.referral_count || 0);
+        return json({
+          inviteCode: ownCode.code,
+          referralCount,
+          badgeUnlocked: referralCount >= 5,
+          badgeTitle: referralCount >= 5 ? "صاعقة" : null
+        });
       }
 
       // Rotate the one-time recovery code after verifying the current password.
