@@ -470,9 +470,57 @@ async function consumeRecoveryAttempt(env, scope, identifier, maxAttempts = 5) {
   return Number(row?.attempts || 0) <= maxAttempts;
 }
 
-export { phoneVariants, safeFileName };
+async function cleanupExpiredMedia(env, now = Date.now()) {
+  if (!env.TIGRIS_ACCESS_KEY_ID || !env.TIGRIS_SECRET_ACCESS_KEY) {
+    throw new Error("Media storage credentials are not configured");
+  }
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS media_expirations (object_key TEXT PRIMARY KEY, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
+  const cutoff = new Date(now).toISOString();
+  const expired = await env.DB.prepare(
+    "SELECT object_key FROM media_expirations WHERE expires_at <= ? ORDER BY expires_at ASC LIMIT 100"
+  ).bind(cutoff).all();
+  const bucket = env.TIGRIS_BUCKET || "siraj-media";
+  const storage = new AwsClient({
+    accessKeyId: env.TIGRIS_ACCESS_KEY_ID,
+    secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY,
+    service: "s3",
+    region: "auto",
+    retries: 2
+  });
+  let deleted = 0;
+  for (const item of expired.results || []) {
+    const key = String(item.object_key || "");
+    if (!key || key.length > 512 || key.startsWith("/") ||
+        key.split("/").some(part => !part || part === "." || part === "..")) {
+      console.error("Skipping invalid media expiration key");
+      continue;
+    }
+    const objectPath = key.split("/").map(encodeURIComponent).join("/");
+    const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
+    const response = await storage.fetch(storageUrl, { method: "DELETE" });
+    if (response.ok || response.status === 404) {
+      await env.DB.prepare(
+        "DELETE FROM media_expirations WHERE object_key = ? AND expires_at <= ?"
+      ).bind(key, cutoff).run();
+      deleted++;
+    } else {
+      console.error("Expired media deletion failed:", response.status);
+    }
+  }
+  return { checked: (expired.results || []).length, deleted };
+}
+
+export { phoneVariants, safeFileName, cleanupExpiredMedia };
 
 export default {
+  async scheduled(_controller, env) {
+    try {
+      const result = await cleanupExpiredMedia(env);
+      console.log("Media expiration cleanup:", result);
+    } catch (error) {
+      console.error("Media expiration cleanup failed:", error);
+    }
+  },
   async fetch(request, env) {
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders });
@@ -1469,6 +1517,8 @@ export default {
         const suppliedName = safeFileName(request.headers.get("X-File-Name") || "attachment");
         const id = crypto.randomUUID();
         const key = currentUser.sub + "/" + id;
+        const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
+        await env.DB.prepare("CREATE TABLE IF NOT EXISTS media_expirations (object_key TEXT PRIMARY KEY, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
         const bucket = env.TIGRIS_BUCKET || "siraj-media";
         const objectPath = key.split("/").map(encodeURIComponent).join("/");
         const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
@@ -1487,7 +1537,8 @@ export default {
             "x-amz-meta-recipientid": recipientId,
             "x-amz-meta-groupid": groupId,
             "x-amz-meta-filename": encodeURIComponent(suppliedName),
-            "x-amz-meta-contenttype": contentType
+            "x-amz-meta-contenttype": contentType,
+            "x-amz-meta-expiresat": expiresAt
           },
           body: bytes
         });
@@ -1503,6 +1554,9 @@ export default {
         });
         const messageId = crypto.randomUUID();
         try {
+          await env.DB.prepare(
+            "INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?)"
+          ).bind(key, expiresAt).run();
           if (recipientId) {
             await env.DB.prepare(
               "INSERT INTO messages (id, sender_id, receiver_id, body) VALUES (?, ?, ?, ?)"
@@ -1513,8 +1567,11 @@ export default {
             ).bind(messageId, groupId, currentUser.sub, attachmentBody).run();
           }
         } catch (error) {
-          // Avoid leaving an unreachable object behind if message persistence fails.
+          // Avoid leaving an unreachable object or expiration record behind if persistence fails.
           try { await storage.fetch(storageUrl, { method: "DELETE" }); } catch (_) {}
+          try {
+            await env.DB.prepare("DELETE FROM media_expirations WHERE object_key = ?").bind(key).run();
+          } catch (_) {}
           throw error;
         }
 
