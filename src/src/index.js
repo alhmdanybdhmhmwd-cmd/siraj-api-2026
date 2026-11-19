@@ -207,7 +207,9 @@ function safeFileName(value) {
 }
 
 
-async function sendSirajPush(env, recipientId, senderId, senderName, messageText) {
+async function sendSirajPush(env, recipientId, senderId, senderName, messageText, options = {}) {
+  const category = options.category === "groups" ? "groups" : "messages";
+  const pushType = category === "groups" ? "group_message" : "direct_message";
   if (!env.FCM_SERVICE_ACCOUNT_JSON) return;
   try {
     const account = JSON.parse(env.FCM_SERVICE_ACCOUNT_JSON);
@@ -256,9 +258,9 @@ async function sendSirajPush(env, recipientId, senderId, senderName, messageText
       )
     `).run();
     const pref = await env.DB.prepare(
-      "SELECT messages FROM notification_preferences WHERE user_id = ?"
+      "SELECT " + category + " AS enabled FROM notification_preferences WHERE user_id = ?"
     ).bind(recipientId).first();
-    if (pref && pref.messages === 0) return;
+    if (pref && pref.enabled === 0) return;
 
     await env.DB.prepare(`
       CREATE TABLE IF NOT EXISTS device_tokens (
@@ -286,11 +288,17 @@ async function sendSirajPush(env, recipientId, senderId, senderName, messageText
             message: {
               token: device.fcm_token,
               notification: {
-                title: "رسالة من " + String(senderName || "مستخدم سراج").slice(0, 80),
+                title: category === "groups"
+                  ? "رسالة في " + String(options.groupName || "مجموعة برق").slice(0, 65)
+                  : "رسالة من " + String(senderName || "مستخدم برق").slice(0, 80),
                 body: preview || "لديك رسالة جديدة"
               },
-              data: { type: "direct_message", senderId: String(senderId || "") },
-              android: { priority: "HIGH", notification: { channel_id: "siraj_messages" } }
+              data: {
+                type: pushType,
+                senderId: String(senderId || ""),
+                ...(category === "groups" ? { groupId: String(options.groupId || "") } : {})
+              },
+              android: { priority: "HIGH", notification: { channel_id: category === "groups" ? "barq_groups" : "barq_messages" } }
             }
           })
         }
@@ -304,7 +312,7 @@ async function sendSirajPush(env, recipientId, senderId, senderName, messageText
       }
     }));
   } catch (error) {
-    console.error("Siraj push delivery failed:", error);
+    console.error("Barq push delivery failed:", error);
   }
 }
 
@@ -984,6 +992,19 @@ export default {
           await env.DB.prepare(
             "INSERT INTO group_messages (id, group_id, sender_id, body) VALUES (?, ?, ?, ?)"
           ).bind(id, groupId, currentUser.sub, message).run();
+          const [group, recipients, sender] = await Promise.all([
+            env.DB.prepare("SELECT name FROM chat_groups WHERE id = ?").bind(groupId).first(),
+            env.DB.prepare("SELECT user_id FROM group_members WHERE group_id = ? AND user_id != ?")
+              .bind(groupId, currentUser.sub).all(),
+            env.DB.prepare("SELECT display_name FROM users WHERE id = ?").bind(currentUser.sub).first()
+          ]);
+          await Promise.all((recipients.results || []).map(item =>
+            sendSirajPush(
+              env, item.user_id, currentUser.sub,
+              sender?.display_name || "مستخدم برق", message,
+              { category: "groups", groupId, groupName: group?.name || "مجموعة برق" }
+            )
+          ));
           return json({ message: "Message sent", id }, 201);
         }
       }
