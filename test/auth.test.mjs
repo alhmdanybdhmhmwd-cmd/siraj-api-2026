@@ -357,7 +357,7 @@ test("registration attributes a new account to one valid referral code", async (
   assert.equal(response.status, 201);
   assert.equal(db.referrals.length, 1);
   assert.equal(db.referrals[0].referrer_user_id, "referrer-1");
-  assert.ok([...db.referralCodes.values()].includes("invited_user") === false);
+  assert.ok([...db.referralCodes.values()].includes(db.user.id));
 });
 
 test("referral dashboard creates a code and unlocks the badge at five new registrations", async () => {
