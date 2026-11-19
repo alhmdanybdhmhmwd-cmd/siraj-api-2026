@@ -156,3 +156,24 @@ test("phone contact matching returns registered searchable accounts only", async
   const data = await response.json();
   assert.deepEqual(data.users.map(item => item.id), ["matched-user"]);
 });
+
+test("BARQ does not create or expose friend requests; direct contacts remain separate", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  const env = { DB: db, JWT_SECRET: secret };
+  const headers = {
+    Authorization: "Bearer " + token,
+    "Content-Type": "application/json"
+  };
+  const send = await worker.default.fetch(new Request("https://api.example.test/api/friends/requests", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ username: "matched" })
+  }), env);
+  assert.equal(send.status, 410);
+  const list = await worker.default.fetch(new Request("https://api.example.test/api/friends/requests", {
+    headers
+  }), env);
+  assert.equal(list.status, 200);
+  assert.deepEqual(await list.json(), { incoming: [], outgoing: [] });
+});
