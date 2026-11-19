@@ -635,9 +635,14 @@ export default {
         const username = String(body.username || "").trim().toLowerCase();
         const password = String(body.password || "");
 
+        // Match phone identifiers across Yemen local/international formats,
+        // while retaining exact username lookup.
+        const phoneConflict = phoneConflictCondition("phone", username);
         const user = await env.DB.prepare(
-          "SELECT * FROM users WHERE username = ? OR phone = ? LIMIT 1"
-        ).bind(username, username).first();
+          `SELECT * FROM users
+           WHERE username = ? OR phone = ? OR ${phoneConflict.sql}
+           LIMIT 1`
+        ).bind(username, username, ...phoneConflict.bindings).first();
 
         if (
           !user ||
