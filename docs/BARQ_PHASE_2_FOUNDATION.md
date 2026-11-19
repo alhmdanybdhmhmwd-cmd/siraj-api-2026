@@ -51,9 +51,14 @@ Until the preview D1 database and preview API are available, work is limited to 
 - These probes do not create tables, write rows, or run migrations.
 - The changes are source-only and have not been deployed. Runtime verification remains pending until an isolated preview environment is available.
 
+## Additional client foundation work
+
+- Android source snapshot: API, media, and realtime origins now support build-time `--dart-define` values (`BARQ_API_BASE`, `BARQ_MEDIA_BASE`, `BARQ_REALTIME_URL`) while retaining production defaults. This source snapshot is packaged separately because the Android project is not part of this GitHub repository.
+- Flutter compilation and tests have not yet been run; this environment does not currently provide Flutter/Dart tooling.
+
 ## Remaining work before phase completion
 - Provision and verify a distinct preview D1 database ID; the current Wrangler binding still points at the production database.
-- Establish a preview Worker/API URL and wire Android build-time environment selection.
+- Establish a preview Worker/API URL and supply the verified values to the Android build-time environment selectors.
 - Add automated route tests for liveness/readiness and authentication/session behavior.
 - Run the repository test workflow and Flutter analyze/tests/build in a suitable toolchain.
 - Verify API, media, and realtime origin routing and the Android package/Firebase identity.
