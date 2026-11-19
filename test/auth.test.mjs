@@ -267,6 +267,48 @@ class FakeDB {
 }
 
 
+test("voice transcription accepts authenticated audio and returns the Workers AI transcript", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  const env = {
+    DB: db,
+    JWT_SECRET: secret,
+    AI: { async run(model, input) {
+      assert.equal(model, "@cf/openai/whisper-large-v3-turbo");
+      assert.ok(input.audio);
+      return { text: "هذا اختبار صوتي", language: "ar" };
+    }}
+  };
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/transcribe", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "audio/wav"
+    },
+    body: new Uint8Array([1, 2, 3, 4])
+  }), env);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { text: "هذا اختبار صوتي", language: "ar" });
+});
+
+test("voice transcription rejects non-audio uploads", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/transcribe", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "application/json"
+    },
+    body: "{}"
+  }), {
+    DB: db,
+    JWT_SECRET: secret,
+    AI: { async run() { throw new Error("must not run"); } }
+  });
+  assert.equal(response.status, 415);
+});
+
 test("ephemeral messages use a separate store and start a ten-second deletion window on read", async () => {
   const db = new FakeDB();
   const senderToken = await worker.signToken(user, secret, 0);
