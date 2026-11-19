@@ -1062,6 +1062,13 @@ export default {
         if (q.length < 2) {
           return json({ users: [] });
         }
+        // Bound authenticated directory enumeration and repeated expensive LIKE queries.
+        if (!(await consumeLoginAttempt(env, "user-search", currentUser.sub, 120))) {
+          return new Response(JSON.stringify({ error: "Too many searches. Please try again in 15 minutes." }), {
+            status: 429,
+            headers: { ...corsHeaders, "Retry-After": "900" }
+          });
+        }
 
         const byId = new Map();
         const usernameMatches = await env.DB.prepare(
@@ -1114,6 +1121,13 @@ export default {
         const body = await request.json();
         if (!Array.isArray(body.phones) || body.phones.length > 500) {
           return json({ error: "قائمة جهات الاتصال غير صالحة" }, 400);
+        }
+        // Contact matching performs several bounded database lookups; cap repeated bulk requests.
+        if (!(await consumeLoginAttempt(env, "contact-match", currentUser.sub, 30))) {
+          return new Response(JSON.stringify({ error: "Too many contact matching requests. Please try again in 15 minutes." }), {
+            status: 429,
+            headers: { ...corsHeaders, "Retry-After": "900" }
+          });
         }
         const requested = new Set(
           body.phones.filter(value => typeof value === "string" && value.length <= 32)
