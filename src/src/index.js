@@ -1733,9 +1733,9 @@ export default {
         const inserted = Number(insertResult?.meta?.changes || 0) === 1;
         if (!inserted) {
           const existing = await env.DB.prepare(
-            "SELECT sender_id, receiver_id FROM messages WHERE id = ?"
+            "SELECT sender_id, receiver_id, body FROM messages WHERE id = ?"
           ).bind(id).first();
-          if (!existing || existing.sender_id !== currentUser.sub || existing.receiver_id !== receiverId) {
+          if (!existing || existing.sender_id !== currentUser.sub || existing.receiver_id !== receiverId || existing.body !== message) {
             return json({ error: "Message ID conflict" }, 409);
           }
           return json({ message: "Message already synchronized", id, duplicate: true }, 200);
