@@ -11,7 +11,7 @@ class AwsClient {
   }
 }
 `);
-workerSource += "\nexport { signToken, verifyToken, authenticate, hashPassword };";
+workerSource += "\nexport { signToken, verifyToken, authenticate, hashPassword, cleanupExpiredRateLimits };";
 const worker = await import("data:text/javascript;base64," + Buffer.from(workerSource).toString("base64"));
 
 const secret = "unit-test-secret-that-is-long-enough";
@@ -1176,6 +1176,29 @@ test("media expiration cleanup deletes only objects whose individual 72-hour dea
   } finally {
     delete globalThis.__fakeTigrisHandler;
   }
+});
+
+test("rate limit cleanup removes only buckets older than 24 hours", async () => {
+  const statements = [];
+  const db = {
+    prepare(sql) {
+      return {
+        params: [],
+        bind(...params) { this.params = params; return this; },
+        async run() {
+          statements.push({ sql, params: this.params });
+          return { meta: { changes: 3 } };
+        }
+      };
+    }
+  };
+  const now = Date.parse("2026-11-19T12:00:00.000Z");
+  const result = await worker.cleanupExpiredRateLimits({ DB: db }, now);
+  const cutoff = Math.floor(now / 1000) - 24 * 60 * 60;
+  assert.deepEqual(result, { login_rate_limits: 3, recovery_rate_limits: 3 });
+  assert.equal(statements.length, 2);
+  assert.ok(statements.every(item => item.sql.includes("window_started < ?")));
+  assert.ok(statements.every(item => item.params[0] === cutoff));
 });
 
 test("media expiration cleanup continues after one storage deletion fails", async () => {
