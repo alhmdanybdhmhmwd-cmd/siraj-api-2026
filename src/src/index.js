@@ -199,6 +199,49 @@ function phoneVariants(value) {
   return [...variants];
 }
 
+
+function normalizedPhoneSql(column = "phone") {
+  let expression = column;
+  const digits = [
+    ["٠", "0"], ["١", "1"], ["٢", "2"], ["٣", "3"], ["٤", "4"],
+    ["٥", "5"], ["٦", "6"], ["٧", "7"], ["٨", "8"], ["٩", "9"],
+    ["۰", "0"], ["۱", "1"], ["۲", "2"], ["۳", "3"], ["۴", "4"],
+    ["۵", "5"], ["۶", "6"], ["۷", "7"], ["۸", "8"], ["۹", "9"]
+  ];
+  for (const [from, to] of digits) {
+    expression = `replace(${expression}, '${from}', '${to}')`;
+  }
+  for (const character of [" ", "+", "-", "(", ")", ".", "\t"]) {
+    expression = `replace(${expression}, '${character}', '')`;
+  }
+  return expression;
+}
+
+async function phoneAlreadyInUse(env, phone, excludeUserId = "") {
+  const requested = [...new Set(phoneVariants(phone))];
+  if (!requested.length) return false;
+  const normalizedPhone = normalizedPhoneSql("phone");
+  for (let offset = 0; offset < requested.length; offset += 40) {
+    const chunk = requested.slice(offset, offset + 40);
+    const suffixes = [...new Set(chunk.filter(value => value.length >= 9).map(value => value.slice(-9)))];
+    const exactPlaceholders = chunk.map(() => "?").join(", ");
+    const suffixPlaceholders = suffixes.map(() => "?").join(", ");
+    const result = await env.DB.prepare(
+      `SELECT id, phone FROM users
+       WHERE id != ? AND (
+         ${normalizedPhone} IN (${exactPlaceholders})
+         OR substr(${normalizedPhone}, -9) IN (${suffixPlaceholders || "''"})
+       )`
+    ).bind(excludeUserId, ...chunk, ...suffixes).all();
+    for (const candidate of result.results || []) {
+      if (phoneVariants(candidate.phone).some(value => requested.includes(value))) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 function cleanUser(user) {
   return {
     id: user.id,
@@ -411,6 +454,9 @@ export default {
         if (phone.length > 25) {
           return json({ error: "Invalid phone number" }, 400);
         }
+        if (phone && await phoneAlreadyInUse(env, phone)) {
+          return json({ error: "Phone number is already registered" }, 409);
+        }
 
         const id = crypto.randomUUID();
         const salt = base64url(
@@ -565,13 +611,8 @@ export default {
         if (phone.length > 25) {
           return json({ error: "Phone number is too long" }, 400);
         }
-        if (phone) {
-          const existingPhone = await env.DB.prepare(
-            "SELECT id FROM users WHERE phone = ? AND id != ? LIMIT 1"
-          ).bind(phone, currentUser.sub).first();
-          if (existingPhone) {
-            return json({ error: "Phone number is already in use" }, 409);
-          }
+        if (phone && await phoneAlreadyInUse(env, phone, currentUser.sub)) {
+          return json({ error: "Phone number is already in use" }, 409);
         }
         await env.DB.prepare(
           "UPDATE users SET display_name = ?, phone = ? WHERE id = ?"
@@ -829,7 +870,7 @@ export default {
         for (let offset = 0; offset < variants.length; offset += 40) {
           const chunk = variants.slice(offset, offset + 40);
           const placeholders = chunk.map(() => "?").join(", ");
-          const normalizedPhone = "replace(replace(replace(replace(replace(phone, ' ', ''), '+', ''), '-', ''), '(', ''), ')', '')";
+          const normalizedPhone = normalizedPhoneSql("phone");
           const suffixes = chunk.map(value => value.slice(-9)).filter(value => value.length === 9);
           const suffixPlaceholders = suffixes.map(() => "?").join(", ");
           const result = await env.DB.prepare(
