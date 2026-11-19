@@ -31,7 +31,30 @@ function decodeBase64url(value) {
   return Uint8Array.from(binary, c => c.charCodeAt(0));
 }
 
-async function signToken(user, secret) {
+
+async function ensureAccountSecurity(env) {
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS account_security (
+      user_id TEXT PRIMARY KEY,
+      session_version INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `).run();
+}
+
+async function getSessionVersion(env, userId) {
+  await ensureAccountSecurity(env);
+  await env.DB.prepare(
+    "INSERT OR IGNORE INTO account_security (user_id, session_version) VALUES (?, 0)"
+  ).bind(userId).run();
+  const row = await env.DB.prepare(
+    "SELECT session_version FROM account_security WHERE user_id = ?"
+  ).bind(userId).first();
+  return Number(row?.session_version || 0);
+}
+
+async function signToken(user, secret, sessionVersion = 0) {
   const header = base64url(
     encoder.encode(JSON.stringify({ alg: "HS256", typ: "JWT" }))
   );
@@ -40,6 +63,7 @@ async function signToken(user, secret) {
     encoder.encode(JSON.stringify({
       sub: user.id,
       username: user.username,
+      sv: Number(sessionVersion || 0),
       exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30
     }))
   );
@@ -132,7 +156,19 @@ async function authenticate(request, env) {
 
   if (!token) return null;
 
-  return verifyToken(token, env.JWT_SECRET);
+  const payload = await verifyToken(token, env.JWT_SECRET);
+  if (!payload) return null;
+  try {
+    const row = await env.DB.prepare(
+      "SELECT session_version FROM account_security WHERE user_id = ?"
+    ).bind(payload.sub).first();
+    if (row && Number(payload.sv || 0) !== Number(row.session_version || 0)) {
+      return null;
+    }
+  } catch {
+    // Older databases without the security table keep existing sessions valid.
+  }
+  return payload;
 }
 
 function cleanUser(user) {
@@ -358,8 +394,9 @@ export default {
           phone
         };
 
-        const token = await signToken(user, env.JWT_SECRET);
         const recoveryCode = await issueRecoveryCode(env, id);
+        const sessionVersion = await getSessionVersion(env, id);
+        const token = await signToken(user, env.JWT_SECRET, sessionVersion);
 
         return json({
           user: cleanUser(user),
@@ -392,12 +429,34 @@ export default {
         }
         const salt = base64url(crypto.getRandomValues(new Uint8Array(16)));
         const passwordHash = await hashPassword(newPassword, salt);
-        await env.DB.batch([
-          env.DB.prepare("UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?")
-            .bind(passwordHash, salt, user.id),
-          env.DB.prepare("DELETE FROM account_recovery WHERE user_id = ?").bind(user.id)
+        await ensureAccountSecurity(env);
+        await env.DB.prepare(
+          "INSERT OR IGNORE INTO account_security (user_id, session_version) VALUES (?, 0)"
+        ).bind(user.id).run();
+        const consumed = await env.DB.batch([
+          env.DB.prepare(
+            `UPDATE users SET password_hash = ?, password_salt = ?
+             WHERE id = ? AND EXISTS (
+               SELECT 1 FROM account_recovery
+               WHERE user_id = ? AND recovery_hash = ?
+             )`
+          ).bind(passwordHash, salt, user.id, user.id, saved.recovery_hash),
+          env.DB.prepare(
+            `UPDATE account_security SET session_version = session_version + 1,
+               updated_at = CURRENT_TIMESTAMP
+             WHERE user_id = ? AND EXISTS (
+               SELECT 1 FROM account_recovery
+               WHERE user_id = ? AND recovery_hash = ?
+             )`
+          ).bind(user.id, user.id, saved.recovery_hash),
+          env.DB.prepare(
+            "DELETE FROM account_recovery WHERE user_id = ? AND recovery_hash = ?"
+          ).bind(user.id, saved.recovery_hash)
         ]);
-        return json({ message: "تم تحديث كلمة المرور. سجّل الدخول بكلمة المرور الجديدة." });
+        if (!consumed?.[0]?.meta?.changes) {
+          return json({ error: "رمز الاسترداد استُخدم بالفعل أو لم يعد صالحًا" }, 400);
+        }
+        return json({ message: "تم تحديث كلمة المرور وإبطال الجلسات السابقة. سجّل الدخول من جديد." });
       }
 
       // Login
@@ -420,7 +479,8 @@ export default {
           }, 401);
         }
 
-        const token = await signToken(user, env.JWT_SECRET);
+        const sessionVersion = await getSessionVersion(env, user.id);
+        const token = await signToken(user, env.JWT_SECRET, sessionVersion);
 
         return json({
           user: cleanUser(user),
