@@ -31,6 +31,7 @@ class FakeDB {
     this.recovery = null;
     this.sessionVersion = 0;
     this.recoveryAttempts = new Map();
+    this.loginAttempts = new Map();
     this.contactCandidates = [];
   }
 
@@ -76,6 +77,9 @@ class FakeDB {
         if (sql.includes("SELECT attempts FROM recovery_rate_limits")) {
           return { attempts: db.recoveryAttempts.get(this.params[0]) || 0 };
         }
+        if (sql.includes("SELECT attempts FROM login_rate_limits")) {
+          return { attempts: db.loginAttempts.get(this.params[0]) || 0 };
+        }
         return null;
       },
       async all() {
@@ -100,6 +104,10 @@ class FakeDB {
         if (sql.includes("INSERT INTO recovery_rate_limits")) {
           const key = this.params[0];
           db.recoveryAttempts.set(key, (db.recoveryAttempts.get(key) || 0) + 1);
+        }
+        if (sql.includes("INSERT INTO login_rate_limits")) {
+          const key = this.params[0];
+          db.loginAttempts.set(key, (db.loginAttempts.get(key) || 0) + 1);
         }
         if (sql.includes("INSERT INTO recovery_codes")) {
           db.recovery = { code_hash: this.params[1], code_salt: this.params[2], expires_at: this.params[3], consumed_at: null };
@@ -1063,4 +1071,32 @@ test("only the group owner can add members", async () => {
   const allowed = await worker.default.fetch(request(), { DB: ownerDb, JWT_SECRET: secret });
   assert.equal(allowed.status, 201);
   assert.equal(ownerDb.insertedMembers, 1);
+});
+
+
+test("login rate limit blocks repeated attempts by identifier and client", async () => {
+  const db = new FakeDB();
+  const wrongLogin = () => worker.default.fetch(new Request("https://api.example.test/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "CF-Connecting-IP": "203.0.113.10" },
+    body: JSON.stringify({ username: "tester", password: "incorrect-password" })
+  }), { DB: db, JWT_SECRET: secret });
+
+  for (let i = 0; i < 10; i++) {
+    assert.equal((await wrongLogin()).status, 401);
+  }
+  const blocked = await wrongLogin();
+  assert.equal(blocked.status, 429);
+  assert.equal(blocked.headers.get("Retry-After"), "900");
+});
+
+test("login rate limit separates client IP buckets", async () => {
+  const db = new FakeDB();
+  const attempt = ip => worker.default.fetch(new Request("https://api.example.test/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "CF-Connecting-IP": ip },
+    body: JSON.stringify({ username: "tester", password: "incorrect-password" })
+  }), { DB: db, JWT_SECRET: secret });
+  for (let i = 0; i < 10; i++) await attempt("203.0.113.11");
+  assert.equal((await attempt("203.0.113.12")).status, 401);
 });
