@@ -38,6 +38,7 @@ class FakeDB {
     this.ephemeralMessages = [];
     this.referralCodes = new Map();
     this.referrals = [];
+    this.messages = [];
   }
 
   prepare(sql) {
@@ -47,6 +48,10 @@ class FakeDB {
       params: [],
       bind(...params) { this.params = params; return this; },
       async first() {
+        if (sql.includes("SELECT sender_id, receiver_id FROM messages WHERE id = ?")) {
+          const item = db.messages.find(message => message.id === this.params[0]);
+          return item ? { sender_id: item.sender_id, receiver_id: item.receiver_id } : null;
+        }
         if (sql.includes("SELECT user_id FROM referral_codes WHERE code = ?")) {
           const userId = db.referralCodes.get(this.params[0]);
           return userId ? { user_id: userId } : null;
@@ -170,6 +175,12 @@ class FakeDB {
             return { meta: { changes: 1 } };
           }
           return { meta: { changes: 0 } };
+        }
+        if (sql.includes("INSERT OR IGNORE INTO messages")) {
+          const [id, senderId, receiverId, body] = this.params;
+          if (db.messages.some(item => item.id === id)) return { meta: { changes: 0 } };
+          db.messages.push({ id, sender_id: senderId, receiver_id: receiverId, body });
+          return { meta: { changes: 1 } };
         }
         if (sql.includes("INSERT OR IGNORE INTO referral_codes")) {
           const [userId, code] = this.params;
@@ -308,6 +319,26 @@ class FakeDB {
   }
 }
 
+
+test("offline message synchronization is idempotent and rejects ID collisions", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  const env = { DB: db, JWT_SECRET: secret };
+  const send = (receiverId, clientMessageId) => worker.default.fetch(new Request("https://api.example.test/api/messages", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+    body: JSON.stringify({ receiverId, body: "offline message", clientMessageId })
+  }), env);
+  const first = await send("friend-1", "aabbccddeeff00112233445566778899");
+  assert.equal(first.status, 201);
+  const duplicate = await send("friend-1", "aabbccddeeff00112233445566778899");
+  assert.equal(duplicate.status, 200);
+  assert.equal((await duplicate.json()).duplicate, true);
+  assert.equal(db.messages.length, 1);
+  const conflict = await send("another-friend", "aabbccddeeff00112233445566778899");
+  assert.equal(conflict.status, 409);
+  assert.equal(db.messages.length, 1);
+});
 
 test("registration attributes a new account to one valid referral code", async () => {
   const db = new FakeDB();
