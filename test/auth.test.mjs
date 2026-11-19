@@ -169,6 +169,68 @@ test("phone contact matching returns registered searchable accounts only", async
   assert.deepEqual(data.users.map(item => item.id), ["matched-user"]);
 });
 
+class FakeGroupDB extends FakeDB {
+  constructor(member = true) {
+    super();
+    this.isGroupMember = member;
+    this.groupMessages = [];
+  }
+  prepare(sql) {
+    const statement = super.prepare(sql);
+    const originalFirst = statement.first.bind(statement);
+    const originalAll = statement.all.bind(statement);
+    const originalRun = statement.run.bind(statement);
+    statement.first = async () => {
+      if (sql.includes("SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?")) {
+        return this.isGroupMember ? { ok: 1 } : null;
+      }
+      if (sql.includes("SELECT name FROM chat_groups WHERE id = ?")) return { name: "Test group" };
+      if (sql.includes("SELECT display_name FROM users WHERE id = ?")) return { display_name: "Tester" };
+      return originalFirst();
+    };
+    statement.all = async () => {
+      if (sql.includes("SELECT user_id FROM group_members WHERE group_id = ? AND user_id != ?")) {
+        return { results: [{ user_id: "member-2" }] };
+      }
+      return originalAll();
+    };
+    statement.run = async () => {
+      if (sql.includes("INSERT INTO group_messages")) this.groupMessages.push(statement.params);
+      return originalRun();
+    };
+    return statement;
+  }
+}
+
+test("group messages are accepted only from members and persisted", async () => {
+  const db = new FakeGroupDB(true);
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/groups/group-1/messages", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ body: "Hello group" })
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 201);
+  assert.equal(db.groupMessages.length, 1);
+  assert.equal(db.groupMessages[0][1], "group-1");
+  assert.equal(db.groupMessages[0][3], "Hello group");
+
+  const outsider = new FakeGroupDB(false);
+  const denied = await worker.default.fetch(new Request("https://api.example.test/api/groups/group-1/messages", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ body: "Should not pass" })
+  }), { DB: outsider, JWT_SECRET: secret });
+  assert.equal(denied.status, 404);
+  assert.equal(outsider.groupMessages.length, 0);
+});
+
 test("BARQ does not create or expose friend requests; direct contacts remain separate", async () => {
   const db = new FakeDB();
   const token = await worker.signToken(user, secret, 0);
