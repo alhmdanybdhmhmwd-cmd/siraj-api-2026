@@ -133,6 +133,12 @@ test("password recovery consumes the code and invalidates the old session", asyn
   assert.equal(reused.status, 400);
 });
 
+test("media filenames are safely decoded and cannot contain path separators or control characters", () => {
+  assert.equal(worker.safeFileName("..%2F..%5Csecret%0Aname.jpg"), ".._.._secret_name.jpg");
+  assert.equal(worker.safeFileName("%E0%A4%A"), "%E0%A4%A");
+  assert.equal(worker.safeFileName(""), "attachment");
+});
+
 test("phone normalization matches local and Yemen international forms", () => {
   const variants = worker.phoneVariants("+967 77 123 4567");
   assert.ok(variants.includes("967771234567"));
