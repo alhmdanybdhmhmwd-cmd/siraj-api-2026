@@ -57,3 +57,45 @@ Do not invent a new base migration from partial SQL usage. In particular,
 do not add guessed constraints or indexes to the production schema. The
 existing SQLite test validates the recovery migration's local SQL behavior
 only; it is not a substitute for Cloudflare D1 integration testing.
+
+## Additional historical-branch finding
+
+The historical `feature/siraj-foundation-v1` branch contains two older
+migrations, but they are not a safe substitute for the current schema:
+
+- `0001_groups_media.sql` creates `groups`, while the current Worker
+  creates and queries `chat_groups`.
+- That historical migration creates `group_members` with a foreign key to
+  `groups`; the current Worker-created `group_members` definition points to
+  `chat_groups`. SQLite/D1 does not change an existing table's foreign-key
+  target merely because a later `CREATE TABLE IF NOT EXISTS` is executed.
+- The historical migration also creates `media_assets`, while the current
+  Worker attachment flow uses message records plus Tigris object keys and
+  does not use that historical media metadata schema.
+- `0002_tigris_retention.sql` alters the historical `media_assets` table and
+  must not be applied unless that exact earlier migration is installed and
+  the current product still requires that schema.
+
+Therefore, blindly restoring those old migration files could leave the
+database with two group table names and incompatible foreign-key relationships.
+Do not copy or apply them as current migrations.
+
+## Worker-managed table definitions
+
+The current Worker lazily creates these support tables with
+`CREATE TABLE IF NOT EXISTS`: `account_security`,
+`notification_preferences`, `device_tokens`, `user_privacy`,
+`status_posts`, `chat_groups`, `group_members`, and
+`group_messages`. Some definitions are repeated at multiple API paths.
+These definitions should be consolidated only after checking the actual
+non-production D1 schema, because existing tables are not altered by
+`IF NOT EXISTS`.
+
+## Next safe action
+
+Obtain a read-only schema export (for example, `sqlite_master` table/index
+definitions and `PRAGMA table_info` / `PRAGMA foreign_key_list`) from a
+dedicated non-production D1 database or a verified database backup. Compare
+it with the current Worker SQL before writing any migration. The available
+repository integration does not expose Cloudflare D1 commands, so no D1
+database has been created or queried in this task.
