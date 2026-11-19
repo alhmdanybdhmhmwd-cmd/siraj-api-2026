@@ -827,10 +827,7 @@ export default {
         return json({ incoming: [], outgoing: [] });
       }
 
-      const actionMatch = path.match(
-        /^\\/api\\/friends\\/requests\\/([^/]+)\\/(accept|reject)$/
-      );
-      if (method === "POST" && actionMatch) {
+      if (method === "POST" && path.startsWith("/api/friends/requests/")) {
         return json({ error: "Friend requests are not supported. Add the contact directly." }, 410);
       }
 
