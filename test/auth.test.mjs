@@ -1310,6 +1310,49 @@ test("expired attachment is denied and deleted before any media bytes are downlo
   }
 });
 
+test("expired attachment cleanup record is retained when Tigris deletion fails", async () => {
+  const db = new FakeDB();
+  const originalPrepare = db.prepare.bind(db);
+  db.expirationRowDeletes = 0;
+  db.prepare = sql => {
+    const statement = originalPrepare(sql);
+    const run = statement.run.bind(statement);
+    statement.run = async () => {
+      if (sql.includes("DELETE FROM media_expirations")) db.expirationRowDeletes++;
+      return run();
+    };
+    return statement;
+  };
+  const token = await worker.signToken(user, secret, 0);
+  globalThis.__fakeTigrisHandler = async (_url, options) => {
+    if (options.method === "HEAD") {
+      return new Response(null, {
+        status: 200,
+        headers: {
+          "x-amz-meta-ownerid": user.id,
+          "x-amz-meta-expiresat": "2020-01-01T00:00:00.000Z"
+        }
+      });
+    }
+    return new Response("temporary storage failure", { status: 503 });
+  };
+  try {
+    const response = await worker.default.fetch(new Request(
+      "https://api.example.test/api/media/user-1/expired-object",
+      { headers: { Authorization: "Bearer " + token } }
+    ), {
+      DB: db,
+      JWT_SECRET: secret,
+      TIGRIS_ACCESS_KEY_ID: "test-access",
+      TIGRIS_SECRET_ACCESS_KEY: "test-secret"
+    });
+    assert.equal(response.status, 410);
+    assert.equal(db.expirationRowDeletes, 0);
+  } finally {
+    delete globalThis.__fakeTigrisHandler;
+  }
+});
+
 test("media expiration cleanup deletes only objects whose individual 72-hour deadline passed", async () => {
   const cutoff = Date.parse("2026-11-22T12:00:00.000Z");
   const rows = [
