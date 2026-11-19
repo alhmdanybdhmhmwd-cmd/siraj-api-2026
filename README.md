@@ -6,7 +6,6 @@ Cloudflare Worker backend for Siraj application.
 The Worker recovery-code endpoints require these additive D1 migrations:
 
 - `migrations/0001_recovery_codes.sql`
-- `migrations/0002_recovery_token_revocations.sql`
 
 Wrangler is configured to discover them through `migrations_dir = "migrations"`. Before any deployment, review the target database and migration plan. Apply migrations only to a dedicated, isolated development/preview D1 database during testing. Do not apply them to the production `siraj-db` or deploy production without explicit release approval.
 
