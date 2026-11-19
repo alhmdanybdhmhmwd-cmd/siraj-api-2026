@@ -1164,14 +1164,20 @@ export default {
           size: bytes.byteLength
         });
         const messageId = crypto.randomUUID();
-        if (recipientId) {
-          await env.DB.prepare(
-            "INSERT INTO messages (id, sender_id, receiver_id, body) VALUES (?, ?, ?, ?)"
-          ).bind(messageId, currentUser.sub, recipientId, attachmentBody).run();
-        } else {
-          await env.DB.prepare(
-            "INSERT INTO group_messages (id, group_id, sender_id, body) VALUES (?, ?, ?, ?)"
-          ).bind(messageId, groupId, currentUser.sub, attachmentBody).run();
+        try {
+          if (recipientId) {
+            await env.DB.prepare(
+              "INSERT INTO messages (id, sender_id, receiver_id, body) VALUES (?, ?, ?, ?)"
+            ).bind(messageId, currentUser.sub, recipientId, attachmentBody).run();
+          } else {
+            await env.DB.prepare(
+              "INSERT INTO group_messages (id, group_id, sender_id, body) VALUES (?, ?, ?, ?)"
+            ).bind(messageId, groupId, currentUser.sub, attachmentBody).run();
+          }
+        } catch (error) {
+          // Avoid leaving an unreachable object behind if message persistence fails.
+          try { await storage.fetch(storageUrl, { method: "DELETE" }); } catch (_) {}
+          throw error;
         }
         return json({ attachment: { id: key, fileName: suppliedName, contentType, size: bytes.byteLength }, messageId }, 201);
       }
