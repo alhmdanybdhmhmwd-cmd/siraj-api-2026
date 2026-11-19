@@ -137,6 +137,9 @@ test("phone normalization matches local and Yemen international forms", () => {
   const variants = worker.phoneVariants("+967 77 123 4567");
   assert.ok(variants.includes("967771234567"));
   assert.ok(variants.includes("771234567"));
+  const internationalPrefix = worker.phoneVariants("00967 77 123 4567");
+  assert.ok(internationalPrefix.includes("967771234567"));
+  assert.ok(internationalPrefix.includes("771234567"));
   assert.deepEqual(worker.phoneVariants("invalid"), []);
 });
 
