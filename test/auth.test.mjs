@@ -124,3 +124,10 @@ test("password recovery consumes the code and invalidates the old session", asyn
   const reused = await worker.default.fetch(reusedRequest, env);
   assert.equal(reused.status, 400);
 });
+
+test("phone normalization matches local and Yemen international forms", () => {
+  const variants = worker.phoneVariants("+967 77 123 4567");
+  assert.ok(variants.includes("967771234567"));
+  assert.ok(variants.includes("771234567"));
+  assert.deepEqual(worker.phoneVariants("invalid"), []);
+});
