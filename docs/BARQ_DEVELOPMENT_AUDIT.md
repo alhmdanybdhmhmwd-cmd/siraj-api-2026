@@ -18,13 +18,18 @@ This branch is a safe development workspace. Production `main` is unchanged.
 - Profile editing, logout, Arabic RTL interface and existing visual identity.
 - Existing API compatibility, stored credentials and user data.
 
-## Confirmed gaps and work status
-1. **Recovery code — implemented on this development branch (not deployed):** registration now returns a cryptographically random one-time recovery code; the backend stores only a salted PBKDF2 hash; `POST /api/password/recover` validates username/phone plus code, updates the password, and consumes the code; authenticated `POST /api/recovery-code` rotates it after current-password verification. Existing users without a code can use the rotate endpoint after signing in.
-2. **Realtime:** the Flutter client contains a WebSocket client for `/api/realtime`, but the current Worker does not implement a WebSocket upgrade or realtime route. Polling is the current fallback; realtime is still open.
-3. **Direct contacts:** `/api/contacts` already exists in the Worker and adds both sides directly. Legacy friend-request routes remain in the backend for compatibility, but must not be exposed or required by the product flow.
-4. **Automatic phone-contact matching/synchronization** is not present in the inspected client API surface. Implement only with explicit contacts permission and privacy-safe matching.
-5. **End-to-end encryption** was not found in the inspected Flutter dependency list or Worker source.
-6. **Six approved features** remain unimplemented in the inspected source: Lightning mode, nearby offline messaging and later sync, read-triggered 10-second ephemeral messages excluded from Firebase, Arabic-English live translation, voice transcription, and invite rewards (five verified registrations => "صاعقة" title and gold avatar frame).
+## Old work status (new six features are explicitly deferred)
+1. **Recovery code:** implemented on this development branch (not deployed). Registration returns a cryptographically random one-time code; only a salted PBKDF2 hash is stored; password recovery consumes the matching code; users can rotate the code after signing in and verifying their current password.
+2. **Session invalidation:** implemented on this development branch. JWTs carry a per-account session version; successful password recovery increments it atomically with the password update and code consumption, rejecting previously issued sessions.
+3. **Recovery tests:** added Node built-in tests for session-version invalidation, password update, one-time code consumption, and rejection of reuse. Added a CI workflow to run these tests and Worker syntax validation. The workflow result must be confirmed before calling tests passed.
+4. **Media proxy:** fixed `api/[...path].js` on this branch to forward `X-File-Name`, `X-Recipient-Id`, and `X-Group-Id`, and preserve `Content-Disposition` / cache headers. The Vercel status check for this commit reported success.
+5. **Realtime:** the Flutter client currently uses REST polling through Vercel every five seconds. The Cloudflare Worker does not implement a WebSocket upgrade. Reliable realtime remains open; do not route the app to workers.dev until the route and network compatibility are proven.
+6. **Phone contacts:** automatic permission-based phone contact matching and synchronization are not implemented in the available Flutter source. The existing `POST /api/contacts` endpoint adds a selected person directly, without requiring a friend request.
+7. **End-to-end encryption:** not implemented in the inspected source.
+8. **Release verification:** still needs a Cloudflare preview environment that uses a separate non-production database, Flutter/API contract checks, two-device tests for registration, recovery, direct messaging, read receipts, groups, media, push notifications and reconnect/sync, plus network tests on Yemen Net, Yemen Mobile, Sabafon and another network without VPN.
+9. **Android source:** the available ZIP is the 18-Nov source snapshot. Preserve its package ID `com.siraj.app.siraj`, Firebase client identity, secure-storage keys, API URL, and all existing features. Flutter SDK was not available in this work environment, so Android analysis/build has not been run.
+
+**Deferred by explicit user instruction:** do not start the six approved new features until all items above that apply to the existing product are completed and tested.
 ## Implementation order
 1. Reconcile the complete existing requirements and finish old in-progress work first, especially recovery-code/password recovery, API/realtime consistency, contact matching, and reliable message delivery.
 2. Add the six approved features in independently testable increments.
