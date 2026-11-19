@@ -89,8 +89,15 @@ async function signToken(user, secret, sessionVersion = 0) {
 
 async function verifyToken(token, secret) {
   try {
+    if (typeof token !== "string" || token.length > 8192) return null;
     const parts = token.split(".");
     if (parts.length !== 3) return null;
+
+    // Accept only the exact JWT profile issued by this API.
+    const header = JSON.parse(
+      new TextDecoder().decode(decodeBase64url(parts[0]))
+    );
+    if (header.alg !== "HS256" || header.typ !== "JWT") return null;
 
     const key = await crypto.subtle.importKey(
       "raw",
