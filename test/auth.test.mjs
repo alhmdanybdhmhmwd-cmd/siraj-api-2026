@@ -716,6 +716,7 @@ class FakeGroupDB extends FakeDB {
       }
       if (sql.includes("FROM (") && sql.includes("group_messages")) {
         this.groupHistoryQuery = sql;
+        this.groupHistoryParams = statement.params;
         return { results: [] };
       }
       if (sql.includes("SELECT user_id FROM group_members WHERE group_id = ? AND user_id != ?")) {
@@ -802,6 +803,7 @@ class FakePrivateHistoryDB extends FakeDB {
     statement.all = async () => {
       if (sql.includes("FROM (") && sql.includes("receiver_id")) {
         this.privateHistoryQuery = sql;
+        this.privateHistoryParams = statement.params;
         return { results: [] };
       }
       return originalAll();
@@ -915,8 +917,9 @@ test("private history fetches the newest 100 messages in chronological order", a
     headers: { Authorization: "Bearer " + token }
   }), { DB: db, JWT_SECRET: secret });
   assert.equal(response.status, 200);
-  assert.match(db.privateHistoryQuery, /ORDER BY created_at DESC, id DESC\s+LIMIT 101/i);
+  assert.match(db.privateHistoryQuery, /ORDER BY created_at DESC, id DESC\s+LIMIT \\?/i);
   assert.match(db.privateHistoryQuery, /ORDER BY created_at ASC, id ASC/i);
+  assert.equal(db.privateHistoryParams.at(-1), 101);
 });
 
 test("group history fetches the newest 100 messages in chronological order", async () => {
@@ -926,8 +929,9 @@ test("group history fetches the newest 100 messages in chronological order", asy
     headers: { Authorization: "Bearer " + token }
   }), { DB: db, JWT_SECRET: secret });
   assert.equal(response.status, 200);
-  assert.match(db.groupHistoryQuery, /ORDER BY gm\.created_at DESC, gm\.id DESC\s+LIMIT 101/i);
+  assert.match(db.groupHistoryQuery, /ORDER BY gm\.created_at DESC, gm\.id DESC\s+LIMIT \\?/i);
   assert.match(db.groupHistoryQuery, /ORDER BY created_at ASC, id ASC/i);
+  assert.equal(db.groupHistoryParams.at(-1), 101);
 });
 
 test("private message remains successful when notification sender lookup fails", async () => {
