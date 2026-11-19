@@ -202,7 +202,7 @@ function cleanUser(user) {
 function safeFileName(value) {
   let decoded = String(value || "attachment");
   try { decoded = decodeURIComponent(decoded); } catch (_) {}
-  const cleaned = decoded.replace(/[\\/\\\\\\u0000-\\u001f\\u007f]/g, "_").trim().slice(0, 180);
+  const cleaned = Array.from(decoded, char => { const code = char.charCodeAt(0); return char === "/" || char === "\\\\" || code < 32 || code === 127 ? "_" : char; }).join("").trim().slice(0, 180);
   return cleaned || "attachment";
 }
 
