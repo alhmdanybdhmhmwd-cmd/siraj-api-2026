@@ -817,143 +817,21 @@ export default {
         return json({ message: "Contact added", userId }, 201);
       }
 
-      // Send friend request
+      // Friend requests are intentionally disabled in BARQ.
+      // Users add contacts directly through POST /api/contacts.
       if (method === "POST" && path === "/api/friends/requests") {
-        const body = await request.json();
-
-        const target = String(
-          body.username || body.phone || body.target || ""
-        ).trim();
-
-        if (!target) {
-          return json({
-            error: "Enter a username or phone number"
-          }, 400);
-        }
-
-        const receiver = await env.DB.prepare(
-          "SELECT id FROM users WHERE username = ? OR phone = ? LIMIT 1"
-        ).bind(target.toLowerCase(), target).first();
-
-        if (!receiver) {
-          return json({ error: "User not found" }, 404);
-        }
-
-        if (receiver.id === currentUser.sub) {
-          return json({ error: "Cannot add yourself" }, 400);
-        }
-
-        const existing = await env.DB.prepare(
-          `SELECT id, status FROM friend_requests
-           WHERE (sender_id = ? AND receiver_id = ?)
-           OR (sender_id = ? AND receiver_id = ?)
-           LIMIT 1`
-        ).bind(
-          currentUser.sub,
-          receiver.id,
-          receiver.id,
-          currentUser.sub
-        ).first();
-
-        if (existing && existing.status === "accepted") {
-          return json({ error: "Already friends" }, 409);
-        }
-
-        if (existing && existing.status === "pending") {
-          return json({ error: "A request already exists" }, 409);
-        }
-
-        const id = crypto.randomUUID();
-
-        await env.DB.prepare(
-          `INSERT INTO friend_requests
-           (id, sender_id, receiver_id, status)
-           VALUES (?, ?, ?, 'pending')`
-        ).bind(id, currentUser.sub, receiver.id).run();
-
-        return json({
-          message: "Friend request sent",
-          id
-        }, 201);
+        return json({ error: "Friend requests are not supported. Add the contact directly." }, 410);
       }
 
-      // Get friend requests
       if (method === "GET" && path === "/api/friends/requests") {
-        const incoming = await env.DB.prepare(
-          `SELECT r.id, r.status, r.created_at,
-                  u.id AS user_id, u.username, u.display_name
-           FROM friend_requests r
-           JOIN users u ON u.id = r.sender_id
-           WHERE r.receiver_id = ? AND r.status = 'pending'
-           ORDER BY r.created_at DESC`
-        ).bind(currentUser.sub).all();
-
-        const outgoing = await env.DB.prepare(
-          `SELECT r.id, r.status, r.created_at,
-                  u.id AS user_id, u.username, u.display_name
-           FROM friend_requests r
-           JOIN users u ON u.id = r.receiver_id
-           WHERE r.sender_id = ? AND r.status = 'pending'
-           ORDER BY r.created_at DESC`
-        ).bind(currentUser.sub).all();
-
-        return json({
-          incoming: incoming.results || [],
-          outgoing: outgoing.results || []
-        });
+        return json({ incoming: [], outgoing: [] });
       }
 
-      // Accept or reject friend request
       const actionMatch = path.match(
-        /^\/api\/friends\/requests\/([^/]+)\/(accept|reject)$/
+        /^\\/api\\/friends\\/requests\\/([^/]+)\\/(accept|reject)$/
       );
-
       if (method === "POST" && actionMatch) {
-        const requestId = actionMatch[1];
-        const action = actionMatch[2];
-
-        const friendRequest = await env.DB.prepare(
-          `SELECT * FROM friend_requests
-           WHERE id = ?
-           AND receiver_id = ?
-           AND status = 'pending'`
-        ).bind(requestId, currentUser.sub).first();
-
-        if (!friendRequest) {
-          return json({ error: "Request not found" }, 404);
-        }
-
-        if (action === "reject") {
-          await env.DB.prepare(
-            `UPDATE friend_requests
-             SET status = 'rejected',
-                 updated_at = CURRENT_TIMESTAMP
-             WHERE id = ?`
-          ).bind(requestId).run();
-
-          return json({ message: "Request rejected" });
-        }
-
-        await env.DB.batch([
-          env.DB.prepare(
-            `UPDATE friend_requests
-             SET status = 'accepted',
-                 updated_at = CURRENT_TIMESTAMP
-             WHERE id = ? AND status = 'pending'`
-          ).bind(requestId),
-
-          env.DB.prepare(
-            `INSERT OR IGNORE INTO friendships (user_id, friend_id)
-             VALUES (?, ?)`
-          ).bind(currentUser.sub, friendRequest.sender_id),
-
-          env.DB.prepare(
-            `INSERT OR IGNORE INTO friendships (user_id, friend_id)
-             VALUES (?, ?)`
-          ).bind(friendRequest.sender_id, currentUser.sub)
-        ]);
-
-        return json({ message: "Friend request accepted" });
+        return json({ error: "Friend requests are not supported. Add the contact directly." }, 410);
       }
 
       // Get friends
