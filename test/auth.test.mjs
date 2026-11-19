@@ -214,6 +214,8 @@ class FakeGroupDB extends FakeDB {
     super();
     this.isGroupMember = member;
     this.groupMessages = [];
+    this.failGroupNotificationLookup = false;
+    this.groupHistoryQuery = "";
   }
   prepare(sql) {
     const statement = super.prepare(sql);
@@ -224,11 +226,18 @@ class FakeGroupDB extends FakeDB {
       if (sql.includes("SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?")) {
         return this.isGroupMember ? { ok: 1 } : null;
       }
-      if (sql.includes("SELECT name FROM chat_groups WHERE id = ?")) return { name: "Test group" };
+      if (sql.includes("SELECT name FROM chat_groups WHERE id = ?")) {
+        if (this.failGroupNotificationLookup) throw new Error("notification lookup unavailable");
+        return { name: "Test group" };
+      }
       if (sql.includes("SELECT display_name FROM users WHERE id = ?")) return { display_name: "Tester" };
       return originalFirst();
     };
     statement.all = async () => {
+      if (sql.includes("FROM (") && sql.includes("group_messages")) {
+        this.groupHistoryQuery = sql;
+        return { results: [] };
+      }
       if (sql.includes("SELECT user_id FROM group_members WHERE group_id = ? AND user_id != ?")) {
         return { results: [{ user_id: "member-2" }] };
       }
@@ -269,6 +278,33 @@ test("group messages are accepted only from members and persisted", async () => 
   }), { DB: outsider, JWT_SECRET: secret });
   assert.equal(denied.status, 404);
   assert.equal(outsider.groupMessages.length, 0);
+});
+
+test("group history fetches the newest 100 messages in chronological order", async () => {
+  const db = new FakeGroupDB(true);
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/groups/group-1/messages", {
+    headers: { Authorization: "Bearer " + token }
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 200);
+  assert.match(db.groupHistoryQuery, /ORDER BY gm\.created_at DESC, gm\.id DESC\s+LIMIT 100/i);
+  assert.match(db.groupHistoryQuery, /ORDER BY created_at ASC, id ASC/i);
+});
+
+test("group message remains successful when push recipient lookup fails", async () => {
+  const db = new FakeGroupDB(true);
+  db.failGroupNotificationLookup = true;
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/groups/group-1/messages", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ body: "Saved even if notifications fail" })
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 201);
+  assert.equal(db.groupMessages.length, 1);
 });
 
 test("BARQ does not create or expose friend requests; direct contacts remain separate", async () => {
