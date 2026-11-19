@@ -1,0 +1,21 @@
+name: Backend tests
+
+on:
+  push:
+    branches:
+      - main
+      - "barq/**"
+  pull_request:
+
+jobs:
+  auth-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run backend authentication tests
+        run: npm test
+      - name: Check Worker JavaScript syntax
+        run: node --check src/src/index.js
