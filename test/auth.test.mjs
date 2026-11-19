@@ -130,6 +130,10 @@ class FakeDB {
         return { results: [] };
       },
       async run() {
+        if (sql.includes("INSERT INTO status_posts")) {
+          db.statusPosts ??= [];
+          db.statusPosts.push(this.params);
+        }
         if (sql.includes("INSERT INTO device_tokens")) {
           db.deviceTokens ??= new Map();
           db.deviceTokens.set(this.params[1], this.params[0]);
@@ -1136,6 +1140,34 @@ test("BARQ does not create or expose friend requests; direct contacts remain sep
   }), env);
   assert.equal(list.status, 200);
   assert.deepEqual(await list.json(), { incoming: [], outgoing: [] });
+});
+
+test("status remains published when friend notification lookup fails", async () => {
+  const db = new FakeDB();
+  const originalPrepare = db.prepare.bind(db);
+  db.prepare = sql => {
+    const statement = originalPrepare(sql);
+    const all = statement.all.bind(statement);
+    statement.all = async () => {
+      if (sql.includes("SELECT friend_id FROM friendships")) {
+        throw new Error("simulated notification lookup failure");
+      }
+      return all();
+    };
+    return statement;
+  };
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/statuses", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ content: "Status stays published" })
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 201);
+  assert.equal(db.statusPosts.length, 1);
+  assert.equal(db.statusPosts[0][2], "Status stays published");
 });
 
 test("status pushes honor the statuses preference and use the status notification channel", async () => {
