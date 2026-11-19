@@ -100,7 +100,7 @@ test("password recovery consumes the code and invalidates the old session", asyn
     })
   });
   const env = { DB: db, JWT_SECRET: secret };
-  const response = await (await import("data:text/javascript;base64," + Buffer.from(workerSource).toString("base64"))).default.fetch(request(), env);
+  const response = await worker.default.fetch(request(), env);
   assert.equal(response.status, 200);
   assert.equal(db.recovery, null);
   assert.equal(db.sessionVersion, 1);
@@ -108,6 +108,19 @@ test("password recovery consumes the code and invalidates the old session", asyn
   assert.equal(await worker.authenticate(new Request("https://api.example.test/private", {
     headers: { Authorization: "Bearer " + token }
   }), env), null);
-  const reused = await (await import("data:text/javascript;base64," + Buffer.from(workerSource).toString("base64"))).default.fetch(request(), env);
+  const newToken = await worker.signToken(user, secret, 1);
+  const reusedRequest = new Request("https://api.example.test/api/password/recover", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + newToken,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      identifier: user.username,
+      recoveryCode: code,
+      newPassword: "another-secure-password"
+    })
+  });
+  const reused = await worker.default.fetch(reusedRequest, env);
   assert.equal(reused.status, 400);
 });
