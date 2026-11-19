@@ -199,6 +199,13 @@ function cleanUser(user) {
   };
 }
 
+function safeFileName(value) {
+  let decoded = String(value || "attachment");
+  try { decoded = decodeURIComponent(decoded); } catch (_) {}
+  const cleaned = decoded.replace(/[\\/\\\\\\u0000-\\u001f\\u007f]/g, "_").trim().slice(0, 180);
+  return cleaned || "attachment";
+}
+
 
 async function sendSirajPush(env, recipientId, senderId, senderName, messageText) {
   if (!env.FCM_SERVICE_ACCOUNT_JSON) return;
@@ -332,7 +339,7 @@ async function issueRecoveryCode(env, userId) {
   return code;
 }
 
-export { phoneVariants };
+export { phoneVariants, safeFileName };
 
 export default {
   async fetch(request, env) {
@@ -1121,7 +1128,7 @@ export default {
         if (!bytes.byteLength || bytes.byteLength > 20 * 1024 * 1024) {
           return json({ error: "File must be between 1 byte and 20 MB" }, 413);
         }
-        const suppliedName = decodeURIComponent(request.headers.get("X-File-Name") || "attachment").replace(/[\\/\\r\\n]/g, "_").slice(0, 180);
+        const suppliedName = safeFileName(request.headers.get("X-File-Name") || "attachment");
         const id = crypto.randomUUID();
         const key = currentUser.sub + "/" + id;
         const bucket = env.TIGRIS_BUCKET || "siraj-media";
