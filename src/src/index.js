@@ -685,8 +685,14 @@ export default {
         // bucket prevents IP rotation from bypassing protection; the IP bucket
         // limits bursts across many account names from one client.
         const clientIp = request.headers.get("CF-Connecting-IP") || "unknown";
+        // Canonicalize phone identifiers so local, international, and formatted
+        // versions of the same number share one account-level rate-limit bucket.
+        const phoneIdentifierVariants = phoneVariants(username);
+        const rateLimitIdentifier = phoneIdentifierVariants.length
+          ? phoneIdentifierVariants.sort((a, b) => a.length - b.length)[0]
+          : username;
         const [identifierAllowed, clientAllowed] = await Promise.all([
-          consumeLoginAttempt(env, "identifier", username),
+          consumeLoginAttempt(env, "identifier", rateLimitIdentifier),
           consumeLoginAttempt(env, "client", clientIp)
         ]);
         if (!identifierAllowed || !clientAllowed) {
