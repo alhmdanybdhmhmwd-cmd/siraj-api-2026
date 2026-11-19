@@ -5,8 +5,9 @@ module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader(
     "Access-Control-Allow-Headers",
-    "Content-Type, Authorization"
+    "Content-Type, Authorization, X-File-Name, X-Recipient-Id, X-Group-Id"
   );
+  res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
 
   if (req.method === "OPTIONS") {
     return res.status(204).end();
@@ -30,6 +31,15 @@ module.exports = async (req, res) => {
     if (req.headers.authorization) {
       headers["Authorization"] = req.headers.authorization;
     }
+    if (req.headers["x-file-name"]) {
+      headers["X-File-Name"] = req.headers["x-file-name"];
+    }
+    if (req.headers["x-recipient-id"]) {
+      headers["X-Recipient-Id"] = req.headers["x-recipient-id"];
+    }
+    if (req.headers["x-group-id"]) {
+      headers["X-Group-Id"] = req.headers["x-group-id"];
+    }
 
     const response = await fetch(UPSTREAM + req.url, {
       method: req.method,
@@ -45,6 +55,10 @@ module.exports = async (req, res) => {
       "Content-Type",
       response.headers.get("content-type") || "application/json"
     );
+    const disposition = response.headers.get("content-disposition");
+    if (disposition) res.setHeader("Content-Disposition", disposition);
+    const cacheControl = response.headers.get("cache-control");
+    if (cacheControl) res.setHeader("Cache-Control", cacheControl);
 
     return res.send(Buffer.from(responseBody));
   } catch (error) {
