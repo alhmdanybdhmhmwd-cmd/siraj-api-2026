@@ -54,6 +54,11 @@ class FakeDB {
         return null;
       },
       async all() {
+        if (sql.includes("username LIKE") && sql.includes("FROM users")) {
+          db.userSearchQueries = (db.userSearchQueries || 0) + 1;
+          db.lastUserSearchSql = sql;
+          return { results: db.searchCandidates || [] };
+        }
         if (sql.includes("SELECT id, phone FROM users")) {
           db.phoneLookupQueries = (db.phoneLookupQueries || 0) + 1;
           db.lastPhoneLookupSql = sql;
@@ -208,6 +213,27 @@ test("phone normalization matches local and Yemen international forms", () => {
   assert.deepEqual(worker.phoneVariants("invalid"), []);
   assert.ok(worker.phoneVariants("٠٧٧١٢٣٤٥٦٧").includes("0771234567"));
   assert.ok(worker.phoneVariants("۰۷۷۱۲۳۴۵۶۷").includes("0771234567"));
+});
+
+
+test("user search finds a Yemen account saved internationally when searched by local phone", async () => {
+  const db = new FakeDB();
+  db.searchCandidates = [{
+    id: "searched-user",
+    username: "yemen_user",
+    display_name: "Yemen User",
+    phone: "+967 77 123 4567"
+  }];
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request(
+    "https://api.example.test/api/users/search?q=0771234567",
+    { headers: { Authorization: "Bearer " + token } }
+  ), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.deepEqual(data.users.map(item => item.id), ["searched-user"]);
+  assert.ok(db.userSearchQueries > 0);
+  assert.match(db.lastUserSearchSql, /substr\(/);
 });
 
 test("phone contact matching returns registered searchable accounts only", async () => {
