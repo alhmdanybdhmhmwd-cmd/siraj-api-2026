@@ -1086,7 +1086,7 @@ test("login rate limit blocks repeated attempts by identifier and client", async
     assert.equal((await wrongLogin()).status, 401);
   }
   const blocked = await wrongLogin();
-  assert.equal(blocked.status, 429, await blocked.clone().text());
+  assert.equal(blocked.status, 429);
   assert.equal(blocked.headers.get("Retry-After"), "900");
 });
 
@@ -1147,6 +1147,6 @@ test("registration rate limit blocks mass account creation from one client", asy
     assert.equal((await register("newuser" + i)).status, 201);
   }
   const blocked = await register("newuser-final");
-  assert.equal(blocked.status, 429);
+  assert.equal(blocked.status, 429, await blocked.clone().text());
   assert.equal(blocked.headers.get("Retry-After"), "900");
 });
