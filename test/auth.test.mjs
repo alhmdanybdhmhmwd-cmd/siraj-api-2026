@@ -180,6 +180,22 @@ class FakeDB {
   }
 }
 
+test("status publishing is rate limited per authenticated account", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  const env = { DB: db, JWT_SECRET: secret };
+  let response;
+  for (let i = 0; i < 11; i++) {
+    response = await worker.default.fetch(new Request("https://api.example.test/api/statuses", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "Status " + i })
+    }), env);
+  }
+  assert.equal(response.status, 429);
+  assert.equal(response.headers.get("Retry-After"), "900");
+});
+
 test("JWTs are rejected after the account session version is incremented", async () => {
   const db = new FakeDB();
   const token = await worker.signToken(user, secret, 0);
