@@ -11,7 +11,7 @@ This branch is a safe development workspace. Production `main` is unchanged.
 
 ## Existing work to preserve and finish
 - Authentication by username or phone and password.
-- Recovery-code generation and password recovery (client methods exist; server route/response parity must be completed and tested).
+- Recovery-code generation, rotation, one-time password recovery, and session invalidation are implemented on the development branch; end-to-end verification remains open.
 - Direct contact adding without friend requests.
 - Friends, private messages, groups, statuses, file attachments.
 - Privacy settings, notification preferences, FCM device-token registration.
@@ -27,7 +27,7 @@ This branch is a safe development workspace. Production `main` is unchanged.
 6. **Phone contacts:** the backend `POST /api/contacts/match` endpoint is implemented on this branch. It accepts at most 500 phone values, normalizes Yemen/international formats in memory, respects each account's searchable privacy setting, and does not persist the submitted contact list. The working Flutter source snapshot now includes explicit READ_CONTACTS permission, opt-in matching, direct-add controls, and automatic re-sync on app resume/contact-book change. Flutter analysis and Android device verification are still pending.
 7. **End-to-end encryption:** not implemented in the inspected source.
 8. **Release verification:** still needs a Cloudflare preview environment that uses a separate non-production database, Flutter/API contract checks, two-device tests for registration, recovery, direct messaging, read receipts, groups, media, push notifications and reconnect/sync, plus network tests on Yemen Net, Yemen Mobile, Sabafon and another network without VPN.
-9. **Android source:** the available ZIP is the 18-Nov source snapshot; a working copy is being updated with phone-contact sync and a corrected Flutter smoke test. The APK workflow in that working copy has been changed to manual validation only; release APK generation is disabled. Preserve package ID `com.siraj.app.siraj`, Firebase client identity, secure-storage keys, API URL, and all existing features. Flutter SDK is not available in this work environment, so Android analysis/build has not been run.
+9. **Android source:** the available ZIP is the 18-Nov source snapshot; a working copy includes phone-contact sync, a corrected Flutter smoke test, lifecycle-aware polling, and adaptive retry backoff. The APK workflow in that working copy has been changed to manual validation only; release APK generation is disabled. Preserve package ID `com.siraj.app.siraj`, Firebase client identity, secure-storage keys, API URL, and all existing features. Flutter SDK is not available in this work environment, so Android analysis/build has not been run.
 
 **Deferred by explicit user instruction:** do not start the six approved new features until all items above that apply to the existing product are completed and tested.
 ## Implementation order
