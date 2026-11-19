@@ -47,6 +47,8 @@ class FakeDB {
         if (sql.includes("SELECT session_version FROM account_security")) {
           return { session_version: db.sessionVersion };
         }
+        if (sql.includes("SELECT 1 FROM friendships")) return { 1: 1 };
+        if (sql.includes("SELECT 1 FROM group_members")) return { 1: 1 };
         if (sql.includes("SELECT searchable, read_receipts FROM user_privacy")) {
           return db.privacySettings ? { ...db.privacySettings } : null;
         }
@@ -105,9 +107,22 @@ class FakeDB {
           db.contactLookupQueries = (db.contactLookupQueries || 0) + 1;
           return { results: db.contactCandidates };
         }
+        if (sql.includes("FROM messages") && sql.includes("ORDER BY created_at DESC")) {
+          db.lastMessageQuery = sql;
+          db.lastMessageParams = this.params;
+          return { results: db.messageRows || [] };
+        }
+        if (sql.includes("FROM group_messages") && sql.includes("ORDER BY gm.created_at DESC")) {
+          db.lastGroupMessageQuery = sql;
+          db.lastGroupMessageParams = this.params;
+          return { results: db.groupMessageRows || [] };
+        }
         return { results: [] };
       },
       async run() {
+        if (sql.includes("UPDATE messages SET read_at")) {
+          db.readReceiptUpdate = { sql, params: this.params };
+        }
         if (sql.includes("INSERT OR IGNORE INTO account_security")) db.sessionVersion ??= 0;
         if (sql.includes("INSERT INTO user_privacy")) {
           db.privacySettings = { searchable: this.params[1], read_receipts: this.params[2] };
@@ -179,6 +194,63 @@ class FakeDB {
     return [{ meta: { changes: 1 } }, { meta: { changes: 1 } }, { meta: { changes: 1 } }];
   }
 }
+
+
+test("private conversation pagination uses a stable cursor and marks only returned incoming messages read", async () => {
+  const db = new FakeDB();
+  db.messageRows = [
+    { id: "older-extra", sender_id: "friend-1", receiver_id: user.id, created_at: "2026-11-18 10:00:00", read_at: null },
+    { id: "page-item", sender_id: "friend-1", receiver_id: user.id, created_at: "2026-11-18 11:00:00", read_at: null }
+  ];
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request(
+    "https://api.example.test/api/messages?with=friend-1&limit=1&before=2026-11-18%2012%3A00%3A00&beforeId=latest",
+    { headers: { Authorization: "Bearer " + token } }
+  ), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.deepEqual(data.messages.map(item => item.id), ["page-item"]);
+  assert.equal(data.hasMore, true);
+  assert.deepEqual(data.nextCursor, { before: "2026-11-18 11:00:00", beforeId: "page-item" });
+  assert.match(db.lastMessageQuery, /created_at < \? OR \(created_at = \? AND id < \?\)/);
+  assert.deepEqual(db.lastMessageParams.slice(-4), [
+    "2026-11-18 12:00:00", "2026-11-18 12:00:00", "latest", 2
+  ]);
+  assert.deepEqual(db.readReceiptUpdate.params, ["friend-1", user.id, "page-item"]);
+});
+
+test("private conversation rejects incomplete pagination cursors", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request(
+    "https://api.example.test/api/messages?with=friend-1&before=2026-11-18",
+    { headers: { Authorization: "Bearer " + token } }
+  ), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 400);
+  assert.equal(db.lastMessageQuery, undefined);
+});
+
+test("group conversation pagination uses the same stable cursor contract", async () => {
+  const db = new FakeDB();
+  db.groupMessageRows = [
+    { id: "older-extra", group_id: "group-1", sender_id: "friend-1", created_at: "2026-11-18 10:00:00" },
+    { id: "page-item", group_id: "group-1", sender_id: "friend-1", created_at: "2026-11-18 11:00:00" }
+  ];
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request(
+    "https://api.example.test/api/groups/group-1/messages?limit=1&before=2026-11-18%2012%3A00%3A00&beforeId=latest",
+    { headers: { Authorization: "Bearer " + token } }
+  ), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.deepEqual(data.messages.map(item => item.id), ["page-item"]);
+  assert.equal(data.hasMore, true);
+  assert.deepEqual(data.nextCursor, { before: "2026-11-18 11:00:00", beforeId: "page-item" });
+  assert.match(db.lastGroupMessageQuery, /gm.created_at < \? OR \(gm.created_at = \? AND gm.id < \?\)/);
+  assert.deepEqual(db.lastGroupMessageParams, [
+    "group-1", "2026-11-18 12:00:00", "2026-11-18 12:00:00", "latest", 2
+  ]);
+});
 
 test("status publishing is rate limited per authenticated account", async () => {
   const db = new FakeDB();
