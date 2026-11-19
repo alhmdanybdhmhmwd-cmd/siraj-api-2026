@@ -1092,11 +1092,12 @@ test("login rate limit blocks repeated attempts by identifier and client", async
 
 test("login rate limit separates client IP buckets", async () => {
   const db = new FakeDB();
-  const attempt = ip => worker.default.fetch(new Request("https://api.example.test/api/login", {
+  const attempt = (ip, username) => worker.default.fetch(new Request("https://api.example.test/api/login", {
     method: "POST",
     headers: { "Content-Type": "application/json", "CF-Connecting-IP": ip },
-    body: JSON.stringify({ username: "tester", password: "incorrect-password" })
+    body: JSON.stringify({ username, password: "incorrect-password" })
   }), { DB: db, JWT_SECRET: secret });
-  for (let i = 0; i < 10; i++) await attempt("203.0.113.11");
-  assert.equal((await attempt("203.0.113.12")).status, 401);
+  // Use a different identifier each time so this exercises only the client-IP bucket.
+  for (let i = 0; i < 10; i++) await attempt("203.0.113.11", "unknown-" + i);
+  assert.equal((await attempt("203.0.113.12", "unknown-final")).status, 401);
 });
