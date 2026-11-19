@@ -1,6 +1,9 @@
 name: BARQ Cloudflare preflight (read-only)
 
 on:
+  push:
+    branches:
+      - barq/phase-2-cloudflare-preflight-2026-11-20
   workflow_dispatch:
 
 permissions:
