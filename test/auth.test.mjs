@@ -48,7 +48,7 @@ class FakeDB {
       params: [],
       bind(...params) { this.params = params; return this; },
       async first() {
-        if (sql.includes("SELECT sender_id, receiver_id FROM messages WHERE id = ?")) {
+        if (sql.includes("FROM messages WHERE id = ?")) {
           const item = db.messages.find(message => message.id === this.params[0]);
           return item ? { sender_id: item.sender_id, receiver_id: item.receiver_id, body: item.body } : null;
         }
