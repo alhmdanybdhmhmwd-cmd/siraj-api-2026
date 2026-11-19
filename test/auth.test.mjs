@@ -976,3 +976,35 @@ test("malformed JSON request bodies return 400 instead of 500", async () => {
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), { error: "Invalid JSON body" });
 });
+
+test("oversized media Content-Length is rejected before Tigris upload", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  const calls = [];
+  globalThis.__fakeTigrisHandler = async (_url, options) => {
+    calls.push(options.method);
+    return new Response(null, { status: 200 });
+  };
+  try {
+    const response = await worker.default.fetch(new Request("https://api.example.test/api/media", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + token,
+        "Content-Type": "image/jpeg",
+        "Content-Length": String(20 * 1024 * 1024 + 1),
+        "X-Recipient-Id": "friend-1"
+      },
+      body: new Uint8Array([1, 2, 3])
+    }), {
+      DB: db,
+      JWT_SECRET: secret,
+      TIGRIS_ACCESS_KEY_ID: "test-access",
+      TIGRIS_SECRET_ACCESS_KEY: "test-secret"
+    });
+    assert.equal(response.status, 413);
+    assert.deepEqual(await response.json(), { error: "File must be between 1 byte and 20 MB" });
+    assert.deepEqual(calls, []);
+  } finally {
+    delete globalThis.__fakeTigrisHandler;
+  }
+});
