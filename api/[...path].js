@@ -14,10 +14,24 @@ module.exports = async (req, res) => {
   }
 
   try {
+    const isMediaUpload = req.method === "POST" &&
+      new URL(req.url, "https://vercel.invalid").pathname === "/api/media";
+    const maxMediaBytes = 20 * 1024 * 1024;
+    const declaredLength = Number(req.headers["content-length"]);
+    if (isMediaUpload && Number.isFinite(declaredLength) && declaredLength > maxMediaBytes) {
+      return res.status(413).json({ error: "File must be between 1 byte and 20 MB" });
+    }
+
     const chunks = [];
+    let receivedBytes = 0;
 
     for await (const chunk of req) {
-      chunks.push(chunk);
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      receivedBytes += buffer.length;
+      if (isMediaUpload && receivedBytes > maxMediaBytes) {
+        return res.status(413).json({ error: "File must be between 1 byte and 20 MB" });
+      }
+      chunks.push(buffer);
     }
 
     const body = Buffer.concat(chunks);
