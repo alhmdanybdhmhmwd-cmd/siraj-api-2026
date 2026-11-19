@@ -1202,6 +1202,34 @@ export default {
           try { await storage.fetch(storageUrl, { method: "DELETE" }); } catch (_) {}
           throw error;
         }
+
+        // Deliver the same push notification behavior for attachment messages as for text.
+        // Notification failures must never undo a successfully stored attachment message.
+        try {
+          const sender = await env.DB.prepare(
+            "SELECT display_name FROM users WHERE id = ?"
+          ).bind(currentUser.sub).first();
+          const senderName = sender?.display_name || currentUser.username || "مستخدم برق";
+          if (recipientId) {
+            await sendSirajPush(env, recipientId, currentUser.sub, senderName, "أرسل مرفقًا");
+          } else {
+            const [group, recipients] = await Promise.all([
+              env.DB.prepare("SELECT name FROM chat_groups WHERE id = ?").bind(groupId).first(),
+              env.DB.prepare("SELECT user_id FROM group_members WHERE group_id = ? AND user_id != ?")
+                .bind(groupId, currentUser.sub).all()
+            ]);
+            await Promise.all((recipients.results || []).map(item =>
+              sendSirajPush(env, item.user_id, currentUser.sub, senderName, "أرسل مرفقًا", {
+                category: "groups",
+                groupId,
+                groupName: group?.name || "مجموعة برق"
+              })
+            ));
+          }
+        } catch (notificationError) {
+          console.error("Attachment notification dispatch failed:", notificationError);
+        }
+
         return json({ attachment: { id: key, fileName: suppliedName, contentType, size: bytes.byteLength }, messageId }, 201);
       }
 
