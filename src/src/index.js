@@ -840,6 +840,41 @@ export default {
         return json({ error: "Unauthorized" }, 401);
       }
 
+      // Voice-note transcription is explicitly requested by the user and processed by Workers AI.
+      // Audio bytes are not persisted by this endpoint.
+      if (method === "POST" && path === "/api/transcribe") {
+        if (!env.AI || typeof env.AI.run !== "function") {
+          return json({ error: "خدمة تحويل الصوت إلى نص غير مفعلة على الخادم بعد." }, 503);
+        }
+        if (!(await consumeLoginAttempt(env, "voice-transcription", currentUser.sub, 12))) {
+          return new Response(JSON.stringify({ error: "طلبات تحويل كثيرة. حاول بعد 15 دقيقة." }), {
+            status: 429,
+            headers: { ...corsHeaders, "Retry-After": "900" }
+          });
+        }
+        const contentType = String(request.headers.get("Content-Type") || "").split(";")[0].toLowerCase();
+        if (!contentType.startsWith("audio/")) {
+          return json({ error: "الملف المرسل ليس ملفًا صوتيًا." }, 415);
+        }
+        const audio = await request.arrayBuffer();
+        if (!audio.byteLength || audio.byteLength > 8 * 1024 * 1024) {
+          return json({ error: "حجم التسجيل الصوتي يجب ألا يتجاوز 8 ميجابايت." }, 413);
+        }
+        let binary = "";
+        for (const byte of new Uint8Array(audio)) binary += String.fromCharCode(byte);
+        try {
+          const result = await env.AI.run("@cf/openai/whisper-large-v3-turbo", {
+            audio: btoa(binary)
+          });
+          const transcript = String(result?.text || "").trim();
+          if (!transcript) return json({ error: "لم يتمكن النظام من تمييز الكلام في التسجيل." }, 422);
+          return json({ text: transcript, language: result?.language || null });
+        } catch (error) {
+          console.error("Voice transcription failed:", error);
+          return json({ error: "تعذر تحويل التسجيل إلى نص حاليًا." }, 502);
+        }
+      }
+
       // Ephemeral private messages: never write to the ordinary messages table or send FCM.
       // A message is removed ten seconds after the recipient first reads it.
       if (path === "/api/ephemeral-messages") {
