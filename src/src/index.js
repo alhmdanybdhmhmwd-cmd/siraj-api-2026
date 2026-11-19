@@ -175,7 +175,12 @@ async function authenticate(request, env) {
 
 
 function phoneVariants(value) {
-  const digits = String(value || "").replace(/\D/g, "");
+  // Accept Arabic-Indic and Persian digits commonly used in saved phone contacts.
+  const normalized = String(value || "").replace(/[٠-٩۰-۹]/g, digit => {
+    const code = digit.charCodeAt(0);
+    return String(code >= 0x06f0 ? code - 0x06f0 : code - 0x0660);
+  });
+  const digits = normalized.replace(/\D/g, "");
   const variants = new Set();
   const add = candidate => {
     if (candidate.length >= 7 && candidate.length <= 15) variants.add(candidate);
