@@ -563,6 +563,30 @@ export default {
     const method = request.method;
 
     try {
+      // Liveness is intentionally independent of D1 and secrets so platform
+      // probes can distinguish a running Worker from a ready API instance.
+      if (method === "GET" && path === "/health/live") {
+        return json({ status: "alive", service: "barq-api" });
+      }
+
+      // Readiness performs a read-only D1 probe. It never creates tables,
+      // applies migrations, or mutates production data.
+      if (method === "GET" && path === "/health/ready") {
+        if (!env.DB || !env.JWT_SECRET) {
+          return json({ status: "not_ready" }, 503);
+        }
+        try {
+          const probe = await env.DB.prepare("SELECT 1 AS ok").first();
+          if (Number(probe?.ok) !== 1) {
+            return json({ status: "not_ready" }, 503);
+          }
+        } catch (error) {
+          console.error("Readiness database probe failed");
+          return json({ status: "not_ready" }, 503);
+        }
+        return json({ status: "ready", service: "barq-api" });
+      }
+
       if (!env.DB || !env.JWT_SECRET) {
         return json(
           { error: "Server configuration is incomplete" },
