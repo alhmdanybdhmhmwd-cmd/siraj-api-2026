@@ -961,3 +961,18 @@ test("Wrangler is configured to discover D1 migrations", async () => {
   const config = await readFile(new URL("../wrangler.toml", import.meta.url), "utf8");
   assert.match(config, /migrations_dir\s*=\s*"migrations"/);
 });
+
+test("malformed JSON request bodies return 400 instead of 500", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/contacts/match", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "application/json"
+    },
+    body: "{"
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: "Invalid JSON body" });
+});
