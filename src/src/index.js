@@ -518,6 +518,22 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
   return { checked: (expired.results || []).length, deleted };
 }
 
+async function cleanupExpiredEphemeralMessages(env, now = Date.now()) {
+  const cutoff = Math.floor(now / 1000);
+  try {
+    const result = await env.DB.prepare(
+      "DELETE FROM ephemeral_messages WHERE expires_at <= ? OR (delete_at IS NOT NULL AND delete_at <= ?)"
+    ).bind(cutoff, cutoff).run();
+    return Number(result?.meta?.changes || 0);
+  } catch (error) {
+    // The table is created lazily by the authenticated endpoint.
+    if (!/no such table/i.test(String(error?.message || error))) {
+      console.error("Ephemeral message cleanup failed:", error);
+    }
+    return 0;
+  }
+}
+
 async function cleanupExpiredRateLimits(env, now = Date.now()) {
   const cutoff = Math.floor(now / 1000) - 24 * 60 * 60;
   const results = {};
@@ -551,6 +567,12 @@ export default {
       console.log("Media expiration cleanup:", result);
     } catch (error) {
       console.error("Media expiration cleanup failed:", error);
+    }
+    try {
+      const deleted = await cleanupExpiredEphemeralMessages(env);
+      console.log("Ephemeral message cleanup:", deleted);
+    } catch (error) {
+      console.error("Ephemeral message cleanup failed:", error);
     }
   },
   async fetch(request, env, ctx) {
@@ -892,15 +914,17 @@ export default {
               }
             }
             // Keep the response available to the reader, then delete from D1 after ten seconds.
-            ctx.waitUntil((async () => {
-              await new Promise(resolve => setTimeout(resolve, 10_100));
-              const deletionTime = Math.floor(Date.now() / 1000);
-              await env.DB.prepare(
-                `DELETE FROM ephemeral_messages
-                 WHERE receiver_id = ? AND sender_id = ? AND delete_at IS NOT NULL AND delete_at <= ?
-                   AND id IN (${incomingIds.map(() => "?").join(", ")})`
-              ).bind(currentUser.sub, friendId, deletionTime, ...incomingIds).run();
-            })());
+            if (ctx && typeof ctx.waitUntil === "function") {
+              ctx.waitUntil((async () => {
+                await new Promise(resolve => setTimeout(resolve, 10_100));
+                const deletionTime = Math.floor(Date.now() / 1000);
+                await env.DB.prepare(
+                  `DELETE FROM ephemeral_messages
+                   WHERE receiver_id = ? AND sender_id = ? AND delete_at IS NOT NULL AND delete_at <= ?
+                     AND id IN (${incomingIds.map(() => "?").join(", ")})`
+                ).bind(currentUser.sub, friendId, deletionTime, ...incomingIds).run();
+              })());
+            }
           }
           return json({ messages: rows });
         }
