@@ -992,12 +992,16 @@ export default {
         if (!member) return json({ error: "Group not found" }, 404);
         if (method === "GET") {
           const result = await env.DB.prepare(`
-            SELECT gm.id, gm.group_id, gm.sender_id, gm.body, gm.created_at,
-                   u.username, u.display_name
-            FROM group_messages gm
-            JOIN users u ON u.id = gm.sender_id
-            WHERE gm.group_id = ?
-            ORDER BY gm.created_at ASC LIMIT 100
+            SELECT * FROM (
+              SELECT gm.id, gm.group_id, gm.sender_id, gm.body, gm.created_at,
+                     u.username, u.display_name
+              FROM group_messages gm
+              JOIN users u ON u.id = gm.sender_id
+              WHERE gm.group_id = ?
+              ORDER BY gm.created_at DESC, gm.id DESC
+              LIMIT 100
+            )
+            ORDER BY created_at ASC, id ASC
           `).bind(groupId).all();
           return json({ messages: result.results || [] });
         }
@@ -1009,19 +1013,23 @@ export default {
           await env.DB.prepare(
             "INSERT INTO group_messages (id, group_id, sender_id, body) VALUES (?, ?, ?, ?)"
           ).bind(id, groupId, currentUser.sub, message).run();
-          const [group, recipients, sender] = await Promise.all([
-            env.DB.prepare("SELECT name FROM chat_groups WHERE id = ?").bind(groupId).first(),
-            env.DB.prepare("SELECT user_id FROM group_members WHERE group_id = ? AND user_id != ?")
-              .bind(groupId, currentUser.sub).all(),
-            env.DB.prepare("SELECT display_name FROM users WHERE id = ?").bind(currentUser.sub).first()
-          ]);
-          await Promise.all((recipients.results || []).map(item =>
-            sendSirajPush(
-              env, item.user_id, currentUser.sub,
-              sender?.display_name || "مستخدم برق", message,
-              { category: "groups", groupId, groupName: group?.name || "مجموعة برق" }
-            )
-          ));
+          try {
+            const [group, recipients, sender] = await Promise.all([
+              env.DB.prepare("SELECT name FROM chat_groups WHERE id = ?").bind(groupId).first(),
+              env.DB.prepare("SELECT user_id FROM group_members WHERE group_id = ? AND user_id != ?")
+                .bind(groupId, currentUser.sub).all(),
+              env.DB.prepare("SELECT display_name FROM users WHERE id = ?").bind(currentUser.sub).first()
+            ]);
+            await Promise.all((recipients.results || []).map(item =>
+              sendSirajPush(
+                env, item.user_id, currentUser.sub,
+                sender?.display_name || "مستخدم برق", message,
+                { category: "groups", groupId, groupName: group?.name || "مجموعة برق" }
+              )
+            ));
+          } catch (notificationError) {
+            console.error("Group message notification dispatch failed:", notificationError);
+          }
           return json({ message: "Message sent", id }, 201);
         }
       }
@@ -1119,13 +1127,16 @@ export default {
         }
 
         const result = await env.DB.prepare(
-          `SELECT id, sender_id, receiver_id,
-                  body, created_at, read_at
-           FROM messages
-           WHERE (sender_id = ? AND receiver_id = ?)
-              OR (sender_id = ? AND receiver_id = ?)
-           ORDER BY created_at ASC
-           LIMIT 100`
+          `SELECT * FROM (
+             SELECT id, sender_id, receiver_id,
+                    body, created_at, read_at
+             FROM messages
+             WHERE (sender_id = ? AND receiver_id = ?)
+                OR (sender_id = ? AND receiver_id = ?)
+             ORDER BY created_at DESC, id DESC
+             LIMIT 100
+           )
+           ORDER BY created_at ASC, id ASC`
         ).bind(
           currentUser.sub,
           friendId,
