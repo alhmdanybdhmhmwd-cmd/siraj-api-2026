@@ -165,8 +165,10 @@ async function authenticate(request, env) {
     if (row && Number(payload.sv || 0) !== Number(row.session_version || 0)) {
       return null;
     }
-  } catch {
-    // Older databases without the security table keep existing sessions valid.
+  } catch (error) {
+    // Never accept a session when its revocation state cannot be verified.
+    console.error("Session security check failed:", error);
+    return null;
   }
   return payload;
 }
