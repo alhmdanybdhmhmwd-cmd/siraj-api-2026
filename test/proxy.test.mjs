@@ -33,7 +33,7 @@ test("media proxy rejects oversized declared Content-Length before reading or fo
     let streamRead = false;
     const req = {
       url: "/api/media", method: "POST",
-      headers: { "content-length": String(20 * 1024 * 1024 + 1) },
+      headers: { "content-length": String(60 * 1024 * 1024 + 1) },
       async *[Symbol.asyncIterator]() { streamRead = true; }
     };
     await handler(req, res);
@@ -45,7 +45,7 @@ test("media proxy rejects oversized declared Content-Length before reading or fo
   }
 });
 
-test("media proxy rejects streamed bodies over 20 MB when Content-Length is absent", async () => {
+test("media proxy rejects streamed bodies over 60 MB when Content-Length is absent", async () => {
   const originalFetch = globalThis.fetch;
   let fetchCalled = false;
   globalThis.fetch = async () => { fetchCalled = true; throw new Error("unexpected upstream request"); };
@@ -53,7 +53,7 @@ test("media proxy rejects streamed bodies over 20 MB when Content-Length is abse
     const res = makeResponse();
     const req = makeRequest({
       headers: {},
-      chunks: [Buffer.alloc(20 * 1024 * 1024), Buffer.from([1])]
+      chunks: [Buffer.alloc(60 * 1024 * 1024), Buffer.from([1])]
     });
     await handler(req, res);
     assert.equal(res.statusCode, 413);
