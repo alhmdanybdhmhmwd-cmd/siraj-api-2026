@@ -123,6 +123,18 @@ class FakeDB {
         return { results: [] };
       },
       async run() {
+        if (sql.includes("INSERT INTO device_tokens")) {
+          db.deviceTokens ??= new Map();
+          db.deviceTokens.set(this.params[1], this.params[0]);
+        }
+        if (sql.includes("DELETE FROM device_tokens")) {
+          db.deviceTokens ??= new Map();
+          if (db.deviceTokens.get(this.params[1]) === this.params[0]) {
+            db.deviceTokens.delete(this.params[1]);
+            return { meta: { changes: 1 } };
+          }
+          return { meta: { changes: 0 } };
+        }
         if (sql.includes("UPDATE messages SET read_at")) {
           db.readReceiptUpdate = { sql, params: this.params };
         }
@@ -1117,6 +1129,28 @@ test("BARQ does not create or expose friend requests; direct contacts remain sep
   }), env);
   assert.equal(list.status, 200);
   assert.deepEqual(await list.json(), { incoming: [], outgoing: [] });
+});
+
+test("device tokens can be registered and revoked for the authenticated account", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  const headers = {
+    Authorization: "Bearer " + token,
+    "Content-Type": "application/json"
+  };
+  const register = await worker.default.fetch(new Request("https://api.example.test/api/devices/token", {
+    method: "POST", headers, body: JSON.stringify({ fcmToken: "fcm-device-token-123" })
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(register.status, 200);
+  assert.equal(db.deviceTokens.get("fcm-device-token-123"), user.id);
+
+  const revoke = await worker.default.fetch(new Request("https://api.example.test/api/devices/token", {
+    method: "DELETE", headers, body: JSON.stringify({ fcmToken: "fcm-device-token-123" })
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(revoke.status, 200);
+  assert.equal((await revoke.json()).removed, 1);
+  assert.equal(db.deviceTokens.has("fcm-device-token-123"), false);
+  assert.match(revoke.headers.get("access-control-allow-methods"), /DELETE/);
 });
 
 test("contacts can be added directly and appear in the contact list without friend requests", async () => {
