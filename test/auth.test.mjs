@@ -56,7 +56,7 @@ class FakeDB {
           return db.notificationSettings ? { ...db.notificationSettings } : null;
         }
         if (sql.includes("AS enabled FROM notification_preferences")) {
-          const category = sql.match(/SELECT (\\w+) AS enabled/)[1];
+          const category = sql.match(/SELECT (\w+) AS enabled/)[1];
           return db.notificationSettings ? { enabled: db.notificationSettings[category] } : null;
         }
         if (sql.includes("COALESCE((SELECT searchable FROM user_privacy")) {
