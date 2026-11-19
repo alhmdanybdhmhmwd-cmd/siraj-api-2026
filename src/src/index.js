@@ -530,7 +530,7 @@ export default {
         }
         // Limit automated account creation before the expensive password hash.
         const registrationIp = request.headers.get("CF-Connecting-IP") || "unknown";
-        if (!(await consumeLoginAttempt(env, "register-client", registrationIp, 5))) {
+        if (!(await consumeLoginAttempt(env, "register-client", registrationIp, 20))) {
           return new Response(JSON.stringify({
             error: "Too many registration attempts. Please try again in 15 minutes."
           }), {
