@@ -1632,6 +1632,15 @@ export default {
         const headResponse = await storage.fetch(storageUrl, { method: "HEAD" });
         if (headResponse.status === 404) return json({ error: "Attachment not found" }, 404);
         if (!headResponse.ok) return json({ error: "Media storage lookup failed", storageStatus: headResponse.status }, 502);
+        const expiresAt = headResponse.headers.get("x-amz-meta-expiresat");
+        if (expiresAt && Number.isFinite(Date.parse(expiresAt)) && Date.parse(expiresAt) <= Date.now()) {
+          try { await storage.fetch(storageUrl, { method: "DELETE" }); } catch (_) {}
+          try {
+            await env.DB.prepare("DELETE FROM media_expirations WHERE object_key = ? AND expires_at <= ?")
+              .bind(key, new Date().toISOString()).run();
+          } catch (_) {}
+          return json({ error: "Attachment has expired" }, 410);
+        }
         const ownerId = headResponse.headers.get("x-amz-meta-ownerid") || "";
         const recipientId = headResponse.headers.get("x-amz-meta-recipientid") || "";
         const groupId = headResponse.headers.get("x-amz-meta-groupid") || "";
