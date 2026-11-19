@@ -89,6 +89,23 @@ test("JWTs are rejected after the account session version is incremented", async
   assert.equal(await worker.authenticate(request, { DB: db, JWT_SECRET: secret }), null);
 });
 
+test("authentication rejects tokens without an explicit session version", async () => {
+  const token = await worker.signToken(user, secret, 0);
+  const parts = token.split(".");
+  const payload = JSON.parse(new TextDecoder().decode(Buffer.from(parts[1], "base64url")));
+  delete payload.sv;
+  const unsigned = parts[0] + "." + Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(unsigned));
+  const legacyToken = unsigned + "." + Buffer.from(signature).toString("base64url");
+  const db = { prepare() { return { bind() { return this; }, async first() { return { session_version: 0 }; } }; } };
+  const request = new Request("https://api.example.test/private", {
+    headers: { Authorization: "Bearer " + legacyToken }
+  });
+  assert.equal(await worker.authenticate(request, { DB: db, JWT_SECRET: secret }), null);
+});
+
 test("authentication rejects tokens when the account security row is missing", async () => {
   const token = await worker.signToken(user, secret, 0);
   const missingSecurityDB = {
