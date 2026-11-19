@@ -11,7 +11,7 @@ class AwsClient {
   }
 }
 `);
-workerSource += "\nexport { signToken, verifyToken, authenticate, hashPassword, cleanupExpiredRateLimits };";
+workerSource += "\nexport { signToken, verifyToken, authenticate, hashPassword };";
 const worker = await import("data:text/javascript;base64," + Buffer.from(workerSource).toString("base64"));
 
 const secret = "unit-test-secret-that-is-long-enough";
