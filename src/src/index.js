@@ -428,6 +428,27 @@ async function saveRecoveryCode(env, userId, recovery) {
   ).bind(userId, recovery.codeHash, recovery.salt, now + RECOVERY_CODE_TTL_SECONDS, now).run();
 }
 
+async function consumeLoginAttempt(env, scope, identifier, maxAttempts = 10) {
+  const normalized = String(identifier || "").trim().toLowerCase().slice(0, 256);
+  const bucketKey = await sha256Hex("login:" + scope + ":" + normalized);
+  const now = Math.floor(Date.now() / 1000);
+  const windowStart = now - 15 * 60;
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS login_rate_limits (
+      bucket_key TEXT PRIMARY KEY,
+      window_started INTEGER NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0
+    )
+  `).run();
+  await env.DB.prepare(
+    "INSERT INTO login_rate_limits (bucket_key, window_started, attempts) VALUES (?, ?, 1) ON CONFLICT(bucket_key) DO UPDATE SET window_started = CASE WHEN login_rate_limits.window_started <= ? THEN excluded.window_started ELSE login_rate_limits.window_started END, attempts = CASE WHEN login_rate_limits.window_started <= ? THEN 1 ELSE login_rate_limits.attempts + 1 END"
+  ).bind(bucketKey, now, windowStart, windowStart).run();
+  const row = await env.DB.prepare(
+    "SELECT attempts FROM login_rate_limits WHERE bucket_key = ?"
+  ).bind(bucketKey).first();
+  return Number(row?.attempts || 0) <= maxAttempts;
+}
+
 async function consumeRecoveryAttempt(env, scope, identifier, maxAttempts = 5) {
   const normalized = String(identifier).toLowerCase().replace(/[\s()+.-]/g, "");
   const bucketKey = await sha256Hex("recovery:" + scope + ":" + normalized);
@@ -637,6 +658,23 @@ export default {
 
         const username = String(body.username || "").trim().toLowerCase();
         const password = String(body.password || "");
+
+        // Apply independent per-identifier and per-client limits. The identifier
+        // bucket prevents IP rotation from bypassing protection; the IP bucket
+        // limits bursts across many account names from one client.
+        const clientIp = request.headers.get("CF-Connecting-IP") || "unknown";
+        const [identifierAllowed, clientAllowed] = await Promise.all([
+          consumeLoginAttempt(env, "identifier", username),
+          consumeLoginAttempt(env, "client", clientIp)
+        ]);
+        if (!identifierAllowed || !clientAllowed) {
+          return new Response(JSON.stringify({
+            error: "Too many login attempts. Please try again in 15 minutes."
+          }), {
+            status: 429,
+            headers: { ...corsHeaders, "Retry-After": "900" }
+          });
+        }
 
         // Match phone identifiers across Yemen local/international formats,
         // while retaining exact username lookup.
