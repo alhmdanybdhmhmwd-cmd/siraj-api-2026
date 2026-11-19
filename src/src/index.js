@@ -217,6 +217,24 @@ function normalizedPhoneSql(column = "phone") {
   return expression;
 }
 
+function phoneConflictCondition(column, phone) {
+  const variants = [...new Set(phoneVariants(phone))];
+  if (!variants.length) return { sql: "0", bindings: [] };
+
+  const normalized = normalizedPhoneSql(column);
+  const placeholders = variants.map(() => "?").join(", ");
+  const conditions = [
+    `${normalized} IN (${placeholders})`,
+    `(substr(${normalized}, 1, 2) = '00' AND substr(${normalized}, 3) IN (${placeholders}))`,
+    `(substr(${normalized}, 1, 3) = '967' AND length(${normalized}) >= 10 AND substr(${normalized}, 4) IN (${placeholders}))`,
+    `(substr(${normalized}, 1, 1) = '0' AND length(${normalized}) >= 8 AND substr(${normalized}, 2) IN (${placeholders}))`
+  ];
+  return {
+    sql: "(" + conditions.join(" OR ") + ")",
+    bindings: [...variants, ...variants, ...variants, ...variants]
+  };
+}
+
 async function phoneAlreadyInUse(env, phone, excludeUserId = "") {
   const requested = [...new Set(phoneVariants(phone))];
   if (!requested.length) return false;
@@ -489,16 +507,25 @@ export default {
 
         const recovery = await generateRecoveryCode();
         const createdAt = Math.floor(Date.now() / 1000);
-        await env.DB.batch([
-          env.DB.prepare(`INSERT INTO users
-            (id, username, display_name, password_hash, password_salt, phone)
-            VALUES (?, ?, ?, ?, ?, ?)`)
-            .bind(id, username, displayName, passwordHash, salt, phone || null),
+        const registrationResults = await env.DB.batch([
+          (() => {
+            const phoneConflict = phone ? phoneConflictCondition("phone", phone) : { sql: "0", bindings: [] };
+            return env.DB.prepare(`INSERT INTO users
+              (id, username, display_name, password_hash, password_salt, phone)
+              SELECT ?, ?, ?, ?, ?, ?
+              WHERE NOT EXISTS (
+                SELECT 1 FROM users WHERE ${phoneConflict.sql}
+              )`).bind(id, username, displayName, passwordHash, salt, phone || null,
+                ...phoneConflict.bindings);
+          })(),
           env.DB.prepare(`INSERT INTO recovery_codes
             (user_id, code_hash, code_salt, expires_at, consumed_at, created_at)
             VALUES (?, ?, ?, ?, NULL, ?)`)
             .bind(id, recovery.codeHash, recovery.salt, createdAt + RECOVERY_CODE_TTL_SECONDS, createdAt)
         ]);
+        if (Number(registrationResults?.[0]?.meta?.changes || 0) !== 1) {
+          return json({ error: phone ? "Phone number is already registered" : "Unable to create account" }, 409);
+        }
 
         const user = {
           id,
@@ -668,13 +695,22 @@ export default {
         if (phone && await phoneAlreadyInUse(env, phone, currentUser.sub)) {
           return json({ error: "Phone number is already in use" }, 409);
         }
-        await env.DB.prepare(
-          "UPDATE users SET display_name = ?, phone = ? WHERE id = ?"
-        ).bind(displayName, phone || null, currentUser.sub).run();
+        const phoneConflict = phone ? phoneConflictCondition("phone", phone) : { sql: "0", bindings: [] };
+        const updateResult = await env.DB.prepare(
+          `UPDATE users SET display_name = ?, phone = ?
+           WHERE id = ? AND NOT EXISTS (
+             SELECT 1 FROM users
+             WHERE id != ? AND ${phoneConflict.sql}
+           )`
+        ).bind(displayName, phone || null, currentUser.sub, currentUser.sub,
+          ...phoneConflict.bindings).run();
         const user = await env.DB.prepare(
           "SELECT id, username, display_name, phone FROM users WHERE id = ?"
         ).bind(currentUser.sub).first();
         if (!user) return json({ error: "User not found" }, 404);
+        if (Number(updateResult?.meta?.changes || 0) !== 1) {
+          return json({ error: "Phone number is already in use" }, 409);
+        }
         return json({ user: cleanUser(user), message: "Profile updated" });
       }
 
