@@ -328,6 +328,50 @@ test("password recovery rate limits repeated attempts", async () => {
   assert.equal(status, 429);
 });
 
+test("failed attachment message persistence deletes the uploaded Tigris object", async () => {
+  const db = new FakeDB();
+  const originalPrepare = db.prepare.bind(db);
+  db.prepare = sql => {
+    const statement = originalPrepare(sql);
+    const first = statement.first.bind(statement);
+    const run = statement.run.bind(statement);
+    statement.first = async () => sql.includes("SELECT 1 FROM friendships")
+      ? { 1: 1 } : first();
+    statement.run = async () => {
+      if (sql.includes("INSERT INTO messages")) throw new Error("simulated message database failure");
+      return run();
+    };
+    return statement;
+  };
+  const token = await worker.signToken(user, secret, 0);
+  const calls = [];
+  globalThis.__fakeTigrisHandler = async (_url, options) => {
+    calls.push(options.method);
+    return new Response(null, { status: options.method === "PUT" ? 200 : 204 });
+  };
+  try {
+    const response = await worker.default.fetch(new Request("https://api.example.test/api/media", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + token,
+        "Content-Type": "image/jpeg",
+        "X-Recipient-Id": "friend-1",
+        "X-File-Name": "photo.jpg"
+      },
+      body: new Uint8Array([1, 2, 3])
+    }), {
+      DB: db,
+      JWT_SECRET: secret,
+      TIGRIS_ACCESS_KEY_ID: "test-access",
+      TIGRIS_SECRET_ACCESS_KEY: "test-secret"
+    });
+    assert.equal(response.status, 500);
+    assert.deepEqual(calls, ["PUT", "DELETE"]);
+  } finally {
+    delete globalThis.__fakeTigrisHandler;
+  }
+});
+
 test("media download checks authorization before fetching object bytes", async () => {
   const db = new FakeDB();
   const token = await worker.signToken(user, secret, 0);
