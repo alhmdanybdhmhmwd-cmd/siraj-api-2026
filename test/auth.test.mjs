@@ -50,7 +50,10 @@ class FakeDB {
         return null;
       },
       async all() {
-        if (sql.includes("phone IS NOT NULL")) return { results: db.contactCandidates };
+        if (sql.includes("substr(") && sql.includes("user_privacy")) {
+          db.contactLookupQueries = (db.contactLookupQueries || 0) + 1;
+          return { results: db.contactCandidates };
+        }
         return { results: [] };
       },
       async run() {
@@ -181,6 +184,29 @@ test("phone contact matching returns registered searchable accounts only", async
   assert.equal(response.status, 200);
   const data = await response.json();
   assert.deepEqual(data.users.map(item => item.id), ["matched-user"]);
+  assert.equal(db.contactLookupQueries, 1);
+});
+
+test("phone contact matching uses bounded queries beyond the former 10,000-user scan", async () => {
+  const db = new FakeDB();
+  db.contactCandidates = [
+    { id: "late-match", username: "late", display_name: "Late", phone: "+967 77 123 4567" }
+  ];
+  const token = await worker.signToken(user, secret, 0);
+  const phones = Array.from({ length: 500 }, (_, index) => "077" + String(index).padStart(7, "0"));
+  phones[499] = "0771234567";
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/contacts/match", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ phones })
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.deepEqual(data.users.map(item => item.id), ["late-match"]);
+  assert.ok(db.contactLookupQueries > 1);
 });
 
 class FakeGroupDB extends FakeDB {
