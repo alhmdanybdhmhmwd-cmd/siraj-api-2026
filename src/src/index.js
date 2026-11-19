@@ -171,6 +171,17 @@ async function authenticate(request, env) {
   return payload;
 }
 
+
+function phoneVariants(value) {
+  const digits = String(value || "").replace(/\\D/g, "");
+  const variants = new Set();
+  if (digits.length >= 7 && digits.length <= 15) variants.add(digits);
+  if (digits.startsWith("00") && digits.length >= 9) variants.add(digits.slice(2));
+  if (digits.startsWith("967") && digits.length >= 10) variants.add(digits.slice(3));
+  if (digits.startsWith("0") && digits.length >= 8) variants.add(digits.slice(1));
+  return [...variants].filter(value => value.length >= 7 && value.length <= 15);
+}
+
 function cleanUser(user) {
   return {
     id: user.id,
@@ -312,6 +323,8 @@ async function issueRecoveryCode(env, userId) {
   ).bind(userId, recoveryHash, salt).run();
   return code;
 }
+
+export { phoneVariants };
 
 export default {
   async fetch(request, env) {
@@ -745,6 +758,41 @@ export default {
         return json({
           users: (users.results || []).map(cleanUser)
         });
+      }
+
+
+      // Match phone contacts only after the client has obtained explicit permission.
+      // Submitted phone numbers are processed in memory and are never persisted.
+      if (method === "POST" && path === "/api/contacts/match") {
+        const body = await request.json();
+        if (!Array.isArray(body.phones) || body.phones.length > 500) {
+          return json({ error: "قائمة جهات الاتصال غير صالحة" }, 400);
+        }
+        const requested = new Set(
+          body.phones.filter(value => typeof value === "string")
+            .flatMap(phoneVariants)
+        );
+        if (requested.size === 0) return json({ users: [] });
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS user_privacy (
+            user_id TEXT PRIMARY KEY,
+            searchable INTEGER NOT NULL DEFAULT 1,
+            read_receipts INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        const candidates = await env.DB.prepare(
+          `SELECT id, username, display_name, phone
+           FROM users
+           WHERE id != ? AND phone IS NOT NULL
+             AND COALESCE((SELECT searchable FROM user_privacy WHERE user_id = users.id), 1) = 1
+           LIMIT 10000`
+        ).bind(currentUser.sub).all();
+        const matched = (candidates.results || []).filter(user =>
+          phoneVariants(user.phone).some(phone => requested.has(phone))
+        );
+        return json({ users: matched.map(cleanUser) });
       }
 
       // Add a contact directly (no friend-request workflow).
