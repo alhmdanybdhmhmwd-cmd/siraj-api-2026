@@ -236,6 +236,24 @@ test("user search finds a Yemen account saved internationally when searched by l
   assert.match(db.lastUserSearchSql, /substr\(/);
 });
 
+test("phone search strips formatting from partial international numbers", async () => {
+  const db = new FakeDB();
+  db.searchCandidates = [{
+    id: "formatted-search-user",
+    username: "formatted_user",
+    display_name: "Formatted User",
+    phone: "+967 77 123 4567"
+  }];
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request(
+    "https://api.example.test/api/users/search?q=%2B967-77",
+    { headers: { Authorization: "Bearer " + token } }
+  ), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.deepEqual(data.users.map(item => item.id), ["formatted-search-user"]);
+});
+
 test("phone contact matching returns registered searchable accounts only", async () => {
   const db = new FakeDB();
   db.contactCandidates = [
