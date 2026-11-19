@@ -14,3 +14,6 @@ TIGRIS_BUCKET = "siraj-media"
 
 [triggers]
 crons = ["*/15 * * * *"]
+
+[ai]
+binding = "AI"

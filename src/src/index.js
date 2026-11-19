@@ -400,6 +400,30 @@ async function sendSirajPush(env, recipientId, senderId, senderName, messageText
 }
 
 
+async function ensureReferralTables(env) {
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS referral_codes (
+      user_id TEXT PRIMARY KEY,
+      code TEXT NOT NULL UNIQUE,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `).run();
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS referrals (
+      referred_user_id TEXT PRIMARY KEY,
+      referrer_user_id TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (referred_user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (referrer_user_id) REFERENCES users(id) ON DELETE CASCADE,
+      CHECK (referred_user_id != referrer_user_id)
+    )
+  `).run();
+  await env.DB.prepare(
+    "CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_user_id, created_at)"
+  ).run();
+}
+
 const RECOVERY_CODE_TTL_SECONDS = 90 * 24 * 60 * 60;
 
 function randomHex(byteLength) {
@@ -518,6 +542,22 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
   return { checked: (expired.results || []).length, deleted };
 }
 
+async function cleanupExpiredEphemeralMessages(env, now = Date.now()) {
+  const cutoff = Math.floor(now / 1000);
+  try {
+    const result = await env.DB.prepare(
+      "DELETE FROM ephemeral_messages WHERE expires_at <= ? OR (delete_at IS NOT NULL AND delete_at <= ?)"
+    ).bind(cutoff, cutoff).run();
+    return Number(result?.meta?.changes || 0);
+  } catch (error) {
+    // The table is created lazily by the authenticated endpoint.
+    if (!/no such table/i.test(String(error?.message || error))) {
+      console.error("Ephemeral message cleanup failed:", error);
+    }
+    return 0;
+  }
+}
+
 async function cleanupExpiredRateLimits(env, now = Date.now()) {
   const cutoff = Math.floor(now / 1000) - 24 * 60 * 60;
   const results = {};
@@ -552,8 +592,14 @@ export default {
     } catch (error) {
       console.error("Media expiration cleanup failed:", error);
     }
+    try {
+      const deleted = await cleanupExpiredEphemeralMessages(env);
+      console.log("Ephemeral message cleanup:", deleted);
+    } catch (error) {
+      console.error("Ephemeral message cleanup failed:", error);
+    }
   },
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders });
     }
@@ -605,6 +651,18 @@ export default {
         if (phone.length > 25) {
           return json({ error: "Invalid phone number" }, 400);
         }
+        await ensureReferralTables(env);
+        const inviteCode = String(body.inviteCode || "").trim().toUpperCase();
+        let referrerId = null;
+        if (inviteCode) {
+          const referrer = await env.DB.prepare(
+            "SELECT user_id FROM referral_codes WHERE code = ?"
+          ).bind(inviteCode).first();
+          if (!referrer || !referrer.user_id) {
+            return json({ error: "رمز الدعوة غير صالح أو منتهي." }, 400);
+          }
+          referrerId = String(referrer.user_id);
+        }
         if (phone && await phoneAlreadyInUse(env, phone)) {
           return json({ error: "Phone number is already registered" }, 409);
         }
@@ -628,7 +686,8 @@ export default {
 
         const recovery = await generateRecoveryCode();
         const createdAt = Math.floor(Date.now() / 1000);
-        const registrationResults = await env.DB.batch([
+        const referralCode = randomHex(6).toUpperCase();
+        const registrationStatements = [
           (() => {
             const phoneConflict = phone ? phoneConflictCondition("phone", phone) : { sql: "0", bindings: [] };
             return env.DB.prepare(`INSERT INTO users
@@ -643,8 +702,21 @@ export default {
             (user_id, code_hash, code_salt, expires_at, consumed_at, created_at)
             SELECT ?, ?, ?, ?, NULL, ?
             WHERE EXISTS (SELECT 1 FROM users WHERE id = ?)`)
-            .bind(id, recovery.codeHash, recovery.salt, createdAt + RECOVERY_CODE_TTL_SECONDS, createdAt, id)
-        ]);
+            .bind(id, recovery.codeHash, recovery.salt, createdAt + RECOVERY_CODE_TTL_SECONDS, createdAt, id),
+          env.DB.prepare(`INSERT OR IGNORE INTO referral_codes (user_id, code, created_at)
+            SELECT ?, ?, ? WHERE EXISTS (SELECT 1 FROM users WHERE id = ?)`)
+            .bind(id, referralCode, createdAt, id)
+        ];
+        if (referrerId) {
+          registrationStatements.push(env.DB.prepare(`INSERT OR IGNORE INTO referrals
+            (referred_user_id, referrer_user_id, created_at)
+            SELECT ?, ?, ?
+            WHERE EXISTS (SELECT 1 FROM users WHERE id = ?)
+              AND EXISTS (SELECT 1 FROM users WHERE id = ?)
+              AND ? != ?`)
+            .bind(id, referrerId, createdAt, id, referrerId, id, referrerId));
+        }
+        const registrationResults = await env.DB.batch(registrationStatements);
         if (Number(registrationResults?.[0]?.meta?.changes || 0) !== 1) {
           return json({ error: phone ? "Phone number is already registered" : "Unable to create account" }, 409);
         }
@@ -816,6 +888,160 @@ export default {
 
       if (!currentUser) {
         return json({ error: "Unauthorized" }, 401);
+      }
+
+      // Voice-note transcription is explicitly requested by the user and processed by Workers AI.
+      // Audio bytes are not persisted by this endpoint.
+      if (method === "POST" && path === "/api/transcribe") {
+        if (!env.AI || typeof env.AI.run !== "function") {
+          return json({ error: "خدمة تحويل الصوت إلى نص غير مفعلة على الخادم بعد." }, 503);
+        }
+        if (!(await consumeLoginAttempt(env, "voice-transcription", currentUser.sub, 12))) {
+          return new Response(JSON.stringify({ error: "طلبات تحويل كثيرة. حاول بعد 15 دقيقة." }), {
+            status: 429,
+            headers: { ...corsHeaders, "Retry-After": "900" }
+          });
+        }
+        const contentType = String(request.headers.get("Content-Type") || "").split(";")[0].toLowerCase();
+        if (!contentType.startsWith("audio/")) {
+          return json({ error: "الملف المرسل ليس ملفًا صوتيًا." }, 415);
+        }
+        const audio = await request.arrayBuffer();
+        if (!audio.byteLength || audio.byteLength > 8 * 1024 * 1024) {
+          return json({ error: "حجم التسجيل الصوتي يجب ألا يتجاوز 8 ميجابايت." }, 413);
+        }
+        let binary = "";
+        for (const byte of new Uint8Array(audio)) binary += String.fromCharCode(byte);
+        try {
+          const result = await env.AI.run("@cf/openai/whisper-large-v3-turbo", {
+            audio: btoa(binary)
+          });
+          const transcript = String(result?.text || "").trim();
+          if (!transcript) return json({ error: "لم يتمكن النظام من تمييز الكلام في التسجيل." }, 422);
+          return json({ text: transcript, language: result?.language || null });
+        } catch (error) {
+          console.error("Voice transcription failed:", error);
+          return json({ error: "تعذر تحويل التسجيل إلى نص حاليًا." }, 502);
+        }
+      }
+
+      // Ephemeral private messages: never write to the ordinary messages table or send FCM.
+      // A message is removed ten seconds after the recipient first reads it.
+      if (path === "/api/ephemeral-messages") {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS ephemeral_messages (
+            id TEXT PRIMARY KEY,
+            sender_id TEXT NOT NULL,
+            receiver_id TEXT NOT NULL,
+            body TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            read_at INTEGER,
+            delete_at INTEGER,
+            expires_at INTEGER NOT NULL,
+            FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        const now = Math.floor(Date.now() / 1000);
+        await env.DB.prepare(
+          "DELETE FROM ephemeral_messages WHERE expires_at <= ? OR (delete_at IS NOT NULL AND delete_at <= ?)"
+        ).bind(now, now).run();
+
+        if (method === "POST") {
+          const body = await request.json();
+          const receiverId = String(body.receiverId || "").trim();
+          const message = String(body.body || "").trim();
+          if (!receiverId || receiverId === currentUser.sub || !message || message.length > 5000) {
+            return json({ error: "Invalid temporary message" }, 400);
+          }
+          const friendship = await env.DB.prepare(
+            "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
+          ).bind(currentUser.sub, receiverId).first();
+          if (!friendship) return json({ error: "Contact not found" }, 403);
+          const id = crypto.randomUUID();
+          await env.DB.prepare(
+            "INSERT INTO ephemeral_messages (id, sender_id, receiver_id, body, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)"
+          ).bind(id, currentUser.sub, receiverId, message, now, now + 7 * 24 * 60 * 60).run();
+          // Deliberately no FCM notification and no write to messages.
+          return json({ message: "Temporary message sent", id, createdAt: now }, 201);
+        }
+
+        if (method === "GET") {
+          const friendId = String(url.searchParams.get("with") || "").trim();
+          if (!friendId || friendId === currentUser.sub) return json({ error: "Friend ID is required" }, 400);
+          const friendship = await env.DB.prepare(
+            "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
+          ).bind(currentUser.sub, friendId).first();
+          if (!friendship) return json({ error: "Contact not found" }, 403);
+          const result = await env.DB.prepare(
+            `SELECT id, sender_id, receiver_id, body, created_at, read_at, delete_at
+             FROM ephemeral_messages
+             WHERE ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))
+               AND expires_at > ?
+               AND (delete_at IS NULL OR delete_at > ?)
+             ORDER BY created_at ASC, id ASC`
+          ).bind(currentUser.sub, friendId, friendId, currentUser.sub, now, now).all();
+          const rows = result.results || [];
+          const incomingIds = rows.filter(item =>
+            item.sender_id === friendId && item.receiver_id === currentUser.sub && item.read_at == null
+          ).map(item => item.id);
+          if (incomingIds.length) {
+            const deleteAt = now + 10;
+            await env.DB.prepare(
+              `UPDATE ephemeral_messages SET read_at = ?, delete_at = ?
+               WHERE receiver_id = ? AND sender_id = ? AND read_at IS NULL
+                 AND id IN (${incomingIds.map(() => "?").join(", ")})`
+            ).bind(now, deleteAt, currentUser.sub, friendId, ...incomingIds).run();
+            for (const item of rows) {
+              if (incomingIds.includes(item.id)) {
+                item.read_at = now;
+                item.delete_at = deleteAt;
+              }
+            }
+            // Keep the response available to the reader, then delete from D1 after ten seconds.
+            if (ctx && typeof ctx.waitUntil === "function") {
+              ctx.waitUntil((async () => {
+                await new Promise(resolve => setTimeout(resolve, 10_100));
+                const deletionTime = Math.floor(Date.now() / 1000);
+                await env.DB.prepare(
+                  `DELETE FROM ephemeral_messages
+                   WHERE receiver_id = ? AND sender_id = ? AND delete_at IS NOT NULL AND delete_at <= ?
+                     AND id IN (${incomingIds.map(() => "?").join(", ")})`
+                ).bind(currentUser.sub, friendId, deletionTime, ...incomingIds).run();
+              })());
+            }
+          }
+          return json({ messages: rows });
+        }
+        return json({ error: "Method not allowed" }, 405);
+      }
+
+      // Referral code and verified registration count for the signed-in account.
+      if (method === "GET" && path === "/api/referrals") {
+        await ensureReferralTables(env);
+        let ownCode = await env.DB.prepare(
+          "SELECT code FROM referral_codes WHERE user_id = ?"
+        ).bind(currentUser.sub).first();
+        for (let attempt = 0; !ownCode && attempt < 5; attempt++) {
+          const candidate = randomHex(6).toUpperCase();
+          await env.DB.prepare(
+            "INSERT OR IGNORE INTO referral_codes (user_id, code, created_at) VALUES (?, ?, ?)"
+          ).bind(currentUser.sub, candidate, Math.floor(Date.now() / 1000)).run();
+          ownCode = await env.DB.prepare(
+            "SELECT code FROM referral_codes WHERE user_id = ?"
+          ).bind(currentUser.sub).first();
+        }
+        if (!ownCode?.code) return json({ error: "تعذر إنشاء رابط الدعوة حاليًا." }, 503);
+        const countRow = await env.DB.prepare(
+          "SELECT COUNT(*) AS referral_count FROM referrals WHERE referrer_user_id = ?"
+        ).bind(currentUser.sub).first();
+        const referralCount = Number(countRow?.referral_count || 0);
+        return json({
+          inviteCode: ownCode.code,
+          referralCount,
+          badgeUnlocked: referralCount >= 5,
+          badgeTitle: referralCount >= 5 ? "صاعقة" : null
+        });
       }
 
       // Rotate the one-time recovery code after verifying the current password.
@@ -1494,18 +1720,26 @@ export default {
           }, 403);
         }
 
-        const id = crypto.randomUUID();
-
-        await env.DB.prepare(
-          `INSERT INTO messages
+        const suppliedMessageId = String(body.clientMessageId || "").trim();
+        if (suppliedMessageId && !/^[a-f0-9-]{16,64}$/i.test(suppliedMessageId)) {
+          return json({ error: "Invalid client message ID" }, 400);
+        }
+        const id = suppliedMessageId || crypto.randomUUID();
+        const insertResult = await env.DB.prepare(
+          `INSERT OR IGNORE INTO messages
            (id, sender_id, receiver_id, body)
            VALUES (?, ?, ?, ?)`
-        ).bind(
-          id,
-          currentUser.sub,
-          receiverId,
-          message
-        ).run();
+        ).bind(id, currentUser.sub, receiverId, message).run();
+        const inserted = Number(insertResult?.meta?.changes || 0) === 1;
+        if (!inserted) {
+          const existing = await env.DB.prepare(
+            "SELECT sender_id, receiver_id, body FROM messages WHERE id = ?"
+          ).bind(id).first();
+          if (!existing || existing.sender_id !== currentUser.sub || existing.receiver_id !== receiverId || existing.body !== message) {
+            return json({ error: "Message ID conflict" }, 409);
+          }
+          return json({ message: "Message already synchronized", id, duplicate: true }, 200);
+        }
 
         // Message persistence is authoritative; sender lookup or push delivery
         // must not turn a successfully stored message into an apparent failure.

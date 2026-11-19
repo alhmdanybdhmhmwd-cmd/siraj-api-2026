@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "test:api": "node --test test/auth.test.mjs test/proxy.test.mjs"
   },
   "engines": {
     "node": ">=20"

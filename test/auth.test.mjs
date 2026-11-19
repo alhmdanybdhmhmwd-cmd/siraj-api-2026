@@ -11,7 +11,7 @@ class AwsClient {
   }
 }
 `);
-workerSource += "\nexport { signToken, verifyToken, authenticate, hashPassword, sendSirajPush };";
+workerSource += "\nexport { signToken, verifyToken, authenticate, hashPassword, sendSirajPush, cleanupExpiredEphemeralMessages };";
 const worker = await import("data:text/javascript;base64," + Buffer.from(workerSource).toString("base64"));
 
 const secret = "unit-test-secret-that-is-long-enough";
@@ -35,6 +35,10 @@ class FakeDB {
     this.contactCandidates = [];
     this.privacySettings = null;
     this.notificationSettings = null;
+    this.ephemeralMessages = [];
+    this.referralCodes = new Map();
+    this.referrals = [];
+    this.messages = [];
   }
 
   prepare(sql) {
@@ -44,6 +48,23 @@ class FakeDB {
       params: [],
       bind(...params) { this.params = params; return this; },
       async first() {
+        if (sql.includes("FROM messages WHERE id = ?")) {
+          const item = db.messages.find(message => message.id === this.params[0]);
+          return item ? { sender_id: item.sender_id, receiver_id: item.receiver_id, body: item.body } : null;
+        }
+        if (sql.includes("SELECT user_id FROM referral_codes WHERE code = ?")) {
+          const userId = db.referralCodes.get(this.params[0]);
+          return userId ? { user_id: userId } : null;
+        }
+        if (sql.includes("SELECT code FROM referral_codes WHERE user_id = ?")) {
+          for (const [code, userId] of db.referralCodes.entries()) {
+            if (userId === this.params[0]) return { code };
+          }
+          return null;
+        }
+        if (sql.includes("SELECT COUNT(*) AS referral_count FROM referrals")) {
+          return { referral_count: db.referrals.filter(item => item.referrer_user_id === this.params[0]).length };
+        }
         if (sql.includes("SELECT session_version FROM account_security")) {
           return { session_version: db.sessionVersion };
         }
@@ -118,6 +139,14 @@ class FakeDB {
         if (sql.includes("SELECT fcm_token FROM device_tokens")) {
           return { results: db.deviceTokenRows || [] };
         }
+        if (sql.includes("FROM ephemeral_messages")) {
+          const [userA, friendA, friendB, userB, nowA, nowB] = this.params;
+          return { results: db.ephemeralMessages.filter(item =>
+            ((item.sender_id === userA && item.receiver_id === friendA) ||
+             (item.sender_id === friendB && item.receiver_id === userB)) &&
+            item.expires_at > nowA && (item.delete_at == null || item.delete_at > nowB)
+          ).map(item => ({ ...item })) };
+        }
         if (sql.includes("FROM messages") && sql.includes("ORDER BY created_at DESC")) {
           db.lastMessageQuery = sql;
           db.lastMessageParams = this.params;
@@ -146,6 +175,58 @@ class FakeDB {
             return { meta: { changes: 1 } };
           }
           return { meta: { changes: 0 } };
+        }
+        if (sql.includes("INSERT OR IGNORE INTO messages")) {
+          const [id, senderId, receiverId, body] = this.params;
+          if (db.messages.some(item => item.id === id)) return { meta: { changes: 0 } };
+          db.messages.push({ id, sender_id: senderId, receiver_id: receiverId, body });
+          return { meta: { changes: 1 } };
+        }
+        if (sql.includes("INSERT OR IGNORE INTO referral_codes")) {
+          const [userId, code] = this.params;
+          if (![...db.referralCodes.values()].includes(userId) && !db.referralCodes.has(code)) {
+            db.referralCodes.set(code, userId);
+          }
+        }
+        if (sql.includes("INSERT OR IGNORE INTO referrals")) {
+          const [referredUserId, referrerUserId] = this.params;
+          if (referredUserId !== referrerUserId &&
+              !db.referrals.some(item => item.referred_user_id === referredUserId)) {
+            db.referrals.push({ referred_user_id: referredUserId, referrer_user_id: referrerUserId });
+          }
+        }
+        if (sql.includes("INSERT INTO ephemeral_messages")) {
+          const [id, senderId, receiverId, body, createdAt, expiresAt] = this.params;
+          db.ephemeralMessages.push({
+            id, sender_id: senderId, receiver_id: receiverId, body,
+            created_at: createdAt, read_at: null, delete_at: null, expires_at: expiresAt
+          });
+        }
+        if (sql.includes("UPDATE ephemeral_messages SET read_at")) {
+          const [readAt, deleteAt, receiverId, senderId, ...ids] = this.params;
+          for (const item of db.ephemeralMessages) {
+            if (item.receiver_id === receiverId && item.sender_id === senderId &&
+                item.read_at == null && ids.includes(item.id)) {
+              item.read_at = readAt;
+              item.delete_at = deleteAt;
+            }
+          }
+        }
+        if (sql.includes("DELETE FROM ephemeral_messages")) {
+          const originalCount = db.ephemeralMessages.length;
+          if (this.params.length === 2) {
+            const [expiresCutoff, deleteCutoff] = this.params;
+            db.ephemeralMessages = db.ephemeralMessages.filter(item =>
+              !(item.expires_at <= expiresCutoff || (item.delete_at != null && item.delete_at <= deleteCutoff))
+            );
+          } else {
+            const [receiverId, senderId, deleteCutoff, ...ids] = this.params;
+            db.ephemeralMessages = db.ephemeralMessages.filter(item =>
+              !(item.receiver_id === receiverId && item.sender_id === senderId &&
+                item.delete_at != null && item.delete_at <= deleteCutoff && ids.includes(item.id))
+            );
+          }
+          return { meta: { changes: originalCount - db.ephemeralMessages.length } };
         }
         if (sql.includes("UPDATE messages SET read_at")) {
           db.readReceiptUpdate = { sql, params: this.params };
@@ -200,6 +281,7 @@ class FakeDB {
       );
       if (conflict) return [{ meta: { changes: 0 } }, { meta: { changes: 0 } }];
       const recoveryParams = statements[1].params;
+      const referralCodeParams = statements[2]?.params || [];
       this.user = {
         id: userParams[0], username: userParams[1], display_name: userParams[2],
         password_hash: userParams[3], password_salt: userParams[4], phone: userParams[5]
@@ -209,7 +291,20 @@ class FakeDB {
         code_hash: recoveryParams[1], code_salt: recoveryParams[2],
         expires_at: recoveryParams[3], consumed_at: null
       };
-      return [{ meta: { changes: 1 } }, { meta: { changes: 1 } }];
+      if (referralCodeParams.length >= 4) {
+        this.referralCodes.set(referralCodeParams[1], referralCodeParams[0]);
+      }
+      const results = [
+        { meta: { changes: 1 } },
+        { meta: { changes: 1 } },
+        { meta: { changes: 1 } }
+      ];
+      if (statements[3]) {
+        const [referredUserId, referrerUserId] = statements[3].params;
+        this.referrals.push({ referred_user_id: referredUserId, referrer_user_id: referrerUserId });
+        results.push({ meta: { changes: 1 } });
+      }
+      return results;
     }
     const [updatePassword, consumeCode, incrementVersion] = statements;
     const [newHash, newSalt, userId, recoveryUserId, expectedHash, now] = updatePassword.params;
@@ -226,6 +321,168 @@ class FakeDB {
   }
 }
 
+
+test("offline message synchronization is idempotent and rejects ID collisions", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  const env = { DB: db, JWT_SECRET: secret };
+  const send = (receiverId, clientMessageId, message = "offline message") => worker.default.fetch(new Request("https://api.example.test/api/messages", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+    body: JSON.stringify({ receiverId, body: message, clientMessageId })
+  }), env);
+  const first = await send("friend-1", "aabbccddeeff00112233445566778899");
+  assert.equal(first.status, 201);
+  const duplicate = await send("friend-1", "aabbccddeeff00112233445566778899");
+  assert.equal(duplicate.status, 200);
+  assert.equal((await duplicate.json()).duplicate, true);
+  assert.equal(db.messages.length, 1);
+  const bodyConflict = await send("friend-1", "aabbccddeeff00112233445566778899", "different payload");
+  assert.equal(bodyConflict.status, 409);
+  const conflict = await send("another-friend", "aabbccddeeff00112233445566778899");
+  assert.equal(conflict.status, 409);
+  assert.equal(db.messages.length, 1);
+});
+
+test("registration attributes a new account to one valid referral code", async () => {
+  const db = new FakeDB();
+  db.users.push({ id: "referrer-1", username: "referrer", phone: null });
+  db.referralCodes.set("ABC123", "referrer-1");
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      displayName: "Invited User",
+      username: "invited_user",
+      password: "new-secure-password",
+      inviteCode: "abc123"
+    })
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 201);
+  assert.equal(db.referrals.length, 1);
+  assert.equal(db.referrals[0].referrer_user_id, "referrer-1");
+  assert.ok([...db.referralCodes.values()].includes(db.user.id));
+});
+
+test("referral dashboard creates a code and unlocks the badge at five new registrations", async () => {
+  const db = new FakeDB();
+  db.referrals = Array.from({ length: 5 }, (_, index) => ({
+    referred_user_id: "invitee-" + index,
+    referrer_user_id: user.id
+  }));
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/referrals", {
+    headers: { Authorization: "Bearer " + token }
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.match(data.inviteCode, /^[A-F0-9]{12}$/);
+  assert.equal(data.referralCount, 5);
+  assert.equal(data.badgeUnlocked, true);
+  assert.equal(data.badgeTitle, "صاعقة");
+});
+
+test("voice transcription accepts authenticated audio and returns the Workers AI transcript", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  const env = {
+    DB: db,
+    JWT_SECRET: secret,
+    AI: { async run(model, input) {
+      assert.equal(model, "@cf/openai/whisper-large-v3-turbo");
+      assert.ok(input.audio);
+      return { text: "هذا اختبار صوتي", language: "ar" };
+    }}
+  };
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/transcribe", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "audio/wav"
+    },
+    body: new Uint8Array([1, 2, 3, 4])
+  }), env);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { text: "هذا اختبار صوتي", language: "ar" });
+});
+
+test("voice transcription rejects non-audio uploads", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/transcribe", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "application/json"
+    },
+    body: "{}"
+  }), {
+    DB: db,
+    JWT_SECRET: secret,
+    AI: { async run() { throw new Error("must not run"); } }
+  });
+  assert.equal(response.status, 415);
+});
+
+test("ephemeral messages use a separate store and start a ten-second deletion window on read", async () => {
+  const db = new FakeDB();
+  const senderToken = await worker.signToken(user, secret, 0);
+  const senderResponse = await worker.default.fetch(new Request("https://api.example.test/api/ephemeral-messages", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + senderToken, "Content-Type": "application/json" },
+    body: JSON.stringify({ receiverId: "friend-1", body: "temporary text" })
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(senderResponse.status, 201);
+  assert.equal(db.ephemeralMessages.length, 1);
+  assert.equal(db.ephemeralMessages[0].body, "temporary text");
+  assert.equal(db.normalMessageWrites || 0, 0);
+
+  const receiver = { ...user, id: "friend-1", username: "friend" };
+  const receiverToken = await worker.signToken(receiver, secret, 0);
+  const readResponse = await worker.default.fetch(new Request(
+    "https://api.example.test/api/ephemeral-messages?with=user-1",
+    { headers: { Authorization: "Bearer " + receiverToken } }
+  ), { DB: db, JWT_SECRET: secret });
+  assert.equal(readResponse.status, 200);
+  const data = await readResponse.json();
+  assert.equal(data.messages.length, 1);
+  assert.ok(data.messages[0].read_at);
+  assert.equal(data.messages[0].delete_at - data.messages[0].read_at, 10);
+  const firstReadAt = db.ephemeralMessages[0].read_at;
+  const firstDeleteAt = db.ephemeralMessages[0].delete_at;
+  assert.equal(firstDeleteAt - firstReadAt, 10);
+
+  // Reopening the conversation must not restart the ten-second timer.
+  const originalNow = Date.now;
+  try {
+    Date.now = () => originalNow() + 4_000;
+    const repeatedRead = await worker.default.fetch(new Request(
+      "https://api.example.test/api/ephemeral-messages?with=user-1",
+      { headers: { Authorization: "Bearer " + receiverToken } }
+    ), { DB: db, JWT_SECRET: secret });
+    assert.equal(repeatedRead.status, 200);
+    const repeatedData = await repeatedRead.json();
+    assert.equal(repeatedData.messages.length, 1);
+    assert.equal(db.ephemeralMessages[0].read_at, firstReadAt);
+    assert.equal(db.ephemeralMessages[0].delete_at, firstDeleteAt);
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
+test("ephemeral cleanup deletes expired and read-expired rows while preserving unread rows", async () => {
+  const db = new FakeDB();
+  const now = 2_000_000_000_000;
+  const nowSeconds = Math.floor(now / 1000);
+  db.ephemeralMessages = [
+    { id: "read-expired", expires_at: nowSeconds + 3600, delete_at: nowSeconds - 1 },
+    { id: "unread-valid", expires_at: nowSeconds + 3600, delete_at: null },
+    { id: "never-read-but-expired", expires_at: nowSeconds - 1, delete_at: null }
+  ];
+  const deleted = await worker.cleanupExpiredEphemeralMessages({ DB: db }, now);
+  assert.equal(deleted, 2);
+  assert.deepEqual(db.ephemeralMessages.map(item => item.id), ["unread-valid"]);
+});
 
 test("private conversation pagination uses a stable cursor and marks only returned incoming messages read", async () => {
   const db = new FakeDB();
@@ -479,7 +736,7 @@ test("failed attachment message persistence deletes the uploaded Tigris object",
     statement.first = async () => sql.includes("SELECT 1 FROM friendships")
       ? { 1: 1 } : first();
     statement.run = async () => {
-      if (sql.includes("INSERT INTO messages")) throw new Error("simulated message database failure");
+      if (sql.includes("INTO messages")) throw new Error("simulated message database failure");
       return run();
     };
     return statement;
@@ -858,7 +1115,7 @@ class PrivateMessageFailureDB extends FakeDB {
       return first();
     };
     statement.run = async () => {
-      if (sql.includes("INSERT INTO messages")) this.savedMessages++;
+      if (sql.includes("INTO messages")) this.savedMessages++;
       return run();
     };
     return statement;
@@ -1027,7 +1284,7 @@ class PrivateMessageFcmHttpFailureDB extends FakeDB {
     statement.all = async () => sql.includes("SELECT fcm_token FROM device_tokens")
       ? { results: [{ fcm_token: "test-device-token" }] } : all();
     statement.run = async () => {
-      if (sql.includes("INSERT INTO messages")) this.savedMessages++;
+      if (sql.includes("INTO messages")) this.savedMessages++;
       if (sql.includes("DELETE FROM device_tokens")) this.deletedTokens++;
       return run();
     };
