@@ -175,11 +175,19 @@ async function authenticate(request, env) {
 function phoneVariants(value) {
   const digits = String(value || "").replace(/\D/g, "");
   const variants = new Set();
-  if (digits.length >= 7 && digits.length <= 15) variants.add(digits);
-  if (digits.startsWith("00") && digits.length >= 9) variants.add(digits.slice(2));
-  if (digits.startsWith("967") && digits.length >= 10) variants.add(digits.slice(3));
-  if (digits.startsWith("0") && digits.length >= 8) variants.add(digits.slice(1));
-  return [...variants].filter(value => value.length >= 7 && value.length <= 15);
+  const add = candidate => {
+    if (candidate.length >= 7 && candidate.length <= 15) variants.add(candidate);
+  };
+  add(digits);
+  const international = digits.startsWith("00") ? digits.slice(2) : digits;
+  add(international);
+  if (international.startsWith("967") && international.length >= 10) {
+    add(international.slice(3));
+  }
+  if (international.startsWith("0") && international.length >= 8) {
+    add(international.slice(1));
+  }
+  return [...variants];
 }
 
 function cleanUser(user) {
