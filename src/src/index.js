@@ -408,7 +408,7 @@ async function saveRecoveryCode(env, userId, recovery) {
 }
 
 async function consumeRecoveryAttempt(env, scope, identifier, maxAttempts = 5) {
-  const normalized = String(identifier).toLowerCase().replace(/[\\s()+.-]/g, "");
+  const normalized = String(identifier).toLowerCase().replace(/[\s()+.-]/g, "");
   const bucketKey = await sha256Hex("recovery:" + scope + ":" + normalized);
   const now = Math.floor(Date.now() / 1000);
   const windowStart = now - 15 * 60;
@@ -523,7 +523,7 @@ export default {
       if (method === "POST" && path === "/api/password/recover") {
         const body = await request.json();
         const identifier = String(body.identifier || body.username || body.phone || "").trim();
-        const recoveryCode = String(body.recoveryCode || "").replace(/[\\s-]/g, "").toUpperCase();
+        const recoveryCode = String(body.recoveryCode || "").replace(/[\s-]/g, "").toUpperCase();
         const newPassword = String(body.newPassword || "");
         if (!identifier || !/^[A-F0-9]{40}$/.test(recoveryCode)) {
           return json({ error: "تعذر استرداد الحساب. تحقق من البيانات وحاول مجددًا." }, 400);
