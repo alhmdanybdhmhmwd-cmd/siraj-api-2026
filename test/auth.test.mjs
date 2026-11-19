@@ -213,6 +213,7 @@ class FakeDB {
           }
         }
         if (sql.includes("DELETE FROM ephemeral_messages")) {
+          const originalCount = db.ephemeralMessages.length;
           if (this.params.length === 2) {
             const [expiresCutoff, deleteCutoff] = this.params;
             db.ephemeralMessages = db.ephemeralMessages.filter(item =>
@@ -225,6 +226,7 @@ class FakeDB {
                 item.delete_at != null && item.delete_at <= deleteCutoff && ids.includes(item.id))
             );
           }
+          return { meta: { changes: originalCount - db.ephemeralMessages.length } };
         }
         if (sql.includes("UPDATE messages SET read_at")) {
           db.readReceiptUpdate = { sql, params: this.params };
@@ -457,7 +459,7 @@ test("ephemeral cleanup deletes expired and read-expired rows while preserving u
     { id: "never-read-but-expired", expires_at: nowSeconds - 1, delete_at: null }
   ];
   const deleted = await worker.cleanupExpiredEphemeralMessages({ DB: db }, now);
-  assert.equal(deleted, 0); // FakeDB models row filtering; D1 reports the affected-row count.
+  assert.equal(deleted, 2);
   assert.deepEqual(db.ephemeralMessages.map(item => item.id), ["unread-valid"]);
 });
 
