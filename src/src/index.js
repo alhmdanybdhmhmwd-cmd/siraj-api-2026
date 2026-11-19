@@ -373,11 +373,14 @@ async function sendSirajPush(env, recipientId, senderId, senderName, messageText
           })
         }
       );
-      if (response.status === 404 || response.status === 400) {
-        const detail = await response.clone().text();
-        if (/UNREGISTERED|INVALID_ARGUMENT/i.test(detail)) {
+      if (!response.ok) {
+        const detail = await response.clone().text().catch(() => "");
+        if ((response.status === 404 || response.status === 400) &&
+            /UNREGISTERED|INVALID_ARGUMENT/i.test(detail)) {
           await env.DB.prepare("DELETE FROM device_tokens WHERE fcm_token = ?")
             .bind(device.fcm_token).run();
+        } else {
+          console.error("FCM message send failed:", response.status, detail.slice(0, 300));
         }
       }
     }));
