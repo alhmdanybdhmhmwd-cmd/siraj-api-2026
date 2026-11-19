@@ -375,6 +375,28 @@ class FakePrivateHistoryDB extends FakeDB {
   }
 }
 
+class PrivateMessageFailureDB extends FakeDB {
+  constructor() {
+    super();
+    this.savedMessages = 0;
+  }
+  prepare(sql) {
+    const statement = super.prepare(sql);
+    const first = statement.first.bind(statement);
+    const run = statement.run.bind(statement);
+    statement.first = async () => {
+      if (sql.includes("SELECT 1 FROM friendships")) return { ok: 1 };
+      if (sql.includes("SELECT display_name FROM users")) throw new Error("sender lookup unavailable");
+      return first();
+    };
+    statement.run = async () => {
+      if (sql.includes("INSERT INTO messages")) this.savedMessages++;
+      return run();
+    };
+    return statement;
+  }
+}
+
 class FakeReadReceiptDB extends FakeDB {
   constructor(readReceipts) {
     super();
@@ -468,6 +490,21 @@ test("group history fetches the newest 100 messages in chronological order", asy
   assert.equal(response.status, 200);
   assert.match(db.groupHistoryQuery, /ORDER BY gm\.created_at DESC, gm\.id DESC\s+LIMIT 100/i);
   assert.match(db.groupHistoryQuery, /ORDER BY created_at ASC, id ASC/i);
+});
+
+test("private message remains successful when notification sender lookup fails", async () => {
+  const db = new PrivateMessageFailureDB();
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/messages", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ receiverId: "friend-1", body: "Persist this message" })
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 201);
+  assert.equal(db.savedMessages, 1);
 });
 
 test("group message remains successful when push recipient lookup fails", async () => {
