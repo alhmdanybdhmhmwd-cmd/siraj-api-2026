@@ -54,7 +54,7 @@ class FakeDB {
         return null;
       },
       async all() {
-        if (sql.includes("LIKE ?") && sql.includes("substr(") && sql.includes("FROM users") && sql.includes("user_privacy")) {
+        if (sql.includes("LIKE ?") && sql.includes("FROM users") && sql.includes("user_privacy")) {
           db.userSearchQueries = (db.userSearchQueries || 0) + 1;
           db.lastUserSearchSql = sql;
           return { results: db.searchCandidates || [] };
