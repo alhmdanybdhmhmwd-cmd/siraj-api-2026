@@ -1509,6 +1509,11 @@ export default {
       return json({ error: "Route not found" }, 404);
 
     } catch (error) {
+      // Malformed client JSON is a request error, not an internal server failure.
+      if (error instanceof SyntaxError) {
+        return json({ error: "Invalid JSON body" }, 400);
+      }
+
       if (
         error &&
         /UNIQUE constraint failed/i.test(error.message || "")
