@@ -1133,3 +1133,20 @@ test("password recovery also limits attempts across many identifiers from one cl
   assert.equal((await attempt("another-unknown-account", "203.0.113.30")).status, 429);
   assert.equal((await attempt("different-client-account", "203.0.113.31")).status, 400);
 });
+
+
+test("registration rate limit blocks mass account creation from one client", async () => {
+  const db = new FakeDB();
+  const env = { DB: db, JWT_SECRET: secret };
+  const register = username => worker.default.fetch(new Request("https://api.example.test/api/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "CF-Connecting-IP": "203.0.113.40" },
+    body: JSON.stringify({ displayName: "New User", username, password: "secure-password-123" })
+  }), env);
+  for (let i = 0; i < 5; i++) {
+    assert.equal((await register("newuser" + i)).status, 201);
+  }
+  const blocked = await register("newuser-final");
+  assert.equal(blocked.status, 429);
+  assert.equal(blocked.headers.get("Retry-After"), "900");
+});
