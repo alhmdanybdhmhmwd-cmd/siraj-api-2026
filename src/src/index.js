@@ -285,8 +285,9 @@ function safeFileName(value) {
 
 
 async function sendSirajPush(env, recipientId, senderId, senderName, messageText, options = {}) {
-  const category = options.category === "groups" ? "groups" : "messages";
-  const pushType = category === "groups" ? "group_message" : "direct_message";
+  const category = ["groups", "statuses"].includes(options.category) ? options.category : "messages";
+  const pushType = category === "groups" ? "group_message"
+    : category === "statuses" ? "status_update" : "direct_message";
   if (!env.FCM_SERVICE_ACCOUNT_JSON) return;
   try {
     const account = JSON.parse(env.FCM_SERVICE_ACCOUNT_JSON);
@@ -367,15 +368,17 @@ async function sendSirajPush(env, recipientId, senderId, senderName, messageText
               notification: {
                 title: category === "groups"
                   ? "رسالة في " + String(options.groupName || "مجموعة برق").slice(0, 65)
-                  : "رسالة من " + String(senderName || "مستخدم برق").slice(0, 80),
-                body: preview || "لديك رسالة جديدة"
+                  : category === "statuses"
+                    ? "حالة جديدة من " + String(senderName || "مستخدم برق").slice(0, 80)
+                    : "رسالة من " + String(senderName || "مستخدم برق").slice(0, 80),
+                body: category === "statuses" ? "شارك حالة جديدة" : preview || "لديك رسالة جديدة"
               },
               data: {
                 type: pushType,
                 senderId: String(senderId || ""),
                 ...(category === "groups" ? { groupId: String(options.groupId || "") } : {})
               },
-              android: { priority: "HIGH", notification: { channel_id: category === "groups" ? "barq_groups" : "barq_messages" } }
+              android: { priority: "HIGH", notification: { channel_id: category === "groups" ? "barq_groups" : category === "statuses" ? "barq_statuses" : "barq_messages" } }
             }
           })
         }
@@ -1033,6 +1036,19 @@ export default {
           `INSERT INTO status_posts (id, user_id, content, expires_at)
            VALUES (?, ?, ?, datetime('now', '+24 hours'))`
         ).bind(id, currentUser.sub, content).run();
+
+        // Status persistence is authoritative; push failures must not undo it.
+        try {
+          const recipients = await env.DB.prepare(
+            "SELECT friend_id FROM friendships WHERE user_id = ?"
+          ).bind(currentUser.sub).all();
+          await Promise.all((recipients.results || []).map(item =>
+            sendSirajPush(env, item.friend_id, currentUser.sub,
+              currentUser.username, "شارك حالة جديدة", { category: "statuses" })
+          ));
+        } catch (notificationError) {
+          console.error("Status notification dispatch failed:", notificationError);
+        }
 
         return json({
           status: { id, content, createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 86400000).toISOString() }
