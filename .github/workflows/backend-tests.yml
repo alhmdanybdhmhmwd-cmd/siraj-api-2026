@@ -17,5 +17,7 @@ jobs:
           node-version: 22
       - name: Run backend authentication tests
         run: npm test
+      - name: Test D1 migration SQL with SQLite
+        run: python3 test/migrations.test.py
       - name: Check Worker JavaScript syntax
         run: node --check src/src/index.js
