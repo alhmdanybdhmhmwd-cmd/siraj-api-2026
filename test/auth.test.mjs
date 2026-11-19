@@ -1065,6 +1065,42 @@ test("each uploaded attachment receives its own 72-hour expiration timestamp", a
   }
 });
 
+
+test("expired attachment is denied and deleted before any media bytes are downloaded", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  const methods = [];
+  globalThis.__fakeTigrisHandler = async (_url, options) => {
+    methods.push(options.method);
+    if (options.method === "HEAD") {
+      return new Response(null, {
+        status: 200,
+        headers: {
+          "x-amz-meta-ownerid": user.id,
+          "x-amz-meta-expiresat": "2020-01-01T00:00:00.000Z"
+        }
+      });
+    }
+    return new Response(null, { status: 204 });
+  };
+  try {
+    const response = await worker.default.fetch(new Request(
+      "https://api.example.test/api/media/user-1/old-video",
+      { headers: { Authorization: "Bearer " + token } }
+    ), {
+      DB: db,
+      JWT_SECRET: secret,
+      TIGRIS_ACCESS_KEY_ID: "test-access",
+      TIGRIS_SECRET_ACCESS_KEY: "test-secret"
+    });
+    assert.equal(response.status, 410);
+    assert.deepEqual(await response.json(), { error: "Attachment has expired" });
+    assert.deepEqual(methods, ["HEAD", "DELETE"]);
+  } finally {
+    delete globalThis.__fakeTigrisHandler;
+  }
+});
+
 test("media expiration cleanup deletes only objects whose individual 72-hour deadline passed", async () => {
   const cutoff = Date.parse("2026-11-22T12:00:00.000Z");
   const rows = [
