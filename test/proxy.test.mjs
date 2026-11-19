@@ -62,3 +62,37 @@ test("media proxy rejects streamed bodies over 60 MB when Content-Length is abse
     globalThis.fetch = originalFetch;
   }
 });
+
+test("proxy forwards authenticated DELETE requests for device token revocation", async () => {
+  const originalFetch = globalThis.fetch;
+  let forwarded = null;
+  globalThis.fetch = async (url, options) => {
+    forwarded = { url, method: options.method, headers: options.headers, body: options.body };
+    return new Response(JSON.stringify({ message: "Device token unregistered", removed: 1 }), {
+      status: 200, headers: { "content-type": "application/json" }
+    });
+  };
+  try {
+    const res = makeResponse();
+    const req = makeRequest({
+      url: "/api/devices/token",
+      method: "DELETE",
+      headers: {
+        authorization: "Bearer test-token",
+        "content-type": "application/json"
+      },
+      chunks: [Buffer.from(JSON.stringify({ fcmToken: "device-token" }))]
+    });
+    await handler(req, res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(forwarded.method, "DELETE");
+    assert.equal(forwarded.headers.Authorization, "Bearer test-token");
+    assert.equal(forwarded.body.toString(), JSON.stringify({ fcmToken: "device-token" }));
+    assert.match(res.headers["Access-Control-Allow-Methods"], /DELETE/);
+    assert.deepEqual(JSON.parse(res.body.toString()), {
+      message: "Device token unregistered", removed: 1
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
