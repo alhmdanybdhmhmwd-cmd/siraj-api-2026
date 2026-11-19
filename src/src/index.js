@@ -814,12 +814,18 @@ export default {
         for (let offset = 0; offset < variants.length; offset += 80) {
           const chunk = variants.slice(offset, offset + 80);
           const placeholders = chunk.map(() => "?").join(", ");
+          const normalizedPhone = "replace(replace(replace(replace(replace(phone, ' ', ''), '+', ''), '-', ''), '(', ''), ')', '')";
+          const suffixes = chunk.map(value => value.slice(-9)).filter(value => value.length === 9);
+          const suffixPlaceholders = suffixes.map(() => "?").join(", ");
           const result = await env.DB.prepare(
             `SELECT id, username, display_name, phone
              FROM users
-             WHERE id != ? AND phone IN (${placeholders})
+             WHERE id != ? AND (
+               ${normalizedPhone} IN (${placeholders})
+               OR substr(${normalizedPhone}, -9) IN (${suffixPlaceholders || "''"})
+             )
                AND COALESCE((SELECT searchable FROM user_privacy WHERE user_id = users.id), 1) = 1`
-          ).bind(currentUser.sub, ...chunk).all();
+          ).bind(currentUser.sub, ...chunk, ...suffixes).all();
           for (const candidate of result.results || []) {
             if (phoneVariants(candidate.phone).some(phone => requested.has(phone))) {
               matchedById.set(candidate.id, candidate);
