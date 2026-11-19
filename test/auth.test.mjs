@@ -11,7 +11,7 @@ class AwsClient {
   }
 }
 `);
-workerSource += "\nexport { signToken, verifyToken, authenticate, hashPassword };";
+workerSource += "\nexport { signToken, verifyToken, authenticate, hashPassword, sendSirajPush };";
 const worker = await import("data:text/javascript;base64," + Buffer.from(workerSource).toString("base64"));
 
 const secret = "unit-test-secret-that-is-long-enough";
@@ -54,6 +54,10 @@ class FakeDB {
         }
         if (sql.includes("SELECT messages, groups, statuses FROM notification_preferences")) {
           return db.notificationSettings ? { ...db.notificationSettings } : null;
+        }
+        if (sql.includes("AS enabled FROM notification_preferences")) {
+          const category = sql.match(/SELECT (\\w+) AS enabled/)[1];
+          return db.notificationSettings ? { enabled: db.notificationSettings[category] } : null;
         }
         if (sql.includes("COALESCE((SELECT searchable FROM user_privacy")) {
           return db.targetUser ? { id: db.targetUser.id, searchable: db.targetUser.searchable ? 1 : 0 } : null;
@@ -109,6 +113,9 @@ class FakeDB {
         }
         if (sql.includes("FROM friendships f") && sql.includes("JOIN users u")) {
           return { results: db.friendList || [] };
+        }
+        if (sql.includes("SELECT fcm_token FROM device_tokens")) {
+          return { results: db.deviceTokenRows || [] };
         }
         if (sql.includes("FROM messages") && sql.includes("ORDER BY created_at DESC")) {
           db.lastMessageQuery = sql;
@@ -1129,6 +1136,44 @@ test("BARQ does not create or expose friend requests; direct contacts remain sep
   }), env);
   assert.equal(list.status, 200);
   assert.deepEqual(await list.json(), { incoming: [], outgoing: [] });
+});
+
+test("status pushes honor the statuses preference and use the status notification channel", async () => {
+  const db = new FakeDB();
+  db.notificationSettings = { messages: 0, groups: 0, statuses: 1 };
+  db.deviceTokenRows = [{ fcm_token: "device-token" }];
+  const pair = await crypto.subtle.generateKey({
+    name: "RSASSA-PKCS1-v1_5", modulusLength: 2048,
+    publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256"
+  }, true, ["sign", "verify"]);
+  const privateKey = Buffer.from(await crypto.subtle.exportKey("pkcs8", pair.privateKey)).toString("base64");
+  const account = {
+    client_email: "barq-test@example.test",
+    project_id: "barq-test",
+    token_uri: "https://oauth2.example.test/token",
+    private_key: "-----BEGIN PRIVATE KEY-----\\n" + privateKey + "\\n-----END PRIVATE KEY-----"
+  };
+  const originalFetch = globalThis.fetch;
+  let sentMessage = null;
+  globalThis.fetch = async (url, options = {}) => {
+    if (String(url).includes("oauth2.example.test")) {
+      return new Response(JSON.stringify({ access_token: "test-access-token" }), { status: 200 });
+    }
+    sentMessage = JSON.parse(options.body);
+    return new Response(JSON.stringify({ name: "projects/barq-test/messages/1" }), { status: 200 });
+  };
+  try {
+    await worker.sendSirajPush({
+      DB: db,
+      FCM_SERVICE_ACCOUNT_JSON: JSON.stringify(account)
+    }, "recipient-1", user.id, "Tester", "unused preview", { category: "statuses" });
+    assert.equal(sentMessage.message.data.type, "status_update");
+    assert.equal(sentMessage.message.notification.title, "حالة جديدة من Tester");
+    assert.equal(sentMessage.message.android.notification.channel_id, "barq_statuses");
+    assert.equal(sentMessage.message.notification.body, "شارك حالة جديدة");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("device tokens can be registered and revoked for the authenticated account", async () => {
