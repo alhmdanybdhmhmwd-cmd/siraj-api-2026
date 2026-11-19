@@ -246,6 +246,37 @@ async function sendSirajPush(env, recipientId, senderId, senderName, messageText
   }
 }
 
+
+async function ensureRecoveryTable(env) {
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS account_recovery (
+      user_id TEXT PRIMARY KEY,
+      recovery_hash TEXT NOT NULL,
+      recovery_salt TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `).run();
+}
+
+async function issueRecoveryCode(env, userId) {
+  await ensureRecoveryTable(env);
+  const code = Array.from(crypto.getRandomValues(new Uint8Array(10)))
+    .map(byte => byte.toString(16).padStart(2, "0"))
+    .join("").toUpperCase();
+  const salt = base64url(crypto.getRandomValues(new Uint8Array(16)));
+  const recoveryHash = await hashPassword(code, salt);
+  await env.DB.prepare(
+    `INSERT INTO account_recovery (user_id, recovery_hash, recovery_salt)
+     VALUES (?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET
+       recovery_hash = excluded.recovery_hash,
+       recovery_salt = excluded.recovery_salt,
+       created_at = CURRENT_TIMESTAMP`
+  ).bind(userId, recoveryHash, salt).run();
+  return code;
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") {
@@ -328,11 +359,45 @@ export default {
         };
 
         const token = await signToken(user, env.JWT_SECRET);
+        const recoveryCode = await issueRecoveryCode(env, id);
 
         return json({
           user: cleanUser(user),
-          token
+          token,
+          recoveryCode
         }, 201);
+      }
+
+
+      // Recover an account with its one-time recovery code (no SMS/email dependency).
+      if (method === "POST" && path === "/api/password/recover") {
+        const body = await request.json();
+        const identifier = String(body.identifier || "").trim();
+        const recoveryCode = String(body.recoveryCode || "")
+          .replace(/[\\s-]/g, "").toUpperCase();
+        const newPassword = String(body.newPassword || "");
+        if (!identifier || !recoveryCode || newPassword.length < 8 || newPassword.length > 128) {
+          return json({ error: "بيانات الاسترداد غير صحيحة أو كلمة المرور قصيرة" }, 400);
+        }
+        await ensureRecoveryTable(env);
+        const user = await env.DB.prepare(
+          "SELECT * FROM users WHERE username = ? OR phone = ? LIMIT 1"
+        ).bind(identifier.toLowerCase(), identifier).first();
+        if (!user) return json({ error: "رمز الاسترداد أو بيانات الحساب غير صحيحة" }, 400);
+        const saved = await env.DB.prepare(
+          "SELECT recovery_hash, recovery_salt FROM account_recovery WHERE user_id = ?"
+        ).bind(user.id).first();
+        if (!saved || await hashPassword(recoveryCode, saved.recovery_salt) !== saved.recovery_hash) {
+          return json({ error: "رمز الاسترداد غير صحيح أو سبق استخدامه" }, 400);
+        }
+        const salt = base64url(crypto.getRandomValues(new Uint8Array(16)));
+        const passwordHash = await hashPassword(newPassword, salt);
+        await env.DB.batch([
+          env.DB.prepare("UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?")
+            .bind(passwordHash, salt, user.id),
+          env.DB.prepare("DELETE FROM account_recovery WHERE user_id = ?").bind(user.id)
+        ]);
+        return json({ message: "تم تحديث كلمة المرور. سجّل الدخول بكلمة المرور الجديدة." });
       }
 
       // Login
@@ -369,6 +434,21 @@ export default {
       if (!currentUser) {
         return json({ error: "Unauthorized" }, 401);
       }
+
+      // Rotate the one-time recovery code after verifying the current password.
+      if (method === "POST" && path === "/api/recovery-code") {
+        const body = await request.json();
+        const password = String(body.password || "");
+        const user = await env.DB.prepare(
+          "SELECT * FROM users WHERE id = ?"
+        ).bind(currentUser.sub).first();
+        if (!user || await hashPassword(password, user.password_salt) !== user.password_hash) {
+          return json({ error: "كلمة المرور الحالية غير صحيحة" }, 401);
+        }
+        const recoveryCode = await issueRecoveryCode(env, user.id);
+        return json({ recoveryCode });
+      }
+
       // Update current user's editable profile fields
       if (method === "POST" && path === "/api/profile") {
         const body = await request.json();
