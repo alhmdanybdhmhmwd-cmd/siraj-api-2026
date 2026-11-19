@@ -1146,7 +1146,7 @@ test("registration rate limit blocks mass account creation from one client", asy
   for (let i = 0; i < 5; i++) {
     assert.equal((await register("newuser" + i)).status, 201);
   }
-  const blocked = await register("newuser-final");
-  assert.equal(blocked.status, 429, await blocked.clone().text());
+  const blocked = await register("newuserfinal");
+  assert.equal(blocked.status, 429);
   assert.equal(blocked.headers.get("Retry-After"), "900");
 });
