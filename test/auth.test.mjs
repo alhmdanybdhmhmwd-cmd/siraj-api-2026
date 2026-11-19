@@ -280,6 +280,42 @@ test("group messages are accepted only from members and persisted", async () => 
   assert.equal(outsider.groupMessages.length, 0);
 });
 
+class FakePrivateHistoryDB extends FakeDB {
+  constructor() {
+    super();
+    this.privateHistoryQuery = "";
+  }
+  prepare(sql) {
+    const statement = super.prepare(sql);
+    const originalFirst = statement.first.bind(statement);
+    const originalAll = statement.all.bind(statement);
+    statement.first = async () => {
+      if (sql.includes("SELECT 1 FROM friendships")) return { ok: 1 };
+      if (sql.includes("SELECT read_receipts FROM user_privacy")) return { read_receipts: 0 };
+      return originalFirst();
+    };
+    statement.all = async () => {
+      if (sql.includes("FROM (") && sql.includes("receiver_id")) {
+        this.privateHistoryQuery = sql;
+        return { results: [] };
+      }
+      return originalAll();
+    };
+    return statement;
+  }
+}
+
+test("private history fetches the newest 100 messages in chronological order", async () => {
+  const db = new FakePrivateHistoryDB();
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/messages?with=friend-2", {
+    headers: { Authorization: "Bearer " + token }
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 200);
+  assert.match(db.privateHistoryQuery, /ORDER BY created_at DESC, id DESC\s+LIMIT 100/i);
+  assert.match(db.privateHistoryQuery, /ORDER BY created_at ASC, id ASC/i);
+});
+
 test("group history fetches the newest 100 messages in chronological order", async () => {
   const db = new FakeGroupDB(true);
   const token = await worker.signToken(user, secret, 0);
