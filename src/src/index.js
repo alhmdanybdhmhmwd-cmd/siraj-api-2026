@@ -823,22 +823,44 @@ export default {
           return json({ users: [] });
         }
 
-        const users = await env.DB.prepare(
+        const byId = new Map();
+        const usernameMatches = await env.DB.prepare(
           `SELECT id, username, display_name, phone
            FROM users
            WHERE id != ?
-           AND (username LIKE ? OR phone LIKE ?)
-           AND COALESCE((SELECT searchable FROM user_privacy WHERE user_id = users.id), 1) = 1
+             AND username LIKE ?
+             AND COALESCE((SELECT searchable FROM user_privacy WHERE user_id = users.id), 1) = 1
            LIMIT 30`
-        ).bind(
-          currentUser.sub,
-          "%" + q + "%",
-          "%" + q + "%"
-        ).all();
+        ).bind(currentUser.sub, "%" + q + "%").all();
+        for (const candidate of usernameMatches.results || []) byId.set(candidate.id, candidate);
 
-        return json({
-          users: (users.results || []).map(cleanUser)
-        });
+        // Phone lookup uses normalized digits so a Yemen local number can find
+        // the same account saved with +967 / 00967, including Arabic/Persian digits.
+        const normalizedQuery = q.replace(/[٠-٩۰-۹]/g, digit => {
+          const code = digit.charCodeAt(0);
+          return String(code >= 0x06f0 ? code - 0x06f0 : code - 0x0660);
+        }).replace(/\\D/g, "");
+        if (normalizedQuery.length >= 2) {
+          const variants = phoneVariants(q);
+          const suffixes = [...new Set(variants.filter(value => value.length >= 9).map(value => value.slice(-9)))];
+          const exactClause = variants.length ? ` OR ${normalizedPhoneSql("phone")} IN (${variants.map(() => "?").join(", ")})` : "";
+          const suffixClause = suffixes.length ? ` OR substr(${normalizedPhoneSql("phone")}, -9) IN (${suffixes.map(() => "?").join(", ")})` : "";
+          const phoneMatches = await env.DB.prepare(
+            `SELECT id, username, display_name, phone
+             FROM users
+             WHERE id != ?
+               AND (${normalizedPhoneSql("phone")} LIKE ?${exactClause}${suffixClause})
+               AND COALESCE((SELECT searchable FROM user_privacy WHERE user_id = users.id), 1) = 1
+             LIMIT 100`
+          ).bind(currentUser.sub, "%" + normalizedQuery + "%", ...variants, ...suffixes).all();
+          for (const candidate of phoneMatches.results || []) {
+            if (phoneVariants(candidate.phone).some(value =>
+              variants.includes(value) || candidate.phone.replace(/\\D/g, "").includes(normalizedQuery)
+            )) byId.set(candidate.id, candidate);
+          }
+        }
+
+        return json({ users: [...byId.values()].slice(0, 30).map(cleanUser) });
       }
 
 
