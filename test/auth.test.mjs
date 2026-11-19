@@ -89,6 +89,22 @@ test("JWTs are rejected after the account session version is incremented", async
   assert.equal(await worker.authenticate(request, { DB: db, JWT_SECRET: secret }), null);
 });
 
+test("authentication rejects tokens when the account security row is missing", async () => {
+  const token = await worker.signToken(user, secret, 0);
+  const missingSecurityDB = {
+    prepare() {
+      return { bind() { return this; }, async first() { return null; } };
+    }
+  };
+  const request = new Request("https://api.example.test/private", {
+    headers: { Authorization: "Bearer " + token }
+  });
+  assert.equal(await worker.authenticate(request, {
+    DB: missingSecurityDB,
+    JWT_SECRET: secret
+  }), null);
+});
+
 test("authentication fails closed when session security storage is unavailable", async () => {
   const token = await worker.signToken(user, secret, 0);
   const brokenDB = {
