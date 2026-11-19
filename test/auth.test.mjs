@@ -36,6 +36,8 @@ class FakeDB {
     this.privacySettings = null;
     this.notificationSettings = null;
     this.ephemeralMessages = [];
+    this.referralCodes = new Map();
+    this.referrals = [];
   }
 
   prepare(sql) {
@@ -45,6 +47,19 @@ class FakeDB {
       params: [],
       bind(...params) { this.params = params; return this; },
       async first() {
+        if (sql.includes("SELECT user_id FROM referral_codes WHERE code = ?")) {
+          const userId = db.referralCodes.get(this.params[0]);
+          return userId ? { user_id: userId } : null;
+        }
+        if (sql.includes("SELECT code FROM referral_codes WHERE user_id = ?")) {
+          for (const [code, userId] of db.referralCodes.entries()) {
+            if (userId === this.params[0]) return { code };
+          }
+          return null;
+        }
+        if (sql.includes("SELECT COUNT(*) AS referral_count FROM referrals")) {
+          return { referral_count: db.referrals.filter(item => item.referrer_user_id === this.params[0]).length };
+        }
         if (sql.includes("SELECT session_version FROM account_security")) {
           return { session_version: db.sessionVersion };
         }
@@ -156,6 +171,19 @@ class FakeDB {
           }
           return { meta: { changes: 0 } };
         }
+        if (sql.includes("INSERT OR IGNORE INTO referral_codes")) {
+          const [userId, code] = this.params;
+          if (![...db.referralCodes.values()].includes(userId) && !db.referralCodes.has(code)) {
+            db.referralCodes.set(code, userId);
+          }
+        }
+        if (sql.includes("INSERT OR IGNORE INTO referrals")) {
+          const [referredUserId, referrerUserId] = this.params;
+          if (referredUserId !== referrerUserId &&
+              !db.referrals.some(item => item.referred_user_id === referredUserId)) {
+            db.referrals.push({ referred_user_id: referredUserId, referrer_user_id: referrerUserId });
+          }
+        }
         if (sql.includes("INSERT INTO ephemeral_messages")) {
           const [id, senderId, receiverId, body, createdAt, expiresAt] = this.params;
           db.ephemeralMessages.push({
@@ -240,6 +268,7 @@ class FakeDB {
       );
       if (conflict) return [{ meta: { changes: 0 } }, { meta: { changes: 0 } }];
       const recoveryParams = statements[1].params;
+      const referralCodeParams = statements[2]?.params || [];
       this.user = {
         id: userParams[0], username: userParams[1], display_name: userParams[2],
         password_hash: userParams[3], password_salt: userParams[4], phone: userParams[5]
@@ -249,7 +278,20 @@ class FakeDB {
         code_hash: recoveryParams[1], code_salt: recoveryParams[2],
         expires_at: recoveryParams[3], consumed_at: null
       };
-      return [{ meta: { changes: 1 } }, { meta: { changes: 1 } }];
+      if (referralCodeParams.length >= 4) {
+        this.referralCodes.set(referralCodeParams[1], referralCodeParams[0]);
+      }
+      const results = [
+        { meta: { changes: 1 } },
+        { meta: { changes: 1 } },
+        { meta: { changes: 1 } }
+      ];
+      if (statements[3]) {
+        const [referredUserId, referrerUserId] = statements[3].params;
+        this.referrals.push({ referred_user_id: referredUserId, referrer_user_id: referrerUserId });
+        results.push({ meta: { changes: 1 } });
+      }
+      return results;
     }
     const [updatePassword, consumeCode, incrementVersion] = statements;
     const [newHash, newSalt, userId, recoveryUserId, expectedHash, now] = updatePassword.params;
@@ -266,6 +308,44 @@ class FakeDB {
   }
 }
 
+
+test("registration attributes a new account to one valid referral code", async () => {
+  const db = new FakeDB();
+  db.users.push({ id: "referrer-1", username: "referrer", phone: null });
+  db.referralCodes.set("ABC123", "referrer-1");
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      displayName: "Invited User",
+      username: "invited_user",
+      password: "new-secure-password",
+      inviteCode: "abc123"
+    })
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 201);
+  assert.equal(db.referrals.length, 1);
+  assert.equal(db.referrals[0].referrer_user_id, "referrer-1");
+  assert.ok([...db.referralCodes.values()].includes("invited_user") === false);
+});
+
+test("referral dashboard creates a code and unlocks the badge at five new registrations", async () => {
+  const db = new FakeDB();
+  db.referrals = Array.from({ length: 5 }, (_, index) => ({
+    referred_user_id: "invitee-" + index,
+    referrer_user_id: user.id
+  }));
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/referrals", {
+    headers: { Authorization: "Bearer " + token }
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.match(data.inviteCode, /^[A-F0-9]{12}$/);
+  assert.equal(data.referralCount, 5);
+  assert.equal(data.badgeUnlocked, true);
+  assert.equal(data.badgeTitle, "صاعقة");
+});
 
 test("voice transcription accepts authenticated audio and returns the Workers AI transcript", async () => {
   const db = new FakeDB();
