@@ -3,7 +3,7 @@ import { AwsClient } from "aws4fetch";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-File-Name, X-Recipient-Id, X-Group-Id",
   "Content-Type": "application/json; charset=utf-8"
 };
@@ -950,8 +950,8 @@ export default {
         }});
       }
 
-      // Register Firebase device token
-      if (method === "POST" && path === "/api/devices/token") {
+      // Register or revoke this account's Firebase device token.
+      if ((method === "POST" || method === "DELETE") && path === "/api/devices/token") {
         await env.DB.prepare(`
           CREATE TABLE IF NOT EXISTS device_tokens (
             user_id TEXT NOT NULL,
@@ -965,6 +965,13 @@ export default {
 
         if (!fcmToken || fcmToken.length > 4096) {
           return json({ error: "Invalid device token" }, 400);
+        }
+
+        if (method === "DELETE") {
+          const result = await env.DB.prepare(
+            "DELETE FROM device_tokens WHERE user_id = ? AND fcm_token = ?"
+          ).bind(currentUser.sub, fcmToken).run();
+          return json({ message: "Device token unregistered", removed: Number(result?.meta?.changes || 0) });
         }
 
         await env.DB.prepare(
