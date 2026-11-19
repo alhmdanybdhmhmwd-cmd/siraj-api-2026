@@ -11,6 +11,8 @@ def execute_selects(connection, source):
     statement = ""
     results = []
     for line in source.splitlines():
+        if line.lstrip().startswith("--"):
+            continue
         statement += line + "\n"
         if sqlite3.complete_statement(statement):
             candidate = statement.strip()
