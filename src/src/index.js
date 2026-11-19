@@ -796,8 +796,14 @@ export default {
         `).run();
         if (method === "POST") {
           const body = await request.json();
-          const searchable = body.searchable === false ? 0 : 1;
-          const readReceipts = body.readReceipts === false ? 0 : 1;
+          const existing = await env.DB.prepare(
+            "SELECT searchable, read_receipts FROM user_privacy WHERE user_id = ?"
+          ).bind(currentUser.sub).first();
+          // Partial updates must never silently turn a disabled privacy option back on.
+          const searchable = typeof body.searchable === "boolean"
+            ? Number(body.searchable) : Number(existing?.searchable ?? 1);
+          const readReceipts = typeof body.readReceipts === "boolean"
+            ? Number(body.readReceipts) : Number(existing?.read_receipts ?? 1);
           await env.DB.prepare(`
             INSERT INTO user_privacy (user_id, searchable, read_receipts)
             VALUES (?, ?, ?)
