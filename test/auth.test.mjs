@@ -1016,3 +1016,51 @@ test("oversized media Content-Length is rejected before Tigris upload", async ()
     delete globalThis.__fakeTigrisHandler;
   }
 });
+
+
+class GroupInvitePermissionDB extends FakeDB {
+  constructor(ownerId) {
+    super();
+    this.ownerId = ownerId;
+    this.insertedMembers = 0;
+  }
+  prepare(sql) {
+    const statement = super.prepare(sql);
+    const first = statement.first.bind(statement);
+    const run = statement.run.bind(statement);
+    statement.first = async () => {
+      if (sql.includes("SELECT owner_id FROM chat_groups WHERE id = ?")) {
+        return this.ownerId ? { owner_id: this.ownerId } : null;
+      }
+      if (sql.includes("SELECT id FROM users WHERE id = ?")) return { id: "new-member" };
+      return first();
+    };
+    statement.run = async () => {
+      if (sql.includes("INSERT OR IGNORE INTO group_members")) this.insertedMembers++;
+      return run();
+    };
+    return statement;
+  }
+}
+
+test("only the group owner can add members", async () => {
+  const token = await worker.signToken(user, secret, 0);
+  const request = () => new Request("https://api.example.test/api/groups/group-1/members", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ userId: "new-member" })
+  });
+
+  const nonOwnerDb = new GroupInvitePermissionDB("another-owner");
+  const denied = await worker.default.fetch(request(), { DB: nonOwnerDb, JWT_SECRET: secret });
+  assert.equal(denied.status, 403);
+  assert.equal(nonOwnerDb.insertedMembers, 0);
+
+  const ownerDb = new GroupInvitePermissionDB(user.id);
+  const allowed = await worker.default.fetch(request(), { DB: ownerDb, JWT_SECRET: secret });
+  assert.equal(allowed.status, 201);
+  assert.equal(ownerDb.insertedMembers, 1);
+});
