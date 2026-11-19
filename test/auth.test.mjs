@@ -470,6 +470,40 @@ test("ephemeral messages use a separate store and start a ten-second deletion wi
   }
 });
 
+test("ephemeral GET schedules physical D1 deletion after the ten-second read window", async () => {
+  const db = new FakeDB();
+  db.ephemeralMessages = [{
+    id: "delete-after-read", sender_id: "user-1", receiver_id: "friend-1",
+    body: "short-lived", created_at: 1, read_at: null, delete_at: null,
+    expires_at: Math.floor(Date.now() / 1000) + 3600
+  }];
+  const receiver = { ...user, id: "friend-1", username: "friend" };
+  const receiverToken = await worker.signToken(receiver, secret, 0);
+  let deletionTask;
+  const originalSetTimeout = globalThis.setTimeout;
+  try {
+    // Resolve the worker's ten-second wait immediately while still awaiting its waitUntil task.
+    globalThis.setTimeout = (callback) => { callback(); return 0; };
+    const response = await worker.default.fetch(new Request(
+      "https://api.example.test/api/ephemeral-messages?with=user-1",
+      { headers: { Authorization: "Bearer " + receiverToken } }
+    ), {
+      DB: db,
+      JWT_SECRET: secret
+    }, {
+      waitUntil(promise) { deletionTask = promise; }
+    });
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.equal(data.messages.length, 1);
+    assert.ok(deletionTask);
+    await deletionTask;
+    assert.equal(db.ephemeralMessages.length, 0);
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+  }
+});
+
 test("ephemeral cleanup deletes expired and read-expired rows while preserving unread rows", async () => {
   const db = new FakeDB();
   const now = 2_000_000_000_000;
