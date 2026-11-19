@@ -4,7 +4,13 @@ import { readFile } from "node:fs/promises";
 
 const workerPath = new URL("../src/src/index.js", import.meta.url);
 let workerSource = await readFile(workerPath, "utf8");
-workerSource = workerSource.replace('import { AwsClient } from "aws4fetch";', "");
+workerSource = workerSource.replace('import { AwsClient } from "aws4fetch";', `
+class AwsClient {
+  async fetch(url, options) {
+    return globalThis.__fakeTigrisHandler(url, options);
+  }
+}
+`);
 workerSource += "\nexport { signToken, verifyToken, authenticate, hashPassword };";
 const worker = await import("data:text/javascript;base64," + Buffer.from(workerSource).toString("base64"));
 
@@ -320,6 +326,38 @@ test("password recovery rate limits repeated attempts", async () => {
     status = response.status;
   }
   assert.equal(status, 429);
+});
+
+test("media download checks authorization before fetching object bytes", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  const calls = [];
+  globalThis.__fakeTigrisHandler = async (_url, options) => {
+    calls.push(options.method);
+    return new Response(null, {
+      status: 200,
+      headers: {
+        "content-type": "image/jpeg",
+        "x-amz-meta-ownerid": "another-user",
+        "x-amz-meta-recipientid": "someone-else",
+        "x-amz-meta-groupid": ""
+      }
+    });
+  };
+  try {
+    const response = await worker.default.fetch(new Request("https://api.example.test/api/media/another-user%2Ffile-1", {
+      headers: { Authorization: "Bearer " + token }
+    }), {
+      DB: db,
+      JWT_SECRET: secret,
+      TIGRIS_ACCESS_KEY_ID: "test-access",
+      TIGRIS_SECRET_ACCESS_KEY: "test-secret"
+    });
+    assert.equal(response.status, 403);
+    assert.deepEqual(calls, ["HEAD"]);
+  } finally {
+    delete globalThis.__fakeTigrisHandler;
+  }
 });
 
 test("media filenames are safely decoded and cannot contain path separators or control characters", () => {
