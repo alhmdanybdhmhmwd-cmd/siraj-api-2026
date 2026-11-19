@@ -1,0 +1,44 @@
+name: BARQ Cloudflare preflight (read-only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cloudflare-preflight:
+    name: Verify Cloudflare access without changing resources
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate required credentials are present
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.BARQ_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.BARQ_CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set +x
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error::Missing Actions secret BARQ_CLOUDFLARE_API_TOKEN"; exit 1; }
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "::error::Missing Actions variable BARQ_CLOUDFLARE_ACCOUNT_ID"; exit 1; }
+          echo "Required credentials are present (values are not printed)."
+
+      - name: Verify token identity
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.BARQ_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.BARQ_CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set +x
+          npx --yes wrangler@4 whoami
+
+      - name: List D1 databases (read-only)
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.BARQ_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.BARQ_CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set +x
+          npx --yes wrangler@4 d1 list --json
