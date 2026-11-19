@@ -553,7 +553,7 @@ export default {
       console.error("Media expiration cleanup failed:", error);
     }
   },
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders });
     }
@@ -816,6 +816,95 @@ export default {
 
       if (!currentUser) {
         return json({ error: "Unauthorized" }, 401);
+      }
+
+      // Ephemeral private messages: never write to the ordinary messages table or send FCM.
+      // A message is removed ten seconds after the recipient first reads it.
+      if (path === "/api/ephemeral-messages") {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS ephemeral_messages (
+            id TEXT PRIMARY KEY,
+            sender_id TEXT NOT NULL,
+            receiver_id TEXT NOT NULL,
+            body TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            read_at INTEGER,
+            delete_at INTEGER,
+            expires_at INTEGER NOT NULL,
+            FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        const now = Math.floor(Date.now() / 1000);
+        await env.DB.prepare(
+          "DELETE FROM ephemeral_messages WHERE expires_at <= ? OR (delete_at IS NOT NULL AND delete_at <= ?)"
+        ).bind(now, now).run();
+
+        if (method === "POST") {
+          const body = await request.json();
+          const receiverId = String(body.receiverId || "").trim();
+          const message = String(body.body || "").trim();
+          if (!receiverId || receiverId === currentUser.sub || !message || message.length > 5000) {
+            return json({ error: "Invalid temporary message" }, 400);
+          }
+          const friendship = await env.DB.prepare(
+            "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
+          ).bind(currentUser.sub, receiverId).first();
+          if (!friendship) return json({ error: "Contact not found" }, 403);
+          const id = crypto.randomUUID();
+          await env.DB.prepare(
+            "INSERT INTO ephemeral_messages (id, sender_id, receiver_id, body, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)"
+          ).bind(id, currentUser.sub, receiverId, message, now, now + 7 * 24 * 60 * 60).run();
+          // Deliberately no FCM notification and no write to messages.
+          return json({ message: "Temporary message sent", id, createdAt: now }, 201);
+        }
+
+        if (method === "GET") {
+          const friendId = String(url.searchParams.get("with") || "").trim();
+          if (!friendId || friendId === currentUser.sub) return json({ error: "Friend ID is required" }, 400);
+          const friendship = await env.DB.prepare(
+            "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
+          ).bind(currentUser.sub, friendId).first();
+          if (!friendship) return json({ error: "Contact not found" }, 403);
+          const result = await env.DB.prepare(
+            `SELECT id, sender_id, receiver_id, body, created_at, read_at, delete_at
+             FROM ephemeral_messages
+             WHERE ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))
+               AND expires_at > ?
+               AND (delete_at IS NULL OR delete_at > ?)
+             ORDER BY created_at ASC, id ASC`
+          ).bind(currentUser.sub, friendId, friendId, currentUser.sub, now, now).all();
+          const rows = result.results || [];
+          const incomingIds = rows.filter(item =>
+            item.sender_id === friendId && item.receiver_id === currentUser.sub && item.read_at == null
+          ).map(item => item.id);
+          if (incomingIds.length) {
+            const deleteAt = now + 10;
+            await env.DB.prepare(
+              `UPDATE ephemeral_messages SET read_at = ?, delete_at = ?
+               WHERE receiver_id = ? AND sender_id = ? AND read_at IS NULL
+                 AND id IN (${incomingIds.map(() => "?").join(", ")})`
+            ).bind(now, deleteAt, currentUser.sub, friendId, ...incomingIds).run();
+            for (const item of rows) {
+              if (incomingIds.includes(item.id)) {
+                item.read_at = now;
+                item.delete_at = deleteAt;
+              }
+            }
+            // Keep the response available to the reader, then delete from D1 after ten seconds.
+            ctx.waitUntil((async () => {
+              await new Promise(resolve => setTimeout(resolve, 10_100));
+              const deletionTime = Math.floor(Date.now() / 1000);
+              await env.DB.prepare(
+                `DELETE FROM ephemeral_messages
+                 WHERE receiver_id = ? AND sender_id = ? AND delete_at IS NOT NULL AND delete_at <= ?
+                   AND id IN (${incomingIds.map(() => "?").join(", ")})`
+              ).bind(currentUser.sub, friendId, deletionTime, ...incomingIds).run();
+            })());
+          }
+          return json({ messages: rows });
+        }
+        return json({ error: "Method not allowed" }, 405);
       }
 
       // Rotate the one-time recovery code after verifying the current password.
