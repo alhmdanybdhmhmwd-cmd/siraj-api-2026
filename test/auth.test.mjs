@@ -340,6 +340,45 @@ class FakePrivateHistoryDB extends FakeDB {
   }
 }
 
+class FakeReadReceiptDB extends FakeDB {
+  constructor(readReceipts) {
+    super();
+    this.readReceipts = readReceipts;
+    this.readUpdates = 0;
+  }
+  prepare(sql) {
+    const statement = super.prepare(sql);
+    const first = statement.first.bind(statement);
+    const run = statement.run.bind(statement);
+    const all = statement.all.bind(statement);
+    statement.first = async () => {
+      if (sql.includes("SELECT 1 FROM friendships")) return { ok: 1 };
+      if (sql.includes("SELECT read_receipts FROM user_privacy")) return { read_receipts: this.readReceipts ? 1 : 0 };
+      return first();
+    };
+    statement.run = async () => {
+      if (sql.includes("UPDATE messages") && sql.includes("SET read_at")) this.readUpdates++;
+      return run();
+    };
+    statement.all = async () => sql.includes("FROM (") && sql.includes("receiver_id")
+      ? { results: [] } : all();
+    return statement;
+  }
+}
+
+test("private read receipts respect the reader's privacy preference", async () => {
+  for (const enabled of [false, true]) {
+    const db = new FakeReadReceiptDB(enabled);
+    const token = await worker.signToken(user, secret, 0);
+    const response = await worker.default.fetch(new Request(
+      "https://api.example.test/api/messages?with=friend-1",
+      { headers: { Authorization: "Bearer " + token } }
+    ), { DB: db, JWT_SECRET: secret });
+    assert.equal(response.status, 200);
+    assert.equal(db.readUpdates, enabled ? 1 : 0);
+  }
+});
+
 test("private history fetches the newest 100 messages in chronological order", async () => {
   const db = new FakePrivateHistoryDB();
   const token = await worker.signToken(user, secret, 0);
