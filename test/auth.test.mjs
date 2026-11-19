@@ -45,6 +45,14 @@ class FakeDB {
           return db.existingPhone && db.existingPhone.phone === this.params[0] &&
             db.existingPhone.id !== this.params[1] ? { id: db.existingPhone.id } : null;
         }
+        if (sql.includes("SELECT * FROM users") && sql.includes("username = ? OR phone = ?")) {
+          const identifier = String(this.params[0]).toLowerCase();
+          const phoneCandidates = this.params.slice(2).map(String);
+          const storedDigits = String(db.user.phone).replace(/\\D/g, "");
+          return identifier === db.user.username || identifier === db.user.phone ||
+            phoneCandidates.some(value => value === storedDigits || value === storedDigits.slice(-9))
+            ? { ...db.user } : null;
+        }
         if (sql.includes("SELECT id FROM users WHERE username = ? OR phone = ?")) {
           const identifier = String(this.params[0]).toLowerCase();
           const phoneCandidates = this.params.slice(2).map(String);
@@ -231,6 +239,20 @@ test("concurrent registrations cannot claim equivalent Yemen local and internati
   assert.equal(db.users.length, 1);
 });
  
+test("login accepts a Yemen local phone when the account is stored internationally", async () => {
+  const db = new FakeDB();
+  db.user.password_hash = await worker.hashPassword("correct-password", db.user.password_salt);
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "0700000001", password: "correct-password" })
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.user.id, db.user.id);
+  assert.ok(data.token);
+});
+
 test("recovery-code rotation requires the current password and replaces the previous code", async () => {
   const db = new FakeDB();
   db.user.password_hash = await worker.hashPassword("correct-password", db.user.password_salt);
