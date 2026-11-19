@@ -1363,8 +1363,14 @@ export default {
         const contentType = (request.headers.get("Content-Type") || "application/octet-stream").split(";")[0].toLowerCase();
         const allowedTypes = /^(image\/(jpeg|png|webp|gif)|video\/(mp4|webm|quicktime)|audio\/(mpeg|mp4|aac|wav|ogg|webm)|application\/(octet-stream|pdf|zip|msword|vnd\.ms-excel|vnd\.ms-powerpoint|vnd\.openxmlformats-officedocument\.[a-z0-9.]+)|text\/plain)$/;
         if (!allowedTypes.test(contentType)) return json({ error: "Unsupported media type" }, 415);
+        const maxMediaBytes = 20 * 1024 * 1024;
+        const declaredLength = Number(request.headers.get("Content-Length"));
+        // Reject oversized uploads before buffering their body in Worker memory.
+        if (Number.isFinite(declaredLength) && declaredLength > maxMediaBytes) {
+          return json({ error: "File must be between 1 byte and 20 MB" }, 413);
+        }
         const bytes = await request.arrayBuffer();
-        if (!bytes.byteLength || bytes.byteLength > 20 * 1024 * 1024) {
+        if (!bytes.byteLength || bytes.byteLength > maxMediaBytes) {
           return json({ error: "File must be between 1 byte and 20 MB" }, 413);
         }
         const suppliedName = safeFileName(request.headers.get("X-File-Name") || "attachment");
