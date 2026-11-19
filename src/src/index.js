@@ -807,17 +807,26 @@ export default {
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
           )
         `).run();
-        const candidates = await env.DB.prepare(
-          `SELECT id, username, display_name, phone
-           FROM users
-           WHERE id != ? AND phone IS NOT NULL
-             AND COALESCE((SELECT searchable FROM user_privacy WHERE user_id = users.id), 1) = 1
-           LIMIT 10000`
-        ).bind(currentUser.sub).all();
-        const matched = (candidates.results || []).filter(user =>
-          phoneVariants(user.phone).some(phone => requested.has(phone))
-        );
-        return json({ users: matched.map(cleanUser) });
+        // Query only submitted phone variants in bounded batches. This avoids scanning
+        // the first 10,000 accounts and keeps matching reliable as the user base grows.
+        const variants = [...requested];
+        const matchedById = new Map();
+        for (let offset = 0; offset < variants.length; offset += 80) {
+          const chunk = variants.slice(offset, offset + 80);
+          const placeholders = chunk.map(() => "?").join(", ");
+          const result = await env.DB.prepare(
+            `SELECT id, username, display_name, phone
+             FROM users
+             WHERE id != ? AND phone IN (${placeholders})
+               AND COALESCE((SELECT searchable FROM user_privacy WHERE user_id = users.id), 1) = 1`
+          ).bind(currentUser.sub, ...chunk).all();
+          for (const candidate of result.results || []) {
+            if (phoneVariants(candidate.phone).some(phone => requested.has(phone))) {
+              matchedById.set(candidate.id, candidate);
+            }
+          }
+        }
+        return json({ users: [...matchedById.values()].map(cleanUser) });
       }
 
       // Add a contact directly (no friend-request workflow).
