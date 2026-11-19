@@ -162,7 +162,9 @@ async function authenticate(request, env) {
     const row = await env.DB.prepare(
       "SELECT session_version FROM account_security WHERE user_id = ?"
     ).bind(payload.sub).first();
-    if (row && Number(payload.sv || 0) !== Number(row.session_version || 0)) {
+    // A valid session must have an explicit revocation-version record.
+    // Missing security state is not equivalent to version zero.
+    if (!row || Number(payload.sv || 0) !== Number(row.session_version || 0)) {
       return null;
     }
   } catch (error) {
