@@ -360,6 +360,43 @@ test("media download checks authorization before fetching object bytes", async (
   }
 });
 
+test("authorized media download fetches bytes only after owner metadata is verified", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  const calls = [];
+  globalThis.__fakeTigrisHandler = async (_url, options) => {
+    calls.push(options.method);
+    if (options.method === "HEAD") {
+      return new Response(null, {
+        status: 200,
+        headers: {
+          "content-type": "image/jpeg",
+          "x-amz-meta-ownerid": user.id,
+          "x-amz-meta-filename": "photo%20one.jpg"
+        }
+      });
+    }
+    return new Response("image-bytes", { status: 200 });
+  };
+  try {
+    const response = await worker.default.fetch(new Request("https://api.example.test/api/media/user-1%2Ffile-1", {
+      headers: { Authorization: "Bearer " + token }
+    }), {
+      DB: db,
+      JWT_SECRET: secret,
+      TIGRIS_ACCESS_KEY_ID: "test-access",
+      TIGRIS_SECRET_ACCESS_KEY: "test-secret"
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(calls, ["HEAD", "GET"]);
+    assert.equal(response.headers.get("content-type"), "image/jpeg");
+    assert.match(response.headers.get("content-disposition"), /photo%20one\.jpg/);
+    assert.equal(await response.text(), "image-bytes");
+  } finally {
+    delete globalThis.__fakeTigrisHandler;
+  }
+});
+
 test("media filenames are safely decoded and cannot contain path separators or control characters", () => {
   assert.equal(worker.safeFileName("..%2F..%5Csecret%0Aname.jpg"), ".._.._secret_name.jpg");
   assert.equal(worker.safeFileName("%E0%A4%A"), "%E0%A4%A");
