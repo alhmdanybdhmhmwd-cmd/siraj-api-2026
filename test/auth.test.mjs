@@ -21,6 +21,7 @@ const user = {
 class FakeDB {
   constructor() {
     this.user = { ...user };
+    this.users = [this.user];
     this.recovery = null;
     this.sessionVersion = 0;
     this.recoveryAttempts = new Map();
@@ -96,12 +97,32 @@ class FakeDB {
 
   async batch(statements) {
     if (statements[0].sql.includes("INSERT INTO users")) {
+      // Model SQLite's atomic INSERT ... SELECT ... WHERE NOT EXISTS guard.
       const userParams = statements[0].params;
+      const phone = userParams[5];
+      const digits = value => String(value || "").replace(/[٠-٩۰-۹]/g, digit => {
+        const code = digit.charCodeAt(0);
+        return String(code >= 0x06f0 ? code - 0x06f0 : code - 0x0660);
+      }).replace(/\\D/g, "");
+      const variants = value => {
+        const raw = digits(value);
+        const set = new Set([raw]);
+        const international = raw.startsWith("00") ? raw.slice(2) : raw;
+        set.add(international);
+        if (international.startsWith("967") && international.length >= 10) set.add(international.slice(3));
+        if (international.startsWith("0") && international.length >= 8) set.add(international.slice(1));
+        return [...set].filter(item => item.length >= 7 && item.length <= 15);
+      };
+      const conflict = phone && this.users.some(existing =>
+        variants(existing.phone).some(value => variants(phone).includes(value))
+      );
+      if (conflict) return [{ meta: { changes: 0 } }, { meta: { changes: 0 } }];
       const recoveryParams = statements[1].params;
       this.user = {
         id: userParams[0], username: userParams[1], display_name: userParams[2],
         password_hash: userParams[3], password_salt: userParams[4], phone: userParams[5]
       };
+      this.users.push(this.user);
       this.recovery = {
         code_hash: recoveryParams[1], code_salt: recoveryParams[2],
         expires_at: recoveryParams[3], consumed_at: null
@@ -195,6 +216,21 @@ test("registration issues a one-time 160-bit recovery code and stores only its s
   assert.equal(db.recovery.expires_at > Math.floor(Date.now() / 1000), true);
 });
 
+test("concurrent registrations cannot claim equivalent Yemen local and international phone formats", async () => {
+  const db = new FakeDB();
+  db.users = [];
+  const register = (username, phone) => worker.default.fetch(new Request("https://api.example.test/api/register", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ displayName: username, username, password: "new-secure-password", phone })
+  }), { DB: db, JWT_SECRET: secret });
+  const responses = await Promise.all([
+    register("local_user", "0770000002"),
+    register("intl_user", "+967770000002")
+  ]);
+  assert.deepEqual(responses.map(response => response.status).sort(), [201, 409]);
+  assert.equal(db.users.length, 1);
+});
+ 
 test("recovery-code rotation requires the current password and replaces the previous code", async () => {
   const db = new FakeDB();
   db.user.password_hash = await worker.hashPassword("correct-password", db.user.password_salt);
