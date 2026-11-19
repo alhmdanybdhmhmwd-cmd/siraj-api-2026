@@ -1152,11 +1152,16 @@ export default {
         const groupId = groupMemberMatch[1];
         const body = await request.json();
         const userId = String(body.userId || "").trim();
-        const member = await env.DB.prepare(
-          "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
-        ).bind(groupId, currentUser.sub).first();
+        // Only the group owner may add members. Membership alone must not
+        // grant an account the ability to invite arbitrary users.
+        const group = await env.DB.prepare(
+          "SELECT owner_id FROM chat_groups WHERE id = ?"
+        ).bind(groupId).first();
+        if (!group) return json({ error: "Group not found" }, 404);
+        if (group.owner_id !== currentUser.sub) {
+          return json({ error: "Only the group owner can add members" }, 403);
+        }
         const target = await env.DB.prepare("SELECT id FROM users WHERE id = ?").bind(userId).first();
-        if (!member) return json({ error: "Group not found" }, 404);
         if (!target) return json({ error: "User not found" }, 404);
         await env.DB.prepare(
           "INSERT OR IGNORE INTO group_members (group_id, user_id) VALUES (?, ?)"
