@@ -979,6 +979,14 @@ test("malformed JSON request bodies return 400 instead of 500", async () => {
 
 test("oversized media Content-Length is rejected before Tigris upload", async () => {
   const db = new FakeDB();
+  const originalPrepare = db.prepare.bind(db);
+  db.prepare = sql => {
+    const statement = originalPrepare(sql);
+    const first = statement.first.bind(statement);
+    statement.first = async () => sql.includes("SELECT 1 FROM friendships")
+      ? { 1: 1 } : first();
+    return statement;
+  };
   const token = await worker.signToken(user, secret, 0);
   const calls = [];
   globalThis.__fakeTigrisHandler = async (_url, options) => {
