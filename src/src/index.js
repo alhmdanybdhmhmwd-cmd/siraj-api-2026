@@ -528,6 +528,16 @@ export default {
         if (phone && await phoneAlreadyInUse(env, phone)) {
           return json({ error: "Phone number is already registered" }, 409);
         }
+        // Limit automated account creation before the expensive password hash.
+        const registrationIp = request.headers.get("CF-Connecting-IP") || "unknown";
+        if (!(await consumeLoginAttempt(env, "register-client", registrationIp, 5))) {
+          return new Response(JSON.stringify({
+            error: "Too many registration attempts. Please try again in 15 minutes."
+          }), {
+            status: 429,
+            headers: { ...corsHeaders, "Retry-After": "900" }
+          });
+        }
 
         const id = crypto.randomUUID();
         const salt = base64url(
