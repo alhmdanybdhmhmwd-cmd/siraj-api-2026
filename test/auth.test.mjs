@@ -518,6 +518,40 @@ test("user search finds a Yemen account saved internationally when searched by l
   assert.match(db.lastUserSearchSql, /substr\(/);
 });
 
+test("user directory search is rate limited per authenticated account", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  const request = () => worker.default.fetch(new Request(
+    "https://api.example.test/api/users/search?q=ab",
+    { headers: { Authorization: "Bearer " + token } }
+  ), { DB: db, JWT_SECRET: secret });
+  for (let i = 0; i < 120; i++) {
+    assert.equal((await request()).status, 200);
+  }
+  const blocked = await request();
+  assert.equal(blocked.status, 429);
+  assert.equal(blocked.headers.get("Retry-After"), "900");
+});
+
+test("bulk contact matching is rate limited per authenticated account", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  const request = () => worker.default.fetch(new Request(
+    "https://api.example.test/api/contacts/match",
+    {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ phones: ["0771234567"] })
+    }
+  ), { DB: db, JWT_SECRET: secret });
+  for (let i = 0; i < 30; i++) {
+    assert.equal((await request()).status, 200);
+  }
+  const blocked = await request();
+  assert.equal(blocked.status, 429);
+  assert.equal(blocked.headers.get("Retry-After"), "900");
+});
+
 test("phone search strips formatting from partial international numbers", async () => {
   const db = new FakeDB();
   db.searchCandidates = [{
