@@ -797,6 +797,27 @@ test("private message remains successful when FCM credentials are invalid", asyn
   assert.equal(db.savedMessages, 1);
 });
 
+test("group message remains successful when FCM credentials are invalid", async () => {
+  const db = new FakeGroupDB(true);
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/groups/group-1/messages", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ body: "Persist group message despite push config failure" })
+  }), {
+    DB: db,
+    JWT_SECRET: secret,
+    FCM_SERVICE_ACCOUNT_JSON: "not-valid-json"
+  });
+  assert.equal(response.status, 201);
+  assert.equal(db.groupMessages.length, 1);
+  assert.equal(db.groupMessages[0][1], "group-1");
+  assert.equal(db.groupMessages[0][3], "Persist group message despite push config failure");
+});
+
 test("group message remains successful when push recipient lookup fails", async () => {
   const db = new FakeGroupDB(true);
   db.failGroupNotificationLookup = true;
