@@ -1181,7 +1181,14 @@ export default {
         if (!env.TIGRIS_ACCESS_KEY_ID || !env.TIGRIS_SECRET_ACCESS_KEY) {
           return json({ error: "Media storage credentials are not configured" }, 503);
         }
-        const key = decodeURIComponent(mediaMatch[1]);
+        let key;
+        try { key = decodeURIComponent(mediaMatch[1]); } catch (_) {
+          return json({ error: "Invalid attachment identifier" }, 400);
+        }
+        if (!key || key.length > 512 || key.startsWith("/") || key.includes("\\\\") ||
+            key.split("/").some(part => !part || part === "." || part === "..")) {
+          return json({ error: "Invalid attachment identifier" }, 400);
+        }
         const bucket = env.TIGRIS_BUCKET || "siraj-media";
         const objectPath = key.split("/").map(encodeURIComponent).join("/");
         const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
@@ -1192,14 +1199,15 @@ export default {
           region: "auto",
           retries: 2
         });
-        const storageResponse = await storage.fetch(storageUrl, { method: "GET" });
-        if (storageResponse.status === 404) return json({ error: "Attachment not found" }, 404);
-        if (!storageResponse.ok) return json({ error: "Media storage download failed", storageStatus: storageResponse.status }, 502);
-        const ownerId = storageResponse.headers.get("x-amz-meta-ownerid") || "";
-        const recipientId = storageResponse.headers.get("x-amz-meta-recipientid") || "";
-        const groupId = storageResponse.headers.get("x-amz-meta-groupid") || "";
+        // Read only object metadata first; never download bytes before authorization.
+        const headResponse = await storage.fetch(storageUrl, { method: "HEAD" });
+        if (headResponse.status === 404) return json({ error: "Attachment not found" }, 404);
+        if (!headResponse.ok) return json({ error: "Media storage lookup failed", storageStatus: headResponse.status }, 502);
+        const ownerId = headResponse.headers.get("x-amz-meta-ownerid") || "";
+        const recipientId = headResponse.headers.get("x-amz-meta-recipientid") || "";
+        const groupId = headResponse.headers.get("x-amz-meta-groupid") || "";
         let permitted = ownerId === currentUser.sub;
-        if (!permitted && recipientId === currentUser.sub) {
+        if (!permitted && recipientId === currentUser.sub && ownerId) {
           const friendship = await env.DB.prepare(
             "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
           ).bind(currentUser.sub, ownerId).first();
@@ -1212,12 +1220,15 @@ export default {
           permitted = !!member;
         }
         if (!permitted) return json({ error: "Attachment access denied" }, 403);
+        const storageResponse = await storage.fetch(storageUrl, { method: "GET" });
+        if (storageResponse.status === 404) return json({ error: "Attachment not found" }, 404);
+        if (!storageResponse.ok) return json({ error: "Media storage download failed", storageStatus: storageResponse.status }, 502);
         const headers = new Headers(corsHeaders);
-        headers.set("Content-Type", storageResponse.headers.get("content-type") || "application/octet-stream");
-        const encodedName = storageResponse.headers.get("x-amz-meta-filename") || "attachment";
+        headers.set("Content-Type", headResponse.headers.get("content-type") || "application/octet-stream");
+        const encodedName = headResponse.headers.get("x-amz-meta-filename") || "attachment";
         let fileName = "attachment";
         try { fileName = decodeURIComponent(encodedName); } catch (_) { fileName = encodedName; }
-        headers.set("Content-Disposition", "attachment; filename*=UTF-8''" + encodeURIComponent(fileName));
+        headers.set("Content-Disposition", "attachment; filename*=UTF-8''" + encodeURIComponent(safeFileName(fileName)));
         headers.set("Cache-Control", "private, no-store");
         return new Response(storageResponse.body, { status: 200, headers });
       }
