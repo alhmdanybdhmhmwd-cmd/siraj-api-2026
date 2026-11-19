@@ -107,6 +107,9 @@ class FakeDB {
           db.contactLookupQueries = (db.contactLookupQueries || 0) + 1;
           return { results: db.contactCandidates };
         }
+        if (sql.includes("FROM friendships f") && sql.includes("JOIN users u")) {
+          return { results: db.friendList || [] };
+        }
         if (sql.includes("FROM messages") && sql.includes("ORDER BY created_at DESC")) {
           db.lastMessageQuery = sql;
           db.lastMessageParams = this.params;
@@ -147,6 +150,10 @@ class FakeDB {
   }
 
   async batch(statements) {
+    if (statements.length === 2 && statements[0].sql.includes("INSERT OR IGNORE INTO friendships")) {
+      this.friendshipInserts = statements.map(statement => statement.params);
+      return [{ meta: { changes: 1 } }, { meta: { changes: 1 } }];
+    }
     if (statements[0].sql.includes("INSERT INTO users")) {
       // Model SQLite's atomic INSERT ... SELECT ... WHERE NOT EXISTS guard.
       const userParams = statements[0].params;
@@ -1110,6 +1117,32 @@ test("BARQ does not create or expose friend requests; direct contacts remain sep
   }), env);
   assert.equal(list.status, 200);
   assert.deepEqual(await list.json(), { incoming: [], outgoing: [] });
+});
+
+test("contacts can be added directly and appear in the contact list without friend requests", async () => {
+  const db = new FakeDB();
+  db.targetUser = { id: "friend-1", searchable: true };
+  const token = await worker.signToken(user, secret, 0);
+  const headers = {
+    Authorization: "Bearer " + token,
+    "Content-Type": "application/json"
+  };
+  const added = await worker.default.fetch(new Request("https://api.example.test/api/contacts", {
+    method: "POST", headers, body: JSON.stringify({ userId: "friend-1" })
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(added.status, 201);
+  assert.deepEqual(db.friendshipInserts, [[user.id, "friend-1"], ["friend-1", user.id]]);
+
+  db.friendList = [{
+    id: "friend-1", username: "friend", display_name: "Friend", phone: "+967771234567"
+  }];
+  const listed = await worker.default.fetch(new Request("https://api.example.test/api/friends", {
+    headers: { Authorization: "Bearer " + token }
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(listed.status, 200);
+  assert.deepEqual((await listed.json()).friends, [{
+    id: "friend-1", username: "friend", displayName: "Friend", phone: "+967771234567"
+  }]);
 });
 
 test("direct contact adding respects the target user's searchable privacy setting", async () => {
