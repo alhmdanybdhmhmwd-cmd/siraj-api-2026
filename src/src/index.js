@@ -838,6 +838,15 @@ export default {
         `).run();
         if (method === "POST") {
           const body = await request.json();
+          const existing = await env.DB.prepare(
+            "SELECT messages, groups, statuses FROM notification_preferences WHERE user_id = ?"
+          ).bind(currentUser.sub).first();
+          const messages = typeof body.messages === "boolean"
+            ? Number(body.messages) : Number(existing?.messages ?? 1);
+          const groups = typeof body.groups === "boolean"
+            ? Number(body.groups) : Number(existing?.groups ?? 1);
+          const statuses = typeof body.statuses === "boolean"
+            ? Number(body.statuses) : Number(existing?.statuses ?? 1);
           await env.DB.prepare(`
             INSERT INTO notification_preferences (user_id, messages, groups, statuses)
             VALUES (?, ?, ?, ?)
@@ -846,8 +855,7 @@ export default {
               groups = excluded.groups,
               statuses = excluded.statuses,
               updated_at = CURRENT_TIMESTAMP
-          `).bind(currentUser.sub, body.messages === false ? 0 : 1,
-            body.groups === false ? 0 : 1, body.statuses === false ? 0 : 1).run();
+          `).bind(currentUser.sub, messages, groups, statuses).run();
         }
         const settings = await env.DB.prepare(
           "SELECT messages, groups, statuses FROM notification_preferences WHERE user_id = ?"
