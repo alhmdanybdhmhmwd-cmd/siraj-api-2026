@@ -839,7 +839,7 @@ export default {
         const normalizedQuery = q.replace(/[٠-٩۰-۹]/g, digit => {
           const code = digit.charCodeAt(0);
           return String(code >= 0x06f0 ? code - 0x06f0 : code - 0x0660);
-        }).replace(/\\D/g, "");
+        }).replace(/\D/g, "");
         if (normalizedQuery.length >= 2) {
           const variants = phoneVariants(q);
           const suffixes = [...new Set(variants.filter(value => value.length >= 9).map(value => value.slice(-9)))];
@@ -856,7 +856,7 @@ export default {
           const localSearchDigits = normalizedQuery.startsWith("0")
             ? normalizedQuery.slice(1) : normalizedQuery;
           for (const candidate of phoneMatches.results || []) {
-            const candidateDigits = String(candidate.phone || "").replace(/\\D/g, "");
+            const candidateDigits = String(candidate.phone || "").replace(/\D/g, "");
             if (phoneVariants(candidate.phone).some(value => variants.includes(value)) ||
                 (localSearchDigits.length >= 2 && candidateDigits.includes(localSearchDigits))) {
               byId.set(candidate.id, candidate);
