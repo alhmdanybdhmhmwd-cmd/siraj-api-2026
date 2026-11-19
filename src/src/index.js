@@ -918,6 +918,14 @@ export default {
 
       // Publish a 24-hour text status
       if (method === "POST" && path === "/api/statuses") {
+        // Prevent authenticated accounts from flooding friends with statuses.
+        const statusAllowed = await consumeLoginAttempt(env, "status", currentUser.sub, 10);
+        if (!statusAllowed) {
+          return new Response(JSON.stringify({ error: "Too many status posts. Please try again in 15 minutes." }), {
+            status: 429,
+            headers: { ...corsHeaders, "Retry-After": "900" }
+          });
+        }
         const body = await request.json();
         const content = String(body.content || "").trim();
 
