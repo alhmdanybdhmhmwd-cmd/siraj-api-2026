@@ -1037,7 +1037,7 @@ test("oversized media Content-Length is rejected before Tigris upload", async ()
       headers: {
         Authorization: "Bearer " + token,
         "Content-Type": "image/jpeg",
-        "Content-Length": String(20 * 1024 * 1024 + 1),
+        "Content-Length": String(60 * 1024 * 1024 + 1),
         "X-Recipient-Id": "friend-1"
       },
       body: new Uint8Array([1, 2, 3])
@@ -1048,7 +1048,7 @@ test("oversized media Content-Length is rejected before Tigris upload", async ()
       TIGRIS_SECRET_ACCESS_KEY: "test-secret"
     });
     assert.equal(response.status, 413);
-    assert.deepEqual(await response.json(), { error: "File must be between 1 byte and 20 MB" });
+    assert.deepEqual(await response.json(), { error: "File must be between 1 byte and 60 MB" });
     assert.deepEqual(calls, []);
   } finally {
     delete globalThis.__fakeTigrisHandler;
