@@ -23,6 +23,7 @@ class FakeDB {
     this.user = { ...user };
     this.recovery = null;
     this.sessionVersion = 0;
+    this.contactCandidates = [];
   }
 
   prepare(sql) {
@@ -44,6 +45,10 @@ class FakeDB {
           return db.recovery ? { ...db.recovery } : null;
         }
         return null;
+      },
+      async all() {
+        if (sql.includes("phone IS NOT NULL")) return { results: db.contactCandidates };
+        return { results: [] };
       },
       async run() {
         if (sql.includes("INSERT OR IGNORE INTO account_security")) db.sessionVersion ??= 0;
@@ -130,4 +135,24 @@ test("phone normalization matches local and Yemen international forms", () => {
   assert.ok(variants.includes("967771234567"));
   assert.ok(variants.includes("771234567"));
   assert.deepEqual(worker.phoneVariants("invalid"), []);
+});
+
+test("phone contact matching returns registered searchable accounts only", async () => {
+  const db = new FakeDB();
+  db.contactCandidates = [
+    { id: "matched-user", username: "matched", display_name: "Matched", phone: "+967 77 123 4567" },
+    { id: "other-user", username: "other", display_name: "Other", phone: "+967 71 555 4444" }
+  ];
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/contacts/match", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ phones: ["0771234567"] })
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.deepEqual(data.users.map(item => item.id), ["matched-user"]);
 });
