@@ -34,6 +34,7 @@ class FakeDB {
     this.loginAttempts = new Map();
     this.contactCandidates = [];
     this.privacySettings = null;
+    this.notificationSettings = null;
   }
 
   prepare(sql) {
@@ -48,6 +49,9 @@ class FakeDB {
         }
         if (sql.includes("SELECT searchable, read_receipts FROM user_privacy")) {
           return db.privacySettings ? { ...db.privacySettings } : null;
+        }
+        if (sql.includes("SELECT messages, groups, statuses FROM notification_preferences")) {
+          return db.notificationSettings ? { ...db.notificationSettings } : null;
         }
         if (sql.includes("COALESCE((SELECT searchable FROM user_privacy")) {
           return db.targetUser ? { id: db.targetUser.id, searchable: db.targetUser.searchable ? 1 : 0 } : null;
@@ -107,6 +111,9 @@ class FakeDB {
         if (sql.includes("INSERT OR IGNORE INTO account_security")) db.sessionVersion ??= 0;
         if (sql.includes("INSERT INTO user_privacy")) {
           db.privacySettings = { searchable: this.params[1], read_receipts: this.params[2] };
+        }
+        if (sql.includes("INSERT INTO notification_preferences")) {
+          db.notificationSettings = { messages: this.params[1], groups: this.params[2], statuses: this.params[3] };
         }
         if (sql.includes("INSERT INTO recovery_rate_limits")) {
           const key = this.params[0];
@@ -1170,4 +1177,18 @@ test("partial privacy updates preserve previously disabled settings", async () =
   }), { DB: db, JWT_SECRET: secret });
   assert.equal(response.status, 200);
   assert.deepEqual(db.privacySettings, { searchable: 0, read_receipts: 0 });
+});
+
+
+test("partial notification updates preserve previously disabled categories", async () => {
+  const db = new FakeDB();
+  db.notificationSettings = { messages: 1, groups: 0, statuses: 0 };
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/notification-settings", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+    body: JSON.stringify({ messages: false })
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 200);
+  assert.deepEqual(db.notificationSettings, { messages: 0, groups: 0, statuses: 0 });
 });
