@@ -1720,18 +1720,26 @@ export default {
           }, 403);
         }
 
-        const id = crypto.randomUUID();
-
-        await env.DB.prepare(
-          `INSERT INTO messages
+        const suppliedMessageId = String(body.clientMessageId || "").trim();
+        if (suppliedMessageId && !/^[a-f0-9-]{16,64}$/i.test(suppliedMessageId)) {
+          return json({ error: "Invalid client message ID" }, 400);
+        }
+        const id = suppliedMessageId || crypto.randomUUID();
+        const insertResult = await env.DB.prepare(
+          `INSERT OR IGNORE INTO messages
            (id, sender_id, receiver_id, body)
            VALUES (?, ?, ?, ?)`
-        ).bind(
-          id,
-          currentUser.sub,
-          receiverId,
-          message
-        ).run();
+        ).bind(id, currentUser.sub, receiverId, message).run();
+        const inserted = Number(insertResult?.meta?.changes || 0) === 1;
+        if (!inserted) {
+          const existing = await env.DB.prepare(
+            "SELECT sender_id, receiver_id FROM messages WHERE id = ?"
+          ).bind(id).first();
+          if (!existing || existing.sender_id !== currentUser.sub || existing.receiver_id !== receiverId) {
+            return json({ error: "Message ID conflict" }, 409);
+          }
+          return json({ message: "Message already synchronized", id, duplicate: true }, 200);
+        }
 
         // Message persistence is authoritative; sender lookup or push delivery
         // must not turn a successfully stored message into an apparent failure.
