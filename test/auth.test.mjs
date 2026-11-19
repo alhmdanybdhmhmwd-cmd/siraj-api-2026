@@ -1016,6 +1016,55 @@ test("malformed JSON request bodies return 400 instead of 500", async () => {
 });
 
 
+
+test("each uploaded attachment receives its own 72-hour expiration timestamp", async () => {
+  const db = new FakeDB();
+  const originalPrepare = db.prepare.bind(db);
+  let savedExpiry = null;
+  db.prepare = sql => {
+    const statement = originalPrepare(sql);
+    const first = statement.first.bind(statement);
+    const run = statement.run.bind(statement);
+    statement.first = async () => sql.includes("SELECT 1 FROM friendships")
+      ? { 1: 1 } : first();
+    statement.run = async () => {
+      if (sql.includes("INSERT INTO media_expirations")) savedExpiry = statement.params[1];
+      return run();
+    };
+    return statement;
+  };
+  const token = await worker.signToken(user, secret, 0);
+  let storageExpiry = null;
+  globalThis.__fakeTigrisHandler = async (_url, options) => {
+    if (options.method === "PUT") storageExpiry = options.headers["x-amz-meta-expiresat"];
+    return new Response(null, { status: 200 });
+  };
+  try {
+    const before = Date.now();
+    const response = await worker.default.fetch(new Request("https://api.example.test/api/media", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + token,
+        "Content-Type": "image/jpeg",
+        "X-Recipient-Id": "friend-1"
+      },
+      body: new Uint8Array([1, 2, 3])
+    }), {
+      DB: db,
+      JWT_SECRET: secret,
+      TIGRIS_ACCESS_KEY_ID: "test-access",
+      TIGRIS_SECRET_ACCESS_KEY: "test-secret"
+    });
+    assert.equal(response.status, 201);
+    const expiry = Date.parse(savedExpiry);
+    assert.equal(savedExpiry, storageExpiry);
+    assert.ok(expiry >= before + 72 * 60 * 60 * 1000 - 1000);
+    assert.ok(expiry <= Date.now() + 72 * 60 * 60 * 1000 + 1000);
+  } finally {
+    delete globalThis.__fakeTigrisHandler;
+  }
+});
+
 test("media expiration cleanup deletes only objects whose individual 72-hour deadline passed", async () => {
   const cutoff = Date.parse("2026-11-22T12:00:00.000Z");
   const rows = [
