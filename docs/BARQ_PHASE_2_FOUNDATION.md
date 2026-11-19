@@ -59,6 +59,6 @@ Until the preview D1 database and preview API are available, work is limited to 
 ## Remaining work before phase completion
 - Provision and verify a distinct preview D1 database ID; the current Wrangler binding still points at the production database.
 - Establish a preview Worker/API URL and supply the verified values to the Android build-time environment selectors.
-- Add automated route tests for liveness/readiness and authentication/session behavior.
+- Added isolated Node tests for `/health/live` and `/health/ready`, including missing configuration, successful read-only `SELECT 1`, and database failure paths (`test/health.test.mjs`). These tests are committed but have not yet been executed in CI or locally.
 - Run the repository test workflow and Flutter analyze/tests/build in a suitable toolchain.
 - Verify API, media, and realtime origin routing and the Android package/Firebase identity.
