@@ -448,7 +448,26 @@ test("ephemeral messages use a separate store and start a ten-second deletion wi
   assert.equal(data.messages.length, 1);
   assert.ok(data.messages[0].read_at);
   assert.equal(data.messages[0].delete_at - data.messages[0].read_at, 10);
-  assert.equal(db.ephemeralMessages[0].delete_at - db.ephemeralMessages[0].read_at, 10);
+  const firstReadAt = db.ephemeralMessages[0].read_at;
+  const firstDeleteAt = db.ephemeralMessages[0].delete_at;
+  assert.equal(firstDeleteAt - firstReadAt, 10);
+
+  // Reopening the conversation must not restart the ten-second timer.
+  const originalNow = Date.now;
+  try {
+    Date.now = () => originalNow() + 4_000;
+    const repeatedRead = await worker.default.fetch(new Request(
+      "https://api.example.test/api/ephemeral-messages?with=user-1",
+      { headers: { Authorization: "Bearer " + receiverToken } }
+    ), { DB: db, JWT_SECRET: secret });
+    assert.equal(repeatedRead.status, 200);
+    const repeatedData = await repeatedRead.json();
+    assert.equal(repeatedData.messages.length, 1);
+    assert.equal(db.ephemeralMessages[0].read_at, firstReadAt);
+    assert.equal(db.ephemeralMessages[0].delete_at, firstDeleteAt);
+  } finally {
+    Date.now = originalNow;
+  }
 });
 
 test("ephemeral cleanup deletes expired and read-expired rows while preserving unread rows", async () => {
