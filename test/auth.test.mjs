@@ -699,7 +699,7 @@ test("failed attachment message persistence deletes the uploaded Tigris object",
     statement.first = async () => sql.includes("SELECT 1 FROM friendships")
       ? { 1: 1 } : first();
     statement.run = async () => {
-      if (sql.includes("INSERT INTO messages")) throw new Error("simulated message database failure");
+      if (sql.includes("INTO messages")) throw new Error("simulated message database failure");
       return run();
     };
     return statement;
@@ -1078,7 +1078,7 @@ class PrivateMessageFailureDB extends FakeDB {
       return first();
     };
     statement.run = async () => {
-      if (sql.includes("INSERT INTO messages")) this.savedMessages++;
+      if (sql.includes("INTO messages")) this.savedMessages++;
       return run();
     };
     return statement;
@@ -1247,7 +1247,7 @@ class PrivateMessageFcmHttpFailureDB extends FakeDB {
     statement.all = async () => sql.includes("SELECT fcm_token FROM device_tokens")
       ? { results: [{ fcm_token: "test-device-token" }] } : all();
     statement.run = async () => {
-      if (sql.includes("INSERT INTO messages")) this.savedMessages++;
+      if (sql.includes("INTO messages")) this.savedMessages++;
       if (sql.includes("DELETE FROM device_tokens")) this.deletedTokens++;
       return run();
     };
