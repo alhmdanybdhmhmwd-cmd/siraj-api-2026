@@ -853,10 +853,14 @@ export default {
                AND COALESCE((SELECT searchable FROM user_privacy WHERE user_id = users.id), 1) = 1
              LIMIT 100`
           ).bind(currentUser.sub, "%" + normalizedQuery + "%", ...variants, ...suffixes).all();
+          const localSearchDigits = normalizedQuery.startsWith("0")
+            ? normalizedQuery.slice(1) : normalizedQuery;
           for (const candidate of phoneMatches.results || []) {
-            if (phoneVariants(candidate.phone).some(value =>
-              variants.includes(value) || candidate.phone.replace(/\\D/g, "").includes(normalizedQuery)
-            )) byId.set(candidate.id, candidate);
+            const candidateDigits = String(candidate.phone || "").replace(/\\D/g, "");
+            if (phoneVariants(candidate.phone).some(value => variants.includes(value)) ||
+                (localSearchDigits.length >= 2 && candidateDigits.includes(localSearchDigits))) {
+              byId.set(candidate.id, candidate);
+            }
           }
         }
 
