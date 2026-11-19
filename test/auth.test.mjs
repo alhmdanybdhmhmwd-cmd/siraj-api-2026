@@ -54,6 +54,11 @@ class FakeDB {
         return null;
       },
       async all() {
+        if (sql.includes("SELECT id, phone FROM users")) {
+          db.phoneLookupQueries = (db.phoneLookupQueries || 0) + 1;
+          db.lastPhoneLookupSql = sql;
+          return { results: db.phoneCandidates || [] };
+        }
         if (sql.includes("substr(") && sql.includes("user_privacy")) {
           db.contactLookupQueries = (db.contactLookupQueries || 0) + 1;
           return { results: db.contactCandidates };
@@ -370,9 +375,9 @@ class FakeReadReceiptDB extends FakeDB {
   }
 }
 
-test("profile updates cannot claim another account's phone number", async () => {
+test("profile updates reject an existing phone written in an equivalent local format", async () => {
   const db = new FakeDB();
-  db.existingPhone = { id: "other-user", phone: "+967700000002" };
+  db.phoneCandidates = [{ id: "other-user", phone: "+967700000002" }];
   const token = await worker.signToken(user, secret, 0);
   const response = await worker.default.fetch(new Request("https://api.example.test/api/profile", {
     method: "POST",
@@ -380,9 +385,28 @@ test("profile updates cannot claim another account's phone number", async () => 
       Authorization: "Bearer " + token,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ displayName: "Tester", phone: "+967700000002" })
+    body: JSON.stringify({ displayName: "Tester", phone: "٠٧٠٠٠٠٠٠٠٢" })
   }), { DB: db, JWT_SECRET: secret });
   assert.equal(response.status, 409);
+  assert.ok(db.phoneLookupQueries > 0);
+  assert.match(db.lastPhoneLookupSql, /replace\(phone, '٠', '0'\)/);
+});
+
+test("registration rejects an existing Yemen phone in local and international formats", async () => {
+  const db = new FakeDB();
+  db.phoneCandidates = [{ id: "registered-user", phone: "+967700000002" }];
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      displayName: "New User",
+      username: "new_user",
+      password: "secure-password-123",
+      phone: "0700000002"
+    })
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 409);
+  assert.ok(db.phoneLookupQueries > 0);
 });
 
 test("private read receipts respect the reader's privacy preference", async () => {
