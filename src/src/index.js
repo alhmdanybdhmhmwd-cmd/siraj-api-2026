@@ -497,14 +497,19 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
     }
     const objectPath = key.split("/").map(encodeURIComponent).join("/");
     const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
-    const response = await storage.fetch(storageUrl, { method: "DELETE" });
-    if (response.ok || response.status === 404) {
-      await env.DB.prepare(
-        "DELETE FROM media_expirations WHERE object_key = ? AND expires_at <= ?"
-      ).bind(key, cutoff).run();
-      deleted++;
-    } else {
-      console.error("Expired media deletion failed:", response.status);
+    try {
+      const response = await storage.fetch(storageUrl, { method: "DELETE" });
+      if (response.ok || response.status === 404) {
+        await env.DB.prepare(
+          "DELETE FROM media_expirations WHERE object_key = ? AND expires_at <= ?"
+        ).bind(key, cutoff).run();
+        deleted++;
+      } else {
+        console.error("Expired media deletion failed:", response.status);
+      }
+    } catch (error) {
+      // Keep this record for retry, but do not let one failed object block the rest.
+      console.error("Expired media cleanup item failed:", error);
     }
   }
   return { checked: (expired.results || []).length, deleted };
@@ -1632,15 +1637,6 @@ export default {
         const headResponse = await storage.fetch(storageUrl, { method: "HEAD" });
         if (headResponse.status === 404) return json({ error: "Attachment not found" }, 404);
         if (!headResponse.ok) return json({ error: "Media storage lookup failed", storageStatus: headResponse.status }, 502);
-        const expiresAt = headResponse.headers.get("x-amz-meta-expiresat");
-        if (expiresAt && Number.isFinite(Date.parse(expiresAt)) && Date.parse(expiresAt) <= Date.now()) {
-          try { await storage.fetch(storageUrl, { method: "DELETE" }); } catch (_) {}
-          try {
-            await env.DB.prepare("DELETE FROM media_expirations WHERE object_key = ? AND expires_at <= ?")
-              .bind(key, new Date().toISOString()).run();
-          } catch (_) {}
-          return json({ error: "Attachment has expired" }, 410);
-        }
         const ownerId = headResponse.headers.get("x-amz-meta-ownerid") || "";
         const recipientId = headResponse.headers.get("x-amz-meta-recipientid") || "";
         const groupId = headResponse.headers.get("x-amz-meta-groupid") || "";
@@ -1658,6 +1654,17 @@ export default {
           permitted = !!member;
         }
         if (!permitted) return json({ error: "Attachment access denied" }, 403);
+        // Check expiry only after authorization so an unrelated account cannot
+        // trigger deletion of another user's object by guessing its identifier.
+        const expiresAt = headResponse.headers.get("x-amz-meta-expiresat");
+        if (expiresAt && Number.isFinite(Date.parse(expiresAt)) && Date.parse(expiresAt) <= Date.now()) {
+          try { await storage.fetch(storageUrl, { method: "DELETE" }); } catch (_) {}
+          try {
+            await env.DB.prepare("DELETE FROM media_expirations WHERE object_key = ? AND expires_at <= ?")
+              .bind(key, new Date().toISOString()).run();
+          } catch (_) {}
+          return json({ error: "Attachment has expired" }, 410);
+        }
         const storageResponse = await storage.fetch(storageUrl, { method: "GET" });
         if (storageResponse.status === 404) return json({ error: "Attachment not found" }, 404);
         if (!storageResponse.ok) return json({ error: "Media storage download failed", storageStatus: storageResponse.status }, 502);
