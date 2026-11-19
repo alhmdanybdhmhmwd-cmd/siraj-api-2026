@@ -710,6 +710,10 @@ class FakeGroupDB extends FakeDB {
       return originalFirst();
     };
     statement.all = async () => {
+      if (sql.includes("JOIN chat_groups g") && sql.includes("m.joined_at")) {
+        this.groupMemberListQuery = sql;
+        return { results: this.groupMemberRows || [] };
+      }
       if (sql.includes("FROM (") && sql.includes("group_messages")) {
         this.groupHistoryQuery = sql;
         return { results: [] };
@@ -726,6 +730,31 @@ class FakeGroupDB extends FakeDB {
     return statement;
   }
 }
+
+test("group members can view the roster and owner role but outsiders cannot", async () => {
+  const db = new FakeGroupDB(true);
+  db.groupMemberRows = [
+    { id: user.id, username: user.username, display_name: user.display_name, is_owner: 1 },
+    { id: "member-2", username: "member_two", display_name: "Member Two", is_owner: 0 }
+  ];
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request(
+    "https://api.example.test/api/groups/group-1/members",
+    { headers: { Authorization: "Bearer " + token } }
+  ), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.deepEqual(data.members.map(item => item.id), [user.id, "member-2"]);
+  assert.equal(data.members[0].is_owner, 1);
+  assert.match(db.groupMemberListQuery, /JOIN chat_groups g/);
+
+  const outsider = new FakeGroupDB(false);
+  const denied = await worker.default.fetch(new Request(
+    "https://api.example.test/api/groups/group-1/members",
+    { headers: { Authorization: "Bearer " + token } }
+  ), { DB: outsider, JWT_SECRET: secret });
+  assert.equal(denied.status, 404);
+});
 
 test("group messages are accepted only from members and persisted", async () => {
   const db = new FakeGroupDB(true);
