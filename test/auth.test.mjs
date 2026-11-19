@@ -39,6 +39,10 @@ class FakeDB {
         if (sql.includes("COALESCE((SELECT searchable FROM user_privacy")) {
           return db.targetUser ? { id: db.targetUser.id, searchable: db.targetUser.searchable ? 1 : 0 } : null;
         }
+        if (sql.includes("SELECT id FROM users WHERE phone = ? AND id != ?")) {
+          return db.existingPhone && db.existingPhone.phone === this.params[0] &&
+            db.existingPhone.id !== this.params[1] ? { id: db.existingPhone.id } : null;
+        }
         if (sql.includes("SELECT * FROM users WHERE username = ? OR phone = ?")) {
           const id = String(this.params[0]).toLowerCase();
           const phone = String(this.params[1]);
@@ -365,6 +369,21 @@ class FakeReadReceiptDB extends FakeDB {
     return statement;
   }
 }
+
+test("profile updates cannot claim another account's phone number", async () => {
+  const db = new FakeDB();
+  db.existingPhone = { id: "other-user", phone: "+967700000002" };
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/profile", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ displayName: "Tester", phone: "+967700000002" })
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 409);
+});
 
 test("private read receipts respect the reader's privacy preference", async () => {
   for (const enabled of [false, true]) {
