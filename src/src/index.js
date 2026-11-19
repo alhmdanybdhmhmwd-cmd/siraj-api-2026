@@ -520,8 +520,9 @@ export default {
           })(),
           env.DB.prepare(`INSERT INTO recovery_codes
             (user_id, code_hash, code_salt, expires_at, consumed_at, created_at)
-            VALUES (?, ?, ?, ?, NULL, ?)`)
-            .bind(id, recovery.codeHash, recovery.salt, createdAt + RECOVERY_CODE_TTL_SECONDS, createdAt)
+            SELECT ?, ?, ?, ?, NULL, ?
+            WHERE EXISTS (SELECT 1 FROM users WHERE id = ?)`)
+            .bind(id, recovery.codeHash, recovery.salt, createdAt + RECOVERY_CODE_TTL_SECONDS, createdAt, id)
         ]);
         if (Number(registrationResults?.[0]?.meta?.changes || 0) !== 1) {
           return json({ error: phone ? "Phone number is already registered" : "Unable to create account" }, 409);
