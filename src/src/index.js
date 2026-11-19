@@ -769,7 +769,7 @@ export default {
           return json({ error: "قائمة جهات الاتصال غير صالحة" }, 400);
         }
         const requested = new Set(
-          body.phones.filter(value => typeof value === "string")
+          body.phones.filter(value => typeof value === "string" && value.length <= 32)
             .flatMap(phoneVariants)
         );
         if (requested.size === 0) return json({ users: [] });
