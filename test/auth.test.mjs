@@ -33,6 +33,7 @@ class FakeDB {
     this.recoveryAttempts = new Map();
     this.loginAttempts = new Map();
     this.contactCandidates = [];
+    this.privacySettings = null;
   }
 
   prepare(sql) {
@@ -44,6 +45,9 @@ class FakeDB {
       async first() {
         if (sql.includes("SELECT session_version FROM account_security")) {
           return { session_version: db.sessionVersion };
+        }
+        if (sql.includes("SELECT searchable, read_receipts FROM user_privacy")) {
+          return db.privacySettings ? { ...db.privacySettings } : null;
         }
         if (sql.includes("COALESCE((SELECT searchable FROM user_privacy")) {
           return db.targetUser ? { id: db.targetUser.id, searchable: db.targetUser.searchable ? 1 : 0 } : null;
@@ -101,6 +105,9 @@ class FakeDB {
       },
       async run() {
         if (sql.includes("INSERT OR IGNORE INTO account_security")) db.sessionVersion ??= 0;
+        if (sql.includes("INSERT INTO user_privacy")) {
+          db.privacySettings = { searchable: this.params[1], read_receipts: this.params[2] };
+        }
         if (sql.includes("INSERT INTO recovery_rate_limits")) {
           const key = this.params[0];
           db.recoveryAttempts.set(key, (db.recoveryAttempts.get(key) || 0) + 1);
@@ -1149,4 +1156,18 @@ test("registration rate limit blocks mass account creation from one client", asy
   const blocked = await register("newuserfinal");
   assert.equal(blocked.status, 429);
   assert.equal(blocked.headers.get("Retry-After"), "900");
+});
+
+
+test("partial privacy updates preserve previously disabled settings", async () => {
+  const db = new FakeDB();
+  db.privacySettings = { searchable: 1, read_receipts: 0 };
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/privacy", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+    body: JSON.stringify({ searchable: false })
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 200);
+  assert.deepEqual(db.privacySettings, { searchable: 0, read_receipts: 0 });
 });
