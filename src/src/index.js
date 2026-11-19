@@ -576,7 +576,7 @@ async function cleanupExpiredRateLimits(env, now = Date.now()) {
   return results;
 }
 
-export { phoneVariants, safeFileName, cleanupExpiredMedia, cleanupExpiredRateLimits, cleanupExpiredEphemeralMessages };
+export { phoneVariants, safeFileName, cleanupExpiredMedia, cleanupExpiredRateLimits };
 
 export default {
   async scheduled(_controller, env) {
