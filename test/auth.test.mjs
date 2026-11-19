@@ -1116,3 +1116,20 @@ test("JWT verification rejects unsupported algorithms and oversized tokens", asy
   assert.equal(await worker.verifyToken("x".repeat(8193), secret), null);
   assert.ok(await worker.verifyToken(token, secret));
 });
+
+
+test("password recovery also limits attempts across many identifiers from one client", async () => {
+  const db = new FakeDB();
+  const env = { DB: db, JWT_SECRET: secret };
+  const attempt = (identifier, ip) => worker.default.fetch(new Request("https://api.example.test/api/password/recover", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "CF-Connecting-IP": ip },
+    body: JSON.stringify({ identifier, recoveryCode: "A".repeat(40), newPassword: "new-secure-password" })
+  }), env);
+  for (let i = 0; i < 20; i++) {
+    const response = await attempt("unknown-account-" + i, "203.0.113.30");
+    assert.equal(response.status, 400);
+  }
+  assert.equal((await attempt("another-unknown-account", "203.0.113.30")).status, 429);
+  assert.equal((await attempt("different-client-account", "203.0.113.31")).status, 400);
+});
