@@ -23,6 +23,7 @@ class FakeDB {
     this.user = { ...user };
     this.recovery = null;
     this.sessionVersion = 0;
+    this.recoveryAttempts = new Map();
     this.contactCandidates = [];
   }
 
@@ -43,13 +44,19 @@ class FakeDB {
           return db.existingPhone && db.existingPhone.phone === this.params[0] &&
             db.existingPhone.id !== this.params[1] ? { id: db.existingPhone.id } : null;
         }
-        if (sql.includes("SELECT * FROM users WHERE username = ? OR phone = ?")) {
-          const id = String(this.params[0]).toLowerCase();
-          const phone = String(this.params[1]);
-          return (id === db.user.username || phone === db.user.phone) ? { ...db.user } : null;
+        if (sql.includes("SELECT id FROM users WHERE username = ? OR phone = ?")) {
+          const identifier = String(this.params[0]).toLowerCase();
+          const phoneCandidates = this.params.slice(2).map(String);
+          const storedDigits = String(db.user.phone).replace(/\\D/g, "");
+          return identifier === db.user.username || identifier === db.user.phone ||
+            phoneCandidates.some(value => value === storedDigits || value === storedDigits.slice(-9))
+            ? { id: db.user.id } : null;
         }
-        if (sql.includes("SELECT recovery_hash, recovery_salt FROM account_recovery")) {
+        if (sql.includes("SELECT code_hash, code_salt, consumed_at, expires_at FROM recovery_codes")) {
           return db.recovery ? { ...db.recovery } : null;
+        }
+        if (sql.includes("SELECT attempts FROM recovery_rate_limits")) {
+          return { attempts: db.recoveryAttempts.get(this.params[0]) || 0 };
         }
         return null;
       },
@@ -72,22 +79,30 @@ class FakeDB {
       },
       async run() {
         if (sql.includes("INSERT OR IGNORE INTO account_security")) db.sessionVersion ??= 0;
+        if (sql.includes("INSERT INTO recovery_rate_limits")) {
+          const key = this.params[0];
+          db.recoveryAttempts.set(key, (db.recoveryAttempts.get(key) || 0) + 1);
+        }
+        if (sql.includes("INSERT INTO recovery_codes")) {
+          db.recovery = { code_hash: this.params[1], code_salt: this.params[2], expires_at: this.params[3], consumed_at: null };
+        }
         return { meta: { changes: 1 } };
       }
     };
   }
 
   async batch(statements) {
-    const [updatePassword, incrementVersion, consumeCode] = statements;
-    const [newHash, newSalt, userId, recoveryUserId, expectedHash] = updatePassword.params;
-    if (!this.recovery || this.recovery.recovery_hash !== expectedHash ||
+    const [updatePassword, consumeCode, incrementVersion] = statements;
+    const [newHash, newSalt, userId, recoveryUserId, expectedHash, now] = updatePassword.params;
+    if (!this.recovery || this.recovery.code_hash !== expectedHash ||
+        this.recovery.consumed_at !== null || this.recovery.expires_at <= now ||
         this.user.id !== userId || recoveryUserId !== userId) {
       return [{ meta: { changes: 0 } }, { meta: { changes: 0 } }, { meta: { changes: 0 } }];
     }
     this.user.password_hash = newHash;
     this.user.password_salt = newSalt;
+    this.recovery.consumed_at = now;
     this.sessionVersion += 1;
-    this.recovery = null;
     return [{ meta: { changes: 1 } }, { meta: { changes: 1 } }, { meta: { changes: 1 } }];
   }
 }
@@ -150,51 +165,57 @@ test("authentication fails closed when session security storage is unavailable",
   }), null);
 });
 
-test("password recovery consumes the code and invalidates the old session", async () => {
+test("password recovery consumes an expiring 160-bit code and invalidates the old session", async () => {
   const db = new FakeDB();
-  const code = "A1B2C3D4E5F6";
-  const recoverySalt = "AAECAwQFBgcICQoLDA0ODw";
-  db.recovery = {
-    recovery_hash: await worker.hashPassword(code, recoverySalt),
-    recovery_salt: recoverySalt
-  };
+  const code = "A1B2C3D4E5F60718293A4B5C6D7E8F9012345678";
+  const recoverySalt = "0123456789abcdef0123456789abcdef";
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(recoverySalt + ":" + code));
+  const codeHash = Array.from(new Uint8Array(digest)).map(value => value.toString(16).padStart(2, "0")).join("");
+  db.recovery = { code_hash: codeHash, code_salt: recoverySalt, expires_at: Math.floor(Date.now() / 1000) + 3600, consumed_at: null };
   const token = await worker.signToken(user, secret, 0);
   const request = () => new Request("https://api.example.test/api/password/recover", {
-    method: "POST",
-    headers: {
-      Authorization: "Bearer " + token,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      identifier: user.username,
-      recoveryCode: "A1B2-C3D4 E5F6",
-      newPassword: "new-secure-password"
-    })
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ identifier: user.username, recoveryCode: code, newPassword: "new-secure-password" })
   });
   const env = { DB: db, JWT_SECRET: secret };
   const response = await worker.default.fetch(request(), env);
   assert.equal(response.status, 200);
-  assert.equal(db.recovery, null);
+  assert.ok(db.recovery.consumed_at);
   assert.equal(db.sessionVersion, 1);
   assert.notEqual(db.user.password_hash, user.password_hash);
   assert.equal(await worker.authenticate(new Request("https://api.example.test/private", {
     headers: { Authorization: "Bearer " + token }
   }), env), null);
-  const newToken = await worker.signToken(user, secret, 1);
-  const reusedRequest = new Request("https://api.example.test/api/password/recover", {
-    method: "POST",
-    headers: {
-      Authorization: "Bearer " + newToken,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      identifier: user.username,
-      recoveryCode: code,
-      newPassword: "another-secure-password"
-    })
-  });
-  const reused = await worker.default.fetch(reusedRequest, env);
-  assert.equal(reused.status, 400);
+  assert.equal((await worker.default.fetch(request(), env)).status, 400);
+});
+
+test("password recovery rejects expired recovery codes", async () => {
+  const db = new FakeDB();
+  const code = "A1B2C3D4E5F60718293A4B5C6D7E8F9012345678";
+  const recoverySalt = "0123456789abcdef0123456789abcdef";
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(recoverySalt + ":" + code));
+  const codeHash = Array.from(new Uint8Array(digest)).map(value => value.toString(16).padStart(2, "0")).join("");
+  db.recovery = { code_hash: codeHash, code_salt: recoverySalt, expires_at: 1, consumed_at: null };
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/password/recover", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ identifier: user.username, recoveryCode: code, newPassword: "new-secure-password" })
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 400);
+  assert.equal(db.sessionVersion, 0);
+});
+
+test("password recovery rate limits repeated attempts", async () => {
+  const db = new FakeDB();
+  const env = { DB: db, JWT_SECRET: secret };
+  let status = 0;
+  for (let i = 0; i < 6; i++) {
+    const response = await worker.default.fetch(new Request("https://api.example.test/api/password/recover", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier: user.username, recoveryCode: "A".repeat(40), newPassword: "new-secure-password" })
+    }), env);
+    status = response.status;
+  }
+  assert.equal(status, 429);
 });
 
 test("media filenames are safely decoded and cannot contain path separators or control characters", () => {
