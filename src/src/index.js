@@ -580,7 +580,7 @@ export default {
           if (Number(probe?.ok) !== 1) {
             return json({ status: "not_ready" }, 503);
           }
-        } catch (error) {
+        } catch { 
           console.error("Readiness database probe failed");
           return json({ status: "not_ready" }, 503);
         }
