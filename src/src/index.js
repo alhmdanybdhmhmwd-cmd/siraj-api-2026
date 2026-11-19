@@ -1775,11 +1775,19 @@ export default {
         // trigger deletion of another user's object by guessing its identifier.
         const expiresAt = headResponse.headers.get("x-amz-meta-expiresat");
         if (expiresAt && Number.isFinite(Date.parse(expiresAt)) && Date.parse(expiresAt) <= Date.now()) {
-          try { await storage.fetch(storageUrl, { method: "DELETE" }); } catch (_) {}
           try {
-            await env.DB.prepare("DELETE FROM media_expirations WHERE object_key = ? AND expires_at <= ?")
-              .bind(key, new Date().toISOString()).run();
-          } catch (_) {}
+            const deletion = await storage.fetch(storageUrl, { method: "DELETE" });
+            // Keep the expiration row when storage deletion fails so the scheduled
+            // cleanup can retry instead of permanently orphaning the object.
+            if (deletion.ok || deletion.status === 404) {
+              await env.DB.prepare("DELETE FROM media_expirations WHERE object_key = ? AND expires_at <= ?")
+                .bind(key, new Date().toISOString()).run();
+            } else {
+              console.error("Expired attachment deletion failed:", deletion.status);
+            }
+          } catch (deletionError) {
+            console.error("Expired attachment deletion request failed:", deletionError);
+          }
           return json({ error: "Attachment has expired" }, 410);
         }
         const storageResponse = await storage.fetch(storageUrl, { method: "GET" });
