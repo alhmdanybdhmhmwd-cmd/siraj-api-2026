@@ -1161,10 +1161,19 @@ export default {
           message
         ).run();
 
-        const sender = await env.DB.prepare(
-          "SELECT display_name FROM users WHERE id = ?"
-        ).bind(currentUser.sub).first();
-        await sendSirajPush(env, receiverId, currentUser.sub, sender?.display_name || currentUser.username, message);
+        // Message persistence is authoritative; sender lookup or push delivery
+        // must not turn a successfully stored message into an apparent failure.
+        try {
+          const sender = await env.DB.prepare(
+            "SELECT display_name FROM users WHERE id = ?"
+          ).bind(currentUser.sub).first();
+          await sendSirajPush(
+            env, receiverId, currentUser.sub,
+            sender?.display_name || currentUser.username, message
+          );
+        } catch (notificationError) {
+          console.error("Private message notification dispatch failed:", notificationError);
+        }
 
         return json({
           message: "Message sent",
