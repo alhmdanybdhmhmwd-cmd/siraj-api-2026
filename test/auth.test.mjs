@@ -11,7 +11,7 @@ class AwsClient {
   }
 }
 `);
-workerSource += "\nexport { signToken, verifyToken, authenticate, hashPassword };";
+workerSource += "\nexport { signToken, verifyToken, authenticate, hashPassword, cleanupExpiredMedia };";
 const worker = await import("data:text/javascript;base64," + Buffer.from(workerSource).toString("base64"));
 
 const secret = "unit-test-secret-that-is-long-enough";
@@ -1013,6 +1013,55 @@ test("malformed JSON request bodies return 400 instead of 500", async () => {
   }), { DB: db, JWT_SECRET: secret });
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), { error: "Invalid JSON body" });
+});
+
+
+test("media expiration cleanup deletes only objects whose individual 72-hour deadline passed", async () => {
+  const cutoff = Date.parse("2026-11-22T12:00:00.000Z");
+  const rows = [
+    { object_key: "user-1/expired-video", expires_at: "2026-11-22T11:59:59.000Z" },
+    { object_key: "user-1/newer-photo", expires_at: "2026-11-22T22:00:00.000Z" }
+  ];
+  const removedRows = [];
+  const db = {
+    prepare(sql) {
+      const statement = {
+        params: [],
+        bind(...params) { this.params = params; return this; },
+        async run() {
+          if (sql.startsWith("DELETE FROM media_expirations")) removedRows.push(this.params[0]);
+          return { meta: { changes: 1 } };
+        },
+        async all() {
+          return { results: rows.filter(row => row.expires_at <= this.params[0]) };
+        }
+      };
+      return statement;
+    }
+  };
+  const deletedObjects = [];
+  globalThis.__fakeTigrisHandler = async (url, options) => {
+    deletedObjects.push({ url: String(url), method: options.method });
+    return new Response(null, { status: 204 });
+  };
+  try {
+    const result = await worker.cleanupExpiredMedia({
+      DB: db,
+      TIGRIS_ACCESS_KEY_ID: "test-access",
+      TIGRIS_SECRET_ACCESS_KEY: "test-secret"
+    }, cutoff);
+    assert.deepEqual(result, { checked: 1, deleted: 1 });
+    assert.equal(deletedObjects.length, 1);
+    assert.match(deletedObjects[0].url, /expired-video$/);
+    assert.deepEqual(removedRows, ["user-1/expired-video"]);
+  } finally {
+    delete globalThis.__fakeTigrisHandler;
+  }
+});
+
+test("media expiration cleanup schedule runs every 15 minutes", async () => {
+  const config = await readFile(new URL("../wrangler.toml", import.meta.url), "utf8");
+  assert.match(config, /crons\s*=\s*\["\*\/15 \* \* \* \*"\]/);
 });
 
 test("oversized media Content-Length is rejected before Tigris upload", async () => {
