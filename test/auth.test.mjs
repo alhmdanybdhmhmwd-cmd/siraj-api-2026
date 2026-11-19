@@ -11,7 +11,7 @@ class AwsClient {
   }
 }
 `);
-workerSource += "\nexport { signToken, verifyToken, authenticate, hashPassword, sendSirajPush };";
+workerSource += "\nexport { signToken, verifyToken, authenticate, hashPassword, sendSirajPush, cleanupExpiredEphemeralMessages };";
 const worker = await import("data:text/javascript;base64," + Buffer.from(workerSource).toString("base64"));
 
 const secret = "unit-test-secret-that-is-long-enough";
@@ -445,6 +445,20 @@ test("ephemeral messages use a separate store and start a ten-second deletion wi
   assert.ok(data.messages[0].read_at);
   assert.equal(data.messages[0].delete_at - data.messages[0].read_at, 10);
   assert.equal(db.ephemeralMessages[0].delete_at - db.ephemeralMessages[0].read_at, 10);
+});
+
+test("ephemeral cleanup deletes expired and read-expired rows while preserving unread rows", async () => {
+  const db = new FakeDB();
+  const now = 2_000_000_000_000;
+  const nowSeconds = Math.floor(now / 1000);
+  db.ephemeralMessages = [
+    { id: "read-expired", expires_at: nowSeconds + 3600, delete_at: nowSeconds - 1 },
+    { id: "unread-valid", expires_at: nowSeconds + 3600, delete_at: null },
+    { id: "never-read-but-expired", expires_at: nowSeconds - 1, delete_at: null }
+  ];
+  const deleted = await worker.cleanupExpiredEphemeralMessages({ DB: db }, now);
+  assert.equal(deleted, 0); // FakeDB models row filtering; D1 reports the affected-row count.
+  assert.deepEqual(db.ephemeralMessages.map(item => item.id), ["unread-valid"]);
 });
 
 test("private conversation pagination uses a stable cursor and marks only returned incoming messages read", async () => {
