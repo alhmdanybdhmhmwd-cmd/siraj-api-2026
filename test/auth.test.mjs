@@ -584,13 +584,13 @@ test("recovery migrations create only additive recovery tables", async () => {
   assert.match(migration, /CREATE TABLE IF NOT EXISTS recovery_codes/i);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS recovery_rate_limits/i);
   assert.match(migration, /CREATE INDEX IF NOT EXISTS idx_recovery_rate_limits_window/i);
-  assert.match(migration, /FOREIGN KEY (\\(user_id\\)) REFERENCES users\\(id\\) ON DELETE CASCADE/i);
-  assert.doesNotMatch(migration + revocations, /\\b(DROP TABLE|DELETE FROM|ALTER TABLE)\\b/i);
+  assert.match(migration, /FOREIGN KEY \(user_id\) REFERENCES users\(id\) ON DELETE CASCADE/i);
+  assert.doesNotMatch(migration + revocations, /\b(DROP TABLE|DELETE FROM|ALTER TABLE)\b/i);
   assert.match(revocations, /CREATE TABLE IF NOT EXISTS recovery_token_revocations/i);
-  assert.match(revocations, /FOREIGN KEY (\\(user_id\\)) REFERENCES users\\(id\\) ON DELETE CASCADE/i);
+  assert.match(revocations, /FOREIGN KEY \(user_id\) REFERENCES users\(id\) ON DELETE CASCADE/i);
 });
 
 test("Wrangler is configured to discover D1 migrations", async () => {
   const config = await readFile(new URL("../wrangler.toml", import.meta.url), "utf8");
-  assert.match(config, /migrations_dir\\s*=\\s*"migrations"/);
+  assert.match(config, /migrations_dir\s*=\s*"migrations"/);
 });
