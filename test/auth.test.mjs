@@ -35,6 +35,7 @@ class FakeDB {
     this.contactCandidates = [];
     this.privacySettings = null;
     this.notificationSettings = null;
+    this.ephemeralMessages = [];
   }
 
   prepare(sql) {
@@ -118,6 +119,14 @@ class FakeDB {
         if (sql.includes("SELECT fcm_token FROM device_tokens")) {
           return { results: db.deviceTokenRows || [] };
         }
+        if (sql.includes("FROM ephemeral_messages")) {
+          const [userA, friendA, friendB, userB, nowA, nowB] = this.params;
+          return { results: db.ephemeralMessages.filter(item =>
+            ((item.sender_id === userA && item.receiver_id === friendA) ||
+             (item.sender_id === friendB && item.receiver_id === userB)) &&
+            item.expires_at > nowA && (item.delete_at == null || item.delete_at > nowB)
+          ).map(item => ({ ...item })) };
+        }
         if (sql.includes("FROM messages") && sql.includes("ORDER BY created_at DESC")) {
           db.lastMessageQuery = sql;
           db.lastMessageParams = this.params;
@@ -146,6 +155,37 @@ class FakeDB {
             return { meta: { changes: 1 } };
           }
           return { meta: { changes: 0 } };
+        }
+        if (sql.includes("INSERT INTO ephemeral_messages")) {
+          const [id, senderId, receiverId, body, createdAt, expiresAt] = this.params;
+          db.ephemeralMessages.push({
+            id, sender_id: senderId, receiver_id: receiverId, body,
+            created_at: createdAt, read_at: null, delete_at: null, expires_at: expiresAt
+          });
+        }
+        if (sql.includes("UPDATE ephemeral_messages SET read_at")) {
+          const [readAt, deleteAt, receiverId, senderId, ...ids] = this.params;
+          for (const item of db.ephemeralMessages) {
+            if (item.receiver_id === receiverId && item.sender_id === senderId &&
+                item.read_at == null && ids.includes(item.id)) {
+              item.read_at = readAt;
+              item.delete_at = deleteAt;
+            }
+          }
+        }
+        if (sql.includes("DELETE FROM ephemeral_messages")) {
+          if (this.params.length === 2) {
+            const [expiresCutoff, deleteCutoff] = this.params;
+            db.ephemeralMessages = db.ephemeralMessages.filter(item =>
+              !(item.expires_at <= expiresCutoff || (item.delete_at != null && item.delete_at <= deleteCutoff))
+            );
+          } else {
+            const [receiverId, senderId, deleteCutoff, ...ids] = this.params;
+            db.ephemeralMessages = db.ephemeralMessages.filter(item =>
+              !(item.receiver_id === receiverId && item.sender_id === senderId &&
+                item.delete_at != null && item.delete_at <= deleteCutoff && ids.includes(item.id))
+            );
+          }
         }
         if (sql.includes("UPDATE messages SET read_at")) {
           db.readReceiptUpdate = { sql, params: this.params };
@@ -226,6 +266,33 @@ class FakeDB {
   }
 }
 
+
+test("ephemeral messages use a separate store and start a ten-second deletion window on read", async () => {
+  const db = new FakeDB();
+  const senderToken = await worker.signToken(user, secret, 0);
+  const senderResponse = await worker.default.fetch(new Request("https://api.example.test/api/ephemeral-messages", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + senderToken, "Content-Type": "application/json" },
+    body: JSON.stringify({ receiverId: "friend-1", body: "temporary text" })
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(senderResponse.status, 201);
+  assert.equal(db.ephemeralMessages.length, 1);
+  assert.equal(db.ephemeralMessages[0].body, "temporary text");
+  assert.equal(db.normalMessageWrites || 0, 0);
+
+  const receiver = { ...user, id: "friend-1", username: "friend" };
+  const receiverToken = await worker.signToken(receiver, secret, 0);
+  const readResponse = await worker.default.fetch(new Request(
+    "https://api.example.test/api/ephemeral-messages?with=user-1",
+    { headers: { Authorization: "Bearer " + receiverToken } }
+  ), { DB: db, JWT_SECRET: secret });
+  assert.equal(readResponse.status, 200);
+  const data = await readResponse.json();
+  assert.equal(data.messages.length, 1);
+  assert.ok(data.messages[0].read_at);
+  assert.equal(data.messages[0].delete_at - data.messages[0].read_at, 10);
+  assert.equal(db.ephemeralMessages[0].delete_at - db.ephemeralMessages[0].read_at, 10);
+});
 
 test("private conversation pagination uses a stable cursor and marks only returned incoming messages read", async () => {
   const db = new FakeDB();
