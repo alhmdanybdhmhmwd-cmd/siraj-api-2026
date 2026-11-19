@@ -164,6 +164,8 @@ test("phone normalization matches local and Yemen international forms", () => {
   assert.ok(internationalPrefix.includes("967771234567"));
   assert.ok(internationalPrefix.includes("771234567"));
   assert.deepEqual(worker.phoneVariants("invalid"), []);
+  assert.ok(worker.phoneVariants("٠٧٧١٢٣٤٥٦٧").includes("0771234567"));
+  assert.ok(worker.phoneVariants("۰۷۷۱۲۳۴۵۶۷").includes("0771234567"));
 });
 
 test("phone contact matching returns registered searchable accounts only", async () => {
