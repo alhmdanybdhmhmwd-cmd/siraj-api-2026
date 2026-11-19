@@ -99,3 +99,25 @@ dedicated non-production D1 database or a verified database backup. Compare
 it with the current Worker SQL before writing any migration. The available
 repository integration does not expose Cloudflare D1 commands, so no D1
 database has been created or queried in this task.
+
+## Repository-history search (2026-11-19)
+
+The Git history was checked beyond the current branch:
+
+- The complete tree of `feature/siraj-foundation-v1` contains only
+  `0001_groups_media.sql` and `0002_tigris_retention.sql`; neither defines
+  `users`, `friendships`, or `messages`.
+- The older `feature/recovery-code-password-reset` tree contains only
+  recovery-code migrations; it does not contain the core schema.
+- The `main` tree has no migrations directory and no schema export.
+- The earliest available `src/src/index.js` revision was inspected; it does
+  not contain `CREATE TABLE` definitions for the three core tables.
+- The repository's Worker source therefore assumes these core tables already
+  exist in the bound D1 database. Their authoritative definitions are not
+  recoverable from the repository history inspected so far.
+
+The CI run for audit documentation commit
+`a7680525e85835b4125323f8381a6f2cba678018` completed successfully:
+`44539078738`. This confirms the repository tests, SQLite recovery migration
+test, and Worker syntax check pass; it does not validate the missing core
+schema or a live D1 database.
