@@ -47,7 +47,7 @@ test("GET /health/ready performs only a read-only SELECT probe", async () => {
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { status: "ready", service: "barq-api" });
   assert.deepEqual(statements, ["SELECT 1 AS ok"]);
-  assert.ok(statements.every(sql => /^\\s*SELECT\\b/i.test(sql)));
+  assert.ok(statements.every(sql => /^\s*SELECT\b/i.test(sql)));
 });
 
 test("GET /health/ready returns 503 when the database probe fails", async () => {
