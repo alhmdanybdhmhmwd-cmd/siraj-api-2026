@@ -515,10 +515,34 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
   return { checked: (expired.results || []).length, deleted };
 }
 
-export { phoneVariants, safeFileName, cleanupExpiredMedia };
+async function cleanupExpiredRateLimits(env, now = Date.now()) {
+  const cutoff = Math.floor(now / 1000) - 24 * 60 * 60;
+  const results = {};
+  for (const table of ["login_rate_limits", "recovery_rate_limits"]) {
+    try {
+      const result = await env.DB.prepare(
+        `DELETE FROM ${table} WHERE window_started < ?`
+      ).bind(cutoff).run();
+      results[table] = Number(result?.meta?.changes || 0);
+    } catch (error) {
+      // Recovery limits may not exist until the additive recovery migration is applied.
+      console.error("Rate limit cleanup failed for " + table + ":", error);
+      results[table] = null;
+    }
+  }
+  return results;
+}
+
+export { phoneVariants, safeFileName, cleanupExpiredMedia, cleanupExpiredRateLimits };
 
 export default {
   async scheduled(_controller, env) {
+    try {
+      const result = await cleanupExpiredRateLimits(env);
+      console.log("Rate limit cleanup:", result);
+    } catch (error) {
+      console.error("Rate limit cleanup failed:", error);
+    }
     try {
       const result = await cleanupExpiredMedia(env);
       console.log("Media expiration cleanup:", result);
