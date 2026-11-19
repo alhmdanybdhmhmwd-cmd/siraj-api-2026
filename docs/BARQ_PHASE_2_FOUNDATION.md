@@ -44,3 +44,16 @@ This phase establishes a safe development foundation and verifies the existing a
 
 ## Safety boundary
 Until the preview D1 database and preview API are available, work is limited to source review, isolated branch changes, local/static tests, and documentation. Do not point development traffic at production data.
+
+## Implemented on the isolated phase branch
+- Added `GET /health/live`, which reports Worker liveness without requiring D1 or secrets.
+- Added `GET /health/ready`, which checks required configuration and executes only `SELECT 1 AS ok` against the configured D1 binding. It returns HTTP 503 when configuration or the read-only probe is unavailable.
+- These probes do not create tables, write rows, or run migrations.
+- The changes are source-only and have not been deployed. Runtime verification remains pending until an isolated preview environment is available.
+
+## Remaining work before phase completion
+- Provision and verify a distinct preview D1 database ID; the current Wrangler binding still points at the production database.
+- Establish a preview Worker/API URL and wire Android build-time environment selection.
+- Add automated route tests for liveness/readiness and authentication/session behavior.
+- Run the repository test workflow and Flutter analyze/tests/build in a suitable toolchain.
+- Verify API, media, and realtime origin routing and the Android package/Firebase identity.
