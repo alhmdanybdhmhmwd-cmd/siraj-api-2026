@@ -1192,3 +1192,18 @@ test("partial notification updates preserve previously disabled categories", asy
   assert.equal(response.status, 200);
   assert.deepEqual(db.notificationSettings, { messages: 0, groups: 0, statuses: 0 });
 });
+
+
+test("login identifier rate limit normalizes local and international phone formats", async () => {
+  const db = new FakeDB();
+  const attempt = (username, ip) => worker.default.fetch(new Request("https://api.example.test/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "CF-Connecting-IP": ip },
+    body: JSON.stringify({ username, password: "incorrect-password" })
+  }), { DB: db, JWT_SECRET: secret });
+  for (let i = 0; i < 10; i++) {
+    assert.equal((await attempt("0771234567", "203.0.113.50")).status, 401);
+  }
+  // A different IP and +967 formatting must not bypass the same account bucket.
+  assert.equal((await attempt("+967 771 234 567", "203.0.113.51")).status, 429);
+});
