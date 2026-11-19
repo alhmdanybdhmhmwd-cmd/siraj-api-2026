@@ -221,7 +221,7 @@ test("password recovery consumes an expiring 160-bit code and invalidates the ol
   const token = await worker.signToken(user, secret, 0);
   const request = () => new Request("https://api.example.test/api/password/recover", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ identifier: user.username, recoveryCode: code, newPassword: "new-secure-password" })
+    body: JSON.stringify({ identifier: "0700000001", recoveryCode: code.match(/.{1,4}/g).join(" "), newPassword: "new-secure-password" })
   });
   const env = { DB: db, JWT_SECRET: secret };
   const response = await worker.default.fetch(request(), env);
