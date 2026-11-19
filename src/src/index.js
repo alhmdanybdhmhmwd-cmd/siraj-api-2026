@@ -424,7 +424,7 @@ export default {
         const body = await request.json();
         const identifier = String(body.identifier || "").trim();
         const recoveryCode = String(body.recoveryCode || "")
-          .replace(/[\\s-]/g, "").toUpperCase();
+          .replace(/[\s-]/g, "").toUpperCase();
         const newPassword = String(body.newPassword || "");
         if (!identifier || !recoveryCode || newPassword.length < 8 || newPassword.length > 128) {
           return json({ error: "بيانات الاسترداد غير صحيحة أو كلمة المرور قصيرة" }, 400);
