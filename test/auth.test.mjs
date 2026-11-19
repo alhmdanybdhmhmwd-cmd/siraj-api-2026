@@ -1086,7 +1086,7 @@ test("login rate limit blocks repeated attempts by identifier and client", async
     assert.equal((await wrongLogin()).status, 401);
   }
   const blocked = await wrongLogin();
-  assert.equal(blocked.status, 429);
+  assert.equal(blocked.status, 429, await blocked.clone().text());
   assert.equal(blocked.headers.get("Retry-After"), "900");
 });
 
