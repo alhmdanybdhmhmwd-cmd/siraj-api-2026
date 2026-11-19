@@ -36,6 +36,9 @@ class FakeDB {
         if (sql.includes("SELECT session_version FROM account_security")) {
           return { session_version: db.sessionVersion };
         }
+        if (sql.includes("COALESCE((SELECT searchable FROM user_privacy")) {
+          return db.targetUser ? { id: db.targetUser.id, searchable: db.targetUser.searchable ? 1 : 0 } : null;
+        }
         if (sql.includes("SELECT * FROM users WHERE username = ? OR phone = ?")) {
           const id = String(this.params[0]).toLowerCase();
           const phone = String(this.params[1]);
@@ -176,4 +179,19 @@ test("BARQ does not create or expose friend requests; direct contacts remain sep
   }), env);
   assert.equal(list.status, 200);
   assert.deepEqual(await list.json(), { incoming: [], outgoing: [] });
+});
+
+test("direct contact adding respects the target user's searchable privacy setting", async () => {
+  const db = new FakeDB();
+  db.targetUser = { id: "hidden-user", searchable: false };
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/contacts", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ userId: "hidden-user" })
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 404);
 });
