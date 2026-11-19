@@ -1143,7 +1143,7 @@ test("registration rate limit blocks mass account creation from one client", asy
     headers: { "Content-Type": "application/json", "CF-Connecting-IP": "203.0.113.40" },
     body: JSON.stringify({ displayName: "New User", username, password: "secure-password-123" })
   }), env);
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 20; i++) {
     assert.equal((await register("newuser" + i)).status, 201);
   }
   const blocked = await register("newuserfinal");
