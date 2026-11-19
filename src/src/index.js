@@ -1356,19 +1356,41 @@ export default {
         ).bind(groupId, currentUser.sub).first();
         if (!member) return json({ error: "Group not found" }, 404);
         if (method === "GET") {
-          const result = await env.DB.prepare(`
+          const requestedLimit = Number(url.searchParams.get("limit") || 100);
+          const limit = Number.isInteger(requestedLimit)
+            ? Math.min(100, Math.max(1, requestedLimit)) : 100;
+          const before = url.searchParams.get("before");
+          const beforeId = url.searchParams.get("beforeId");
+          if ((before && (!beforeId || before.length > 64 || beforeId.length > 128)) ||
+              (!before && beforeId)) {
+            return json({ error: "Invalid message cursor" }, 400);
+          }
+          const cursorClause = before ? "AND (gm.created_at < ? OR (gm.created_at = ? AND gm.id < ?))" : "";
+          const statement = env.DB.prepare(`
             SELECT * FROM (
               SELECT gm.id, gm.group_id, gm.sender_id, gm.body, gm.created_at,
                      u.username, u.display_name
               FROM group_messages gm
               JOIN users u ON u.id = gm.sender_id
-              WHERE gm.group_id = ?
+              WHERE gm.group_id = ? ${cursorClause}
               ORDER BY gm.created_at DESC, gm.id DESC
-              LIMIT 100
+              LIMIT ?
             )
             ORDER BY created_at ASC, id ASC
-          `).bind(groupId).all();
-          return json({ messages: result.results || [] });
+          `);
+          const result = before
+            ? await statement.bind(groupId, before, before, beforeId, limit + 1).all()
+            : await statement.bind(groupId, limit + 1).all();
+          const rows = result.results || [];
+          const hasMore = rows.length > limit;
+          const messages = hasMore ? rows.slice(1) : rows;
+          const oldest = messages[0];
+          return json({
+            messages,
+            hasMore,
+            nextCursor: hasMore && oldest
+              ? { before: oldest.created_at, beforeId: oldest.id } : null
+          });
         }
         if (method === "POST") {
           const body = await request.json();
@@ -1487,39 +1509,71 @@ export default {
           }, 403);
         }
 
+        const requestedLimit = Number(url.searchParams.get("limit") || 100);
+        const limit = Number.isInteger(requestedLimit)
+          ? Math.min(100, Math.max(1, requestedLimit)) : 100;
+        const before = url.searchParams.get("before");
+        const beforeId = url.searchParams.get("beforeId");
+        if ((before && (!beforeId || before.length > 64 || beforeId.length > 128)) ||
+            (!before && beforeId)) {
+          return json({ error: "Invalid message cursor" }, 400);
+        }
+        const cursorClause = before
+          ? "AND (created_at < ? OR (created_at = ? AND id < ?))" : "";
+        const result = before
+          ? await env.DB.prepare(
+              `SELECT * FROM (
+                 SELECT id, sender_id, receiver_id, body, created_at, read_at
+                 FROM messages
+                 WHERE ((sender_id = ? AND receiver_id = ?)
+                    OR (sender_id = ? AND receiver_id = ?))
+                   ${cursorClause}
+                 ORDER BY created_at DESC, id DESC
+                 LIMIT ?
+               )
+               ORDER BY created_at ASC, id ASC`
+            ).bind(currentUser.sub, friendId, friendId, currentUser.sub,
+              before, before, beforeId, limit + 1).all()
+          : await env.DB.prepare(
+              `SELECT * FROM (
+                 SELECT id, sender_id, receiver_id, body, created_at, read_at
+                 FROM messages
+                 WHERE (sender_id = ? AND receiver_id = ?)
+                    OR (sender_id = ? AND receiver_id = ?)
+                 ORDER BY created_at DESC, id DESC
+                 LIMIT ?
+               )
+               ORDER BY created_at ASC, id ASC`
+            ).bind(currentUser.sub, friendId, friendId, currentUser.sub, limit + 1).all();
+
+        const rows = result.results || [];
+        const hasMore = rows.length > limit;
+        const messages = hasMore ? rows.slice(1) : rows;
+
+        // Only mark messages in the page actually returned to this reader.
+        // Older pages are marked when they are fetched, not prematurely.
         const privacy = await env.DB.prepare(
           "SELECT read_receipts FROM user_privacy WHERE user_id = ?"
         ).bind(currentUser.sub).first();
-        if (!privacy || privacy.read_receipts === 1) {
-          await env.DB.prepare(
-            `UPDATE messages
-             SET read_at = CURRENT_TIMESTAMP
-             WHERE sender_id = ?
-             AND receiver_id = ?
-             AND read_at IS NULL`
-          ).bind(friendId, currentUser.sub).run();
+        if ((!privacy || privacy.read_receipts === 1) && messages.length) {
+          const ids = messages.filter(item =>
+            item.sender_id === friendId && item.receiver_id === currentUser.sub && !item.read_at
+          ).map(item => item.id);
+          if (ids.length) {
+            await env.DB.prepare(
+              `UPDATE messages SET read_at = CURRENT_TIMESTAMP
+               WHERE sender_id = ? AND receiver_id = ? AND read_at IS NULL
+                 AND id IN (${ids.map(() => "?").join(", ")})`
+            ).bind(friendId, currentUser.sub, ...ids).run();
+          }
         }
 
-        const result = await env.DB.prepare(
-          `SELECT * FROM (
-             SELECT id, sender_id, receiver_id,
-                    body, created_at, read_at
-             FROM messages
-             WHERE (sender_id = ? AND receiver_id = ?)
-                OR (sender_id = ? AND receiver_id = ?)
-             ORDER BY created_at DESC, id DESC
-             LIMIT 100
-           )
-           ORDER BY created_at ASC, id ASC`
-        ).bind(
-          currentUser.sub,
-          friendId,
-          friendId,
-          currentUser.sub
-        ).all();
-
+        const oldest = messages[0];
         return json({
-          messages: result.results || []
+          messages,
+          hasMore,
+          nextCursor: hasMore && oldest
+            ? { before: oldest.created_at, beforeId: oldest.id } : null
         });
       }
 
