@@ -811,8 +811,8 @@ export default {
         // the first 10,000 accounts and keeps matching reliable as the user base grows.
         const variants = [...requested];
         const matchedById = new Map();
-        for (let offset = 0; offset < variants.length; offset += 80) {
-          const chunk = variants.slice(offset, offset + 80);
+        for (let offset = 0; offset < variants.length; offset += 40) {
+          const chunk = variants.slice(offset, offset + 40);
           const placeholders = chunk.map(() => "?").join(", ");
           const normalizedPhone = "replace(replace(replace(replace(replace(phone, ' ', ''), '+', ''), '-', ''), '(', ''), ')', '')";
           const suffixes = chunk.map(value => value.slice(-9)).filter(value => value.length === 9);
