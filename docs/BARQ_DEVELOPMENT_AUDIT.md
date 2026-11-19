@@ -18,14 +18,13 @@ This branch is a safe development workspace. Production `main` is unchanged.
 - Profile editing, logout, Arabic RTL interface and existing visual identity.
 - Existing API compatibility, stored credentials and user data.
 
-## Confirmed gaps found in source inspection
-1. The Flutter client calls `POST /api/password/recover` and expects `recoveryCode` on registration, but the current Worker `src/src/index.js` inspected on 2026-11-19 does not contain the password-recovery route and its registration response does not return a recovery code. This is an unfinished pre-existing feature and must be completed without breaking existing accounts.
-2. The Flutter client opens a WebSocket at `/api/realtime`; the current Worker source inspected does not implement a WebSocket upgrade or realtime route. Realtime delivery therefore cannot be considered complete; polling currently provides a fallback.
-3. The backend still contains legacy friend-request routes. The product flow must remain direct-add/direct-message; do not introduce friend requests into the UI or require them for messaging.
-4. Automatic phone-contact matching/synchronization is not present in the inspected client API surface. Implement only with explicit contacts permission and privacy-safe matching.
-5. No end-to-end encryption implementation was found in the inspected Flutter dependency list or Worker source.
-6. The six approved new features are not implemented in the inspected source: Lightning mode, nearby offline messaging and later sync, read-triggered 10-second ephemeral messages excluded from Firebase, Arabic-English live translation, voice transcription, and invite rewards (five verified registrations => "صاعقة" title and gold avatar frame).
-
+## Confirmed gaps and work status
+1. **Recovery code — implemented on this development branch (not deployed):** registration now returns a cryptographically random one-time recovery code; the backend stores only a salted PBKDF2 hash; `POST /api/password/recover` validates username/phone plus code, updates the password, and consumes the code; authenticated `POST /api/recovery-code` rotates it after current-password verification. Existing users without a code can use the rotate endpoint after signing in.
+2. **Realtime:** the Flutter client contains a WebSocket client for `/api/realtime`, but the current Worker does not implement a WebSocket upgrade or realtime route. Polling is the current fallback; realtime is still open.
+3. **Direct contacts:** `/api/contacts` already exists in the Worker and adds both sides directly. Legacy friend-request routes remain in the backend for compatibility, but must not be exposed or required by the product flow.
+4. **Automatic phone-contact matching/synchronization** is not present in the inspected client API surface. Implement only with explicit contacts permission and privacy-safe matching.
+5. **End-to-end encryption** was not found in the inspected Flutter dependency list or Worker source.
+6. **Six approved features** remain unimplemented in the inspected source: Lightning mode, nearby offline messaging and later sync, read-triggered 10-second ephemeral messages excluded from Firebase, Arabic-English live translation, voice transcription, and invite rewards (five verified registrations => "صاعقة" title and gold avatar frame).
 ## Implementation order
 1. Reconcile the complete existing requirements and finish old in-progress work first, especially recovery-code/password recovery, API/realtime consistency, contact matching, and reliable message delivery.
 2. Add the six approved features in independently testable increments.
