@@ -50,7 +50,7 @@ class FakeDB {
       async first() {
         if (sql.includes("SELECT sender_id, receiver_id FROM messages WHERE id = ?")) {
           const item = db.messages.find(message => message.id === this.params[0]);
-          return item ? { sender_id: item.sender_id, receiver_id: item.receiver_id } : null;
+          return item ? { sender_id: item.sender_id, receiver_id: item.receiver_id, body: item.body } : null;
         }
         if (sql.includes("SELECT user_id FROM referral_codes WHERE code = ?")) {
           const userId = db.referralCodes.get(this.params[0]);
@@ -326,10 +326,10 @@ test("offline message synchronization is idempotent and rejects ID collisions", 
   const db = new FakeDB();
   const token = await worker.signToken(user, secret, 0);
   const env = { DB: db, JWT_SECRET: secret };
-  const send = (receiverId, clientMessageId) => worker.default.fetch(new Request("https://api.example.test/api/messages", {
+  const send = (receiverId, clientMessageId, message = "offline message") => worker.default.fetch(new Request("https://api.example.test/api/messages", {
     method: "POST",
     headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
-    body: JSON.stringify({ receiverId, body: "offline message", clientMessageId })
+    body: JSON.stringify({ receiverId, body: message, clientMessageId })
   }), env);
   const first = await send("friend-1", "aabbccddeeff00112233445566778899");
   assert.equal(first.status, 201);
@@ -337,6 +337,8 @@ test("offline message synchronization is idempotent and rejects ID collisions", 
   assert.equal(duplicate.status, 200);
   assert.equal((await duplicate.json()).duplicate, true);
   assert.equal(db.messages.length, 1);
+  const bodyConflict = await send("friend-1", "aabbccddeeff00112233445566778899", "different payload");
+  assert.equal(bodyConflict.status, 409);
   const conflict = await send("another-friend", "aabbccddeeff00112233445566778899");
   assert.equal(conflict.status, 409);
   assert.equal(db.messages.length, 1);
