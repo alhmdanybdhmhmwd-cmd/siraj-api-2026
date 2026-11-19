@@ -157,14 +157,14 @@ async function authenticate(request, env) {
   if (!token) return null;
 
   const payload = await verifyToken(token, env.JWT_SECRET);
-  if (!payload) return null;
+  if (!payload || !Number.isSafeInteger(payload.sv) || payload.sv < 0) return null;
   try {
     const row = await env.DB.prepare(
       "SELECT session_version FROM account_security WHERE user_id = ?"
     ).bind(payload.sub).first();
-    // A valid session must have an explicit revocation-version record.
-    // Missing security state is not equivalent to version zero.
-    if (!row || Number(payload.sv || 0) !== Number(row.session_version || 0)) {
+    // A valid session must carry an explicit, non-negative integer version.
+    if (!row || !Number.isSafeInteger(Number(row.session_version)) ||
+        payload.sv !== Number(row.session_version)) {
       return null;
     }
   } catch (error) {
