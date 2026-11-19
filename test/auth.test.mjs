@@ -1101,3 +1101,18 @@ test("login rate limit separates client IP buckets", async () => {
   for (let i = 0; i < 10; i++) await attempt("203.0.113.11", "unknown-" + i);
   assert.equal((await attempt("203.0.113.12", "unknown-final")).status, 401);
 });
+
+
+test("JWT verification rejects unsupported algorithms and oversized tokens", async () => {
+  const token = await worker.signToken(user, secret, 0);
+  const parts = token.split(".");
+  const unsupportedHeader = Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString("base64url");
+  const unsigned = unsupportedHeader + "." + parts[1];
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(unsigned));
+  const forgedProfile = unsigned + "." + Buffer.from(signature).toString("base64url");
+  assert.equal(await worker.verifyToken(forgedProfile, secret), null);
+  assert.equal(await worker.verifyToken("x".repeat(8193), secret), null);
+  assert.ok(await worker.verifyToken(token, secret));
+});
