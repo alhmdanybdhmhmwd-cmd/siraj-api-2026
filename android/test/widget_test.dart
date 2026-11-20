@@ -3,6 +3,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:barq/main.dart';
 
 void main() {
+  test('international phone normalization supports Arabic digits and 00 prefix', () {
+    expect(normalizeBarqInternationalPhone(' +٩٦٧ ٧٧٠٠٠٠٠٠٠ '), '+967770000000');
+    expect(normalizeBarqInternationalPhone('00447911123456'), '+447911123456');
+  });
+
   test('message merge deduplicates by id and keeps chronological order', () {
     final merged = mergeMessages(
       [
@@ -57,6 +62,7 @@ void main() {
     expect(find.text('صديق برق'), findsOneWidget);
     expect(find.text('@barq_friend'), findsNWidgets(2));
     expect(find.text('+967700000001'), findsOneWidget);
+    expect(find.text('حفظ الرقم في جهات الاتصال'), findsOneWidget);
     expect(find.text('إرسال رسالة'), findsOneWidget);
   });
 
