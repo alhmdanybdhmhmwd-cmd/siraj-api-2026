@@ -3577,15 +3577,9 @@ class BarqConversationSummaryDialog extends StatefulWidget {
 }
 
 class _BarqConversationSummaryDialogState extends State<BarqConversationSummaryDialog> {
-  late Future<Map<String, dynamic>> _summaryFuture;
+  Future<Map<String, dynamic>>? _summaryFuture;
 
-  @override
-  void initState() {
-    super.initState();
-    _summaryFuture = widget.loadSummary();
-  }
-
-  void _retry() {
+  void _startSummary() {
     setState(() => _summaryFuture = widget.loadSummary());
   }
 
@@ -3615,65 +3609,78 @@ class _BarqConversationSummaryDialogState extends State<BarqConversationSummaryD
               ]),
               const SizedBox(height: 6),
               const Text(
-                'سيُرسل نص آخر 60 رسالة إلى خدمة الذكاء الاصطناعي لدى Cloudflare لإنشاء الملخص. لا تُرسل المرفقات، ولا يُحفظ الملخص كرسالة في المحادثة.',
+                'لإنشاء الملخص، سيُرسل نص آخر 60 رسالة إلى خدمة الذكاء الاصطناعي لدى Cloudflare. لا تُرسل المرفقات، ولا يُحفظ الملخص كرسالة في المحادثة.',
                 style: TextStyle(color: Colors.white54, fontSize: 11),
               ),
               const Divider(height: 22, color: Colors.white24),
-              FutureBuilder<Map<String, dynamic>>(
-                future: _summaryFuture,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState != ConnectionState.done) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 28),
-                      child: Column(children: [
-                        CircularProgressIndicator(color: gold),
-                        SizedBox(height: 12),
-                        Text('جارٍ قراءة الرسائل وإنشاء الملخص...', style: TextStyle(color: Colors.white70)),
-                      ]),
-                    );
-                  }
-                  if (snapshot.hasError) {
-                    return Column(children: [
-                      const Icon(Icons.error_outline, color: Colors.redAccent, size: 34),
-                      const SizedBox(height: 8),
-                      Text(cleanError(snapshot.error!), textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.white70)),
-                      const SizedBox(height: 12),
-                      OutlinedButton.icon(
-                        onPressed: _retry,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('إعادة المحاولة'),
-                      ),
-                    ]);
-                  }
-                  final data = snapshot.data ?? <String, dynamic>{};
-                  final summary = field(data, ['summary']);
-                  if (summary.isEmpty) {
-                    return Column(children: [
-                      const Text('لا توجد رسائل نصية كافية لإنشاء ملخص.',
-                        textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
-                      TextButton(onPressed: _retry, child: const Text('إعادة المحاولة')),
-                    ]);
-                  }
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(summary, style: const TextStyle(color: Colors.white, height: 1.55)),
-                      const SizedBox(height: 12),
-                      Text('اعتمد الملخص على ' + field(data, ['messageCount'], '0') + ' رسالة نصية حديثة.',
-                        style: const TextStyle(color: Colors.white54, fontSize: 11)),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
-                          onPressed: _retry,
-                          icon: const Icon(Icons.refresh, size: 17),
-                          label: const Text('تحديث الملخص'),
+              if (_summaryFuture == null)
+                Column(children: [
+                  const Text('لن يبدأ إرسال الرسائل قبل ضغطك على «إنشاء الملخص».',
+                    textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
+                  const SizedBox(height: 14),
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+                    onPressed: _startSummary,
+                    icon: const Icon(Icons.auto_awesome),
+                    label: const Text('إنشاء الملخص'),
+                  ),
+                ])
+              else
+                FutureBuilder<Map<String, dynamic>>(
+                  future: _summaryFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState != ConnectionState.done) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 28),
+                        child: Column(children: [
+                          CircularProgressIndicator(color: gold),
+                          SizedBox(height: 12),
+                          Text('جارٍ قراءة الرسائل وإنشاء الملخص...', style: TextStyle(color: Colors.white70)),
+                        ]),
+                      );
+                    }
+                    if (snapshot.hasError) {
+                      return Column(children: [
+                        const Icon(Icons.error_outline, color: Colors.redAccent, size: 34),
+                        const SizedBox(height: 8),
+                        Text(cleanError(snapshot.error!), textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.white70)),
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: _startSummary,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('إعادة المحاولة'),
                         ),
-                      ),
-                    ],
-                  );
-                },
-              ),
+                      ]);
+                    }
+                    final data = snapshot.data ?? <String, dynamic>{};
+                    final summary = field(data, ['summary']);
+                    if (summary.isEmpty) {
+                      return Column(children: [
+                        const Text('لا توجد رسائل نصية كافية لإنشاء ملخص.',
+                          textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
+                        TextButton(onPressed: _startSummary, child: const Text('إعادة المحاولة')),
+                      ]);
+                    }
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(summary, style: const TextStyle(color: Colors.white, height: 1.55)),
+                        const SizedBox(height: 12),
+                        Text('اعتمد الملخص على ' + field(data, ['messageCount'], '0') + ' رسالة نصية حديثة.',
+                          style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            onPressed: _startSummary,
+                            icon: const Icon(Icons.refresh, size: 17),
+                            label: const Text('تحديث الملخص'),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
             ],
           ),
         ),
