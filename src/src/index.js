@@ -577,7 +577,7 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
   `).run();
   await env.DB.prepare(`
     CREATE TABLE IF NOT EXISTS status_media (
-      status_id TEXT PRIMARY KEY, object_key TEXT NOT NULL UNIQUE,
+      id TEXT PRIMARY KEY, status_id TEXT NOT NULL, object_key TEXT NOT NULL UNIQUE,
       file_name TEXT NOT NULL, content_type TEXT NOT NULL,
       size INTEGER NOT NULL, caption TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1651,7 +1651,7 @@ export default {
         `).run();
         await env.DB.prepare(`
           CREATE TABLE IF NOT EXISTS status_media (
-            status_id TEXT PRIMARY KEY, object_key TEXT NOT NULL UNIQUE,
+            id TEXT PRIMARY KEY, status_id TEXT NOT NULL, object_key TEXT NOT NULL UNIQUE,
             file_name TEXT NOT NULL, content_type TEXT NOT NULL,
             size INTEGER NOT NULL, caption TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1666,7 +1666,19 @@ export default {
           )
         `).run();
 
-        const id = crypto.randomUUID();
+        const requestedStatusId = (request.headers.get("X-Status-Id") || "").trim();
+        if (requestedStatusId.length > 128) return json({ error: "Invalid SPARK status identifier" }, 400);
+        const id = requestedStatusId || crypto.randomUUID();
+        if (requestedStatusId) {
+          const existingStatus = await env.DB.prepare(
+            "SELECT user_id, expires_at FROM status_posts WHERE id = ?"
+          ).bind(requestedStatusId).first();
+          if (!existingStatus || existingStatus.user_id !== currentUser.sub ||
+              Date.parse(existingStatus.expires_at) <= Date.now()) {
+            return json({ error: "SPARK status not found or expired" }, 404);
+          }
+        }
+        const mediaId = crypto.randomUUID();
         const objectKey = currentUser.sub + "/" + crypto.randomUUID();
         const suppliedName = safeFileName(request.headers.get("X-File-Name") || "spark-media");
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
@@ -1693,20 +1705,24 @@ export default {
           return json({ error: "SPARK media upload failed", storageStatus: putResponse.status }, 502);
         }
         try {
-          await env.DB.batch([
-            env.DB.prepare(
+          const statements = [];
+          if (!requestedStatusId) {
+            statements.push(env.DB.prepare(
               "INSERT INTO status_posts (id, user_id, content, expires_at) VALUES (?, ?, ?, ?)"
-            ).bind(id, currentUser.sub, caption, expiresAt),
+            ).bind(id, currentUser.sub, caption, expiresAt));
+          }
+          statements.push(
             env.DB.prepare(
-              "INSERT INTO status_media (status_id, object_key, file_name, content_type, size, caption) VALUES (?, ?, ?, ?, ?, ?)"
-            ).bind(id, objectKey, suppliedName, contentType, bytes.byteLength, caption),
+              "INSERT INTO status_media (id, status_id, object_key, file_name, content_type, size, caption) VALUES (?, ?, ?, ?, ?, ?, ?)"
+            ).bind(mediaId, id, objectKey, suppliedName, contentType, bytes.byteLength, caption),
             env.DB.prepare(
               "INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?)"
             ).bind(objectKey, expiresAt),
             env.DB.prepare(
               "INSERT INTO media_access (object_key, owner_id, recipient_id, group_id, file_name, content_type, expires_at) VALUES (?, ?, NULL, NULL, ?, ?, ?)"
             ).bind(objectKey, currentUser.sub, suppliedName, contentType, expiresAt)
-          ]);
+          );
+          await env.DB.batch(statements);
         } catch (error) {
           let deleted = false;
           try {
@@ -1718,22 +1734,24 @@ export default {
           }
           throw error;
         }
-        try {
-          const recipients = await env.DB.prepare(
-            "SELECT friend_id FROM friendships WHERE user_id = ?"
-          ).bind(currentUser.sub).all();
-          await Promise.all((recipients.results || []).map(item =>
-            sendSirajPush(env, item.friend_id, currentUser.sub,
-              currentUser.username, "لحظة جديدة في SPARK", { category: "statuses" })
-          ));
-        } catch (notificationError) {
-          console.error("SPARK media notification dispatch failed:", notificationError);
+        if (!requestedStatusId) {
+          try {
+            const recipients = await env.DB.prepare(
+              "SELECT friend_id FROM friendships WHERE user_id = ?"
+            ).bind(currentUser.sub).all();
+            await Promise.all((recipients.results || []).map(item =>
+              sendSirajPush(env, item.friend_id, currentUser.sub,
+                currentUser.username, "لحظة جديدة في SPARK", { category: "statuses" })
+            ));
+          } catch (notificationError) {
+            console.error("SPARK media notification dispatch failed:", notificationError);
+          }
         }
         return json({
           status: {
             id, userId: currentUser.sub, content: caption,
             createdAt: new Date().toISOString(), expiresAt,
-            media: { attachmentId: objectKey, fileName: suppliedName, contentType, size: bytes.byteLength, caption }
+            media: { id: mediaId, attachmentId: objectKey, fileName: suppliedName, contentType, size: bytes.byteLength, caption }
           }
         }, 201);
       }
@@ -1825,7 +1843,7 @@ export default {
         if (statuses.length) {
           await env.DB.prepare(`
             CREATE TABLE IF NOT EXISTS status_media (
-              status_id TEXT PRIMARY KEY, object_key TEXT NOT NULL UNIQUE,
+              id TEXT PRIMARY KEY, status_id TEXT NOT NULL, object_key TEXT NOT NULL UNIQUE,
               file_name TEXT NOT NULL, content_type TEXT NOT NULL,
               size INTEGER NOT NULL, caption TEXT NOT NULL DEFAULT '',
               created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -3139,7 +3157,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         `).run();
         await env.DB.prepare(`
           CREATE TABLE IF NOT EXISTS status_media (
-            status_id TEXT PRIMARY KEY, object_key TEXT NOT NULL UNIQUE,
+            id TEXT PRIMARY KEY, status_id TEXT NOT NULL, object_key TEXT NOT NULL UNIQUE,
             file_name TEXT NOT NULL, content_type TEXT NOT NULL,
             size INTEGER NOT NULL, caption TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
