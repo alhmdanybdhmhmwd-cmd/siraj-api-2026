@@ -1128,7 +1128,8 @@ export default {
         ).bind(friendId, currentUser.sub).run();
 
         const result = await env.DB.prepare(
-          `SELECT id, sender_id, receiver_id, body, created_at, read_at, delete_at
+          `SELECT id, sender_id, receiver_id, body, created_at, read_at,
+                        reply_to_id, reply_to_body, reply_to_sender_id, delete_at
            FROM ephemeral_messages
            WHERE ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))
              AND (delete_at IS NULL OR delete_at > unixepoch())
@@ -1938,6 +1939,7 @@ const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
           const statement = env.DB.prepare(`
             SELECT * FROM (
               SELECT gm.id, gm.group_id, gm.sender_id, gm.body, gm.created_at,
+                     gm.reply_to_id, gm.reply_to_body, gm.reply_to_sender_id,
                      u.username, u.display_name, p.updated_at AS photo_updated_at
               FROM group_messages gm
               JOIN users u ON u.id = gm.sender_id
@@ -1966,10 +1968,22 @@ const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
           const body = await request.json();
           const message = String(body.body || "").trim();
           if (!message || message.length > 5000) return json({ error: "Invalid message" }, 400);
+          const replyToId = body.replyToId == null ? "" : String(body.replyToId).trim();
+          let reply = { id: null, body: null, sender_id: null };
+          if (replyToId) {
+            if (replyToId.length > 128) return json({ error: "Invalid reply target" }, 400);
+            const target = await env.DB.prepare(
+              "SELECT id, body, sender_id FROM group_messages WHERE id = ? AND group_id = ?"
+            ).bind(replyToId, groupId).first();
+            if (!target) return json({ error: "Reply target not found in this group" }, 404);
+            reply = { id: target.id, body: String(target.body || "").slice(0, 500), sender_id: target.sender_id };
+          }
           const id = crypto.randomUUID();
           await env.DB.prepare(
-            "INSERT INTO group_messages (id, group_id, sender_id, body) VALUES (?, ?, ?, ?)"
-          ).bind(id, groupId, currentUser.sub, message).run();
+            `INSERT INTO group_messages
+             (id, group_id, sender_id, body, reply_to_id, reply_to_body, reply_to_sender_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`
+          ).bind(id, groupId, currentUser.sub, message, reply.id, reply.body, reply.sender_id).run();
           try {
             const [group, recipients, sender] = await Promise.all([
               env.DB.prepare("SELECT name FROM chat_groups WHERE id = ?").bind(groupId).first(),
@@ -2033,12 +2047,27 @@ const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
         }
         const id = clientMessageId || crypto.randomUUID();
 
+        const replyToId = body.replyToId == null ? "" : String(body.replyToId).trim();
+        let reply = { id: null, body: null, sender_id: null };
+        if (replyToId) {
+          if (replyToId.length > 128) return json({ error: "Invalid reply target" }, 400);
+          const target = await env.DB.prepare(
+            `SELECT id, body, sender_id FROM messages
+             WHERE id = ? AND (
+               (sender_id = ? AND receiver_id = ?) OR
+               (sender_id = ? AND receiver_id = ?)
+             )`
+          ).bind(replyToId, currentUser.sub, receiverId, receiverId, currentUser.sub).first();
+          if (!target) return json({ error: "Reply target not found in this conversation" }, 404);
+          reply = { id: target.id, body: String(target.body || "").slice(0, 500), sender_id: target.sender_id };
+        }
+
         const inserted = await env.DB.prepare(
           `INSERT INTO messages
-           (id, sender_id, receiver_id, body)
-           VALUES (?, ?, ?, ?)
+           (id, sender_id, receiver_id, body, reply_to_id, reply_to_body, reply_to_sender_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO NOTHING`
-        ).bind(id, currentUser.sub, receiverId, message).run();
+        ).bind(id, currentUser.sub, receiverId, message, reply.id, reply.body, reply.sender_id).run();
 
         if (Number(inserted?.meta?.changes || 0) === 0) {
           const existing = await env.DB.prepare(
@@ -2122,7 +2151,8 @@ const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
         const result = before
           ? await env.DB.prepare(
               `SELECT * FROM (
-                 SELECT id, sender_id, receiver_id, body, created_at, read_at
+                 SELECT id, sender_id, receiver_id, body, created_at, read_at,
+                        reply_to_id, reply_to_body, reply_to_sender_id
                  FROM messages
                  WHERE ((sender_id = ? AND receiver_id = ?)
                     OR (sender_id = ? AND receiver_id = ?))
@@ -2135,7 +2165,8 @@ const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
               before, before, beforeId, limit + 1).all()
           : await env.DB.prepare(
               `SELECT * FROM (
-                 SELECT id, sender_id, receiver_id, body, created_at, read_at
+                 SELECT id, sender_id, receiver_id, body, created_at, read_at,
+                        reply_to_id, reply_to_body, reply_to_sender_id
                  FROM messages
                  WHERE (sender_id = ? AND receiver_id = ?)
                     OR (sender_id = ? AND receiver_id = ?)
