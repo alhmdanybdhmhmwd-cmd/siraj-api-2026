@@ -8,6 +8,8 @@ on:
       - barq/phase-2-android-ci-2026-11-20
     paths:
       - .github/workflows/barq-local-health-probes.yml
+      - wrangler.test.toml
+      - src/src/index.js
 
 permissions:
   contents: read
