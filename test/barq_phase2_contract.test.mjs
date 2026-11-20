@@ -221,18 +221,18 @@ test("server-side message search is scoped, authenticated, bounded, and rate-lim
   assert.ok(groupSearch.includes("instr(lower(gm.body), lower(?))"));
   assert.ok(groupSearch.includes("message-search-group"));
   assert.ok(groupSearch.includes("Math.min(50"));
-  assert.ok(app.includes("searchPrivateMessages"));
-  assert.ok(app.includes("searchGroupMessages"));
-  assert.ok(app.includes("جميع رسائل المحادثة"));
-  assert.ok(app.includes("Api.searchPrivateMessages(friendId, query)"));
-  assert.ok(app.includes("Api.searchGroupMessages(groupId, query)"));
+  assert.ok(flutterApp.includes("searchPrivateMessages"));
+  assert.ok(flutterApp.includes("searchGroupMessages"));
+  assert.ok(flutterApp.includes("جميع رسائل المحادثة"));
+  assert.ok(flutterApp.includes("Api.searchPrivateMessages(friendId, query)"));
+  assert.ok(flutterApp.includes("Api.searchGroupMessages(groupId, query)"));
 });
 
 test("private and group message pagination uses stable compound cursors and merges without duplicates", () => {
   assert.ok(worker.includes("created_at < ? OR (created_at = ? AND id < ?)"));
   assert.ok(worker.includes("nextCursor: hasMore && oldest"));
-  assert.ok(app.includes("mergeMessages(older, messages)"));
-  assert.ok(app.includes("Api.messagesPage(friendId, before: olderMessageCursor)"));
-  assert.ok(app.includes("Api.groupMessagesPage(groupId, before: olderMessageCursor)"));
-  assert.ok(app.includes("final unique = <String, Map<String, dynamic>>{}"));
+  assert.ok(flutterApp.includes("mergeMessages(older, messages)"));
+  assert.ok(flutterApp.includes("Api.messagesPage(friendId, before: olderMessageCursor)"));
+  assert.ok(flutterApp.includes("Api.groupMessagesPage(groupId, before: olderMessageCursor)"));
+  assert.ok(flutterApp.includes("final unique = <String, Map<String, dynamic>>{}"));
 });
