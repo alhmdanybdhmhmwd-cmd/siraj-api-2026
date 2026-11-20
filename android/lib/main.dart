@@ -667,6 +667,14 @@ class Api {
     );
   }
 
+  static Future<Map<String, dynamic>> summarizePrivateConversation(String friendId) {
+    return request('POST', '/api/messages/' + Uri.encodeComponent(friendId) + '/summary');
+  }
+
+  static Future<Map<String, dynamic>> summarizeGroupConversation(String groupId) {
+    return request('POST', '/api/groups/' + Uri.encodeComponent(groupId) + '/summary');
+  }
+
   static Future<void> uploadAttachment({
     required List<int> bytes,
     required String fileName,
@@ -3559,6 +3567,121 @@ String _mimeForExtension(String extension) {
   }
 }
 
+class BarqConversationSummaryDialog extends StatefulWidget {
+  final Future<Map<String, dynamic>> Function() loadSummary;
+
+  const BarqConversationSummaryDialog({super.key, required this.loadSummary});
+
+  @override
+  State<BarqConversationSummaryDialog> createState() => _BarqConversationSummaryDialogState();
+}
+
+class _BarqConversationSummaryDialogState extends State<BarqConversationSummaryDialog> {
+  late Future<Map<String, dynamic>> _summaryFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _summaryFuture = widget.loadSummary();
+  }
+
+  void _retry() {
+    setState(() => _summaryFuture = widget.loadSummary());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: panel,
+      insetPadding: const EdgeInsets.all(16),
+      child: SizedBox(
+        width: 440,
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(children: [
+                const Icon(Icons.auto_awesome, color: gold),
+                const SizedBox(width: 9),
+                const Expanded(child: Text('ملخص المحادثة',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                IconButton(
+                  tooltip: 'إغلاق',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close, color: Colors.white70),
+                ),
+              ]),
+              const SizedBox(height: 6),
+              const Text(
+                'سيُرسل نص آخر 60 رسالة إلى خدمة الذكاء الاصطناعي لدى Cloudflare لإنشاء الملخص. لا تُرسل المرفقات، ولا يُحفظ الملخص كرسالة في المحادثة.',
+                style: TextStyle(color: Colors.white54, fontSize: 11),
+              ),
+              const Divider(height: 22, color: Colors.white24),
+              FutureBuilder<Map<String, dynamic>>(
+                future: _summaryFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 28),
+                      child: Column(children: [
+                        CircularProgressIndicator(color: gold),
+                        SizedBox(height: 12),
+                        Text('جارٍ قراءة الرسائل وإنشاء الملخص...', style: TextStyle(color: Colors.white70)),
+                      ]),
+                    );
+                  }
+                  if (snapshot.hasError) {
+                    return Column(children: [
+                      const Icon(Icons.error_outline, color: Colors.redAccent, size: 34),
+                      const SizedBox(height: 8),
+                      Text(cleanError(snapshot.error!), textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.white70)),
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: _retry,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('إعادة المحاولة'),
+                      ),
+                    ]);
+                  }
+                  final data = snapshot.data ?? <String, dynamic>{};
+                  final summary = field(data, ['summary']);
+                  if (summary.isEmpty) {
+                    return Column(children: [
+                      const Text('لا توجد رسائل نصية كافية لإنشاء ملخص.',
+                        textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
+                      TextButton(onPressed: _retry, child: const Text('إعادة المحاولة')),
+                    ]);
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(summary, style: const TextStyle(color: Colors.white, height: 1.55)),
+                      const SizedBox(height: 12),
+                      Text('اعتمد الملخص على ' + field(data, ['messageCount'], '0') + ' رسالة نصية حديثة.',
+                        style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: _retry,
+                          icon: const Icon(Icons.refresh, size: 17),
+                          label: const Text('تحديث الملخص'),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class BarqVoiceRecordButton extends StatefulWidget {
   final bool disabled;
   final Future<void> Function(List<int> bytes, Duration duration) onSend;
@@ -5008,6 +5131,16 @@ class _ChatPageState extends State<ChatPage> {
               icon: const Icon(Icons.search, color: gold),
               tooltip: 'البحث في المحادثة',
             ),
+            IconButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => BarqConversationSummaryDialog(
+                  loadSummary: () => Api.summarizePrivateConversation(friendId),
+                ),
+              ),
+              icon: const Icon(Icons.auto_awesome_outlined, color: gold),
+              tooltip: 'ملخص المحادثة',
+            ),
             IconButton(onPressed: loadMessages, icon: const Icon(Icons.refresh, color: gold)),
           ],
         ),
@@ -5516,6 +5649,16 @@ class _GroupChatPageState extends State<GroupChatPage> {
               onPressed: () => showConversationSearch(context, (query, before) => Api.searchGroupMessages(groupId, query, before: before)),
               icon: const Icon(Icons.search, color: gold),
               tooltip: 'البحث في المحادثة',
+            ),
+            IconButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => BarqConversationSummaryDialog(
+                  loadSummary: () => Api.summarizeGroupConversation(groupId),
+                ),
+              ),
+              icon: const Icon(Icons.auto_awesome_outlined, color: gold),
+              tooltip: 'ملخص المحادثة',
             ),
             IconButton(onPressed: showGroupMembers, icon: const Icon(Icons.people_alt_outlined, color: gold), tooltip: 'أعضاء المجموعة'),
             IconButton(onPressed: widget.onAddMember, icon: const Icon(Icons.person_add_alt_1, color: gold), tooltip: 'إضافة عضو'),
