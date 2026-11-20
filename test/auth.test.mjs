@@ -643,6 +643,23 @@ test("registration issues a one-time 160-bit recovery code and stores only its s
   assert.equal(db.recovery.expires_at > Math.floor(Date.now() / 1000), true);
 });
 
+test("registration accepts international numbers and generates a private handle when username is omitted", async () => {
+  const db = new FakeDB();
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      displayName: "International User",
+      phone: "+447911123456",
+      password: "secure-password-123"
+    })
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 201);
+  const data = await response.json();
+  assert.equal(data.user.phone, "+447911123456");
+  assert.match(data.user.username, /^barq[a-f0-9]{12}$/);
+});
+
 test("concurrent registrations cannot claim equivalent Yemen local and international phone formats", async () => {
   const db = new FakeDB();
   db.users = [];
