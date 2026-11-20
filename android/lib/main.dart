@@ -3580,7 +3580,8 @@ class _BarqConversationSummaryDialogState extends State<BarqConversationSummaryD
   Future<Map<String, dynamic>>? _summaryFuture;
 
   void _startSummary() {
-    setState(() => _summaryFuture = widget.loadSummary());
+    final future = widget.loadSummary();
+    setState(() => _summaryFuture = future);
   }
 
   @override
