@@ -143,6 +143,8 @@ class FakeDB {
         }
         if (sql.includes("substr(") && sql.includes("user_privacy")) {
           db.contactLookupQueries = (db.contactLookupQueries || 0) + 1;
+          db.lastContactLookupSql = sql;
+          db.lastContactLookupParams = this.params;
           return { results: db.contactCandidates };
         }
         if (sql.includes("FROM friendships f") && sql.includes("JOIN users u")) {
@@ -1013,6 +1015,9 @@ test("phone contact matching returns registered searchable accounts only", async
   const data = await response.json();
   assert.deepEqual(data.users.map(item => item.id), ["matched-user"]);
   assert.equal(db.contactLookupQueries, 1);
+  assert.match(db.lastContactLookupSql, /COALESCE\(\(SELECT searchable FROM user_privacy WHERE user_id = users\.id\), 1\) = 1/);
+  assert.match(db.lastContactLookupSql, /WHERE id != \?/);
+  assert.equal(db.lastContactLookupParams[0], user.id);
 });
 
 test("phone contact matching uses bounded queries beyond the former 10,000-user scan", async () => {
