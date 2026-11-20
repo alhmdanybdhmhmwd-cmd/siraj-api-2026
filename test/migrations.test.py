@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = ROOT / "migrations" / "0001_recovery_codes.sql"
+MIGRATIONS = sorted((ROOT / "migrations").glob("*.sql"))"
 
 
 class RecoveryMigrationTests(unittest.TestCase):
@@ -13,7 +13,8 @@ class RecoveryMigrationTests(unittest.TestCase):
         self.db.execute("PRAGMA foreign_keys = ON")
         # The users table belongs to the existing application schema.
         self.db.execute("CREATE TABLE users (id TEXT PRIMARY KEY)")
-        self.db.executescript(MIGRATION.read_text(encoding="utf-8"))
+        for migration in MIGRATIONS:
+            self.db.executescript(migration.read_text(encoding="utf-8"))
 
     def tearDown(self):
         self.db.close()
@@ -80,6 +81,39 @@ class RecoveryMigrationTests(unittest.TestCase):
             "SELECT window_started, attempts FROM recovery_rate_limits WHERE bucket_key = 'bucket'"
         ).fetchone()
         self.assertEqual(row, (1903, 1))
+
+
+    def test_revoked_sessions_store_only_hashes_and_expire_with_the_token(self):
+        tables = {
+            row[0] for row in self.db.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+        indexes = {
+            row[0] for row in self.db.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'index'"
+            )
+        }
+        self.assertIn("revoked_sessions", tables)
+        self.assertIn("idx_revoked_sessions_expiry", indexes)
+
+        self.db.execute("INSERT INTO users (id) VALUES ('user-1')")
+        self.db.execute(
+            """INSERT INTO revoked_sessions (token_hash, user_id, expires_at)
+               VALUES ('sha256-digest-only', 'user-1', 2000)"""
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT expires_at FROM revoked_sessions WHERE token_hash = ?",
+                ("sha256-digest-only",),
+            ).fetchone()[0],
+            2000,
+        )
+        self.db.execute("DELETE FROM users WHERE id = 'user-1'")
+        self.assertEqual(
+            self.db.execute("SELECT COUNT(*) FROM revoked_sessions").fetchone()[0],
+            0,
+        )
 
 
 if __name__ == "__main__":
