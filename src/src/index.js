@@ -842,6 +842,32 @@ export default {
         return json({ error: "Unauthorized" }, 401);
       }
 
+      // A single private invite code per account; no counters, badges, thresholds, or rewards.
+      if (method === "GET" && path === "/api/referrals") {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS user_invite_codes (
+            user_id TEXT PRIMARY KEY,
+            invite_code TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        const existing = await env.DB.prepare(
+          "SELECT invite_code FROM user_invite_codes WHERE user_id = ?"
+        ).bind(currentUser.sub).first();
+        if (existing?.invite_code) return json({ inviteCode: existing.invite_code });
+
+        const inviteCode = base64url(crypto.getRandomValues(new Uint8Array(9)));
+        await env.DB.prepare(
+          "INSERT OR IGNORE INTO user_invite_codes (user_id, invite_code) VALUES (?, ?)"
+        ).bind(currentUser.sub, inviteCode).run();
+        const saved = await env.DB.prepare(
+          "SELECT invite_code FROM user_invite_codes WHERE user_id = ?"
+        ).bind(currentUser.sub).first();
+        if (!saved?.invite_code) return json({ error: "Could not create invite code" }, 503);
+        return json({ inviteCode: saved.invite_code });
+      }
+
       // Ephemeral private messages are stored only in D1 (never sent to Firebase).
       // The ten-second deletion window starts when the recipient first fetches the message.
       if (path === "/api/ephemeral-messages" && (method === "GET" || method === "POST")) {
