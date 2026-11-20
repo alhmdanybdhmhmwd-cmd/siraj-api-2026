@@ -2717,11 +2717,18 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
             ).bind(messageId, groupId, currentUser.sub, attachmentBody).run();
           }
         } catch (error) {
-          // Avoid leaving an unreachable object or expiration record behind if persistence fails.
-          try { await storage.fetch(storageUrl, { method: "DELETE" }); } catch (_) {}
+          // Revoke access immediately. Keep the expiration record unless storage confirms
+          // deletion so the scheduled cleanup can retry an object that could not be removed.
+          let objectDeleted = false;
+          try {
+            const deleteResponse = await storage.fetch(storageUrl, { method: "DELETE" });
+            objectDeleted = deleteResponse.ok || deleteResponse.status === 404;
+          } catch (_) {}
           try {
             await env.DB.prepare("DELETE FROM media_access WHERE object_key = ?").bind(key).run();
-            await env.DB.prepare("DELETE FROM media_expirations WHERE object_key = ?").bind(key).run();
+            if (objectDeleted) {
+              await env.DB.prepare("DELETE FROM media_expirations WHERE object_key = ?").bind(key).run();
+            }
           } catch (_) {}
           throw error;
         }
