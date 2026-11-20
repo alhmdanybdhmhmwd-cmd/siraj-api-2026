@@ -299,9 +299,9 @@ void main() {
     String? selectedEmoji;
     bool? removing;
     await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
+      home: Builder(builder: (context) => Scaffold(
         body: messageReactionBar(
-          context: tester.element(find.byType(Scaffold)),
+          context: context,
           currentUserId: 'u1',
           message: {
             'reactions': [
@@ -314,7 +314,7 @@ void main() {
             removing = remove;
           },
         ),
-      ),
+      )),
     ));
 
     expect(find.text('❤️ 2'), findsOneWidget);
