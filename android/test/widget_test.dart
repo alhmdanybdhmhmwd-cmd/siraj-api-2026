@@ -146,6 +146,29 @@ void main() {
     );
   });
 
+  test('only an owner can transfer group ownership to another non-owner member', () {
+    expect(
+      barqCanTransferGroupOwnership('owner', targetIsOwner: false, targetIsSelf: false),
+      isTrue,
+    );
+    expect(
+      barqCanTransferGroupOwnership('admin', targetIsOwner: false, targetIsSelf: false),
+      isFalse,
+    );
+    expect(
+      barqCanTransferGroupOwnership('member', targetIsOwner: false, targetIsSelf: false),
+      isFalse,
+    );
+    expect(
+      barqCanTransferGroupOwnership('owner', targetIsOwner: true, targetIsSelf: false),
+      isFalse,
+    );
+    expect(
+      barqCanTransferGroupOwnership('owner', targetIsOwner: false, targetIsSelf: true),
+      isFalse,
+    );
+  });
+
   test('group members can leave themselves but the owner cannot leave without transfer', () {
     expect(barqCanLeaveGroup(isSelf: true, isOwner: false), isTrue);
     expect(barqCanLeaveGroup(isSelf: true, isOwner: true), isFalse);
