@@ -1792,6 +1792,7 @@ test("media expiration cleanup deletes only objects whose individual 72-hour dea
     { object_key: "user-1/newer-photo", expires_at: "2026-11-22T22:00:00.000Z" }
   ];
   const removedRows = [];
+  const removedAccessRows = [];
   const db = {
     prepare(sql) {
       const statement = {
@@ -1799,6 +1800,7 @@ test("media expiration cleanup deletes only objects whose individual 72-hour dea
         bind(...params) { this.params = params; return this; },
         async run() {
           if (sql.startsWith("DELETE FROM media_expirations")) removedRows.push(this.params[0]);
+          if (sql.startsWith("DELETE FROM media_access")) removedAccessRows.push(this.params[0]);
           return { meta: { changes: 1 } };
         },
         async all() {
@@ -1823,6 +1825,7 @@ test("media expiration cleanup deletes only objects whose individual 72-hour dea
     assert.equal(deletedObjects.length, 1);
     assert.match(deletedObjects[0].url, /expired-video$/);
     assert.deepEqual(removedRows, ["user-1/expired-video"]);
+    assert.deepEqual(removedAccessRows, ["user-1/expired-video"]);
   } finally {
     delete globalThis.__fakeTigrisHandler;
   }
@@ -1885,6 +1888,7 @@ test("media expiration cleanup continues after one storage deletion fails", asyn
     { object_key: "user-1/expired-photo", expires_at: "2026-11-22T11:30:00.000Z" }
   ];
   const removedRows = [];
+  const removedAccessRows = [];
   const db = {
     prepare(sql) {
       const statement = {
@@ -1892,6 +1896,7 @@ test("media expiration cleanup continues after one storage deletion fails", asyn
         bind(...params) { this.params = params; return this; },
         async run() {
           if (sql.startsWith("DELETE FROM media_expirations")) removedRows.push(this.params[0]);
+          if (sql.startsWith("DELETE FROM media_access")) removedAccessRows.push(this.params[0]);
           return { meta: { changes: 1 } };
         },
         async all() { return { results: rows.filter(row => row.expires_at <= this.params[0]) }; }
@@ -1913,6 +1918,8 @@ test("media expiration cleanup continues after one storage deletion fails", asyn
     assert.deepEqual(result, { checked: 2, deleted: 1 });
     assert.deepEqual(attempted, ["failing-video", "expired-photo"]);
     assert.deepEqual(removedRows, ["user-1/expired-photo"]);
+    assert.deepEqual(removedAccessRows, ["user-1/expired-photo"]);
+    assert.ok(!removedAccessRows.includes("user-1/failing-video"));
   } finally {
     delete globalThis.__fakeTigrisHandler;
   }
