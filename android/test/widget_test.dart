@@ -33,6 +33,7 @@ void main() {
           'phone': '+967700000001',
         },
         currentUserId: 'current-user',
+        canMessage: true,
       ),
     ));
 
