@@ -1231,17 +1231,16 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  String _normalizedYemenPhone(String raw) {
-    var digits = raw.replaceAll(RegExp(r'[^0-9٠-٩۰-۹]'), '');
-    digits = digits.replaceAllMapped(RegExp(r'[٠-٩۰-۹]'), (m) {
+  String _normalizedInternationalPhone(String raw) {
+    var value = raw.trim().replaceAllMapped(RegExp(r'[٠-٩۰-۹]'), (m) {
       final c = m.group(0)!.codeUnitAt(0);
       return String.fromCharCode(c >= 0x06f0 && c <= 0x06f9
           ? c - 0x06f0 + 48 : c - 0x0660 + 48);
     });
-    if (digits.startsWith('00')) digits = digits.substring(2);
-    if (digits.startsWith('967')) return '+$digits';
-    if (digits.startsWith('0')) digits = digits.substring(1);
-    return '+967$digits';
+    value = value.replaceAll(RegExp(r'[\\s().-]'), '');
+    if (value.startsWith('00')) value = '+${value.substring(2)}';
+    if (!value.startsWith('+')) value = '+$value';
+    return value;
   }
 
   String _generatedUsername() {
@@ -1264,7 +1263,7 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
     if (registering && !RegExp(r'^\+9677[0-9]{8}$').hasMatch(_normalizedYemenPhone(phone.text))) {
-      showMsg(context, 'أدخل رقم هاتف يمني صحيحًا مكوّنًا من 9 أرقام بعد +967.');
+      showMsg(context, 'أدخل رقم الهاتف مع مفتاح الدولة بصيغة دولية صحيحة.');
       return;
     }
     setState(() => busy = true);
@@ -1276,7 +1275,7 @@ class _LoginPageState extends State<LoginPage> {
                   ? _generatedUsername()
                   : optionalUsername.text.trim().replaceAll('@', ''),
               password: password.text,
-              phone: _normalizedYemenPhone(phone.text),
+              phone: _normalizedInternationalPhone(phone.text),
               inviteCode: inviteCode.text.trim().isEmpty ? null : inviteCode.text.trim(),
             )
           : await Api.login(username.text.trim(), password.text);
@@ -1324,7 +1323,7 @@ class _LoginPageState extends State<LoginPage> {
     keyboardType: isPhone ? TextInputType.phone : TextInputType.text,
     textDirection: isPhone ? TextDirection.ltr : TextDirection.rtl,
     decoration: _barqDecoration(label, icon,
-      prefix: isPhone ? '+967  ' : null).copyWith(
+      prefix: null).copyWith(
         suffixText: optional ? 'اختياري' : null,
       ),
   );
