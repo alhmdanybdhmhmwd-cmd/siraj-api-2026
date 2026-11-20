@@ -585,6 +585,17 @@ class Api {
     await request('POST', '/api/groups/$groupId/messages', body: {'body': body});
   }
 
+  static Future<void> deletePrivateMessage(String messageId) async {
+    await request('DELETE', '/api/messages/${Uri.encodeComponent(messageId)}');
+  }
+
+  static Future<void> deleteGroupMessage(String groupId, String messageId) async {
+    await request(
+      'DELETE',
+      '/api/groups/${Uri.encodeComponent(groupId)}/messages/${Uri.encodeComponent(messageId)}',
+    );
+  }
+
   static Future<void> uploadAttachment({
     required List<int> bytes,
     required String fileName,
@@ -1026,6 +1037,60 @@ class BarqNearbyService {
     _discoveredUsers.clear();
     _running = false;
     _events.add({'type': 'stopped'});
+  }
+}
+
+Future<void> showMessageActions(
+  BuildContext context, {
+  required Map<String, dynamic> message,
+  required bool canDelete,
+  required Future<void> Function() onDelete,
+}) async {
+  final action = await showModalBottomSheet<String>(
+    context: context,
+    backgroundColor: panel,
+    builder: (sheetContext) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.copy_rounded, color: gold),
+            title: const Text('نسخ الرسالة'),
+            onTap: () => Navigator.pop(sheetContext, 'copy'),
+          ),
+          if (canDelete)
+            ListTile(
+              leading: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+              title: const Text('حذف الرسالة'),
+              onTap: () => Navigator.pop(sheetContext, 'delete'),
+            ),
+        ],
+      ),
+    ),
+  );
+  if (action == 'copy') {
+    final text = field(message, ['body', 'content', 'message']);
+    if (text.isNotEmpty) {
+      await Clipboard.setData(ClipboardData(text: text));
+      if (context.mounted) showMsg(context, 'تم نسخ الرسالة');
+    }
+  } else if (action == 'delete' && canDelete && context.mounted) {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: panel,
+        title: const Text('حذف الرسالة؟'),
+        content: const Text('سيتم حذف الرسالة من المحادثة.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('حذف', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await onDelete();
   }
 }
 
@@ -3896,12 +3961,15 @@ class _ChatPageState extends State<ChatPage> {
                                         ),
                                     ] else ...[
                                       GestureDetector(
-                                        onLongPress: () async {
-                                          final text = field(m, ['body', 'content', 'message']);
-                                          if (text.isEmpty) return;
-                                          await Clipboard.setData(ClipboardData(text: text));
-                                          if (context.mounted) showMsg(context, 'تم نسخ الرسالة');
-                                        },
+                                        onLongPress: () => showMessageActions(
+                                          context,
+                                          message: m,
+                                          canDelete: mine,
+                                          onDelete: () async {
+                                            await Api.deletePrivateMessage(field(m, ['id', 'message_id']));
+                                            if (mounted) await loadMessages();
+                                          },
+                                        ),
                                         child: Text(field(m, ['body', 'content', 'message'])),
                                       ),
                                       if (BarqFeatures.autoTranslate && translatedMessages[field(m, ['id', 'message_id'])] != null) ...[
@@ -4303,12 +4371,15 @@ class _GroupChatPageState extends State<GroupChatPage> {
                               ),
                           ] else ...[
                             GestureDetector(
-                              onLongPress: () async {
-                                final text = field(m, ['body', 'content', 'message']);
-                                if (text.isEmpty) return;
-                                await Clipboard.setData(ClipboardData(text: text));
-                                if (context.mounted) showMsg(context, 'تم نسخ الرسالة');
-                              },
+                              onLongPress: () => showMessageActions(
+                                context,
+                                message: m,
+                                canDelete: mine,
+                                onDelete: () async {
+                                  await Api.deleteGroupMessage(groupId, field(m, ['id', 'message_id']));
+                                  if (mounted) await loadMessages();
+                                },
+                              ),
                               child: Text(field(m, ['body'])),
                             ),
                             if (BarqFeatures.autoTranslate && translatedMessages[field(m, ['id', 'message_id'])] != null) ...[
