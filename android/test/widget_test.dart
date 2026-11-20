@@ -401,4 +401,39 @@ void main() {
     expect(find.text('ملخص اختباري'), findsOneWidget);
   });
 
+  testWidgets('conversation tools sheet exposes chat tools outside app settings', (tester) async {
+    var selectedTool = '';
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(builder: (context) => Scaffold(
+        body: TextButton(
+          onPressed: () => showBarqConversationTools(context, [
+            BarqConversationTool(
+              icon: Icons.search,
+              title: 'البحث في المحادثة',
+              subtitle: 'ابحث داخل الرسائل',
+              onTap: () => selectedTool = 'search',
+            ),
+            BarqConversationTool(
+              icon: Icons.push_pin_outlined,
+              title: 'الرسائل المثبتة',
+              subtitle: 'عرض الرسائل المثبتة',
+              onTap: () => selectedTool = 'pinned',
+            ),
+          ]),
+          child: const Text('فتح أدوات المحادثة'),
+        ),
+      )),
+    ));
+
+    await tester.tap(find.text('فتح أدوات المحادثة'));
+    await tester.pumpAndSettle();
+    expect(find.text('أدوات المحادثة'), findsOneWidget);
+    expect(find.text('البحث في المحادثة'), findsOneWidget);
+    expect(find.text('الرسائل المثبتة'), findsOneWidget);
+
+    await tester.tap(find.text('الرسائل المثبتة'));
+    await tester.pumpAndSettle();
+    expect(selectedTool, 'pinned');
+  });
+
 }
