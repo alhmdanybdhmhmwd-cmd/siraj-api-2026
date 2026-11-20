@@ -1325,6 +1325,7 @@ class _LoginPageState extends State<LoginPage> {
     textDirection: isPhone ? TextDirection.ltr : TextDirection.rtl,
     decoration: _barqDecoration(label, icon,
       prefix: null).copyWith(
+        hintText: isPhone ? '+رمز الدولة ورقم الهاتف' : null,
         suffixText: optional ? 'اختياري' : null,
       ),
   );
@@ -2403,7 +2404,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 controller: phoneController,
                 keyboardType: TextInputType.phone,
                 maxLength: 25,
-                decoration: inputDecoration('رقم الهاتف', Icons.phone_outlined),
+                decoration: inputDecoration('رقم الهاتف', Icons.phone_outlined)
+                    .copyWith(hintText: '+رمز الدولة ورقم الهاتف'),
               ),
               const SizedBox(height: 6),
               const Text('اسم المستخدم لا يتغير من هذه الشاشة.',
