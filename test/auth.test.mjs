@@ -1736,6 +1736,34 @@ test("malformed JSON request bodies return 400 instead of 500", async () => {
 
 
 
+test("chunked oversized JSON requests are rejected before route processing", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  let cancelled = false;
+  const request = new Request("https://api.example.test/api/contacts/match", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "application/json"
+    },
+    body: new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array(256 * 1024));
+        controller.enqueue(new Uint8Array(1));
+      },
+      cancel() { cancelled = true; }
+    }),
+    duplex: "half"
+  });
+  assert.equal(request.headers.has("Content-Length"), false);
+  const response = await worker.default.fetch(request, { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 413);
+  assert.deepEqual(await response.json(), { error: "JSON request body is too large" });
+  assert.equal(cancelled, true);
+});
+
+
+
 test("each uploaded attachment receives its own 72-hour expiration timestamp", async () => {
   const db = new FakeDB();
   const originalPrepare = db.prepare.bind(db);
