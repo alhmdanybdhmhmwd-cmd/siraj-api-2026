@@ -236,6 +236,28 @@ void main() {
     expect(messageReplyPreview({'reply_to_body': ''}), 'رسالة');
   });
 
+  testWidgets('message edit dialog returns trimmed replacement text', (tester) async {
+    String? saved;
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(builder: (context) => Scaffold(
+        body: TextButton(
+          onPressed: () async {
+            saved = await showEditMessageDialog(context, 'النص القديم');
+          },
+          child: const Text('فتح التعديل'),
+        ),
+      )),
+    ));
+
+    await tester.tap(find.text('فتح التعديل'));
+    await tester.pumpAndSettle();
+    expect(find.text('تعديل الرسالة'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '  النص الجديد  ');
+    await tester.tap(find.text('حفظ'));
+    await tester.pumpAndSettle();
+    expect(saved, 'النص الجديد');
+  });
+
   testWidgets('message action menu invokes the reply callback', (tester) async {
     Map<String, dynamic>? selected;
     await tester.pumpWidget(MaterialApp(
