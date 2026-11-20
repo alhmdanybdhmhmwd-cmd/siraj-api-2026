@@ -23,6 +23,26 @@ void main() {
     expect(field({}, ['username'], 'مستخدم'), 'مستخدم');
   });
 
+  testWidgets('public profile page shows the selected contact details', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: PublicProfilePage(
+        person: {
+          'id': 'friend-1',
+          'display_name': 'صديق برق',
+          'username': 'barq_friend',
+          'phone': '+967700000001',
+        },
+        currentUserId: 'current-user',
+      ),
+    ));
+
+    expect(find.text('الملف الشخصي'), findsOneWidget);
+    expect(find.text('صديق برق'), findsOneWidget);
+    expect(find.text('@barq_friend'), findsOneWidget);
+    expect(find.text('+967700000001'), findsOneWidget);
+    expect(find.text('إرسال رسالة'), findsOneWidget);
+  });
+
   test('ephemeral messages disappear at their first-read expiry deadline', () {
     final now = DateTime.utc(2026, 11, 20, 12);
     final nowSeconds = now.millisecondsSinceEpoch ~/ 1000;
