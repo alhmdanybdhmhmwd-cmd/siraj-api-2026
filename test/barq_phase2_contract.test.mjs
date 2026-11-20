@@ -96,3 +96,12 @@ test("Flutter invite deep links reach the registration request", () => {
   assert.ok(flutterApp.includes("'inviteCode': inviteCode.trim().toUpperCase()"));
   assert.ok(worker.includes('body.inviteCode'));
 });
+
+test("Android API, media, and realtime origins are selectable for isolated preview builds", () => {
+  assert.ok(flutterApp.includes("'BARQ_API_BASE'"));
+  assert.ok(flutterApp.includes("'BARQ_MEDIA_BASE'"));
+  assert.ok(flutterApp.includes("'BARQ_REALTIME_URL'"));
+  assert.ok(flutterApp.includes("defaultValue: 'https://siraj-api-2026.vercel.app'"));
+  assert.ok(flutterApp.includes("defaultValue: 'https://siraj-api.alhmdanybdhmhmwd.workers.dev'"));
+  assert.ok(flutterApp.includes("defaultValue: 'wss://siraj-api.alhmdanybdhmhmwd.workers.dev/api/realtime'"));
+});
