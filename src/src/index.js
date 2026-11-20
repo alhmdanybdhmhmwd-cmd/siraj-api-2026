@@ -2004,18 +2004,32 @@ export default {
           }, 403);
         }
 
-        const id = crypto.randomUUID();
+        // The Android offline outbox retries with the same 128-bit client ID.
+        // Persist that ID as the message primary key so a lost HTTP response
+        // cannot create duplicate messages when the outbox retries.
+        const clientMessageId = body.clientMessageId == null
+          ? "" : String(body.clientMessageId).trim().toLowerCase();
+        if (clientMessageId && !/^[a-f0-9]{32}$/.test(clientMessageId)) {
+          return json({ error: "Invalid client message ID" }, 400);
+        }
+        const id = clientMessageId || crypto.randomUUID();
 
-        await env.DB.prepare(
-          `INSERT INTO messages
+        const inserted = await env.DB.prepare(
+          `INSERT OR IGNORE INTO messages
            (id, sender_id, receiver_id, body)
            VALUES (?, ?, ?, ?)`
-        ).bind(
-          id,
-          currentUser.sub,
-          receiverId,
-          message
-        ).run();
+        ).bind(id, currentUser.sub, receiverId, message).run();
+
+        if (Number(inserted?.meta?.changes || 0) === 0) {
+          const existing = await env.DB.prepare(
+            "SELECT sender_id, receiver_id, body FROM messages WHERE id = ?"
+          ).bind(id).first();
+          if (!existing || existing.sender_id !== currentUser.sub ||
+              existing.receiver_id !== receiverId || existing.body !== message) {
+            return json({ error: "Client message ID conflict" }, 409);
+          }
+          return json({ message: "Message already accepted", id, duplicate: true });
+        }
 
         // Message persistence is authoritative; sender lookup or push delivery
         // must not turn a successfully stored message into an apparent failure.
