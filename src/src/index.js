@@ -585,6 +585,15 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
     )
   `).run();
   await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS status_views (
+      status_id TEXT NOT NULL, viewer_id TEXT NOT NULL,
+      viewed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (status_id, viewer_id),
+      FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE,
+      FOREIGN KEY (viewer_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `).run();
+  await env.DB.prepare(`
     CREATE TABLE IF NOT EXISTS status_reactions (
       status_id TEXT NOT NULL, user_id TEXT NOT NULL, emoji TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -639,6 +648,9 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
       console.error("Expired media cleanup item failed:", error);
     }
   }
+  await env.DB.prepare(
+    "DELETE FROM status_views WHERE status_id IN (SELECT id FROM status_posts WHERE expires_at <= ?)"
+  ).bind(cutoff).run();
   await env.DB.prepare(
     "DELETE FROM status_reactions WHERE status_id IN (SELECT id FROM status_posts WHERE expires_at <= ?)"
   ).bind(cutoff).run();
@@ -1673,6 +1685,15 @@ export default {
           )
         `).run();
         await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_views (
+            status_id TEXT NOT NULL, viewer_id TEXT NOT NULL,
+            viewed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (status_id, viewer_id),
+            FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE,
+            FOREIGN KEY (viewer_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        await env.DB.prepare(`
           CREATE TABLE IF NOT EXISTS status_media (
             id TEXT PRIMARY KEY, status_id TEXT NOT NULL, object_key TEXT NOT NULL UNIQUE,
             file_name TEXT NOT NULL, content_type TEXT NOT NULL,
@@ -1859,7 +1880,8 @@ export default {
         const result = await env.DB.prepare(
           `SELECT s.id, s.user_id AS userId, u.username,
                   u.display_name AS displayName, s.content,
-                  s.created_at AS createdAt, s.expires_at AS expiresAt
+                  s.created_at AS createdAt, s.expires_at AS expiresAt,
+                  (SELECT COUNT(*) FROM status_views sv WHERE sv.status_id = s.id) AS viewCount
            FROM status_posts s
            JOIN users u ON u.id = s.user_id
            WHERE s.expires_at > CURRENT_TIMESTAMP
@@ -1908,6 +1930,59 @@ export default {
           for (const item of statuses) item.media = [];
         }
         return json({ statuses });
+      }
+
+      // Record unique SPARK viewers and expose the viewer list only to the status owner.
+      const sparkViewerMatch = path.match(/^\/api\/statuses\/([^/]+)\/(view|viewers)$/);
+      if (sparkViewerMatch) {
+        let statusId;
+        try { statusId = decodeURIComponent(sparkViewerMatch[1]); } catch (_) {
+          return json({ error: "Invalid SPARK status identifier" }, 400);
+        }
+        const action = sparkViewerMatch[2];
+        const status = await env.DB.prepare(
+          "SELECT user_id FROM status_posts WHERE id = ? AND expires_at > CURRENT_TIMESTAMP"
+        ).bind(statusId).first();
+        if (!status) return json({ error: "SPARK status not found or expired" }, 404);
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_views (
+            status_id TEXT NOT NULL, viewer_id TEXT NOT NULL,
+            viewed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (status_id, viewer_id),
+            FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE,
+            FOREIGN KEY (viewer_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        if (action === "view" && method === "POST") {
+          if (status.user_id !== currentUser.sub) {
+            const friendship = await env.DB.prepare(
+              `SELECT 1 FROM friendships f
+               WHERE f.user_id = ? AND f.friend_id = ?
+                 AND EXISTS (
+                   SELECT 1 FROM friendships reciprocal
+                   WHERE reciprocal.user_id = ? AND reciprocal.friend_id = ?
+                 )`
+            ).bind(currentUser.sub, status.user_id, status.user_id, currentUser.sub).first();
+            if (!friendship) return json({ error: "SPARK status access denied" }, 403);
+            await env.DB.prepare(
+              "INSERT OR IGNORE INTO status_views (status_id, viewer_id) VALUES (?, ?)"
+            ).bind(statusId, currentUser.sub).run();
+          }
+          const count = await env.DB.prepare(
+            "SELECT COUNT(*) AS count FROM status_views WHERE status_id = ?"
+          ).bind(statusId).first();
+          return json({ statusId, viewCount: Number(count?.count || 0) });
+        }
+        if (action === "viewers" && method === "GET") {
+          if (status.user_id !== currentUser.sub) return json({ error: "Only the status owner can view this list" }, 403);
+          const viewers = await env.DB.prepare(
+            `SELECT sv.viewed_at AS viewedAt, u.id, u.display_name AS displayName, u.username
+             FROM status_views sv JOIN users u ON u.id = sv.viewer_id
+             WHERE sv.status_id = ? ORDER BY sv.viewed_at DESC LIMIT 100`
+          ).bind(statusId).all();
+          return json({ viewers: viewers.results || [] });
+        }
+        return json({ error: "Method not allowed" }, 405);
       }
 
       // SPARK replies and reactions are available only while the status is active and visible.
