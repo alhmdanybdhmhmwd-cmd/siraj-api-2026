@@ -1320,10 +1320,10 @@ export default {
         if (!displayName || displayName.length > 60) {
           return json({ error: "Display name must be 1-60 characters" }, 400);
         }
-        if (phone.length > 25) {
-          return json({ error: "Phone number is too long" }, 400);
+        if (!/^\+[1-9][0-9]{7,14}$/.test(phone)) {
+          return json({ error: "Enter a valid international phone number including its country code" }, 400);
         }
-        if (phone && await phoneAlreadyInUse(env, phone, currentUser.sub)) {
+        if (await phoneAlreadyInUse(env, phone, currentUser.sub)) {
           return json({ error: "Phone number is already in use" }, 409);
         }
         const phoneConflict = phone ? phoneConflictCondition("phone", phone) : { sql: "0", bindings: [] };
