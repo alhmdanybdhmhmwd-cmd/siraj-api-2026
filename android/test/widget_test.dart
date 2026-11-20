@@ -226,4 +226,35 @@ void main() {
     expect(find.text('حذف الرسالة'), findsNothing);
   });
 
+  test('quoted reply preview is bounded and handles attachment references', () {
+    expect(messageReplyPreview({'reply_to_body': 'رسالة مقتبسة'}), 'رسالة مقتبسة');
+    expect(messageReplyPreview({'reply_to_body': 'x' * 130}).length, 121);
+    expect(messageReplyPreview({'reply_to_body': '{"attachmentId":"a1"}'}), 'مرفق');
+  });
+
+  testWidgets('message action menu invokes the reply callback', (tester) async {
+    Map<String, dynamic>? selected;
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(builder: (context) => Scaffold(
+        body: TextButton(
+          onPressed: () => showMessageActions(
+            context,
+            message: {'id': 'reply-1', 'body': 'رسالة للرد'},
+            canDelete: false,
+            onDelete: () async {},
+            onReply: (message) async { selected = message; },
+          ),
+          child: const Text('فتح الإجراءات'),
+        ),
+      )),
+    ));
+
+    await tester.tap(find.text('فتح الإجراءات'));
+    await tester.pumpAndSettle();
+    expect(find.text('الرد على الرسالة'), findsOneWidget);
+    await tester.tap(find.text('الرد على الرسالة'));
+    await tester.pumpAndSettle();
+    expect(selected?['id'], 'reply-1');
+  });
+
 }
