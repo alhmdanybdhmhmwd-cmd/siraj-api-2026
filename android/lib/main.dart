@@ -1121,7 +1121,7 @@ String messageReplyPreview(Map<String, dynamic> message) {
     final decoded = jsonDecode(value);
     if (decoded is Map && decoded['type'] == 'attachment') return 'مرفق';
   } catch (_) {}
-  return value.length > 120 ? value.substring(0, 120) + '…' : value;
+  return value.length > 120 ? '${value.substring(0, 120)}…' : value;
 }
 
 List<Map<String, dynamic>> searchConversationMessages(
@@ -4022,7 +4022,7 @@ class _ChatPageState extends State<ChatPage> {
                                             await Api.deletePrivateMessage(field(m, ['id', 'message_id']));
                                             if (mounted) await loadMessages();
                                           },
-                                          onReply: (message) {
+                                          onReply: (message) async {
                                             setState(() => replyToMessage = Map<String, dynamic>.from(message));
                                           },
                                         ),
@@ -4082,7 +4082,7 @@ class _ChatPageState extends State<ChatPage> {
                           ephemeralMode ? 'رسالة مؤقتة — تختفي بعد القراءة' : 'اكتب رسالتك...',
                           ephemeralMode ? Icons.timer_outlined : Icons.message,
                         ).copyWith(
-                          helperText: replyToMessage == null ? null : 'الرد على: ' + messageReplyPreview(replyToMessage!),
+                          helperText: replyToMessage == null ? null : 'الرد على: ${messageReplyPreview(replyToMessage!)}',
                           helperStyle: const TextStyle(color: gold, fontSize: 10),
                         ),
                         onSubmitted: (_) => send(),
@@ -4458,7 +4458,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
                                   await Api.deleteGroupMessage(groupId, field(m, ['id', 'message_id']));
                                   if (mounted) await loadMessages();
                                 },
-                                onReply: (message) {
+                                onReply: (message) async {
                                   setState(() => replyToMessage = Map<String, dynamic>.from(message));
                                 },
                               ),
