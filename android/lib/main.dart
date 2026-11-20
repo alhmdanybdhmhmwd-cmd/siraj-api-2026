@@ -2810,21 +2810,26 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       'mp4': 'video/mp4', 'webm': 'video/webm', 'mov': 'video/quicktime',
     };
     final prepared = <Map<String, dynamic>>[];
+    String? preparationError;
     for (final file in picked.files) {
       final extension = (file.extension ?? '').toLowerCase();
       final contentType = mimeTypes[extension];
       if (contentType == null) {
-        showMsg(pageContext, 'الملف ${file.name} ليس بصيغة صورة أو فيديو مدعومة.');
-        return;
+        preparationError = 'الملف ${file.name} ليس بصيغة صورة أو فيديو مدعومة.';
+        break;
       }
       final bytes = file.bytes ?? (file.path == null ? null : await File(file.path!).readAsBytes());
       if (bytes == null || bytes.isEmpty || bytes.length > maxAttachmentBytes) {
-        showMsg(pageContext, 'تعذر قراءة ${file.name} أو تجاوز حجمه 60 ميجابايت.');
-        return;
+        preparationError = 'تعذر قراءة ${file.name} أو تجاوز حجمه 60 ميجابايت.';
+        break;
       }
       prepared.add({'file': file, 'bytes': bytes, 'contentType': contentType});
     }
     if (!pageContext.mounted) return;
+    if (preparationError != null) {
+      showMsg(pageContext, preparationError);
+      return;
+    }
     final captionController = TextEditingController();
     await showDialog<void>(
       context: pageContext,
@@ -2870,14 +2875,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     if (dialogContext.mounted) Navigator.pop(dialogContext);
                     await refreshAll();
                     if (pageContext.mounted) {
-                      showMsg(pageContext, 'نُشرت ${uploaded} وسائط في لحظة SPARK واحدة لمدة 24 ساعة.');
+                      showMsg(pageContext, 'نُشرت $uploaded وسائط في لحظة SPARK واحدة لمدة 24 ساعة.');
                     }
                   } catch (e) {
                     if (uploaded > 0) {
                       if (dialogContext.mounted) Navigator.pop(dialogContext);
                       await refreshAll();
                       if (pageContext.mounted) {
-                        showMsg(pageContext, 'نُشر ${uploaded} من ${prepared.length} وسائط. تعذر إكمال البقية: ${cleanError(e)}');
+                        showMsg(pageContext, 'نُشر $uploaded من ${prepared.length} وسائط. تعذر إكمال البقية: ${cleanError(e)}');
                       }
                     } else {
                       if (dialogContext.mounted) setDialogState(() => uploading = false);
