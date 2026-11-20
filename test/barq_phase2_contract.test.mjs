@@ -388,9 +388,11 @@ test("SPARK media reads enforce active friend visibility and expire with their s
   const cleanupStart = worker.indexOf("async function cleanupExpiredMedia");
   const cleanupEnd = worker.indexOf("async function cleanupExpiredEphemeralMessages", cleanupStart);
   const cleanup = worker.slice(cleanupStart, cleanupEnd);
-  assert.ok(cleanup.includes("DELETE FROM status_posts WHERE id IN (SELECT status_id FROM status_media WHERE object_key = ?)"));
   assert.ok(cleanup.includes("DELETE FROM status_media WHERE object_key = ?"));
-  assert.ok(cleanup.includes("DELETE FROM status_posts WHERE id IN (SELECT status_id FROM status_media WHERE object_key = ?)"));
+  assert.ok(cleanup.includes("DELETE FROM status_reactions WHERE status_id IN (SELECT id FROM status_posts WHERE expires_at <= ?)"));
+  assert.ok(cleanup.includes("DELETE FROM status_replies WHERE status_id IN (SELECT id FROM status_posts WHERE expires_at <= ?)"));
+  assert.ok(cleanup.includes("DELETE FROM status_media WHERE status_id IN (SELECT id FROM status_posts WHERE expires_at <= ?)"));
+  assert.ok(cleanup.includes("DELETE FROM status_posts WHERE expires_at <= ?"));
 });
 
 test("Android SPARK media flow supports authenticated upload, caption, image/video viewing and paging", () => {
@@ -402,4 +404,38 @@ test("Android SPARK media flow supports authenticated upload, caption, image/vid
   assert.ok(flutterApp.includes("PageView.builder"));
   assert.ok(flutterApp.includes("VideoPlayerController.networkUrl"));
   assert.ok(flutterApp.includes("Api.sparkMediaUri"));
+});
+
+
+test("SPARK stories can group multiple media objects under one owner-controlled status id", () => {
+  const uploadStart = worker.indexOf('if (method === "POST" && path === "/api/statuses/media")');
+  const uploadEnd = worker.indexOf("// Publish a 24-hour text status", uploadStart);
+  const route = worker.slice(uploadStart, uploadEnd);
+  assert.ok(route.includes('request.headers.get("X-Status-Id")'));
+  assert.ok(route.includes("existingStatus.user_id !== currentUser.sub"));
+  assert.ok(route.includes("status_id TEXT NOT NULL"));
+  assert.ok(route.includes("INSERT INTO status_media (id, status_id, object_key"));
+  assert.ok(route.includes("if (!requestedStatusId)"));
+  assert.ok(route.includes("existingStatusExpiry"));
+  assert.ok(flutterApp.includes("'X-Status-Id': statusId"));
+  assert.ok(flutterApp.includes("allowMultiple: true"));
+  assert.ok(flutterApp.includes("for (final item in prepared)"));
+});
+
+test("SPARK reactions and replies require an active status visible to the requesting contact", () => {
+  const start = worker.indexOf("const sparkInteractionMatch");
+  const end = worker.indexOf("// Ensure privacy preferences table exists", start);
+  const route = worker.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  assert.ok(route.includes("expires_at > CURRENT_TIMESTAMP"));
+  assert.ok(route.includes("FROM friendships WHERE user_id = ? AND friend_id = ?"));
+  assert.ok(route.includes("CREATE TABLE IF NOT EXISTS status_reactions"));
+  assert.ok(route.includes("CREATE TABLE IF NOT EXISTS status_replies"));
+  assert.ok(route.includes("INSERT OR IGNORE INTO status_reactions"));
+  assert.ok(route.includes("DELETE FROM status_reactions"));
+  assert.ok(route.includes("INSERT INTO status_replies"));
+  assert.ok(route.includes("consumeLoginAttempt(env, \"spark_reply\""));
+  assert.ok(flutterApp.includes("reactSparkStatus"));
+  assert.ok(flutterApp.includes("replyToSpark"));
+  assert.ok(flutterApp.includes("لا توجد ردود بعد"));
 });
