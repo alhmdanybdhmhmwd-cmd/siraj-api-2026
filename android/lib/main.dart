@@ -1,0 +1,3628 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:math' as math;
+import 'package:flutter/services.dart';
+
+import 'package:material_ui/material_ui.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:google_mlkit_translation/google_mlkit_translation.dart';
+import 'package:app_links/app_links.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:nearby_connections/nearby_connections.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:http/http.dart' as http;
+
+const Color gold = Color(0xFFD6AD55);
+const Color dark = Color(0xFF090909);
+const Color panel = Color(0xFF171717);
+const Color electricBlue = Color(0xFF168BFF);
+const Color glass = Color(0xCC171B24);
+// Production remains the safe default. Select isolated preview origins at build time
+// without editing source: --dart-define=BARQ_API_BASE=https://<preview-api>.example
+const String apiBase = String.fromEnvironment(
+  'BARQ_API_BASE',
+  defaultValue: 'https://siraj-api-2026.vercel.app',
+);
+// Vercel Functions have a small request/response payload ceiling; large media
+// files go directly to the Cloudflare Worker while normal API traffic stays
+// on the Vercel proxy for better reachability on restricted mobile networks.
+const String mediaWorkerBase = String.fromEnvironment(
+  'BARQ_MEDIA_BASE',
+  defaultValue: 'https://siraj-api.alhmdanybdhmhmwd.workers.dev',
+);
+const int maxAttachmentBytes = 60 * 1024 * 1024;
+const int proxyMediaThresholdBytes = 4 * 1024 * 1024;
+
+const storage = FlutterSecureStorage();
+
+/// إعدادات الميزات المحلية التي لا تحتاج إلى اتصال بالخادم.
+class BarqFeatures {
+  static bool lightningMode = false;
+  static bool autoTranslate = false;
+  static const String _lightningKey = 'barq_lightning_mode';
+  static const String _translationKey = 'barq_auto_translate';
+
+  static Future<void> load() async {
+    try {
+      lightningMode = await storage.read(key: _lightningKey) == '1';
+      autoTranslate = await storage.read(key: _translationKey) == '1';
+    } catch (_) {
+      // فشل قراءة إعداد محلي لا يمنع تشغيل التطبيق؛ تبقى الميزات الاختيارية متوقفة.
+      lightningMode = false;
+      autoTranslate = false;
+    }
+  }
+
+  static Future<void> setLightningMode(bool enabled) async {
+    await storage.write(key: _lightningKey, value: enabled ? '1' : '0');
+    lightningMode = enabled;
+  }
+
+  static Future<void> setAutoTranslate(bool enabled) async {
+    await storage.write(key: _translationKey, value: enabled ? '1' : '0');
+    autoTranslate = enabled;
+  }
+}
+
+/// استقبال روابط الدعوة barq://invite/CODE حتى عند فتح التطبيق من رابط خارجي.
+class BarqInviteLinks {
+  static final AppLinks _links = AppLinks();
+  static StreamSubscription<Uri>? _subscription;
+  static final ValueNotifier<String?> pendingCode = ValueNotifier<String?>(null);
+  static const String _pendingKey = 'barq_pending_invite_code';
+
+  static Future<void> initialize() async {
+    _subscription ??= _links.uriLinkStream.listen((uri) => _handle(uri));
+    try {
+      final initial = await _links.getInitialLink();
+      if (initial != null) await _handle(initial);
+    } catch (_) {}
+    try {
+      pendingCode.value = await storage.read(key: _pendingKey);
+    } catch (_) {}
+  }
+
+  static Future<void> _handle(Uri uri) async {
+    if (uri.scheme != 'barq' || uri.host != 'invite') return;
+    final code = (uri.pathSegments.isNotEmpty
+        ? uri.pathSegments.first : uri.queryParameters['code'] ?? '')
+        .trim().toUpperCase();
+    if (!RegExp(r'^[A-F0-9]{12}$').hasMatch(code)) return;
+    pendingCode.value = code;
+    try { await storage.write(key: _pendingKey, value: code); } catch (_) {}
+  }
+
+  static Future<void> clear() async {
+    pendingCode.value = null;
+    try { await storage.delete(key: _pendingKey); } catch (_) {}
+  }
+}
+
+/// ترجمة محلية على الجهاز؛ النص الأصلي لا يُستبدل ولا يُرسل إلى الخادم.
+class BarqTranslator {
+  static Future<String> translateArabicEnglish(String original) async {
+    final text = original.trim();
+    if (text.isEmpty) return '';
+    final containsArabic = RegExp(r'[\u0600-\u06FF]').hasMatch(text);
+    if (!containsArabic && !RegExp(r'[A-Za-z]').hasMatch(text)) return '';
+    final translator = OnDeviceTranslator(
+      sourceLanguage: containsArabic ? TranslateLanguage.arabic : TranslateLanguage.english,
+      targetLanguage: containsArabic ? TranslateLanguage.english : TranslateLanguage.arabic,
+    );
+    try {
+      return await translator.translateText(text);
+    } finally {
+      await translator.close();
+    }
+  }
+}
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  await BarqFeatures.load();
+  await BarqInviteLinks.initialize();
+  runApp(const SirajApp());
+}
+
+/// تفعيل إذن الإشعارات وتسجيل رمز الجهاز بعد تسجيل الدخول.
+class SirajPush {
+  static bool _listening = false;
+
+  static Future<void> register() async {
+    try {
+      final messaging = FirebaseMessaging.instance;
+      final permission = await messaging.requestPermission(
+        alert: true, badge: true, sound: true,
+      );
+      if (permission.authorizationStatus == AuthorizationStatus.denied) return;
+      final token = await messaging.getToken();
+      if (token != null && token.isNotEmpty) {
+        await Api.registerDeviceToken(token);
+      }
+      if (!_listening) {
+        _listening = true;
+        FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
+          try {
+            if (Api.token != null) await Api.registerDeviceToken(newToken);
+          } catch (_) {}
+        });
+      }
+    } catch (_) {
+      // فشل الإشعارات لا يمنع الدخول أو استخدام التطبيق.
+    }
+  }
+}
+
+class SirajApp extends StatelessWidget {
+  const SirajApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'برق',
+      theme: ThemeData(
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: dark,
+        colorScheme: const ColorScheme.dark(primary: gold, surface: panel),
+        useMaterial3: true,
+      ),
+      home: const StartupPage(),
+    );
+  }
+}
+
+
+/// اتصال لحظي اختياري؛ REST يبقى المصدر الدائم للرسائل.
+class SirajRealtime {
+  SirajRealtime._();
+  static final SirajRealtime instance = SirajRealtime._();
+  static const String socketUrl = String.fromEnvironment(
+    'BARQ_REALTIME_URL',
+    defaultValue: 'wss://siraj-api.alhmdanybdhmhmwd.workers.dev/api/realtime',
+  );
+
+  final StreamController<Map<String, dynamic>> _events =
+      StreamController<Map<String, dynamic>>.broadcast();
+  WebSocket? _socket;
+  Timer? _reconnectTimer;
+  String? _token;
+  bool _connecting = false;
+  bool _stopped = true;
+  int _retry = 0;
+
+  Stream<Map<String, dynamic>> get events => _events.stream;
+  bool get isConnected => _socket?.readyState == WebSocket.open;
+
+  Future<void> start(String token) async {
+    if (token.isEmpty) return;
+    _token = token;
+    _stopped = false;
+    _retry = 0;
+    _reconnectTimer?.cancel();
+    await _connect();
+  }
+
+  Future<void> _connect() async {
+    if (_stopped || _connecting || _token == null || isConnected) return;
+    _connecting = true;
+    try {
+      final socket = await WebSocket.connect(
+        socketUrl,
+        headers: {'Authorization': 'Bearer $_token'},
+      ).timeout(const Duration(seconds: 15));
+      if (_stopped) {
+        await socket.close();
+        return;
+      }
+      _socket = socket;
+      _retry = 0;
+      socket.pingInterval = const Duration(seconds: 25);
+      socket.listen(
+        (dynamic raw) {
+          try {
+            if (raw is String) {
+              final value = jsonDecode(raw);
+              if (value is Map<String, dynamic>) _events.add(value);
+            }
+          } catch (_) {
+            // تجاهل أي إطار غير صالح دون إسقاط الاتصال.
+          }
+        },
+        onError: (_) => _scheduleReconnect(),
+        onDone: _scheduleReconnect,
+        cancelOnError: true,
+      );
+    } catch (_) {
+      _scheduleReconnect();
+    } finally {
+      _connecting = false;
+    }
+  }
+
+  void _scheduleReconnect() {
+    _socket = null;
+    if (_stopped || _token == null || _reconnectTimer?.isActive == true) return;
+    final seconds = [1, 2, 4, 8, 15, 30][_retry.clamp(0, 5).toInt()];
+    _retry = (_retry + 1).clamp(0, 5).toInt();
+    _reconnectTimer = Timer(Duration(seconds: seconds), _connect);
+  }
+
+  Future<void> stop() async {
+    _stopped = true;
+    _token = null;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    final socket = _socket;
+    _socket = null;
+    if (socket != null) {
+      try { await socket.close(WebSocketStatus.normalClosure); } catch (_) {}
+    }
+  }
+}
+
+class Api {
+  static String? token;
+  static String? lastRecoveryCode;
+
+  static Map<String, String> get headers => {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      };
+
+  static Future<Map<String, dynamic>> request(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+  }) async {
+    final uri = Uri.parse('$apiBase$path');
+    late http.Response response;
+    try {
+      switch (method.toUpperCase()) {
+        case 'GET':
+          response = await http.get(uri, headers: headers)
+              .timeout(const Duration(seconds: 25));
+          break;
+        case 'DELETE':
+          response = await http.delete(
+            uri,
+            headers: headers,
+            body: body == null ? null : jsonEncode(body),
+          ).timeout(const Duration(seconds: 25));
+          break;
+        case 'POST':
+          response = await http.post(
+            uri,
+            headers: headers,
+            body: jsonEncode(body ?? <String, dynamic>{}),
+          ).timeout(const Duration(seconds: 25));
+          break;
+        default:
+          throw UnsupportedError('HTTP method is not supported: $method');
+      }
+    } catch (e) {
+      throw Exception('NETWORK_DIAGNOSTIC: ${e.runtimeType}: $e');
+    }
+
+    dynamic decoded;
+    try {
+      decoded = jsonDecode(response.body);
+    } catch (_) {
+      decoded = <String, dynamic>{};
+    }
+    final data = decoded is Map<String, dynamic>
+        ? decoded
+        : <String, dynamic>{};
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final message = data['error'] ?? data['message'] ?? 'حدث خطأ (${response.statusCode})';
+      if (response.statusCode == 404 && message.toString().toLowerCase().contains('route')) {
+        throw Exception('مسار غير موجود في الخادم: $method $path');
+      }
+      throw Exception(message.toString());
+    }
+    return data;
+  }
+
+  static Future<Map<String, dynamic>> login(String username, String password) async {
+    final data = await request('POST', '/api/login', body: {
+      'username': username,
+      'password': password,
+    });
+    token = data['token']?.toString();
+    if (token == null || token!.isEmpty) throw Exception('لم يستلم التطبيق رمز الدخول من الخادم.');
+    await storage.write(key: 'siraj_token', value: token);
+    final user = _map(data['user']);
+    await _cacheUser(user);
+    return user;
+  }
+
+  static Future<Map<String, dynamic>> register({
+    required String displayName,
+    required String username,
+    required String password,
+    required String phone,
+    String? inviteCode,
+  }) async {
+    lastRecoveryCode = null;
+    final data = await request('POST', '/api/register', body: {
+      'displayName': displayName,
+      'username': username,
+      'password': password,
+      'phone': phone,
+      if (inviteCode != null && inviteCode.trim().isNotEmpty)
+        'inviteCode': inviteCode.trim().toUpperCase(),
+    });
+    token = data['token']?.toString();
+    if (token == null || token!.isEmpty) throw Exception('لم يستلم التطبيق رمز الدخول من الخادم.');
+    lastRecoveryCode = data['recoveryCode']?.toString();
+    await storage.write(key: 'siraj_token', value: token);
+    final user = _map(data['user']);
+    await _cacheUser(user);
+    return user;
+  }
+
+  static Future<void> recoverPassword({
+    required String identifier,
+    required String recoveryCode,
+    required String newPassword,
+  }) async {
+    await request('POST', '/api/password/recover', body: {
+      'identifier': identifier.trim(),
+      'recoveryCode': recoveryCode.replaceAll(RegExp(r'[\s-]'), '').toUpperCase(),
+      'newPassword': newPassword,
+    });
+  }
+
+  static Future<String> rotateRecoveryCode(String currentPassword) async {
+    final data = await request('POST', '/api/recovery-code', body: {
+      'password': currentPassword,
+    });
+    final code = data['recoveryCode']?.toString();
+    if (code == null || code.isEmpty) {
+      throw Exception('لم يستلم التطبيق رمز الاسترداد من الخادم.');
+    }
+    return code;
+  }
+
+  static Future<Map<String, dynamic>> me() async {
+    final user = _map((await request('GET', '/api/me'))['user']);
+    await _cacheUser(user);
+    return user;
+  }
+
+  static Future<Map<String, dynamic>> updateProfile({
+    required String displayName,
+    required String phone,
+  }) async => _map((await request('POST', '/api/profile', body: {
+        'displayName': displayName.trim(),
+        'phone': phone.trim(),
+      }))['user']);
+
+  static Future<Map<String, dynamic>> privacy() async =>
+      _map((await request('GET', '/api/privacy'))['privacy']);
+
+  static Future<Map<String, dynamic>> savePrivacy({
+    required bool searchable,
+    required bool readReceipts,
+  }) async => _map((await request('POST', '/api/privacy', body: {
+        'searchable': searchable,
+        'readReceipts': readReceipts,
+      }))['privacy']);
+
+  static Future<Map<String, dynamic>> notificationSettings() async =>
+      _map((await request('GET', '/api/notification-settings'))['settings']);
+
+  static Future<Map<String, dynamic>> saveNotificationSettings({
+    required bool messages, required bool groups, required bool statuses,
+  }) async => _map((await request('POST', '/api/notification-settings', body: {
+        'messages': messages, 'groups': groups, 'statuses': statuses,
+      }))['settings']);
+
+  static Future<Map<String, dynamic>> referrals() async =>
+      _map(await request('GET', '/api/referrals'));
+
+  static Future<List<Map<String, dynamic>>> friends() async =>
+      _list((await request('GET', '/api/friends'))['friends']);
+
+  static Future<List<Map<String, dynamic>>> search(String query) async =>
+      _list((await request(
+        'GET',
+        '/api/users/search?q=${Uri.encodeQueryComponent(query)}',
+      ))['users']);
+
+  // إضافة مباشرة إلى جهات الاتصال دون طلب صداقة.
+  static Future<void> addContact(String userId) async {
+    await request('POST', '/api/contacts', body: {'userId': userId});
+  }
+
+  static Future<List<Map<String, dynamic>>> matchPhoneContacts(
+    List<String> phones,
+  ) async => _list((await request('POST', '/api/contacts/match', body: {
+        'phones': phones.take(500).toList(),
+      }))['users']);
+
+  static Future<Map<String, dynamic>> messagesPage(
+    String friendId, {
+    int limit = 100,
+    Map<String, dynamic>? before,
+  }) async {
+    final query = <String, String>{
+      'with': friendId,
+      'limit': limit.toString(),
+      if (before?['before'] != null) 'before': before!['before'].toString(),
+      if (before?['beforeId'] != null) 'beforeId': before!['beforeId'].toString(),
+    };
+    return request('GET', '/api/messages?${Uri(queryParameters: query).query}');
+  }
+
+  static Future<List<Map<String, dynamic>>> messages(String friendId) async =>
+      _list((await messagesPage(friendId))['messages']);
+
+  static Future<void> sendMessage(String receiverId, String body, {String? clientMessageId}) async {
+    await request('POST', '/api/messages', body: {
+      'receiverId': receiverId,
+      'body': body,
+      if (clientMessageId != null && clientMessageId.isNotEmpty)
+        'clientMessageId': clientMessageId,
+    });
+  }
+
+  /// رسائل مؤقتة منفصلة تمامًا عن جدول الرسائل العادي وإشعارات Firebase.
+  static Future<void> sendEphemeralMessage(String receiverId, String body) async {
+    await request('POST', '/api/ephemeral-messages', body: {
+      'receiverId': receiverId,
+      'body': body,
+    });
+  }
+
+  static Future<List<Map<String, dynamic>>> ephemeralMessages(String friendId) async {
+    final data = await request(
+      'GET',
+      '/api/ephemeral-messages?with=${Uri.encodeQueryComponent(friendId)}',
+    );
+    return _list(data['messages']).map((message) {
+      final value = Map<String, dynamic>.from(message);
+      final created = value['created_at'];
+      if (created is num) {
+        value['created_at'] = DateTime.fromMillisecondsSinceEpoch(
+          created.toInt() * 1000,
+          isUtc: true,
+        ).toIso8601String();
+      }
+      value['is_ephemeral'] = true;
+      return value;
+    }).toList();
+  }
+
+  // تسجيل رمز جهاز المستخدم لدى الخادم لتهيئة الإشعارات لاحقاً.
+  // يستدعى بعد الحصول على FCM token من Firebase Messaging.
+  static Future<void> registerDeviceToken(String fcmToken) async {
+    final value = fcmToken.trim();
+    if (value.isEmpty) throw Exception('رمز الجهاز غير صالح.');
+    await request('POST', '/api/devices/token', body: {
+      'fcmToken': value,
+    });
+  }
+
+  static Future<List<Map<String, dynamic>>> statuses() async =>
+      _list((await request('GET', '/api/statuses'))['statuses']);
+
+  static Future<void> publishStatus(String content) async {
+    await request('POST', '/api/statuses', body: {'content': content});
+  }
+
+  static Future<List<Map<String, dynamic>>> groups() async =>
+      _list((await request('GET', '/api/groups'))['groups']);
+
+  static Future<Map<String, dynamic>> createGroup(String name, String description) async =>
+      _map((await request('POST', '/api/groups', body: {
+        'name': name,
+        'description': description,
+      }))['group']);
+
+  static Future<void> addGroupMember(String groupId, String userId) async {
+    await request('POST', '/api/groups/$groupId/members', body: {'userId': userId});
+  }
+
+  static Future<List<Map<String, dynamic>>> groupMembers(String groupId) async =>
+      _list((await request('GET', '/api/groups/$groupId/members'))['members']);
+
+  static Future<Map<String, dynamic>> groupMessagesPage(
+    String groupId, {
+    int limit = 100,
+    Map<String, dynamic>? before,
+  }) async {
+    final query = <String, String>{
+      'limit': limit.toString(),
+      if (before?['before'] != null) 'before': before!['before'].toString(),
+      if (before?['beforeId'] != null) 'beforeId': before!['beforeId'].toString(),
+    };
+    return request('GET', '/api/groups/$groupId/messages?${Uri(queryParameters: query).query}');
+  }
+
+  static Future<List<Map<String, dynamic>>> groupMessages(String groupId) async =>
+      _list((await groupMessagesPage(groupId))['messages']);
+
+  static Future<void> sendGroupMessage(String groupId, String body) async {
+    await request('POST', '/api/groups/$groupId/messages', body: {'body': body});
+  }
+
+  static Future<void> uploadAttachment({
+    required List<int> bytes,
+    required String fileName,
+    required String contentType,
+    String? recipientId,
+    String? groupId,
+  }) async {
+    if (BarqFeatures.lightningMode) {
+      throw Exception('وضع البرق مفعّل: إرسال الملفات والوسائط متوقف مؤقتًا.');
+    }
+    if ((recipientId == null) == (groupId == null)) {
+      throw Exception('حدد محادثة فردية أو مجموعة واحدة.');
+    }
+    if (bytes.isEmpty || bytes.length > maxAttachmentBytes) {
+      throw Exception('حجم الملف يجب ألا يتجاوز 60 ميجابايت.');
+    }
+    // Keep small uploads on the Vercel proxy. Larger uploads bypass its
+    // 4.5 MB function payload ceiling and stream directly to the Worker.
+    final uploadBase = bytes.length <= proxyMediaThresholdBytes ? apiBase : mediaWorkerBase;
+    final uri = Uri.parse('$uploadBase/api/media');
+    final response = await http.post(uri, headers: {
+      if (token != null) 'Authorization': 'Bearer $token',
+      'Content-Type': contentType,
+      'X-File-Name': Uri.encodeComponent(fileName),
+      if (recipientId != null) 'X-Recipient-Id': recipientId,
+      if (groupId != null) 'X-Group-Id': groupId,
+    }, body: bytes).timeout(const Duration(minutes: 3));
+    Map<String, dynamic> data = {};
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) data = decoded;
+    } catch (_) {}
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception((data['error'] ?? 'تعذر إرسال الملف (${response.statusCode})').toString());
+    }
+  }
+
+  /// يجلب المرفق الصوتي المصرح به ثم يرسله مباشرة إلى مسار التفريغ الصوتي.
+  /// لا يُحفظ الملف الصوتي أو النص الناتج في جدول الرسائل العادي.
+  static Future<String> transcribeAttachment(String attachmentId, {String? expectedContentType}) async {
+    final requestHeaders = {if (token != null) 'Authorization': 'Bearer $token'};
+    http.Response audioResponse;
+    try {
+      audioResponse = await http.get(
+        Uri.parse('$mediaWorkerBase/api/media/${Uri.encodeComponent(attachmentId)}'),
+        headers: requestHeaders,
+      ).timeout(const Duration(minutes: 2));
+      if (audioResponse.statusCode >= 500) {
+        throw const HttpException('Media Worker unavailable');
+      }
+    } catch (_) {
+      audioResponse = await http.get(
+        Uri.parse('$apiBase/api/media/${Uri.encodeComponent(attachmentId)}'),
+        headers: requestHeaders,
+      ).timeout(const Duration(minutes: 2));
+    }
+    if (audioResponse.statusCode < 200 || audioResponse.statusCode >= 300) {
+      throw Exception('تعذر جلب التسجيل الصوتي (${audioResponse.statusCode}).');
+    }
+    final responseContentType = (audioResponse.headers['content-type'] ?? '').split(';').first.toLowerCase();
+    final fallbackContentType = (expectedContentType ?? '').split(';').first.toLowerCase();
+    final contentType = responseContentType.startsWith('audio/') ? responseContentType : fallbackContentType;
+    if (!contentType.startsWith('audio/')) {
+      throw Exception('هذا المرفق ليس تسجيلًا صوتيًا.');
+    }
+    final audioBytes = audioResponse.bodyBytes;
+    final primaryTranscribeBase = audioBytes.length <= proxyMediaThresholdBytes
+        ? apiBase : mediaWorkerBase;
+    final fallbackTranscribeBase = primaryTranscribeBase == apiBase ? mediaWorkerBase : null;
+    http.Response response;
+    try {
+      response = await http.post(
+        Uri.parse('$primaryTranscribeBase/api/transcribe'),
+        headers: {...requestHeaders, 'Content-Type': contentType},
+        body: audioBytes,
+      ).timeout(const Duration(minutes: 3));
+      if (response.statusCode >= 500 && fallbackTranscribeBase != null) {
+        response = await http.post(
+          Uri.parse('$fallbackTranscribeBase/api/transcribe'),
+          headers: {...requestHeaders, 'Content-Type': contentType},
+          body: audioBytes,
+        ).timeout(const Duration(minutes: 3));
+      }
+    } catch (_) {
+      if (fallbackTranscribeBase == null) rethrow;
+      response = await http.post(
+        Uri.parse('$fallbackTranscribeBase/api/transcribe'),
+        headers: {...requestHeaders, 'Content-Type': contentType},
+        body: audioBytes,
+      ).timeout(const Duration(minutes: 3));
+    }
+    Map<String, dynamic> data = {};
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) data = decoded;
+    } catch (_) {}
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception((data['error'] ?? 'تعذر تحويل التسجيل إلى نص (${response.statusCode}).').toString());
+    }
+    final transcript = data['text']?.toString().trim() ?? '';
+    if (transcript.isEmpty) throw Exception('لم يتم العثور على كلام واضح في التسجيل.');
+    return transcript;
+  }
+
+  static Future<void> downloadAttachment({
+    required String attachmentId,
+    required String fileName,
+  }) async {
+    final requestHeaders = {if (token != null) 'Authorization': 'Bearer $token'};
+    http.Response response;
+    try {
+      response = await http.get(
+        Uri.parse('$mediaWorkerBase/api/media/${Uri.encodeComponent(attachmentId)}'),
+        headers: requestHeaders,
+      ).timeout(const Duration(minutes: 3));
+      // Do not retry authorization, not-found, or expiry responses through a
+      // second host. Only transport/server failures are eligible for fallback.
+      if (response.statusCode >= 500) throw const HttpException('Media Worker unavailable');
+    } catch (_) {
+      response = await http.get(
+        Uri.parse('$apiBase/api/media/${Uri.encodeComponent(attachmentId)}'),
+        headers: requestHeaders,
+      ).timeout(const Duration(minutes: 3));
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('تعذر تنزيل الملف (${response.statusCode}).');
+    }
+    final saved = await FilePicker.platform.saveFile(
+      fileName: fileName,
+      bytes: response.bodyBytes,
+    );
+    if (saved == null) throw Exception('تم إلغاء حفظ الملف.');
+  }
+
+  static Future<void> logout() async {
+    // Revoke this installation's push token before clearing the auth session.
+    // A network failure must never trap the user in the account.
+    try {
+      final fcmToken = await FirebaseMessaging.instance.getToken();
+      if (token != null && fcmToken != null && fcmToken.isNotEmpty) {
+        await request('DELETE', '/api/devices/token', body: {'fcmToken': fcmToken});
+      }
+    } catch (_) {}
+    await SirajRealtime.instance.stop();
+    await BarqNearbyService.instance.stop();
+    token = null;
+    await storage.delete(key: 'siraj_token');
+    await storage.delete(key: 'barq_cached_user');
+    await storage.delete(key: 'barq_cached_friends');
+    await storage.delete(key: 'barq_offline_outbox_v1');
+    await storage.delete(key: 'barq_offline_inbox_v1');
+  }
+
+  static Map<String, dynamic> _map(dynamic value) =>
+      value is Map ? Map<String, dynamic>.from(value) : <String, dynamic>{};
+
+  static Future<void> _cacheUser(Map<String, dynamic> user) async {
+    if (user.isEmpty) return;
+    try { await storage.write(key: 'barq_cached_user', value: jsonEncode(user)); } catch (_) {}
+  }
+
+  static List<Map<String, dynamic>> _list(dynamic value) {
+    if (value is! List) return [];
+    return value.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+}
+
+String newBarqMessageId() {
+  final random = math.Random.secure();
+  return List.generate(16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+}
+
+/// طابور محلي مشفر بواسطة flutter_secure_storage؛ لا يضم الرسائل المؤقتة.
+class BarqOfflineQueue {
+  static const String _outboxKey = 'barq_offline_outbox_v1';
+  static const String _inboxKey = 'barq_offline_inbox_v1';
+  static bool _syncing = false;
+
+  static Future<List<Map<String, dynamic>>> _read(String key) async {
+    try {
+      final raw = await storage.read(key: key);
+      if (raw == null || raw.isEmpty) return [];
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return [];
+      return decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<void> _write(String key, List<Map<String, dynamic>> items) async {
+    await storage.write(key: key, value: jsonEncode(items));
+  }
+
+  static Future<void> enqueueOutgoing(Map<String, dynamic> message) async {
+    final items = await _read(_outboxKey);
+    if (!items.any((item) => item['id'] == message['id'])) {
+      if (items.length >= 200) throw Exception('صندوق الرسائل دون إنترنت ممتلئ؛ اتصل بالإنترنت لمزامنة الرسائل أولاً.');
+      items.add(message);
+      await _write(_outboxKey, items);
+    }
+  }
+
+  static Future<void> enqueueIncoming(Map<String, dynamic> message) async {
+    final items = await _read(_inboxKey);
+    if (!items.any((item) => item['id'] == message['id'])) {
+      if (items.length >= 200) return;
+      items.add(message);
+      await _write(_inboxKey, items);
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> conversation(String friendId, String currentUserId) async {
+    final outbox = await _read(_outboxKey);
+    final inbox = await _read(_inboxKey);
+    return [...outbox, ...inbox].where((item) {
+      final sender = field(item, ['sender_id']);
+      final receiver = field(item, ['receiver_id']);
+      return (sender == currentUserId && receiver == friendId) ||
+          (sender == friendId && receiver == currentUserId);
+    }).map((item) => {...item, 'is_offline_pending': true}).toList();
+  }
+
+  static Future<void> reconcile(List<Map<String, dynamic>> serverMessages) async {
+    final ids = serverMessages.map((item) => field(item, ['id'])).where((id) => id.isNotEmpty).toSet();
+    if (ids.isEmpty) return;
+    final outbox = await _read(_outboxKey);
+    final inbox = await _read(_inboxKey);
+    await _write(_outboxKey, outbox.where((item) => !ids.contains(field(item, ['id']))).toList());
+    await _write(_inboxKey, inbox.where((item) => !ids.contains(field(item, ['id']))).toList());
+  }
+
+  static Future<void> syncOutbox() async {
+    if (_syncing || Api.token == null) return;
+    _syncing = true;
+    try {
+      final items = await _read(_outboxKey);
+      for (final item in items) {
+        try {
+          await Api.sendMessage(
+            field(item, ['receiver_id']),
+            field(item, ['body']),
+            clientMessageId: field(item, ['id']),
+          );
+          final remaining = await _read(_outboxKey);
+          await _write(_outboxKey, remaining.where((entry) => entry['id'] != item['id']).toList());
+        } catch (_) {
+          // يبقى العنصر في الطابور حتى يتاح الاتصال بالخادم.
+          break;
+        }
+      }
+    } finally {
+      _syncing = false;
+    }
+  }
+}
+
+/// نقل رسائل نصية فقط عبر Google Nearby Connections بين جهات الاتصال المعروفة.
+class BarqNearbyService {
+  BarqNearbyService._();
+  static final BarqNearbyService instance = BarqNearbyService._();
+  static const String _serviceId = 'com.barq.app';
+  final StreamController<Map<String, dynamic>> _events = StreamController.broadcast();
+  final Map<String, ConnectionInfo> _pending = {};
+  final Map<String, String> _connectedUsers = {};
+  final Map<String, String> _discoveredUsers = {};
+  Set<String> _knownContacts = {};
+  String? _currentUserId;
+  String _endpointName = 'BARQ';
+  bool _running = false;
+
+  Stream<Map<String, dynamic>> get events => _events.stream;
+  bool get isRunning => _running;
+  List<MapEntry<String, String>> get discovered => _discoveredUsers.entries.toList();
+  List<MapEntry<String, String>> get connected => _connectedUsers.entries.toList();
+
+  String? _userIdFromEndpoint(String name) {
+    final parts = name.split('|');
+    if (parts.length < 2 || parts.first != 'BARQ') return null;
+    return parts[1].trim().isEmpty ? null : parts[1].trim();
+  }
+
+  Future<void> start({required String userId, required String displayName, required List<Map<String, dynamic>> friends}) async {
+    if (_running) return;
+    _currentUserId = userId;
+    _knownContacts = friends.map((item) => field(item, ['id', 'user_id'])).where((id) => id.isNotEmpty).toSet();
+    final safeName = displayName.replaceAll('|', '');
+    _endpointName = 'BARQ|$userId|${safeName.substring(0, math.min(safeName.length, 12).toInt())}';
+    await [
+      Permission.location,
+      Permission.bluetooth,
+      Permission.bluetoothAdvertise,
+      Permission.bluetoothConnect,
+      Permission.bluetoothScan,
+      Permission.nearbyWifiDevices,
+    ].request();
+    final locationServiceStatus = await Permission.location.serviceStatus;
+    if (!locationServiceStatus.isEnabled) {
+      throw Exception('شغّل خدمة الموقع في إعدادات الهاتف؛ مكتبة Nearby تحتاجها لاكتشاف الأجهزة على بعض إصدارات Android، ولا يتم جمع موقعك.');
+    }
+
+    final advertisingStarted = await Nearby().startAdvertising(
+      _endpointName,
+      Strategy.P2P_POINT_TO_POINT,
+      serviceId: _serviceId,
+      onConnectionInitiated: _onConnectionInitiated,
+      onConnectionResult: _onConnectionResult,
+      onDisconnected: _onDisconnected,
+    );
+    if (!advertisingStarted) throw Exception('تعذر بدء الإعلان عن جهاز برق القريب.');
+    final discoveryStarted = await Nearby().startDiscovery(
+      _endpointName,
+      Strategy.P2P_POINT_TO_POINT,
+      serviceId: _serviceId,
+      onEndpointFound: (id, name, serviceId) {
+        final peerId = _userIdFromEndpoint(name);
+        if (peerId == null || !_knownContacts.contains(peerId)) return;
+        _discoveredUsers[id] = peerId;
+        _events.add({'type': 'endpoint_found', 'endpointId': id, 'userId': peerId, 'name': name});
+      },
+      onEndpointLost: (id) {
+        _discoveredUsers.remove(id);
+        _events.add({'type': 'endpoint_lost', 'endpointId': id});
+      },
+    );
+    if (!discoveryStarted) {
+      await Nearby().stopAdvertising();
+      throw Exception('تعذر بدء البحث عن الأجهزة القريبة.');
+    }
+    _running = true;
+    _events.add({'type': 'started'});
+  }
+
+  void _onConnectionInitiated(String id, ConnectionInfo info) {
+    final peerId = _userIdFromEndpoint(info.endpointName);
+    if (peerId == null || !_knownContacts.contains(peerId)) {
+      unawaited(Nearby().rejectConnection(id).then<bool>((_) => true, onError: (Object _) => false));
+      return;
+    }
+    _pending[id] = info;
+    _discoveredUsers[id] = peerId;
+    _events.add({
+      'type': 'connection_request',
+      'endpointId': id,
+      'userId': peerId,
+      'name': info.endpointName,
+      'authenticationToken': info.authenticationToken,
+      'isIncoming': info.isIncomingConnection,
+    });
+  }
+
+  void _onConnectionResult(String id, Status status) {
+    final peerId = _discoveredUsers[id] ?? _userIdFromEndpoint(_pending[id]?.endpointName ?? '');
+    if (status == Status.CONNECTED && peerId != null && _knownContacts.contains(peerId)) {
+      _connectedUsers[id] = peerId;
+    }
+    _events.add({'type': 'connection_result', 'endpointId': id, 'userId': peerId ?? '', 'success': status == Status.CONNECTED, 'status': status.toString()});
+  }
+
+  void _onDisconnected(String id) {
+    _connectedUsers.remove(id);
+    _pending.remove(id);
+    _events.add({'type': 'disconnected', 'endpointId': id});
+  }
+
+  Future<void> requestConnection(String endpointId) async {
+    await Nearby().requestConnection(
+      _endpointName,
+      endpointId,
+      onConnectionInitiated: _onConnectionInitiated,
+      onConnectionResult: _onConnectionResult,
+      onDisconnected: _onDisconnected,
+    );
+  }
+
+  Future<void> acceptConnection(String endpointId) async {
+    final info = _pending[endpointId];
+    final peerId = _discoveredUsers[endpointId] ?? _userIdFromEndpoint(info?.endpointName ?? '');
+    if (info == null || peerId == null || !_knownContacts.contains(peerId)) {
+      throw Exception('الجهاز ليس ضمن جهات اتصال برق المعروفة.');
+    }
+    await Nearby().acceptConnection(
+      endpointId,
+      onPayLoadRecieved: (id, payload) async {
+        if (payload.type != PayloadType.BYTES || payload.bytes == null) return;
+        try {
+          final decoded = jsonDecode(utf8.decode(payload.bytes!));
+          if (decoded is! Map<String, dynamic> || decoded['kind'] != 'barq_text_message') return;
+          if (decoded['senderId']?.toString() != peerId || decoded['receiverId']?.toString() != _currentUserId) return;
+          final body = decoded['body']?.toString() ?? '';
+          final messageId = decoded['id']?.toString() ?? '';
+          if (body.isEmpty || body.length > 5000 || messageId.isEmpty) return;
+          await BarqOfflineQueue.enqueueIncoming({
+            'id': messageId,
+            'sender_id': peerId,
+            'receiver_id': _currentUserId,
+            'body': body,
+            'created_at': decoded['createdAt']?.toString() ?? DateTime.now().toUtc().toIso8601String(),
+          });
+          _events.add({'type': 'message_received', 'senderId': peerId, 'id': messageId});
+        } catch (_) {}
+      },
+      onPayloadTransferUpdate: (id, update) {},
+    );
+    _events.add({'type': 'connection_accepted', 'endpointId': endpointId, 'userId': peerId});
+  }
+
+  Future<void> rejectConnection(String endpointId) async {
+    _pending.remove(endpointId);
+    await Nearby().rejectConnection(endpointId);
+  }
+
+  Future<bool> sendTextMessage({required String receiverId, required String messageId, required String body, required String senderId}) async {
+    final targets = _connectedUsers.entries.where((entry) => entry.value == receiverId).toList();
+    if (targets.isEmpty) return false;
+    final payload = Uint8List.fromList(utf8.encode(jsonEncode({
+      'kind': 'barq_text_message',
+      'id': messageId,
+      'senderId': senderId,
+      'receiverId': receiverId,
+      'body': body,
+      'createdAt': DateTime.now().toUtc().toIso8601String(),
+    })));
+    for (final target in targets) {
+      await Nearby().sendBytesPayload(target.key, payload);
+    }
+    return true;
+  }
+
+  Future<void> stop() async {
+    try { await Nearby().stopAllEndpoints(); } catch (_) {}
+    try { await Nearby().stopAdvertising(); } catch (_) {}
+    try { await Nearby().stopDiscovery(); } catch (_) {}
+    _pending.clear();
+    _connectedUsers.clear();
+    _discoveredUsers.clear();
+    _running = false;
+    _events.add({'type': 'stopped'});
+  }
+}
+
+List<Map<String, dynamic>> mergeMessages(
+  Iterable<Map<String, dynamic>> first,
+  Iterable<Map<String, dynamic>> second,
+) {
+  final unique = <String, Map<String, dynamic>>{};
+  for (final message in [...first, ...second]) {
+    final id = field(message, ['id']);
+    final fallbackKey = '${field(message, ['created_at', 'createdAt'])}|' 
+        '${field(message, ['sender_id', 'senderId'])}|' 
+        '${field(message, ['body', 'content'])}';
+    unique[id.isNotEmpty ? id : fallbackKey] = message;
+  }
+  final result = unique.values.toList();
+  result.sort((a, b) {
+    final aTime = _messageSortTime(field(a, ['created_at', 'createdAt']));
+    final bTime = _messageSortTime(field(b, ['created_at', 'createdAt']));
+    final byTime = aTime.compareTo(bTime);
+    return byTime != 0 ? byTime : field(a, ['id']).compareTo(field(b, ['id']));
+  });
+  return result;
+}
+
+DateTime _messageSortTime(String raw) {
+  if (raw.isEmpty) return DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+  final normalized = raw.contains(' ') && !raw.contains('T') ? '${raw.replaceFirst(' ', 'T')}Z' : raw;
+  return DateTime.tryParse(normalized)?.toUtc() ?? DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+}
+
+String field(Map<String, dynamic> data, List<String> keys, [String fallback = '']) {
+  for (final key in keys) {
+    final value = data[key];
+    if (value != null && value.toString().isNotEmpty) return value.toString();
+  }
+  return fallback;
+}
+
+class StartupPage extends StatefulWidget {
+  const StartupPage({super.key});
+
+  @override
+  State<StartupPage> createState() => _StartupPageState();
+}
+
+class _StartupPageState extends State<StartupPage> {
+  bool checking = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _start();
+  }
+
+  Future<void> _start() async {
+    final saved = await storage.read(key: 'siraj_token');
+    if (saved != null && saved.isNotEmpty) {
+      Api.token = saved;
+      try {
+        final user = await Api.me();
+        await SirajPush.register();
+        // اتصال REST عبر Vercel هو المسار المعتمد لتجنب workers.dev على الشبكات المقيدة.
+      // المزامنة الدورية أدناه تُبقي الرسائل محدثة دون اتصال WebSocket مباشر.
+        if (!mounted) return;
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomePage(user: user)));
+        return;
+      } catch (e) {
+        if (e.toString().contains('NETWORK_DIAGNOSTIC')) {
+          try {
+            final rawUser = await storage.read(key: 'barq_cached_user');
+            final decoded = rawUser == null ? null : jsonDecode(rawUser);
+            if (decoded is Map) {
+              final cachedUser = Map<String, dynamic>.from(decoded);
+              if (cachedUser.isNotEmpty && mounted) {
+                Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomePage(user: cachedUser)));
+                return;
+              }
+            }
+          } catch (_) {}
+          // لا نحذف الرمز أو الجلسة لمجرد انقطاع الشبكة.
+          if (mounted) setState(() => checking = false);
+          return;
+        }
+        await Api.logout();
+      }
+    }
+    if (mounted) setState(() => checking = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (checking) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator(color: gold)),
+      );
+    }
+    return const LoginPage();
+  }
+}
+
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final name = TextEditingController();
+  final username = TextEditingController(); // login identifier: phone or username
+  final optionalUsername = TextEditingController();
+  final phone = TextEditingController();
+  final password = TextEditingController();
+  final inviteCode = TextEditingController();
+  bool registering = false;
+  bool busy = false;
+  bool obscurePassword = true;
+
+  @override
+  void initState() {
+    super.initState();
+    BarqInviteLinks.pendingCode.addListener(_applyPendingInvite);
+    _applyPendingInvite();
+  }
+
+  void _applyPendingInvite() {
+    final code = BarqInviteLinks.pendingCode.value;
+    if (code != null && code.isNotEmpty && mounted) {
+      inviteCode.text = code;
+      if (!registering) setState(() => registering = true);
+    }
+  }
+
+  @override
+  void dispose() {
+    BarqInviteLinks.pendingCode.removeListener(_applyPendingInvite);
+    name.dispose(); username.dispose(); optionalUsername.dispose();
+    phone.dispose(); password.dispose(); inviteCode.dispose();
+    super.dispose();
+  }
+
+  String _normalizedYemenPhone(String raw) {
+    var digits = raw.replaceAll(RegExp(r'[^0-9٠-٩۰-۹]'), '');
+    digits = digits.replaceAllMapped(RegExp(r'[٠-٩۰-۹]'), (m) {
+      final c = m.group(0)!.codeUnitAt(0);
+      return String.fromCharCode(c >= 0x06f0 && c <= 0x06f9
+          ? c - 0x06f0 + 48 : c - 0x0660 + 48);
+    });
+    if (digits.startsWith('00')) digits = digits.substring(2);
+    if (digits.startsWith('967')) return '+$digits';
+    if (digits.startsWith('0')) digits = digits.substring(1);
+    return '+967$digits';
+  }
+
+  String _generatedUsername() {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    final random = math.Random.secure();
+    return 'barq${List.generate(10, (_) => chars[random.nextInt(chars.length)]).join()}';
+  }
+
+  Future<void> submit() async {
+    if (password.text.isEmpty ||
+        (registering && (name.text.trim().isEmpty || phone.text.trim().isEmpty)) ||
+        (!registering && username.text.trim().isEmpty)) {
+      showMsg(context, registering
+          ? 'أدخل الاسم الظاهر ورقم الهاتف وكلمة المرور.'
+          : 'أدخل رقم الهاتف أو اسم المستخدم وكلمة المرور.');
+      return;
+    }
+    if (registering && password.text.length < 8) {
+      showMsg(context, 'كلمة المرور يجب أن تكون 8 أحرف على الأقل.');
+      return;
+    }
+    if (registering && !RegExp(r'^\+9677[0-9]{8}$').hasMatch(_normalizedYemenPhone(phone.text))) {
+      showMsg(context, 'أدخل رقم هاتف يمني صحيحًا مكوّنًا من 9 أرقام بعد +967.');
+      return;
+    }
+    setState(() => busy = true);
+    try {
+      final user = registering
+          ? await Api.register(
+              displayName: name.text.trim(),
+              username: optionalUsername.text.trim().replaceAll('@', '').isEmpty
+                  ? _generatedUsername()
+                  : optionalUsername.text.trim().replaceAll('@', ''),
+              password: password.text,
+              phone: _normalizedYemenPhone(phone.text),
+              inviteCode: inviteCode.text.trim().isEmpty ? null : inviteCode.text.trim(),
+            )
+          : await Api.login(username.text.trim(), password.text);
+      if (registering) {
+        await BarqInviteLinks.clear();
+        final code = Api.lastRecoveryCode;
+        if (code != null && code.isNotEmpty && mounted) {
+          await showRecoveryCodeDialog(context, code);
+        } else if (mounted) {
+          showMsg(context, 'تم إنشاء الحساب، لكن لم يصدر الخادم رمز الاسترداد.');
+        }
+      }
+      await SirajPush.register();
+      if (!mounted) return;
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomePage(user: user)));
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  InputDecoration _barqDecoration(String label, IconData icon, {String? prefix}) => InputDecoration(
+    labelText: label,
+    prefixText: prefix,
+    prefixIcon: Icon(icon, color: gold),
+    filled: true,
+    fillColor: glass,
+    labelStyle: const TextStyle(color: Colors.white70),
+    prefixStyle: const TextStyle(color: gold, fontWeight: FontWeight.bold),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(20),
+      borderSide: BorderSide(color: Colors.white.withValues(alpha: .09)),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(20),
+      borderSide: const BorderSide(color: electricBlue, width: 1.5),
+    ),
+  );
+
+  Widget _input(TextEditingController controller, String label, IconData icon,
+      {bool isPhone = false, bool optional = false}) => TextField(
+    controller: controller,
+    keyboardType: isPhone ? TextInputType.phone : TextInputType.text,
+    textDirection: isPhone ? TextDirection.ltr : TextDirection.rtl,
+    decoration: _barqDecoration(label, icon,
+      prefix: isPhone ? '+967  ' : null).copyWith(
+        suffixText: optional ? 'اختياري' : null,
+      ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        body: Stack(
+          children: [
+            const Positioned.fill(child: DecoratedBox(
+              decoration: BoxDecoration(gradient: LinearGradient(
+                begin: Alignment.topRight, end: Alignment.bottomLeft,
+                colors: [Color(0xFF101722), Color(0xFF08090D), Color(0xFF050505)],
+              )),
+            )),
+            Positioned(top: -110, right: -70, child: Container(
+              width: 260, height: 260,
+              decoration: BoxDecoration(shape: BoxShape.circle,
+                color: electricBlue.withValues(alpha: .10),
+                boxShadow: [BoxShadow(color: electricBlue.withValues(alpha: .12), blurRadius: 90, spreadRadius: 20)]),
+            )),
+            SafeArea(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 30),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 460),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Center(child: Container(
+                          width: 86, height: 86,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(27),
+                            gradient: const LinearGradient(colors: [Color(0xFFFFE08A), gold, Color(0xFF986B20)]),
+                            boxShadow: [BoxShadow(color: gold.withValues(alpha: .24), blurRadius: 28, spreadRadius: 2)],
+                          ),
+                          child: const Icon(Icons.bolt_rounded, color: Colors.black, size: 54),
+                        )),
+                        const SizedBox(height: 14),
+                        const Center(child: Text('بَرق', style: TextStyle(
+                          color: gold, fontSize: 38, fontWeight: FontWeight.w900, letterSpacing: 1,
+                        ))),
+                        const SizedBox(height: 5),
+                        Center(child: Text(
+                          registering ? 'أنشئ حسابك برقم هاتفك' : 'تواصل أسرع، أقرب، وأسهل',
+                          style: const TextStyle(color: Colors.white70, fontSize: 15),
+                        )),
+                        const SizedBox(height: 28),
+                        Container(
+                          padding: const EdgeInsets.all(18),
+                          decoration: BoxDecoration(
+                            color: const Color(0xAA11151D),
+                            borderRadius: BorderRadius.circular(28),
+                            border: Border.all(color: Colors.white.withValues(alpha: .10)),
+                            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: .30), blurRadius: 28, offset: const Offset(0, 12))],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(registering ? 'إنشاء حساب جديد' : 'مرحبًا بعودتك',
+                                style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold, color: Colors.white)),
+                              const SizedBox(height: 5),
+                              const Text('رقم الهاتف هو معرّفك الأساسي في برق',
+                                style: TextStyle(color: Colors.white54, fontSize: 12)),
+                              const SizedBox(height: 20),
+                              if (registering) ...[
+                                _input(name, 'الاسم الظاهر', Icons.person_outline),
+                                const SizedBox(height: 13),
+                                _input(phone, 'رقم الهاتف اليمني', Icons.phone_android, isPhone: true),
+                                const SizedBox(height: 13),
+                                _input(optionalUsername, 'اسم المستخدم', Icons.alternate_email, optional: true),
+                                const SizedBox(height: 13),
+                                _input(inviteCode, 'رمز دعوة صديق', Icons.bolt_outlined, optional: true),
+                              ] else ...[
+                                _input(username, 'رقم الهاتف أو اسم المستخدم', Icons.person_search),
+                              ],
+                              const SizedBox(height: 13),
+                              TextField(
+                                controller: password,
+                                obscureText: obscurePassword,
+                                decoration: _barqDecoration('كلمة المرور', Icons.lock_outline).copyWith(
+                                  suffixIcon: IconButton(
+                                    onPressed: () => setState(() => obscurePassword = !obscurePassword),
+                                    icon: Icon(obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: Colors.white54),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              SizedBox(
+                                height: 56,
+                                child: FilledButton.icon(
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: gold, foregroundColor: Colors.black,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                                  ),
+                                  onPressed: busy ? null : submit,
+                                  icon: busy ? const SizedBox(width: 20, height: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                                    : Icon(registering ? Icons.person_add_alt_1 : Icons.bolt),
+                                  label: Text(registering ? 'إنشاء الحساب' : 'تسجيل الدخول',
+                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                ),
+                              ),
+                              if (!registering) ...[
+                                const SizedBox(height: 5),
+                                TextButton(
+                                  onPressed: busy ? null : () => Navigator.push(context,
+                                    MaterialPageRoute(builder: (_) => const PasswordRecoveryPage())),
+                                  child: const Text('نسيت كلمة المرور؟'),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        Center(child: TextButton(
+                          onPressed: busy ? null : () => setState(() => registering = !registering),
+                          child: Text(registering ? 'لديك حساب؟ سجّل الدخول' : 'مستخدم جديد؟ أنشئ حسابًا',
+                            style: const TextStyle(color: gold, fontSize: 15)),
+                        )),
+                        const Center(child: Text('لا نحتاج إلى رمز تحقق SMS',
+                          style: TextStyle(color: Colors.white38, fontSize: 11))),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+Future<void> showRecoveryCodeDialog(BuildContext context, String code) async {
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('احفظ رمز استرداد حسابك'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('هذا الرمز يظهر مرة واحدة فقط. احتفظ به في مكان آمن ولا تشاركه مع أحد.'),
+          const SizedBox(height: 16),
+          SelectableText(
+            code,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: code));
+              if (dialogContext.mounted) showMsg(dialogContext, 'تم نسخ رمز الاسترداد.');
+            },
+            icon: const Icon(Icons.copy),
+            label: const Text('نسخ الرمز'),
+          ),
+        ],
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('حفظته، متابعة'),
+        ),
+      ],
+    ),
+  );
+}
+
+class PasswordRecoveryPage extends StatefulWidget {
+  const PasswordRecoveryPage({super.key});
+
+  @override
+  State<PasswordRecoveryPage> createState() => _PasswordRecoveryPageState();
+}
+
+class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
+  final identifier = TextEditingController();
+  final recoveryCode = TextEditingController();
+  final newPassword = TextEditingController();
+  final confirmPassword = TextEditingController();
+  bool busy = false;
+  bool obscureCode = true;
+
+  @override
+  void dispose() {
+    identifier.dispose();
+    recoveryCode.dispose();
+    newPassword.dispose();
+    confirmPassword.dispose();
+    super.dispose();
+  }
+
+  Future<void> submit() async {
+    if (identifier.text.trim().isEmpty ||
+        recoveryCode.text.trim().isEmpty ||
+        newPassword.text.isEmpty ||
+        confirmPassword.text.isEmpty) {
+      showMsg(context, 'أكمل جميع الحقول.');
+      return;
+    }
+    if (newPassword.text.length < 8 || newPassword.text.length > 128) {
+      showMsg(context, 'كلمة المرور يجب أن تكون بين 8 و128 حرفًا.');
+      return;
+    }
+    if (newPassword.text != confirmPassword.text) {
+      showMsg(context, 'كلمتا المرور غير متطابقتين.');
+      return;
+    }
+    setState(() => busy = true);
+    try {
+      await Api.recoverPassword(
+        identifier: identifier.text,
+        recoveryCode: recoveryCode.text,
+        newPassword: newPassword.text,
+      );
+      if (!mounted) return;
+      showMsg(context, 'تم تحديث كلمة المرور. يمكنك تسجيل الدخول الآن.');
+      Navigator.pop(context);
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(title: const Text('استرداد الحساب')),
+        body: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.all(22),
+            children: [
+              const Icon(Icons.shield_outlined, color: gold, size: 58),
+              const SizedBox(height: 12),
+              const Text(
+                'استعد الوصول إلى حسابك',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'أدخل اسم المستخدم أو رقم الهاتف ورمز الاسترداد الذي حفظته عند إنشاء الحساب أو تدويره.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              TextField(
+                controller: identifier,
+                decoration: inputDecoration('اسم المستخدم أو رقم الهاتف', Icons.person_outline),
+                textInputAction: TextInputAction.next,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: recoveryCode,
+                textCapitalization: TextCapitalization.characters,
+                decoration: inputDecoration('رمز الاسترداد', Icons.key).copyWith(
+                  suffixIcon: IconButton(
+                    onPressed: () => setState(() => obscureCode = !obscureCode),
+                    icon: Icon(obscureCode ? Icons.visibility : Icons.visibility_off, color: gold),
+                  ),
+                ),
+                obscureText: obscureCode,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: newPassword,
+                obscureText: true,
+                decoration: inputDecoration('كلمة المرور الجديدة', Icons.lock_outline),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: confirmPassword,
+                obscureText: true,
+                decoration: inputDecoration('تأكيد كلمة المرور الجديدة', Icons.lock_reset),
+              ),
+              const SizedBox(height: 22),
+              SizedBox(
+                height: 52,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+                  onPressed: busy ? null : submit,
+                  child: busy
+                      ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                      : const Text('تحديث كلمة المرور'),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'لا نستخدم رسائل SMS أو البريد الإلكتروني. رمز الاسترداد صالح للاستخدام مرة واحدة.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+InputDecoration inputDecoration(String label, IconData icon) => InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon, color: gold),
+      filled: true,
+      fillColor: panel,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+    );
+
+void showMsg(BuildContext context, String message) {
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+}
+
+Future<bool> confirmVoiceTranscription(BuildContext context) async {
+  final accepted = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      backgroundColor: panel,
+      title: const Text('تحويل التسجيل إلى نص'),
+      content: const Text('سيُرسل الملف الصوتي إلى خدمة Cloudflare Workers AI لمعالجة الكلام وإرجاع النص. لا يُحفظ الملف في جدول الرسائل، لكن المعالجة تتم عبر الإنترنت وقد تُحتسب عليها تكلفة تشغيل. هل تريد المتابعة؟'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+        FilledButton(style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+          onPressed: () => Navigator.pop(dialogContext, true), child: const Text('متابعة')),
+      ],
+    ),
+  );
+  return accepted == true;
+}
+
+String cleanError(Object error) => error.toString().replaceFirst('Exception: ', '');
+
+class HomePage extends StatefulWidget {
+  final Map<String, dynamic> user;
+  const HomePage({super.key, required this.user});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
+  int selectedTab = 0;
+  late Map<String, dynamic> me = widget.user;
+  List<Map<String, dynamic>> friends = [];
+  List<Map<String, dynamic>> matchedContacts = [];
+  bool matchingContacts = false;
+  bool phoneContactsPermissionGranted = false;
+  DateTime? lastPhoneContactsSyncAt;
+  List<Map<String, dynamic>> groups = [];
+  List<Map<String, dynamic>> statuses = [];
+  bool loading = true;
+  Map<String, dynamic> privacySettings = {'searchable': true, 'readReceipts': true};
+  Map<String, dynamic> notificationPrefs = {'messages': true, 'groups': true, 'statuses': true};
+  Map<String, dynamic> referralStats = {};
+  Timer? offlineSyncTimer;
+
+  String get myId => field(me, ['id', 'user_id']);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _loadCachedFriends().whenComplete(() { if (mounted) refreshAll(); });
+    offlineSyncTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      BarqOfflineQueue.syncOutbox();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    offlineSyncTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      BarqOfflineQueue.syncOutbox();
+      if (phoneContactsPermissionGranted) matchPhoneContacts(silent: true);
+    }
+  }
+
+  Future<void> _loadCachedFriends() async {
+    try {
+      final raw = await storage.read(key: 'barq_cached_friends');
+      if (raw == null) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is List && mounted) {
+        setState(() => friends = decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList());
+      }
+    } catch (_) {}
+  }
+
+  Future<void> refreshAll() async {
+    setState(() => loading = true);
+    try {
+      final results = await Future.wait([
+        Api.friends(),
+        Api.me(),
+      ]);
+      friends = results[0] as List<Map<String, dynamic>>;
+      me = results[1] as Map<String, dynamic>;
+      await storage.write(key: 'barq_cached_friends', value: jsonEncode(friends));
+      await storage.write(key: 'barq_cached_user', value: jsonEncode(me));
+      try {
+        statuses = await Api.statuses();
+      } catch (_) {
+        statuses = [];
+      }
+      try {
+        privacySettings = await Api.privacy();
+      } catch (_) {
+        // لا نعطل بقية التطبيق إذا لم يكن تحديث الخصوصية منشوراً على الخادم بعد.
+      }
+      try {
+        notificationPrefs = await Api.notificationSettings();
+      } catch (_) {
+        // يبقى التطبيق متاحاً إذا لم يُنشر مسار إعدادات الإشعارات بعد.
+      }
+      try {
+        groups = await Api.groups();
+      } catch (_) {
+        // لا نعطل المحادثات الفردية إذا لم تُنشر واجهة المجموعات على الخادم بعد.
+      }
+      try {
+        referralStats = await Api.referrals();
+      } catch (_) {
+        // يبقى التطبيق متاحًا قبل نشر مسارات الإحالات.
+      }
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  Future<void> matchPhoneContacts({bool silent = false, bool force = false}) async {
+    if (matchingContacts) return;
+    final lastSync = lastPhoneContactsSyncAt;
+    if (!force && lastSync != null &&
+        DateTime.now().difference(lastSync) < const Duration(minutes: 1)) {
+      return;
+    }
+    if (mounted) setState(() => matchingContacts = true);
+    try {
+      final permitted = await FlutterContacts.requestPermission(readonly: true);
+      if (!permitted) {
+        phoneContactsPermissionGranted = false;
+        if (mounted && !silent) showMsg(context, 'لم يتم منح إذن جهات الاتصال. يمكنك تفعيله من إعدادات الهاتف.');
+        return;
+      }
+      phoneContactsPermissionGranted = true;
+      final phoneContacts = await FlutterContacts.getContacts(
+        withProperties: true,
+        withPhoto: false,
+      );
+      final phones = phoneContacts
+          .expand((contact) => contact.phones)
+          .map((phone) => phone.number.trim())
+          .where((number) => number.isNotEmpty)
+          .toSet()
+          .take(500)
+          .toList();
+      final matches = await Api.matchPhoneContacts(phones);
+      lastPhoneContactsSyncAt = DateTime.now();
+      if (mounted) setState(() => matchedContacts = matches);
+      if (mounted && !silent) showMsg(context, 'تم العثور على ${matches.length} شخص مسجل في برق من جهات هاتفك.');
+    } catch (e) {
+      if (mounted && !silent) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => matchingContacts = false);
+    }
+  }
+
+  Future<void> searchUsers() async {
+    final controller = TextEditingController();
+    List<Map<String, dynamic>> found = [];
+    bool busy = false;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialog) => AlertDialog(
+          backgroundColor: panel,
+          title: const Text('البحث عن مستخدم'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: controller,
+                  decoration: inputDecoration('اسم المستخدم أو الهاتف', Icons.search),
+                  onSubmitted: (_) async {
+                    if (controller.text.trim().length < 2) return;
+                    setDialog(() => busy = true);
+                    try {
+                      found = await Api.search(controller.text.trim());
+                    } catch (e) {
+                      if (mounted) showMsg(this.context, cleanError(e));
+                    }
+                    setDialog(() => busy = false);
+                  },
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: busy ? null : () async {
+                      if (controller.text.trim().length < 2) return;
+                      setDialog(() => busy = true);
+                      try {
+                        found = await Api.search(controller.text.trim());
+                      } catch (e) {
+                        if (mounted) showMsg(this.context, cleanError(e));
+                      }
+                      setDialog(() => busy = false);
+                    },
+                    child: const Text('بحث'),
+                  ),
+                ),
+                if (busy) const CircularProgressIndicator(color: gold),
+                if (!busy && found.isEmpty) const Text('اكتب حرفين على الأقل ثم اضغط بحث.', style: TextStyle(color: Colors.white60)),
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: found.map((person) {
+                      final id = field(person, ['id', 'user_id']);
+                      final uname = field(person, ['username'], 'مستخدم');
+                      return ListTile(
+                        title: Text(field(person, ['displayName', 'display_name'], uname)),
+                        subtitle: Text('@$uname'),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.person_add_alt_1, color: gold),
+                          onPressed: id.isEmpty ? null : () async {
+                            try {
+                              await Api.addContact(id);
+                              if (mounted) {
+                                showMsg(this.context, 'تمت إضافة الشخص إلى جهات اتصالك.');
+                                await refreshAll();
+                              }
+                            } catch (e) {
+                              if (mounted) showMsg(this.context, cleanError(e));
+                            }
+                          },
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق'))],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pages = <Widget>[
+      _chatsPage(),
+      _statusesPage(),
+      _friendsPage(),
+      _groupsPage(),
+      _accountPage(),
+    ];
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('برق', style: TextStyle(color: gold, fontWeight: FontWeight.bold)),
+          actions: [
+            IconButton(onPressed: refreshAll, icon: const Icon(Icons.refresh, color: gold), tooltip: 'تحديث'),
+          ],
+        ),
+        body: loading
+            ? const Center(child: CircularProgressIndicator(color: gold))
+            : pages[selectedTab],
+        floatingActionButton: selectedTab == 1 || selectedTab == 2 || selectedTab == 3
+            ? FloatingActionButton(
+                backgroundColor: gold,
+                foregroundColor: Colors.black,
+                onPressed: selectedTab == 1 ? publishStatusDialog : (selectedTab == 2 ? searchUsers : createGroupDialog),
+                child: Icon(selectedTab == 1 ? Icons.add : (selectedTab == 2 ? Icons.person_add : Icons.group_add)),
+              )
+            : null,
+        bottomNavigationBar: NavigationBar(
+          backgroundColor: panel,
+          selectedIndex: selectedTab,
+          onDestinationSelected: (value) {
+            setState(() => selectedTab = value);
+            // Refresh phone matches automatically whenever the contacts tab is opened.
+            // Permission is requested by the plugin only when the user first enters this tab.
+            if (value == 2) matchPhoneContacts();
+          },
+          destinations: const [
+            NavigationDestination(icon: Icon(Icons.chat_bubble_outline), label: 'المحادثات'),
+            NavigationDestination(icon: Icon(Icons.circle_outlined), label: 'الحالات'),
+            NavigationDestination(icon: Icon(Icons.people_outline), label: 'الأشخاص'),
+            NavigationDestination(icon: Icon(Icons.groups_outlined), label: 'المجموعات'),
+            NavigationDestination(icon: Icon(Icons.person_outline), label: 'حسابي'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> publishStatusDialog() async {
+    final controller = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: panel,
+        title: const Text('نشر حالة نصية'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 1000,
+          maxLines: 5,
+          decoration: inputDecoration('ماذا تريد أن تشارك؟', Icons.edit_note),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+            onPressed: () async {
+              final content = controller.text.trim();
+              if (content.isEmpty) return;
+              try {
+                await Api.publishStatus(content);
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+                await refreshAll();
+                if (mounted) showMsg(context, 'نُشرت حالتك لمدة 24 ساعة.');
+              } catch (e) {
+                if (mounted) showMsg(context, cleanError(e));
+              }
+            },
+            child: const Text('نشر الحالة'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+  }
+
+  Widget _statusesPage() {
+    return RefreshIndicator(
+      color: gold,
+      onRefresh: refreshAll,
+      child: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(8),
+            child: Text('الحالات', style: TextStyle(color: gold, fontSize: 21, fontWeight: FontWeight.bold)),
+          ),
+          if (statuses.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 45, horizontal: 18),
+              child: Column(children: [
+                Icon(Icons.circle_outlined, color: gold, size: 54),
+                SizedBox(height: 12),
+                Text('لا توجد حالات نشطة', style: TextStyle(color: gold, fontSize: 18)),
+                SizedBox(height: 6),
+                Text('انشر أول حالة أو اسحب للأسفل لتحديث الحالات.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60)),
+              ]),
+            ),
+          for (final status in statuses)
+            Card(
+              color: panel,
+              child: ListTile(
+                leading: const CircleAvatar(backgroundColor: Color(0xFF46391F), child: Icon(Icons.person, color: gold)),
+                title: Text(field(status, ['displayName', 'display_name', 'username'], 'مستخدم برق')),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(field(status, ['content']), maxLines: 4, overflow: TextOverflow.ellipsis),
+                ),
+                trailing: const Icon(Icons.circle, color: gold, size: 10),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _chatsPage() {
+    if (friends.isEmpty) {
+      return _empty(Icons.chat_bubble_outline, 'لا توجد محادثات بعد', 'ابحث عن شخص وأضفه إلى جهات اتصالك لتبدأ المراسلة.');
+    }
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: [
+        const Padding(
+          padding: EdgeInsets.all(12),
+          child: Text('محادثاتك', style: TextStyle(color: gold, fontSize: 21)),
+        ),
+        for (final friend in friends)
+          Card(
+            color: panel,
+            child: ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.person, color: gold)),
+              title: Text(_personName(friend)),
+              subtitle: Text('@${_personUsername(friend)}'),
+              trailing: const Icon(Icons.chevron_left),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => ChatPage(friend: friend, currentUserId: myId)),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  String _personName(Map<String, dynamic> p) {
+    final nested = p['user'] is Map ? Map<String, dynamic>.from(p['user']) : p;
+    return field(nested, ['displayName', 'display_name', 'name', 'username'], 'صديق');
+  }
+
+  String _personUsername(Map<String, dynamic> p) {
+    final nested = p['user'] is Map ? Map<String, dynamic>.from(p['user']) : p;
+    return field(nested, ['username'], 'user');
+  }
+
+  Widget _friendsPage() {
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: [
+        Row(
+          children: [
+            const Expanded(child: Text('جهات الاتصال', style: TextStyle(color: gold, fontSize: 21))),
+            IconButton(onPressed: searchUsers, icon: const Icon(Icons.search), tooltip: 'البحث والإضافة'),
+            IconButton(
+              onPressed: matchingContacts ? null : () => matchPhoneContacts(force: true),
+              icon: matchingContacts
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.contacts_outlined, color: gold),
+              tooltip: 'مطابقة جهات الهاتف',
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (matchedContacts.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Text('أشخاص من جهات هاتفك على برق', style: TextStyle(color: gold, fontWeight: FontWeight.bold)),
+          ),
+          for (final person in matchedContacts)
+            Card(
+              color: panel,
+              child: ListTile(
+                leading: const CircleAvatar(child: Icon(Icons.person, color: gold)),
+                title: Text(_personName(person)),
+                subtitle: Text(field(person, ['phone'], '@${_personUsername(person)}')),
+                trailing: IconButton(
+                  icon: const Icon(Icons.person_add_alt_1, color: gold),
+                  tooltip: 'إضافة مباشرة',
+                  onPressed: () async {
+                    try {
+                      await Api.addContact(field(person, ['id']));
+                      if (mounted) {
+                        setState(() => matchedContacts.removeWhere((item) => field(item, ['id']) == field(person, ['id'])));
+                        await refreshAll();
+                        if (mounted) {
+                          showMsg(context, 'تمت الإضافة ويمكنك بدء المراسلة مباشرة.');
+                        }
+                      }
+                    } catch (e) { if (mounted) showMsg(context, cleanError(e)); }
+                  },
+                ),
+              ),
+            ),
+        ],
+        if (friends.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(18),
+            child: Text('لا توجد جهات اتصال بعد. ابحث باسم المستخدم أو رقم الهاتف وأضف الأشخاص مباشرة.',
+                textAlign: TextAlign.center, style: TextStyle(color: Colors.white60)),
+          ),
+        for (final person in friends)
+          Card(
+            color: panel,
+            child: ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.person, color: gold)),
+              title: Text(_personName(person)),
+              subtitle: Text('@${_personUsername(person)}'),
+              trailing: IconButton(
+                icon: const Icon(Icons.chat, color: gold),
+                onPressed: () => Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => ChatPage(friend: person, currentUserId: myId),
+                )),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> createGroupDialog() async {
+    final name = TextEditingController();
+    final description = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: panel,
+        title: const Text('إنشاء مجموعة'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: name, maxLength: 80, decoration: inputDecoration('اسم المجموعة', Icons.group)),
+            const SizedBox(height: 8),
+            TextField(controller: description, maxLength: 500, maxLines: 2,
+              decoration: inputDecoration('وصف المجموعة (اختياري)', Icons.info_outline)),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+            onPressed: () async {
+              if (name.text.trim().length < 2) {
+                showMsg(context, 'اكتب اسماً للمجموعة من حرفين على الأقل.');
+                return;
+              }
+              try {
+                await Api.createGroup(name.text.trim(), description.text.trim());
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+                await refreshAll();
+                if (mounted) showMsg(context, 'تم إنشاء المجموعة. يمكنك فتحها وإضافة الأعضاء.');
+              } catch (e) {
+                if (mounted) showMsg(context, cleanError(e));
+              }
+            },
+            child: const Text('إنشاء'),
+          ),
+        ],
+      ),
+    );
+    name.dispose();
+    description.dispose();
+  }
+
+  Future<void> addMemberDialog(Map<String, dynamic> group) async {
+    final controller = TextEditingController();
+    List<Map<String, dynamic>> found = [];
+    bool busy = false;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialog) => AlertDialog(
+          backgroundColor: panel,
+          title: const Text('إضافة عضو للمجموعة'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(controller: controller, decoration: inputDecoration('اسم المستخدم أو الهاتف', Icons.search)),
+              Align(alignment: Alignment.centerLeft, child: TextButton(
+                onPressed: busy ? null : () async {
+                  if (controller.text.trim().length < 2) return;
+                  setDialog(() => busy = true);
+                  try { found = await Api.search(controller.text.trim()); }
+                  catch (e) { if (mounted) showMsg(this.context, cleanError(e)); }
+                  setDialog(() => busy = false);
+                }, child: const Text('بحث'))),
+              if (busy) const CircularProgressIndicator(color: gold),
+              Flexible(child: ListView(shrinkWrap: true, children: found.map((person) {
+                final id = field(person, ['id', 'user_id']);
+                final uname = field(person, ['username'], 'مستخدم');
+                return ListTile(
+                  title: Text(field(person, ['displayName', 'display_name'], uname)),
+                  subtitle: Text('@$uname'),
+                  trailing: IconButton(icon: const Icon(Icons.person_add_alt_1, color: gold),
+                    onPressed: id.isEmpty ? null : () async {
+                      try {
+                        await Api.addGroupMember(field(group, ['id']), id);
+                        if (dialogContext.mounted) Navigator.pop(dialogContext);
+                        if (mounted) showMsg(this.context, 'تمت إضافة العضو.');
+                      } catch (e) { if (mounted) showMsg(this.context, cleanError(e)); }
+                    }),
+                );
+              }).toList())),
+            ]),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق'))],
+        ),
+      ),
+    );
+    controller.dispose();
+  }
+
+  Widget _groupsPage() {
+    return RefreshIndicator(
+      color: gold,
+      onRefresh: refreshAll,
+      child: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          const Padding(padding: EdgeInsets.all(12),
+            child: Text('مجموعاتك', style: TextStyle(color: gold, fontSize: 21))),
+          if (groups.isEmpty)
+            const Padding(padding: EdgeInsets.all(20), child: Text(
+              'لا توجد مجموعات بعد. أنشئ مجموعة وابدأ بإضافة الأشخاص مباشرة.',
+              textAlign: TextAlign.center, style: TextStyle(color: Colors.white60))),
+          for (final group in groups)
+            Card(color: panel, child: ListTile(
+              leading: const CircleAvatar(backgroundColor: Color(0xFF46391F), child: Icon(Icons.groups, color: gold)),
+              title: Text(field(group, ['name'], 'مجموعة')),
+              subtitle: Text('${field(group, ['description'], 'مجموعة برق')} • ${field(group, ['member_count'], '1')} أعضاء'),
+              trailing: const Icon(Icons.chevron_left),
+              onTap: () => Navigator.push(context, MaterialPageRoute(
+                builder: (_) => GroupChatPage(group: group, currentUserId: myId,
+                  onAddMember: () => addMemberDialog(group)))),
+            )),
+        ],
+      ),
+    );
+  }
+
+
+  Widget _empty(IconData icon, String title, String subtitle) => Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: gold, size: 56),
+            const SizedBox(height: 12),
+            Text(title, style: const TextStyle(color: gold, fontSize: 22)),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(subtitle, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60)),
+            ),
+          ],
+        ),
+      );
+
+  Future<void> editProfileDialog() async {
+    final nameController = TextEditingController(
+      text: field(me, ['displayName', 'display_name']),
+    );
+    final phoneController = TextEditingController(
+      text: field(me, ['phone']),
+    );
+    bool saving = false;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialog) => AlertDialog(
+          backgroundColor: panel,
+          title: const Text('تعديل الملف الشخصي'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                maxLength: 60,
+                decoration: inputDecoration('الاسم الظاهر', Icons.person_outline),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: phoneController,
+                keyboardType: TextInputType.phone,
+                maxLength: 25,
+                decoration: inputDecoration('رقم الهاتف (اختياري)', Icons.phone_outlined),
+              ),
+              const SizedBox(height: 6),
+              const Text('اسم المستخدم لا يتغير من هذه الشاشة.',
+                  style: TextStyle(color: Colors.white60, fontSize: 12)),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(dialogContext),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+              onPressed: saving ? null : () async {
+                final name = nameController.text.trim();
+                if (name.isEmpty) {
+                  showMsg(this.context, 'اكتب الاسم الظاهر أولاً.');
+                  return;
+                }
+                setDialog(() => saving = true);
+                try {
+                  final updated = await Api.updateProfile(
+                    displayName: name,
+                    phone: phoneController.text,
+                  );
+                  if (!mounted || !dialogContext.mounted) return;
+                  setState(() => me = updated);
+                  Navigator.pop(dialogContext);
+                  showMsg(this.context, 'تم تحديث الملف الشخصي على الخادم.');
+                } catch (e) {
+                  if (mounted) showMsg(this.context, cleanError(e));
+                  setDialog(() => saving = false);
+                }
+              },
+              child: saving
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                  : const Text('حفظ التغييرات'),
+            ),
+          ],
+        ),
+      ),
+    );
+    nameController.dispose();
+    phoneController.dispose();
+  }
+
+  Future<void> rotateRecoveryCodeDialog() async {
+    final passwordController = TextEditingController();
+    final code = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('إنشاء رمز استرداد جديد'),
+        content: TextField(
+          controller: passwordController,
+          obscureText: true,
+          decoration: const InputDecoration(labelText: 'كلمة المرور الحالية'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
+          FilledButton(
+            onPressed: () async {
+              final value = passwordController.text;
+              if (value.isEmpty) {
+                showMsg(dialogContext, 'أدخل كلمة المرور الحالية.');
+                return;
+              }
+              Navigator.pop(dialogContext, value);
+            },
+            child: const Text('متابعة'),
+          ),
+        ],
+      ),
+    );
+    if (code == null || !mounted) {
+      passwordController.dispose();
+      return;
+    }
+    try {
+      final recoveryCode = await Api.rotateRecoveryCode(code);
+      if (mounted) await showRecoveryCodeDialog(context, recoveryCode);
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      passwordController.dispose();
+    }
+  }
+
+  Future<void> inviteFriendsDialog() async {
+    try {
+      final stats = await Api.referrals();
+      if (!mounted) return;
+      setState(() => referralStats = stats);
+      final code = field(stats, ['inviteCode']);
+      if (code.isEmpty) throw Exception('لم يتم إنشاء رمز الدعوة بعد.');
+      final link = 'barq://invite/$code';
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: panel,
+          title: const Text('ادعُ أصدقاءك إلى برق'),
+          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            const Text('هذا رابط دعوتك الخاص لمشاركة برق مع من تختار.'),
+            const SizedBox(height: 14),
+            const Text('رمز الدعوة', style: TextStyle(color: gold)),
+            SelectableText(code, textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: 2)),
+            const SizedBox(height: 10),
+            SelectableText(link, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+            const SizedBox(height: 8),
+            const Text('الرابط يفتح برق إذا كان مثبتًا على جهاز صديقك. ويمكنه إدخال الرمز يدويًا أثناء التسجيل.', style: TextStyle(color: Colors.white60, fontSize: 12)),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق')),
+            TextButton.icon(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: link));
+                if (dialogContext.mounted) showMsg(dialogContext, 'تم نسخ رابط الدعوة.');
+              },
+              icon: const Icon(Icons.copy), label: const Text('نسخ الرابط'),
+            ),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+              onPressed: () => SharePlus.instance.share(
+                ShareParams(text: 'انضم إلى برق! استخدم رمز الدعوة $code أو افتح الرابط: $link'),
+              ),
+              icon: const Icon(Icons.share), label: const Text('مشاركة'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    }
+  }
+
+  Future<void> notificationSettingsDialog() async {
+    bool messages = notificationPrefs['messages'] != false;
+    bool groupsEnabled = notificationPrefs['groups'] != false;
+    bool statusesEnabled = notificationPrefs['statuses'] != false;
+    bool saving = false;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialog) => AlertDialog(
+          backgroundColor: panel,
+          title: const Text('تفضيلات الإشعارات'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            SwitchListTile(contentPadding: EdgeInsets.zero, activeThumbColor: gold,
+              title: const Text('الرسائل الخاصة'), value: messages,
+              onChanged: saving ? null : (v) => setDialog(() => messages = v)),
+            SwitchListTile(contentPadding: EdgeInsets.zero, activeThumbColor: gold,
+              title: const Text('رسائل المجموعات'), value: groupsEnabled,
+              onChanged: saving ? null : (v) => setDialog(() => groupsEnabled = v)),
+            SwitchListTile(contentPadding: EdgeInsets.zero, activeThumbColor: gold,
+              title: const Text('الحالات الجديدة'), value: statusesEnabled,
+              onChanged: saving ? null : (v) => setDialog(() => statusesEnabled = v)),
+            const SizedBox(height: 8),
+            const Text('هذه تفضيلات محفوظة في حسابك؛ وصول إشعارات الهاتف الفعلية يتطلب استكمال ربط خدمة الإرسال.', style: TextStyle(color: Colors.white60, fontSize: 12)),
+          ]),
+          actions: [
+            TextButton(onPressed: saving ? null : () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
+            FilledButton(style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+              onPressed: saving ? null : () async {
+                setDialog(() => saving = true);
+                try {
+                  final saved = await Api.saveNotificationSettings(messages: messages, groups: groupsEnabled, statuses: statusesEnabled);
+                  if (!mounted || !dialogContext.mounted) return;
+                  setState(() => notificationPrefs = saved);
+                  Navigator.pop(dialogContext);
+                  showMsg(this.context, 'تم حفظ تفضيلات الإشعارات في حسابك.');
+                } catch (e) {
+                  if (mounted) showMsg(this.context, cleanError(e));
+                  setDialog(() => saving = false);
+                }
+              }, child: saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)) : const Text('حفظ')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> privacySettingsDialog() async {
+    bool searchable = privacySettings['searchable'] != false;
+    bool readReceipts = privacySettings['readReceipts'] != false;
+    bool saving = false;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialog) => AlertDialog(
+          backgroundColor: panel,
+          title: const Text('الخصوصية'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                activeThumbColor: gold,
+                title: const Text('السماح بالعثور علي'),
+                subtitle: const Text('عند الإيقاف لن يظهر حسابك في نتائج البحث عن الأشخاص.'),
+                value: searchable,
+                onChanged: saving ? null : (value) => setDialog(() => searchable = value),
+              ),
+              const Divider(color: Colors.white24),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                activeThumbColor: gold,
+                title: const Text('إشعارات قراءة الرسائل'),
+                subtitle: const Text('عند الإيقاف لن يُسجل التطبيق قراءة الرسائل الواردة عند فتح المحادثة.'),
+                value: readReceipts,
+                onChanged: saving ? null : (value) => setDialog(() => readReceipts = value),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: saving ? null : () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+              onPressed: saving ? null : () async {
+                setDialog(() => saving = true);
+                try {
+                  final saved = await Api.savePrivacy(searchable: searchable, readReceipts: readReceipts);
+                  if (!mounted || !dialogContext.mounted) return;
+                  setState(() => privacySettings = saved);
+                  Navigator.pop(dialogContext);
+                  showMsg(this.context, 'تم حفظ إعدادات الخصوصية في حسابك.');
+                } catch (e) {
+                  if (mounted) showMsg(this.context, cleanError(e));
+                  setDialog(() => saving = false);
+                }
+              },
+              child: saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)) : const Text('حفظ'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _accountPage() {
+    final displayName = field(me, ['displayName', 'display_name'], 'مستخدم برق');
+    final username = field(me, ['username'], 'siraj_user');
+    final phone = field(me, ['phone'], 'غير مضاف');
+    return ListView(
+      padding: const EdgeInsets.all(14),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(colors: [Color(0xFF302719), Color(0xFF17130D)]),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: gold.withValues(alpha: 0.4)),
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: 90,
+                height: 90,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: electricBlue.withValues(alpha: 0.55), width: 2),
+                ),
+                child: CircleAvatar(
+                  radius: 39,
+                  backgroundColor: const Color(0xFF46391F),
+                  child: Text(displayName.isNotEmpty ? displayName.characters.first : 'س', style: const TextStyle(color: gold, fontSize: 32)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(displayName, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold)),
+              Text('@$username', style: const TextStyle(color: gold)),
+              const SizedBox(height: 8),
+              Text(phone, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        const Card(
+          color: panel,
+          child: ListTile(
+            leading: Icon(Icons.info_outline, color: gold),
+            title: Text('حالة الاتصال'),
+            subtitle: Text('متصل بخادم برق'),
+          ),
+        ),
+        Card(
+          color: panel,
+          child: ListTile(
+            leading: const Icon(Icons.edit_outlined, color: gold),
+            title: const Text('تعديل الملف الشخصي'),
+            subtitle: const Text('تغيير الاسم الظاهر ورقم الهاتف'),
+            trailing: const Icon(Icons.chevron_left),
+            onTap: editProfileDialog,
+          ),
+        ),
+        Card(
+          color: panel,
+          child: ListTile(
+            leading: const Icon(Icons.key_rounded, color: gold),
+            title: const Text('رمز استرداد الحساب'),
+            subtitle: const Text('إنشاء رمز جديد بعد تأكيد كلمة المرور'),
+            trailing: const Icon(Icons.chevron_left),
+            onTap: rotateRecoveryCodeDialog,
+          ),
+        ),
+        Card(
+          color: panel,
+          child: ListTile(
+            leading: const Icon(Icons.lock_outline, color: gold),
+            title: const Text('إعدادات الخصوصية'),
+            subtitle: const Text('الظهور في البحث وإشعارات قراءة الرسائل'),
+            trailing: const Icon(Icons.chevron_left),
+            onTap: privacySettingsDialog,
+          ),
+        ),
+        Card(
+          color: panel,
+          child: ListTile(
+            leading: const Icon(Icons.notifications_outlined, color: gold),
+            title: const Text('تفضيلات الإشعارات'),
+            subtitle: const Text('الرسائل الخاصة والمجموعات والحالات'),
+            trailing: const Icon(Icons.chevron_left),
+            onTap: notificationSettingsDialog,
+          ),
+        ),
+        Card(
+          color: panel,
+          child: SwitchListTile(
+            secondary: const Icon(Icons.flash_on_rounded, color: gold),
+            title: const Text('وضع البرق'),
+            subtitle: const Text('أولوية للرسائل النصية وتعطيل إرسال الصور والفيديو والملفات لتقليل استهلاك البيانات.'),
+            value: BarqFeatures.lightningMode,
+            activeThumbColor: gold,
+            onChanged: (enabled) async {
+              try {
+                await BarqFeatures.setLightningMode(enabled);
+                if (mounted) setState(() {});
+              } catch (e) {
+                if (mounted) showMsg(context, 'تعذر حفظ الإعداد: ${cleanError(e)}');
+              }
+            },
+          ),
+        ),
+        Card(
+          color: panel,
+          child: SwitchListTile(
+            secondary: const Icon(Icons.translate_rounded, color: gold),
+            title: const Text('الترجمة التلقائية عربي / إنجليزي'),
+            subtitle: const Text('تعرض ترجمة الرسائل بجانب النص الأصلي باستخدام نموذج محلي على الجهاز. يمكنك إيقافها في أي وقت.'),
+            value: BarqFeatures.autoTranslate,
+            activeThumbColor: gold,
+            onChanged: (enabled) async {
+              try {
+                await BarqFeatures.setAutoTranslate(enabled);
+                if (mounted) setState(() {});
+              } catch (e) {
+                if (mounted) showMsg(context, 'تعذر حفظ الإعداد: ${cleanError(e)}');
+              }
+            },
+          ),
+        ),
+        Card(
+          color: panel,
+          child: ListTile(
+            leading: const Icon(Icons.wifi_tethering, color: gold),
+            title: const Text('المراسلة دون إنترنت — الأجهزة القريبة'),
+            subtitle: const Text('اكتشاف هاتف صديق قريب ونقل الرسائل النصية دون إنترنت.'),
+            trailing: const Icon(Icons.chevron_left),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NearbyDevicesPage(user: me, friends: friends))),
+          ),
+        ),
+        Card(
+          color: panel,
+          child: ListTile(
+            leading: const Icon(Icons.bolt, color: gold),
+            title: const Text('رابط الدعوة الخاص'),
+            subtitle: const Text('شارك رابطك الخاص للانضمام إلى برق.'),
+            trailing: const Icon(Icons.chevron_left),
+            onTap: inviteFriendsDialog,
+          ),
+        ),
+        Card(
+          color: panel,
+          child: ListTile(
+            leading: const Icon(Icons.refresh, color: gold),
+            title: const Text('تحديث البيانات'),
+            onTap: refreshAll,
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Card(
+          color: panel,
+          child: ListTile(
+            leading: Icon(Icons.info_outline, color: gold),
+            title: Text('حول برق'),
+            subtitle: Text('المطور: يحيى المهدي'),
+          ),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: () async {
+            await Api.logout();
+            if (!mounted) return;
+            Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const LoginPage()), (_) => false);
+          },
+          icon: const Icon(Icons.logout),
+          label: const Text('تسجيل الخروج'),
+        ),
+      ],
+    );
+  }
+}
+
+String _messageTime(String raw) {
+  if (raw.isEmpty) return '';
+  final value = _messageSortTime(raw).toLocal();
+  final hour = value.hour.toString().padLeft(2, '0');
+  final minute = value.minute.toString().padLeft(2, '0');
+  return '$hour:$minute';
+}
+
+String _mimeForExtension(String extension) {
+  switch (extension.toLowerCase()) {
+    case 'jpg': case 'jpeg': return 'image/jpeg';
+    case 'png': return 'image/png';
+    case 'gif': return 'image/gif';
+    case 'webp': return 'image/webp';
+    case 'mp4': return 'video/mp4';
+    case 'mov': return 'video/quicktime';
+    case 'mp3': return 'audio/mpeg';
+    case 'm4a': return 'audio/mp4';
+    case 'wav': return 'audio/wav';
+    case 'pdf': return 'application/pdf';
+    case 'zip': return 'application/zip';
+    case 'doc': return 'application/msword';
+    case 'docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    case 'xls': return 'application/vnd.ms-excel';
+    case 'xlsx': return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    case 'ppt': return 'application/vnd.ms-powerpoint';
+    case 'pptx': return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+    case 'txt': return 'text/plain';
+    default: return 'application/octet-stream';
+  }
+}
+
+Map<String, dynamic>? _attachmentData(Map<String, dynamic> message) {
+  final raw = field(message, ['body', 'content', 'message']);
+  try {
+    final decoded = jsonDecode(raw);
+    if (decoded is Map<String, dynamic> && decoded['type'] == 'attachment') {
+      return decoded;
+    }
+  } catch (_) {}
+  return null;
+}
+
+Widget _attachmentTile(
+  Map<String, dynamic> attachment,
+  VoidCallback onDownload,
+) {
+  final name = field(attachment, ['fileName'], 'ملف مرفق');
+  final type = field(attachment, ['contentType']);
+  final icon = type.startsWith('image/') ? Icons.image_outlined
+      : type.startsWith('video/') ? Icons.video_file_outlined
+      : type.startsWith('audio/') ? Icons.audio_file_outlined
+      : Icons.insert_drive_file_outlined;
+  return Container(
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(10)),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, color: gold),
+      const SizedBox(width: 8),
+      Flexible(child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 190),
+        child: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
+      )),
+      IconButton(onPressed: onDownload, icon: const Icon(Icons.download, color: gold), tooltip: 'تنزيل الملف'),
+    ]),
+  );
+}
+
+class NearbyDevicesPage extends StatefulWidget {
+  final Map<String, dynamic> user;
+  final List<Map<String, dynamic>> friends;
+  const NearbyDevicesPage({super.key, required this.user, required this.friends});
+
+  @override
+  State<NearbyDevicesPage> createState() => _NearbyDevicesPageState();
+}
+
+class _NearbyDevicesPageState extends State<NearbyDevicesPage> {
+  List<Map<String, dynamic>> friends = [];
+  final Map<String, String> discovered = {};
+  String statusText = 'جارٍ تجهيز الاتصال بالأجهزة القريبة...';
+  bool starting = true;
+  StreamSubscription<Map<String, dynamic>>? subscription;
+
+  @override
+  void initState() {
+    super.initState();
+    subscription = BarqNearbyService.instance.events.listen(_onNearbyEvent);
+    _start();
+  }
+
+  void _onNearbyEvent(Map<String, dynamic> event) {
+    if (!mounted) return;
+    final type = event['type'];
+    if (type == 'endpoint_found') {
+      setState(() => discovered[event['endpointId'].toString()] = event['userId'].toString());
+    } else if (type == 'endpoint_lost') {
+      setState(() => discovered.remove(event['endpointId'].toString()));
+    } else if (type == 'connection_request') {
+      _confirmConnection(event);
+    } else if (type == 'connection_result') {
+      setState(() => statusText = event['success'] == true ? 'تم الاتصال بالجهاز القريب.' : 'تعذر الاتصال: ${event['status']}');
+    } else if (type == 'message_received') {
+      setState(() => statusText = 'وصلت رسالة دون إنترنت من أحد أصدقائك.');
+    } else if (type == 'stopped') {
+      setState(() => statusText = 'تم إيقاف البحث والاتصالات القريبة.');
+    }
+  }
+
+  Future<void> _start() async {
+    if (mounted) setState(() => starting = true);
+    try {
+      if (BarqNearbyService.instance.isRunning) {
+        await BarqNearbyService.instance.stop();
+      }
+      friends = widget.friends;
+      if (friends.isEmpty) {
+        final raw = await storage.read(key: 'barq_cached_friends');
+        final decoded = raw == null ? null : jsonDecode(raw);
+        if (decoded is List) {
+          friends = decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+        }
+      }
+      if (friends.isEmpty) throw Exception('افتح برق مرة واحدة مع الإنترنت لمزامنة جهات اتصالك قبل استخدام المراسلة القريبة.');
+      await BarqNearbyService.instance.start(
+        userId: field(widget.user, ['id', 'user_id']),
+        displayName: field(widget.user, ['displayName', 'display_name', 'username'], 'مستخدم برق'),
+        friends: friends,
+      );
+      if (mounted) setState(() => statusText = 'يبحث برق عن أصدقائك القريبين. أبقِ هذه الخدمة نشطة على الهاتفين.');
+    } catch (e) {
+      await BarqNearbyService.instance.stop();
+      if (mounted) setState(() => statusText = cleanError(e));
+    } finally {
+      if (mounted) setState(() => starting = false);
+    }
+  }
+
+  Future<void> _confirmConnection(Map<String, dynamic> event) async {
+    final endpointId = event['endpointId']?.toString() ?? '';
+    final name = event['name']?.toString() ?? 'جهاز قريب';
+    final token = event['authenticationToken']?.toString() ?? '';
+    final accepted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: panel,
+        title: const Text('تأكيد اتصال جهاز قريب'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(name),
+          const SizedBox(height: 12),
+          const Text('قارن رمز الأمان مع الرمز الظاهر على الهاتف الآخر. لا توافق إذا اختلف الرمزان.'),
+          const SizedBox(height: 12),
+          SelectableText(token, style: const TextStyle(color: gold, fontSize: 26, fontWeight: FontWeight.bold, letterSpacing: 3)),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('رفض')),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+            onPressed: () => Navigator.pop(dialogContext, true), child: const Text('الرمز متطابق — قبول')),
+        ],
+      ),
+    );
+    if (!mounted || endpointId.isEmpty) return;
+    try {
+      if (accepted == true) {
+        await BarqNearbyService.instance.acceptConnection(endpointId);
+      } else {
+        await BarqNearbyService.instance.rejectConnection(endpointId);
+      }
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    }
+  }
+
+  String _friendName(String id) {
+    for (final friend in friends) {
+      final person = friend['user'] is Map ? Map<String, dynamic>.from(friend['user']) : friend;
+      if (field(person, ['id', 'user_id']) == id) {
+        return field(person, ['displayName', 'display_name', 'username'], 'صديق برق');
+      }
+    }
+    return 'صديق برق';
+  }
+
+  @override
+  void dispose() {
+    subscription?.cancel();
+    // لا نوقف النقل عند مغادرة الشاشة؛ قد يعود المستخدم إلى المحادثة لإرسال النص.
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final connected = BarqNearbyService.instance.connected;
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(title: const Text('الأجهزة القريبة')),
+        body: ListView(padding: const EdgeInsets.all(16), children: [
+          Card(color: panel, child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Row(children: [Icon(Icons.wifi_tethering, color: gold), SizedBox(width: 8), Text('مراسلة محلية دون إنترنت', style: TextStyle(fontWeight: FontWeight.bold))]),
+            const SizedBox(height: 8),
+            Text(statusText),
+            const SizedBox(height: 8),
+            const Text('يعتمد على Bluetooth وWi‑Fi القريب. لا يقرأ موقعك ولا يخزنه، لكن قد يطلب Android إذن الموقع وتشغيل خدمة الموقع لأجل اكتشاف الأجهزة. لا تُرسل ملفات أو صور عبر هذا الوضع.', style: TextStyle(color: Colors.white60, fontSize: 12)),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(child: OutlinedButton.icon(onPressed: starting ? null : _start, icon: const Icon(Icons.refresh), label: const Text('إعادة البحث'))),
+              const SizedBox(width: 8),
+              Expanded(child: OutlinedButton.icon(onPressed: () async { await BarqNearbyService.instance.stop(); if (mounted) setState(() => discovered.clear()); }, icon: const Icon(Icons.stop_circle_outlined), label: const Text('إيقاف'))),
+            ]),
+          ]))),
+          const SizedBox(height: 12),
+          Text('الأجهزة المتصلة (${connected.length})', style: const TextStyle(color: gold, fontWeight: FontWeight.bold)),
+          if (connected.isEmpty) const ListTile(title: Text('لا توجد أجهزة متصلة بعد.')),
+          ...connected.map((entry) => ListTile(leading: const Icon(Icons.link, color: gold), title: Text(_friendName(entry.value)), subtitle: const Text('متصل وجاهز للرسائل النصية'))),
+          const SizedBox(height: 12),
+          Text('الأصدقاء القريبون (${discovered.length})', style: const TextStyle(color: gold, fontWeight: FontWeight.bold)),
+          if (discovered.isEmpty) const ListTile(title: Text('لا يظهر أصدقاؤك الآن. افتح الشاشة نفسها على هاتف صديقك وتأكد من تشغيل Bluetooth والموقع.'), dense: true),
+          ...discovered.entries.map((entry) => Card(color: panel, child: ListTile(
+            leading: const Icon(Icons.phone_android, color: gold),
+            title: Text(_friendName(entry.value)),
+            subtitle: const Text('قريب — لم يتم الاتصال بعد'),
+            trailing: IconButton(icon: const Icon(Icons.link, color: gold), tooltip: 'طلب اتصال', onPressed: () async {
+              try { await BarqNearbyService.instance.requestConnection(entry.key); }
+              catch (e) {
+                if (!context.mounted) return;
+                showMsg(context, cleanError(e));
+              }
+            }),
+          ))),
+        ]),
+      ),
+    );
+  }
+}
+
+class ChatPage extends StatefulWidget {
+  final Map<String, dynamic> friend;
+  final String currentUserId;
+  const ChatPage({super.key, required this.friend, required this.currentUserId});
+
+  @override
+  State<ChatPage> createState() => _ChatPageState();
+}
+
+class _ChatPageState extends State<ChatPage> {
+  final controller = TextEditingController();
+  List<Map<String, dynamic>> messages = [];
+  final Map<String, String> translatedMessages = {};
+  final Set<String> translatingMessageIds = {};
+  final Set<String> translationFailedMessageIds = {};
+  final Map<String, String> voiceTranscripts = {};
+  final Set<String> transcribingMessageIds = {};
+  bool loading = true;
+  bool sending = false;
+  bool refreshing = false;
+  bool ephemeralMode = false;
+  bool hasOlderMessages = false;
+  bool loadingOlderMessages = false;
+  Map<String, dynamic>? olderMessageCursor;
+  Timer? refreshTimer;
+  StreamSubscription<Map<String, dynamic>>? realtimeSubscription;
+  StreamSubscription<Map<String, dynamic>>? nearbySubscription;
+
+  Map<String, dynamic> get person =>
+      widget.friend['user'] is Map
+          ? Map<String, dynamic>.from(widget.friend['user'])
+          : widget.friend;
+
+  String get friendId => field(person, ['id', 'user_id', 'friend_id']);
+
+  @override
+  void initState() {
+    super.initState();
+    loadMessages();
+    nearbySubscription = BarqNearbyService.instance.events.listen((event) {
+      if (event['type'] == 'message_received' && event['senderId'] == friendId) {
+        loadMessages(silent: true);
+      }
+    });
+    realtimeSubscription = SirajRealtime.instance.events.listen((event) {
+      if (event['type'] != 'message') return;
+      final sender = event['senderId']?.toString();
+      final receiver = event['receiverId']?.toString();
+      if (sender == friendId || receiver == friendId) {
+        loadMessages(silent: true);
+      }
+    });
+    // مزامنة الرسائل عبر REST/Vercel كل 5 ثوانٍ دون الاعتماد على workers.dev.
+    refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted && !sending && !refreshing) loadMessages(silent: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    refreshTimer?.cancel();
+    realtimeSubscription?.cancel();
+    nearbySubscription?.cancel();
+    controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _transcribeVoiceMessage(
+    Map<String, dynamic> message,
+    Map<String, dynamic> attachment,
+  ) async {
+    final id = field(message, ['id', 'message_id']);
+    if (id.isEmpty || transcribingMessageIds.contains(id) || voiceTranscripts.containsKey(id)) return;
+    if (!await confirmVoiceTranscription(context) || !mounted) return;
+    setState(() => transcribingMessageIds.add(id));
+    try {
+      final transcript = await Api.transcribeAttachment(
+        field(attachment, ['attachmentId']),
+        expectedContentType: field(attachment, ['contentType']),
+      );
+      if (mounted) setState(() => voiceTranscripts[id] = transcript);
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => transcribingMessageIds.remove(id));
+    }
+  }
+
+  Future<void> _translateMessages(List<Map<String, dynamic>> items) async {
+    if (!BarqFeatures.autoTranslate) return;
+    for (final message in items) {
+      final id = field(message, ['id', 'message_id']);
+      final senderId = field(message, ['sender_id', 'senderId']);
+      final original = field(message, ['body', 'content', 'message']);
+      if (id.isEmpty || senderId == widget.currentUserId || original.isEmpty ||
+          _attachmentData(message) != null || translatedMessages.containsKey(id) ||
+          translatingMessageIds.contains(id) || translationFailedMessageIds.contains(id)) {
+        continue;
+      }
+      translatingMessageIds.add(id);
+      try {
+        final translated = await BarqTranslator.translateArabicEnglish(original);
+        if (mounted && translated.isNotEmpty) {
+          setState(() => translatedMessages[id] = translated);
+        } else {
+          translationFailedMessageIds.add(id);
+        }
+      } catch (_) {
+        translationFailedMessageIds.add(id);
+        // تبقى الرسالة الأصلية ظاهرة ولا نكرر المحاولة تلقائيًا كل دورة تحديث.
+      } finally {
+        translatingMessageIds.remove(id);
+      }
+    }
+  }
+
+  Future<void> loadMessages({bool silent = false}) async {
+    if (refreshing) return;
+    refreshing = true;
+    try {
+      await BarqOfflineQueue.syncOutbox();
+      final page = await Api.messagesPage(friendId);
+      final data = Api._list(page['messages']);
+      await BarqOfflineQueue.reconcile(data);
+      final localPending = await BarqOfflineQueue.conversation(friendId, widget.currentUserId);
+      List<Map<String, dynamic>> temporary = [];
+      try {
+        temporary = await Api.ephemeralMessages(friendId);
+      } catch (_) {
+        // النسخ القديمة من الخادم لا تملك مسار الرسائل المؤقتة بعد.
+      }
+      if (mounted) {
+        setState(() {
+        final existingRegular = messages.where((item) => item['is_ephemeral'] != true).toList();
+        final regular = silent && existingRegular.isNotEmpty
+            ? mergeMessages(existingRegular, data) : data;
+        messages = mergeMessages(mergeMessages(regular, temporary), localPending);
+        if (!silent || olderMessageCursor == null) {
+          olderMessageCursor = page['nextCursor'] is Map
+              ? Map<String, dynamic>.from(page['nextCursor']) : null;
+        }
+        hasOlderMessages = page['hasMore'] == true || (silent && hasOlderMessages);
+        loading = false;
+      });
+        if (BarqFeatures.autoTranslate) _translateMessages(data);
+      }
+    } catch (e) {
+      if (mounted) {
+        final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        final stillVisible = messages.where((item) {
+          if (item['is_ephemeral'] != true) return true;
+          final deleteAt = item['delete_at'];
+          if (deleteAt is num) return deleteAt.toInt() > nowSeconds;
+          if (deleteAt is String) {
+            final parsed = int.tryParse(deleteAt);
+            if (parsed != null) return parsed > nowSeconds;
+          }
+          return true;
+        }).toList();
+        final localPending = await BarqOfflineQueue.conversation(friendId, widget.currentUserId);
+        setState(() {
+          messages = mergeMessages(stillVisible, localPending);
+          loading = false;
+        });
+        if (!silent && localPending.isEmpty && mounted) showMsg(context, cleanError(e));
+      }
+    } finally {
+      refreshing = false;
+    }
+  }
+
+  Future<void> loadOlderMessages() async {
+    if (loadingOlderMessages || !hasOlderMessages || olderMessageCursor == null) return;
+    setState(() => loadingOlderMessages = true);
+    try {
+      final page = await Api.messagesPage(friendId, before: olderMessageCursor);
+      final older = Api._list(page['messages']);
+      if (mounted) {
+        setState(() {
+        messages = mergeMessages(older, messages);
+        olderMessageCursor = page['nextCursor'] is Map
+            ? Map<String, dynamic>.from(page['nextCursor']) : null;
+        hasOlderMessages = page['hasMore'] == true;
+      });
+      }
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => loadingOlderMessages = false);
+    }
+  }
+
+  Future<void> send() async {
+    final text = controller.text.trim();
+    if (text.isEmpty || sending) return;
+    if (text.length > 5000) {
+      showMsg(context, 'الرسالة طويلة جدًا؛ الحد الأقصى 5000 حرف.');
+      return;
+    }
+    setState(() => sending = true);
+    try {
+      if (ephemeralMode) {
+        await Api.sendEphemeralMessage(friendId, text);
+      } else {
+        final messageId = newBarqMessageId();
+        try {
+          await Api.sendMessage(friendId, text, clientMessageId: messageId);
+        } catch (e) {
+          if (!e.toString().contains('NETWORK_DIAGNOSTIC')) rethrow;
+          final localMessage = {
+            'id': messageId,
+            'sender_id': widget.currentUserId,
+            'receiver_id': friendId,
+            'body': text,
+            'created_at': DateTime.now().toUtc().toIso8601String(),
+          };
+          await BarqOfflineQueue.enqueueOutgoing(localMessage);
+          var deliveredNearby = false;
+          try {
+            deliveredNearby = await BarqNearbyService.instance.sendTextMessage(
+              receiverId: friendId,
+              messageId: messageId,
+              body: text,
+              senderId: widget.currentUserId,
+            );
+          } catch (_) {}
+          if (mounted) {
+            setState(() => messages = mergeMessages(messages, [{...localMessage, 'is_offline_pending': true}]));
+            showMsg(context, deliveredNearby
+                ? 'تم تسليم الرسالة للجهاز القريب، وستُزامن مع الخادم عند عودة الإنترنت.'
+                : 'حُفظت الرسالة محليًا. افتح الأجهزة القريبة لتسليمها الآن، وستُزامن تلقائيًا عند عودة الإنترنت.');
+          }
+          controller.clear();
+          return;
+        }
+      }
+      controller.clear();
+      await loadMessages();
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => sending = false);
+    }
+  }
+
+  Future<void> pickAndSendFile() async {
+    if (BarqFeatures.lightningMode) {
+      showMsg(context, 'وضع البرق مفعّل: إرسال الوسائط والملفات متوقف مؤقتًا.');
+      return;
+    }
+    try {
+      final result = await FilePicker.platform.pickFiles(withData: true, allowMultiple: false);
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.single;
+      final bytes = file.bytes;
+      if (bytes == null) throw Exception('تعذر قراءة الملف من الجهاز.');
+      setState(() => sending = true);
+      await Api.uploadAttachment(
+        bytes: bytes,
+        fileName: file.name,
+        contentType: file.extension == null ? 'application/octet-stream' : _mimeForExtension(file.extension!),
+        recipientId: friendId,
+      );
+      await loadMessages();
+      if (mounted) showMsg(context, 'تم إرسال الملف.');
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => sending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final name = field(person, ['displayName', 'display_name', 'name', 'username'], 'محادثة');
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Row(mainAxisSize: MainAxisSize.min, children: [
+            Flexible(child: Text(name, overflow: TextOverflow.ellipsis)),
+            if (BarqFeatures.lightningMode) ...[
+              const SizedBox(width: 6),
+              const Icon(Icons.flash_on_rounded, color: gold, size: 18),
+            ],
+          ]),
+          actions: [IconButton(onPressed: loadMessages, icon: const Icon(Icons.refresh, color: gold))],
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: loading
+                  ? const Center(child: CircularProgressIndicator(color: gold))
+                  : messages.isEmpty
+                      ? const Center(child: Text('لا توجد رسائل بعد. ابدأ المحادثة.', style: TextStyle(color: Colors.white60)))
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: messages.length + (hasOlderMessages ? 1 : 0),
+                          itemBuilder: (context, index) {
+                            if (hasOlderMessages && index == 0) {
+                              return Center(child: TextButton.icon(
+                                onPressed: loadingOlderMessages ? null : loadOlderMessages,
+                                icon: loadingOlderMessages
+                                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                                    : const Icon(Icons.history),
+                                label: const Text('تحميل الرسائل الأقدم'),
+                              ));
+                            }
+                            final m = messages[index - (hasOlderMessages ? 1 : 0)];
+                            final sender = field(m, ['sender_id']);
+                            final mine = sender == widget.currentUserId;
+                            return Align(
+                              alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+                              child: Container(
+                                constraints: const BoxConstraints(maxWidth: 300),
+                                margin: const EdgeInsets.symmetric(vertical: 4),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: mine ? const Color(0xFF46391F) : panel,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (m['is_offline_pending'] == true)
+                                      const Padding(
+                                        padding: EdgeInsets.only(bottom: 5),
+                                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                          Icon(Icons.wifi_off_rounded, size: 12, color: Colors.white54),
+                                          SizedBox(width: 4),
+                                          Text('رسالة دون إنترنت — بانتظار المزامنة', style: TextStyle(color: Colors.white54, fontSize: 10)),
+                                        ]),
+                                      ),
+                                    if (m['is_ephemeral'] == true)
+                                      const Padding(
+                                        padding: EdgeInsets.only(bottom: 5),
+                                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                          Icon(Icons.timer_outlined, size: 13, color: gold),
+                                          SizedBox(width: 4),
+                                          Text('رسالة مؤقتة', style: TextStyle(color: gold, fontSize: 10)),
+                                        ]),
+                                      ),
+                                    if (_attachmentData(m) case final attachment?) ...[
+                                      _attachmentTile(attachment, () async {
+                                        try {
+                                          await Api.downloadAttachment(
+                                            attachmentId: field(attachment, ['attachmentId']),
+                                            fileName: field(attachment, ['fileName'], 'attachment'),
+                                          );
+                                        } catch (e) { if (context.mounted) showMsg(context, cleanError(e)); }
+                                      }),
+                                      if (field(attachment, ['contentType']).startsWith('audio/'))
+                                        TextButton.icon(
+                                          onPressed: transcribingMessageIds.contains(field(m, ['id', 'message_id']))
+                                              ? null : () => _transcribeVoiceMessage(m, attachment),
+                                          icon: transcribingMessageIds.contains(field(m, ['id', 'message_id']))
+                                              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                              : const Icon(Icons.subtitles_outlined, size: 16),
+                                          label: const Text('تحويل الصوت إلى نص'),
+                                        ),
+                                      if (voiceTranscripts[field(m, ['id', 'message_id'])] != null)
+                                        Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8)),
+                                          child: Text(voiceTranscripts[field(m, ['id', 'message_id'])]!),
+                                        ),
+                                    ] else ...[
+                                      Text(field(m, ['body', 'content', 'message'])),
+                                      if (BarqFeatures.autoTranslate && translatedMessages[field(m, ['id', 'message_id'])] != null) ...[
+                                        const SizedBox(height: 6),
+                                        const Divider(height: 1, color: Colors.white24),
+                                        const SizedBox(height: 6),
+                                        Text(translatedMessages[field(m, ['id', 'message_id'])]!,
+                                          style: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic)),
+                                      ],
+                                    ],
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(_messageTime(field(m, ['created_at', 'createdAt'])),
+                                          style: TextStyle(fontSize: 10, color: Colors.white.withValues(alpha: 0.55))),
+                                        if (mine) ...[
+                                          const SizedBox(width: 4),
+                                          Icon(field(m, ['read_at', 'readAt']).isNotEmpty ? Icons.done_all : Icons.done,
+                                            size: 13, color: field(m, ['read_at', 'readAt']).isNotEmpty ? Colors.lightBlueAccent : Colors.white54),
+                                        ],
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+            ),
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+                child: Row(
+                  children: [
+                    IconButton(
+                      onPressed: sending ? null : () => setState(() => ephemeralMode = !ephemeralMode),
+                      icon: Icon(Icons.timer_outlined, color: ephemeralMode ? gold : Colors.white54),
+                      tooltip: ephemeralMode ? 'إيقاف الرسائل المؤقتة' : 'إرسال رسالة تختفي بعد قراءتها',
+                    ),
+                    if (!BarqFeatures.lightningMode)
+                      IconButton(
+                        onPressed: sending ? null : pickAndSendFile,
+                        icon: const Icon(Icons.attach_file, color: gold),
+                        tooltip: 'إرسال ملف أو صورة أو فيديو',
+                      ),
+                    Expanded(
+                      child: TextField(
+                        controller: controller,
+                        minLines: 1,
+                        maxLines: 4,
+                        decoration: inputDecoration(
+                          ephemeralMode ? 'رسالة مؤقتة — تختفي بعد القراءة' : 'اكتب رسالتك...',
+                          ephemeralMode ? Icons.timer_outlined : Icons.message,
+                        ),
+                        onSubmitted: (_) => send(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.filled(
+                      style: IconButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+                      onPressed: sending ? null : send,
+                      icon: sending
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                          : const Icon(Icons.send),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+}
+
+
+class GroupChatPage extends StatefulWidget {
+  final Map<String, dynamic> group;
+  final String currentUserId;
+  final VoidCallback onAddMember;
+  const GroupChatPage({super.key, required this.group, required this.currentUserId, required this.onAddMember});
+
+  @override
+  State<GroupChatPage> createState() => _GroupChatPageState();
+}
+
+class _GroupChatPageState extends State<GroupChatPage> {
+  final controller = TextEditingController();
+  List<Map<String, dynamic>> messages = [];
+  final Map<String, String> translatedMessages = {};
+  final Set<String> translatingMessageIds = {};
+  final Set<String> translationFailedMessageIds = {};
+  final Map<String, String> voiceTranscripts = {};
+  final Set<String> transcribingMessageIds = {};
+  bool loading = true;
+  bool sending = false;
+  bool refreshing = false;
+  bool hasOlderMessages = false;
+  bool loadingOlderMessages = false;
+  Map<String, dynamic>? olderMessageCursor;
+  Timer? refreshTimer;
+  String get groupId => field(widget.group, ['id']);
+
+  @override
+  void initState() {
+    super.initState();
+    loadMessages();
+    refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted && !sending && !refreshing) loadMessages(silent: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    refreshTimer?.cancel();
+    controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _transcribeVoiceMessage(
+    Map<String, dynamic> message,
+    Map<String, dynamic> attachment,
+  ) async {
+    final id = field(message, ['id', 'message_id']);
+    if (id.isEmpty || transcribingMessageIds.contains(id) || voiceTranscripts.containsKey(id)) return;
+    if (!await confirmVoiceTranscription(context) || !mounted) return;
+    setState(() => transcribingMessageIds.add(id));
+    try {
+      final transcript = await Api.transcribeAttachment(
+        field(attachment, ['attachmentId']),
+        expectedContentType: field(attachment, ['contentType']),
+      );
+      if (mounted) setState(() => voiceTranscripts[id] = transcript);
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => transcribingMessageIds.remove(id));
+    }
+  }
+
+  Future<void> _translateMessages(List<Map<String, dynamic>> items) async {
+    if (!BarqFeatures.autoTranslate) return;
+    for (final message in items) {
+      final id = field(message, ['id', 'message_id']);
+      final senderId = field(message, ['sender_id', 'senderId']);
+      final original = field(message, ['body', 'content', 'message']);
+      if (id.isEmpty || senderId == widget.currentUserId || original.isEmpty ||
+          _attachmentData(message) != null || translatedMessages.containsKey(id) ||
+          translatingMessageIds.contains(id) || translationFailedMessageIds.contains(id)) {
+        continue;
+      }
+      translatingMessageIds.add(id);
+      try {
+        final translated = await BarqTranslator.translateArabicEnglish(original);
+        if (mounted && translated.isNotEmpty) {
+          setState(() => translatedMessages[id] = translated);
+        } else {
+          translationFailedMessageIds.add(id);
+        }
+      } catch (_) {
+        translationFailedMessageIds.add(id);
+        // تبقى الرسالة الأصلية ظاهرة ولا نكرر المحاولة تلقائيًا كل دورة تحديث.
+      } finally {
+        translatingMessageIds.remove(id);
+      }
+    }
+  }
+
+  Future<void> loadMessages({bool silent = false}) async {
+    if (refreshing) return;
+    refreshing = true;
+    try {
+      final page = await Api.groupMessagesPage(groupId);
+      final data = Api._list(page['messages']);
+      if (mounted) {
+        setState(() {
+        messages = silent && messages.isNotEmpty ? mergeMessages(messages, data) : data;
+        if (!silent || olderMessageCursor == null) {
+          olderMessageCursor = page['nextCursor'] is Map
+              ? Map<String, dynamic>.from(page['nextCursor']) : null;
+        }
+        hasOlderMessages = page['hasMore'] == true || (silent && hasOlderMessages);
+        loading = false;
+      });
+        if (BarqFeatures.autoTranslate) _translateMessages(data);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => loading = false);
+        if (!silent) showMsg(context, cleanError(e));
+      }
+    } finally { refreshing = false; }
+  }
+
+  Future<void> loadOlderMessages() async {
+    if (loadingOlderMessages || !hasOlderMessages || olderMessageCursor == null) return;
+    setState(() => loadingOlderMessages = true);
+    try {
+      final page = await Api.groupMessagesPage(groupId, before: olderMessageCursor);
+      final older = Api._list(page['messages']);
+      if (mounted) {
+        setState(() {
+        messages = mergeMessages(older, messages);
+        olderMessageCursor = page['nextCursor'] is Map
+            ? Map<String, dynamic>.from(page['nextCursor']) : null;
+        hasOlderMessages = page['hasMore'] == true;
+      });
+      }
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => loadingOlderMessages = false);
+    }
+  }
+
+  Future<void> send() async {
+    final body = controller.text.trim();
+    if (body.isEmpty || sending) return;
+    setState(() => sending = true);
+    try {
+      await Api.sendGroupMessage(groupId, body);
+      controller.clear();
+      await loadMessages();
+    } catch (e) { if (mounted) showMsg(context, cleanError(e)); }
+    finally { if (mounted) setState(() => sending = false); }
+  }
+
+  Future<void> pickAndSendFile() async {
+    if (BarqFeatures.lightningMode) {
+      showMsg(context, 'وضع البرق مفعّل: إرسال الوسائط والملفات متوقف مؤقتًا.');
+      return;
+    }
+    try {
+      final result = await FilePicker.platform.pickFiles(withData: true, allowMultiple: false);
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.single;
+      final bytes = file.bytes;
+      if (bytes == null) throw Exception('تعذر قراءة الملف من الجهاز.');
+      setState(() => sending = true);
+      await Api.uploadAttachment(
+        bytes: bytes,
+        fileName: file.name,
+        contentType: file.extension == null ? 'application/octet-stream' : _mimeForExtension(file.extension!),
+        groupId: groupId,
+      );
+      await loadMessages();
+      if (mounted) showMsg(context, 'تم إرسال الملف للمجموعة.');
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => sending = false);
+    }
+  }
+
+  Future<void> showGroupMembers() async {
+    try {
+      final members = await Api.groupMembers(groupId);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: panel,
+          title: const Text('أعضاء المجموعة'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 320,
+            child: members.isEmpty
+                ? const Center(child: Text('لا يوجد أعضاء لعرضهم.'))
+                : ListView.builder(
+                    itemCount: members.length,
+                    itemBuilder: (context, index) {
+                      final member = members[index];
+                      final isOwner = member['is_owner'] == 1 || member['is_owner'] == true;
+                      return ListTile(
+                        leading: CircleAvatar(child: Icon(isOwner ? Icons.shield : Icons.person, color: gold)),
+                        title: Text(field(member, ['display_name', 'displayName', 'username'], 'عضو')),
+                        subtitle: Text(isOwner ? 'مالك المجموعة' : '@${field(member, ['username'])}'),
+                      );
+                    },
+                  ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق'))],
+        ),
+      );
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Row(mainAxisSize: MainAxisSize.min, children: [
+            Flexible(child: Text(field(widget.group, ['name'], 'مجموعة'), overflow: TextOverflow.ellipsis)),
+            if (BarqFeatures.lightningMode) ...[
+              const SizedBox(width: 6),
+              const Icon(Icons.flash_on_rounded, color: gold, size: 18),
+            ],
+          ]),
+          actions: [
+            IconButton(onPressed: showGroupMembers, icon: const Icon(Icons.people_alt_outlined, color: gold), tooltip: 'أعضاء المجموعة'),
+            IconButton(onPressed: widget.onAddMember, icon: const Icon(Icons.person_add_alt_1, color: gold), tooltip: 'إضافة عضو'),
+            IconButton(onPressed: loadMessages, icon: const Icon(Icons.refresh, color: gold)),
+          ],
+        ),
+        body: Column(children: [
+          Expanded(child: loading
+            ? const Center(child: CircularProgressIndicator(color: gold))
+            : messages.isEmpty
+              ? const Center(child: Text('لا توجد رسائل بعد. ابدأ الحديث مع مجموعتك.', style: TextStyle(color: Colors.white60)))
+              : ListView.builder(
+                  padding: const EdgeInsets.all(12), itemCount: messages.length + (hasOlderMessages ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (hasOlderMessages && index == 0) {
+                      return Center(child: TextButton.icon(
+                        onPressed: loadingOlderMessages ? null : loadOlderMessages,
+                        icon: loadingOlderMessages
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.history),
+                        label: const Text('تحميل الرسائل الأقدم'),
+                      ));
+                    }
+                    final m = messages[index - (hasOlderMessages ? 1 : 0)];
+                    final mine = field(m, ['sender_id']) == widget.currentUserId;
+                    return Align(
+                      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Container(
+                        constraints: const BoxConstraints(maxWidth: 310),
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: mine ? const Color(0xFF46391F) : panel,
+                          borderRadius: BorderRadius.circular(15)),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          if (!mine) Text(field(m, ['display_name', 'username'], 'عضو'),
+                            style: const TextStyle(color: gold, fontSize: 11)),
+                          if (_attachmentData(m) case final attachment?) ...[
+                            _attachmentTile(attachment, () async {
+                              try {
+                                await Api.downloadAttachment(
+                                  attachmentId: field(attachment, ['attachmentId']),
+                                  fileName: field(attachment, ['fileName'], 'attachment'),
+                                );
+                              } catch (e) { if (context.mounted) showMsg(context, cleanError(e)); }
+                            }),
+                            if (field(attachment, ['contentType']).startsWith('audio/'))
+                              TextButton.icon(
+                                onPressed: transcribingMessageIds.contains(field(m, ['id', 'message_id']))
+                                    ? null : () => _transcribeVoiceMessage(m, attachment),
+                                icon: transcribingMessageIds.contains(field(m, ['id', 'message_id']))
+                                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                    : const Icon(Icons.subtitles_outlined, size: 16),
+                                label: const Text('تحويل الصوت إلى نص'),
+                              ),
+                            if (voiceTranscripts[field(m, ['id', 'message_id'])] != null)
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8)),
+                                child: Text(voiceTranscripts[field(m, ['id', 'message_id'])]!),
+                              ),
+                          ] else ...[
+                            Text(field(m, ['body'])),
+                            if (BarqFeatures.autoTranslate && translatedMessages[field(m, ['id', 'message_id'])] != null) ...[
+                              const SizedBox(height: 6),
+                              const Divider(height: 1, color: Colors.white24),
+                              const SizedBox(height: 6),
+                              Text(translatedMessages[field(m, ['id', 'message_id'])]!,
+                                style: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic)),
+                            ],
+                          ],
+                          Align(alignment: Alignment.centerLeft, child: Text(
+                            _messageTime(field(m, ['created_at'])),
+                            style: const TextStyle(color: Colors.white54, fontSize: 10))),
+                        ]),
+                      ),
+                    );
+                  },
+                )),
+          SafeArea(top: false, child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+            child: Row(children: [
+              if (!BarqFeatures.lightningMode)
+                IconButton(onPressed: sending ? null : pickAndSendFile,
+                  icon: const Icon(Icons.attach_file, color: gold), tooltip: 'إرسال ملف أو صورة أو فيديو'),
+              Expanded(child: TextField(controller: controller, minLines: 1, maxLines: 4,
+                decoration: inputDecoration('اكتب رسالة للمجموعة...', Icons.message), onSubmitted: (_) => send())),
+              const SizedBox(width: 8),
+              IconButton.filled(
+                style: IconButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+                onPressed: sending ? null : send,
+                icon: sending ? const SizedBox(width: 18, height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)) : const Icon(Icons.send),
+              ),
+            ]),
+          )),
+        ]),
+      ),
+    );
+  }
+}
