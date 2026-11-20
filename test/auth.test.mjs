@@ -1809,9 +1809,14 @@ test("group attachment upload persists group-scoped access without a private rec
       "report.pdf",
       "application/pdf"
     ]);
+    assert.equal(savedAccess.length, 7);
+    const accessExpiry = Date.parse(savedAccess[6]);
+    assert.ok(accessExpiry > Date.now() + 71 * 60 * 60 * 1000);
+    assert.ok(accessExpiry < Date.now() + 73 * 60 * 60 * 1000);
     assert.equal(storageCalls.length, 1);
     assert.equal(storageCalls[0].method, "PUT");
     assert.equal(storageCalls[0].headers["x-amz-meta-groupid"], "group-42");
+    assert.equal(storageCalls[0].headers["x-amz-meta-expiresat"], savedAccess[6]);
   } finally {
     delete globalThis.__fakeTigrisHandler;
   }
