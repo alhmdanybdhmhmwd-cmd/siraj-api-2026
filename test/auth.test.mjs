@@ -1633,9 +1633,9 @@ test("status pushes honor the statuses preference and use the status notificatio
       FCM_SERVICE_ACCOUNT_JSON: JSON.stringify(account)
     }, "recipient-1", user.id, "Tester", "unused preview", { category: "statuses" });
     assert.equal(sentMessage.message.data.type, "status_update");
-    assert.equal(sentMessage.message.notification.title, "حالة جديدة من Tester");
+    assert.equal(sentMessage.message.notification.title, "SPARK جديد من Tester");
     assert.equal(sentMessage.message.android.notification.channel_id, "barq_statuses");
-    assert.equal(sentMessage.message.notification.body, "شارك حالة جديدة");
+    assert.equal(sentMessage.message.notification.body, "شارك لحظة جديدة في SPARK");
   } finally {
     globalThis.fetch = originalFetch;
   }
