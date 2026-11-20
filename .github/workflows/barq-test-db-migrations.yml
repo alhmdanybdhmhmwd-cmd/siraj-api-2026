@@ -48,6 +48,10 @@ jobs:
           set -euo pipefail
           echo "Core users table definition:"
           npx --yes wrangler@4 d1 execute barq-phase2-test-2026-11-20 --remote --config wrangler.test.toml --command "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users';"
+          echo "Core application tables present (users, friendships, messages):"
+          npx --yes wrangler@4 d1 execute barq-phase2-test-2026-11-20 --remote --config wrangler.test.toml --command "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name IN ('users', 'friendships', 'messages') ORDER BY name;"
+          echo "All non-system tables in isolated test D1:"
+          npx --yes wrangler@4 d1 execute barq-phase2-test-2026-11-20 --remote --config wrangler.test.toml --command "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name;"
           echo "Users columns:"
           npx --yes wrangler@4 d1 execute barq-phase2-test-2026-11-20 --remote --config wrangler.test.toml --command "SELECT cid, name, type, \"notnull\", pk FROM pragma_table_info('users') ORDER BY cid;"
           echo "Users indexes and indexed columns:"
