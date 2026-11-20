@@ -2225,8 +2225,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         showMsg(context, 'تعذر قراءة الصورة المختارة. جرّب صورة أخرى.');
         return;
       }
-      if (bytes.length > 5 * 1024 * 1024) {
-        showMsg(context, 'حجم الصورة أكبر من 5 ميجابايت. اختر صورة أصغر.');
+      if (bytes.length > 4 * 1024 * 1024) {
+        showMsg(context, 'حجم الصورة أكبر من 4 ميجابايت. اختر صورة أصغر.');
         return;
       }
       final extension = file.extension?.toLowerCase() ?? '';
