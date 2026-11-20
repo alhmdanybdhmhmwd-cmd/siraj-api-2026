@@ -436,6 +436,15 @@ void main() {
     expect(selectedTool, 'pinned');
   });
 
+  test('private and group message text share the server 5000-character limit', () {
+    expect(isBarqMessageTextAllowed('رسالة قصيرة'), isTrue);
+    expect(isBarqMessageTextAllowed('  رسالة قصيرة  '), isTrue);
+    expect(isBarqMessageTextAllowed(''), isFalse);
+    expect(isBarqMessageTextAllowed('   '), isFalse);
+    expect(isBarqMessageTextAllowed(List.filled(5000, 'س').join()), isTrue);
+    expect(isBarqMessageTextAllowed(List.filled(5001, 'س').join()), isFalse);
+  });
+
   test('audio transcription enforces the worker two-megabyte limit', () {
     expect(isBarqTranscriptionSizeAllowed(0), isFalse);
     expect(isBarqTranscriptionSizeAllowed(1), isTrue);
