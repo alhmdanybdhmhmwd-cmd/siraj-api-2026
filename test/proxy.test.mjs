@@ -220,3 +220,32 @@ test("proxy forwards explicitly requested binary audio to the transcription Work
     globalThis.fetch = originalFetch;
   }
 });
+
+
+test("proxy forwards authenticated POST requests for device-scoped logout", async () => {
+  const originalFetch = globalThis.fetch;
+  let forwarded = null;
+  globalThis.fetch = async (url, options) => {
+    forwarded = { url, method: options.method, headers: options.headers, body: options.body };
+    return new Response(JSON.stringify({ message: "تم تسجيل الخروج من هذا الجهاز." }), {
+      status: 200, headers: { "content-type": "application/json" }
+    });
+  };
+  try {
+    const res = makeResponse();
+    const req = makeRequest({
+      url: "/api/logout",
+      method: "POST",
+      headers: { authorization: "Bearer device-session-token" }
+    });
+    await handler(req, res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(forwarded.url, "https://siraj-api.alhmdanybdhmhmwd.workers.dev/api/logout");
+    assert.equal(forwarded.method, "POST");
+    assert.equal(forwarded.headers.Authorization, "Bearer device-session-token");
+    assert.equal(forwarded.body, undefined);
+    assert.deepEqual(JSON.parse(res.body.toString()), { message: "تم تسجيل الخروج من هذا الجهاز." });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
