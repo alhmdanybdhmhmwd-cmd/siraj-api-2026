@@ -1143,7 +1143,7 @@ export default {
             return json({ error: "Use a JPEG, PNG, or WebP image" }, 415);
           }
           const declaredLength = Number(request.headers.get("Content-Length"));
-          const maxPhotoBytes = 5 * 1024 * 1024;
+          const maxPhotoBytes = 4 * 1024 * 1024;
           if (Number.isFinite(declaredLength) && declaredLength > maxPhotoBytes) {
             return json({ error: "Profile photo must not exceed 5 MB" }, 413);
           }
