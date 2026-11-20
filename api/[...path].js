@@ -19,7 +19,7 @@ module.exports = async (req, res) => {
     const isProfilePhotoUpload = req.method === "POST" &&
       requestPath.startsWith("/api/profile/photo/");
     const maxMediaBytes = 60 * 1024 * 1024;
-    const maxProfilePhotoBytes = 5 * 1024 * 1024;
+    const maxProfilePhotoBytes = 4 * 1024 * 1024;
     const declaredLength = Number(req.headers["content-length"]);
     if (isMediaUpload && Number.isFinite(declaredLength) && declaredLength > maxMediaBytes) {
       return res.status(413).json({ error: "File must be between 1 byte and 60 MB" });
