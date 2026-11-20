@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:barq/main.dart';
 
@@ -24,7 +25,7 @@ void main() {
   });
 
   testWidgets('public profile page shows the selected contact details', (tester) async {
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(const MaterialApp(
       home: PublicProfilePage(
         person: {
           'id': 'friend-1',
