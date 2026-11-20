@@ -3809,11 +3809,13 @@ class _ChatPageState extends State<ChatPage> {
     setState(() => sending = true);
     try {
       if (ephemeralMode) {
+        if (replyToMessage != null) throw Exception('الرسائل المؤقتة لا تدعم الرد على رسالة أخرى. ألغِ الرد أولاً.');
         await Api.sendEphemeralMessage(friendId, text);
       } else {
         final messageId = newBarqMessageId();
         try {
-          await Api.sendMessage(friendId, text, clientMessageId: messageId);
+          await Api.sendMessage(friendId, text, clientMessageId: messageId,
+            replyToId: replyToMessage == null ? null : field(replyToMessage!, ['id', 'message_id']));
         } catch (e) {
           if (!e.toString().contains('NETWORK_DIAGNOSTIC')) rethrow;
           final localMessage = {
@@ -3821,17 +3823,19 @@ class _ChatPageState extends State<ChatPage> {
             'sender_id': widget.currentUserId,
             'receiver_id': friendId,
             'body': text,
+            if (replyToMessage != null) 'reply_to_id': field(replyToMessage!, ['id', 'message_id']),
+            if (replyToMessage != null) 'reply_to_body': field(replyToMessage!, ['body', 'content', 'message']),
+            if (replyToMessage != null) 'reply_to_sender_id': field(replyToMessage!, ['sender_id']),
             'created_at': DateTime.now().toUtc().toIso8601String(),
           };
           await BarqOfflineQueue.enqueueOutgoing(localMessage);
           var deliveredNearby = false;
           try {
-            deliveredNearby = await BarqNearbyService.instance.sendTextMessage(
-              receiverId: friendId,
-              messageId: messageId,
-              body: text,
-              senderId: widget.currentUserId,
-            );
+            if (replyToMessage == null) {
+              deliveredNearby = await BarqNearbyService.instance.sendTextMessage(
+                receiverId: friendId, messageId: messageId, body: text, senderId: widget.currentUserId,
+              );
+            }
           } catch (_) {}
           if (mounted) {
             setState(() => messages = mergeMessages(messages, [{...localMessage, 'is_offline_pending': true}]));
@@ -3840,10 +3844,12 @@ class _ChatPageState extends State<ChatPage> {
                 : 'حُفظت الرسالة محليًا. افتح الأجهزة القريبة لتسليمها الآن، وستُزامن تلقائيًا عند عودة الإنترنت.');
           }
           controller.clear();
+          if (mounted) setState(() => replyToMessage = null);
           return;
         }
       }
       controller.clear();
+      if (mounted) setState(() => replyToMessage = null);
       await loadMessages();
     } catch (e) {
       if (mounted) showMsg(context, cleanError(e));
@@ -3999,6 +4005,9 @@ class _ChatPageState extends State<ChatPage> {
                                           onDelete: () async {
                                             await Api.deletePrivateMessage(field(m, ['id', 'message_id']));
                                             if (mounted) await loadMessages();
+                                          },
+                                          onReply: (message) {
+                                            setState(() => replyToMessage = Map<String, dynamic>.from(message));
                                           },
                                         ),
                                         child: Text(field(m, ['body', 'content', 'message'])),
@@ -4226,8 +4235,10 @@ class _GroupChatPageState extends State<GroupChatPage> {
     if (body.isEmpty || sending) return;
     setState(() => sending = true);
     try {
-      await Api.sendGroupMessage(groupId, body);
+      await Api.sendGroupMessage(groupId, body,
+        replyToId: replyToMessage == null ? null : field(replyToMessage!, ['id', 'message_id']));
       controller.clear();
+      if (mounted) setState(() => replyToMessage = null);
       await loadMessages();
     } catch (e) { if (mounted) showMsg(context, cleanError(e)); }
     finally { if (mounted) setState(() => sending = false); }
@@ -4410,6 +4421,9 @@ class _GroupChatPageState extends State<GroupChatPage> {
                                 onDelete: () async {
                                   await Api.deleteGroupMessage(groupId, field(m, ['id', 'message_id']));
                                   if (mounted) await loadMessages();
+                                },
+                                onReply: (message) {
+                                  setState(() => replyToMessage = Map<String, dynamic>.from(message));
                                 },
                               ),
                               child: Text(field(m, ['body'])),
