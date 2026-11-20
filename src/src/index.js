@@ -897,13 +897,13 @@ export default {
           return json({ error: "Unsupported audio format" }, 415);
         }
         const declaredLength = Number(request.headers.get("Content-Length"));
-        const maxTranscriptionBytes = 10 * 1024 * 1024;
+        const maxTranscriptionBytes = 2 * 1024 * 1024;
         if (Number.isFinite(declaredLength) && declaredLength > maxTranscriptionBytes) {
-          return json({ error: "Audio must not exceed 10 MB for transcription" }, 413);
+          return json({ error: "Audio must not exceed 2 MB for transcription" }, 413);
         }
         const audio = await request.arrayBuffer();
         if (!audio.byteLength || audio.byteLength > maxTranscriptionBytes) {
-          return json({ error: "Audio must be between 1 byte and 10 MB" }, 413);
+          return json({ error: "Audio must be between 1 byte and 2 MB" }, 413);
         }
 
         // Limit each account to 10 inference requests per rolling hour to prevent abuse.
