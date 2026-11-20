@@ -1827,8 +1827,12 @@ test("rate limit cleanup removes only buckets older than 24 hours", async () => 
   const now = Date.parse("2026-11-19T12:00:00.000Z");
   const result = await worker.cleanupExpiredRateLimits({ DB: db }, now);
   const cutoff = Math.floor(now / 1000) - 24 * 60 * 60;
-  assert.deepEqual(result, { login_rate_limits: 3, recovery_rate_limits: 3 });
-  assert.equal(statements.length, 2);
+  assert.deepEqual(result, {
+    login_rate_limits: 3,
+    recovery_rate_limits: 3,
+    transcription_rate_limits: 3
+  });
+  assert.equal(statements.length, 3);
   assert.ok(statements.every(item => item.sql.includes("window_started < ?")));
   assert.ok(statements.every(item => item.params[0] === cutoff));
 });
