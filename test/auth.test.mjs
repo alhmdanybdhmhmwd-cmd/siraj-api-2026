@@ -1196,7 +1196,7 @@ test("registration rejects an existing Yemen phone in local and international fo
       displayName: "New User",
       username: "new_user",
       password: "secure-password-123",
-      phone: "0700000002"
+      phone: "+967700000002"
     })
   }), { DB: db, JWT_SECRET: secret });
   assert.equal(response.status, 409);
@@ -2025,10 +2025,11 @@ test("password recovery also limits attempts across many identifiers from one cl
 test("registration rate limit blocks mass account creation from one client", async () => {
   const db = new FakeDB();
   const env = { DB: db, JWT_SECRET: secret };
+  let registrationIndex = 0;
   const register = username => worker.default.fetch(new Request("https://api.example.test/api/register", {
     method: "POST",
     headers: { "Content-Type": "application/json", "CF-Connecting-IP": "203.0.113.40" },
-    body: JSON.stringify({ displayName: "New User", username, password: "secure-password-123" })
+    body: JSON.stringify({ displayName: "New User", username, phone: "+1202555" + String(registrationIndex++).padStart(4, "0"), password: "secure-password-123" })
   }), env);
   for (let i = 0; i < 20; i++) {
     assert.equal((await register("newuser" + i)).status, 201);
