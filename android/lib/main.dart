@@ -3140,7 +3140,7 @@ class PublicProfilePage extends StatelessWidget {
         return;
       }
       final existing = await FlutterContacts.getContacts(withProperties: true, withPhoto: false);
-      final digits = (String value) => value.replaceAll(RegExp(r'\\D'), '');
+      String digits(String value) => value.replaceAll(RegExp(r'\D'), '');
       final target = digits(phone);
       final alreadySaved = existing.any((contact) =>
           contact.phones.any((entry) => digits(entry.number) == target));
