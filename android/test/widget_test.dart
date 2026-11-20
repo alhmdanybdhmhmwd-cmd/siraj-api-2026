@@ -284,3 +284,67 @@ void main() {
   });
 
 }
+
+
+  test('message reaction normalization preserves emoji and reacting user IDs', () {
+    final normalized = normalizeMessageReactions([
+      {'emoji': '❤️', 'user_id': 'u1'},
+      {'emoji': '🔥', 'user_id': 'u2'},
+    ]);
+    expect(normalized, hasLength(2));
+    expect(normalized.first['emoji'], '❤️');
+    expect(normalized.last['user_id'], 'u2');
+    expect(normalizeMessageReactions(null), isEmpty);
+  });
+
+  testWidgets('reaction chips show counts and allow removing the current user reaction', (tester) async {
+    String? selectedEmoji;
+    bool? removing;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: messageReactionBar(
+          context: tester.element(find.byType(Scaffold)),
+          currentUserId: 'u1',
+          message: {
+            'reactions': [
+              {'emoji': '❤️', 'user_id': 'u1'},
+              {'emoji': '❤️', 'user_id': 'u2'},
+            ],
+          },
+          onReaction: (emoji, remove) async {
+            selectedEmoji = emoji;
+            removing = remove;
+          },
+        ),
+      ),
+    ));
+
+    expect(find.text('❤️ 2'), findsOneWidget);
+    await tester.tap(find.text('❤️ 2'));
+    await tester.pumpAndSettle();
+    expect(selectedEmoji, '❤️');
+    expect(removing, isTrue);
+  });
+
+  testWidgets('message action sheet exposes reaction and pin actions', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(builder: (context) => Scaffold(
+        body: TextButton(
+          onPressed: () => showMessageActions(
+            context,
+            message: {'id': 'm1', 'body': 'رسالة'},
+            canDelete: false,
+            onDelete: () async {},
+            onReact: (emoji) async {},
+            onPin: () async {},
+          ),
+          child: const Text('فتح الإجراءات'),
+        ),
+      )),
+    ));
+
+    await tester.tap(find.text('فتح الإجراءات'));
+    await tester.pumpAndSettle();
+    expect(find.text('إضافة تفاعل'), findsOneWidget);
+    expect(find.text('تثبيت الرسالة'), findsOneWidget);
+  });
