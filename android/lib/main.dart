@@ -1199,8 +1199,8 @@ String normalizeBarqPhoneDigits(String raw) => raw.trim().replaceAllMapped(
 
 String normalizeBarqInternationalPhone(String raw) {
   var value = normalizeBarqPhoneDigits(raw).replaceAll(RegExp(r'[\s().-]'), '');
-  if (value.startsWith('00')) value = '+'.concat(value.substring(2));
-  if (!value.startsWith('+')) value = '+'.concat(value);
+  if (value.startsWith('00')) value = ['+', value.substring(2)].join();
+  if (!value.startsWith('+')) value = ['+', value].join();
   return value;
 }
 class LoginPage extends StatefulWidget {
