@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import { randomInt, randomUUID } from "node:crypto";
 
 const base = process.env.BARQ_PREVIEW_URL;
-if (!base || !/^https:\/\/[a-z0-9.-]+\.workers\.dev$/i.test(base)) {
-  throw new Error("BARQ_PREVIEW_URL must point to the isolated workers.dev Preview host");
-}
+if (!base) {
+  console.log("Preview integration skipped: BARQ_PREVIEW_URL is not configured.");
+} else {
+  if (!/^https:\/\/[a-z0-9.-]+\.workers\.dev$/i.test(base)) {
+    throw new Error("BARQ_PREVIEW_URL must point to the isolated workers.dev Preview host");
+  }
 
 async function call(path, { method = "GET", token, body, expected = 200 } = {}) {
   const response = await fetch(new URL(path, base), {
@@ -100,3 +103,5 @@ await call("/api/me", { expected: 401 });
 await call("/api/contacts", { method: "POST", token: a.token, body: { userId: a.user.id }, expected: 400 });
 
 console.log("Preview integration passed: two registrations, phone login, authenticated profile read/update, privacy enforcement, Arabic-digit contact matching, direct reciprocal contact addition, and authorization/validation guards.");
+
+}
