@@ -228,7 +228,7 @@ void main() {
 
   test('quoted reply preview is bounded and handles attachment references', () {
     expect(messageReplyPreview({'reply_to_body': 'رسالة مقتبسة'}), 'رسالة مقتبسة');
-    expect(messageReplyPreview({'reply_to_body': 'x' * 130}).length, 121);
+    expect(messageReplyPreview({'reply_to_body': List.filled(130, 'x').join()}).length, 121);
     expect(messageReplyPreview({'reply_to_body': '{"attachmentId":"a1"}'}), 'مرفق');
   });
 
