@@ -1259,7 +1259,9 @@ class _LoginPageState extends State<LoginPage> {
     if (value.startsWith('+') || value.startsWith('00')) {
       return normalizeBarqInternationalPhone(value);
     }
-    return normalizeBarqInternationalPhone('$selectedCountryCode$value');
+    // Remove the common national trunk prefix before applying the selected country code.
+    final nationalNumber = value.replaceFirst(RegExp(r'^0+'), '');
+    return normalizeBarqInternationalPhone('$selectedCountryCode$nationalNumber');
   }
 
   Widget _countryCodePicker() => DropdownButtonFormField<String>(
@@ -3130,6 +3132,32 @@ class PublicProfilePage extends StatelessWidget {
       ? Map<String, dynamic>.from(person['user'])
       : person;
 
+  Future<void> _savePhoneToContacts(BuildContext context, String name, String phone) async {
+    try {
+      final permitted = await FlutterContacts.requestPermission();
+      if (!permitted) {
+        if (context.mounted) showMsg(context, 'يلزم السماح بالوصول إلى جهات الاتصال لحفظ الرقم.');
+        return;
+      }
+      final existing = await FlutterContacts.getContacts(withProperties: true, withPhoto: false);
+      final digits = (String value) => value.replaceAll(RegExp(r'\\D'), '');
+      final target = digits(phone);
+      final alreadySaved = existing.any((contact) =>
+          contact.phones.any((entry) => digits(entry.number) == target));
+      if (alreadySaved) {
+        if (context.mounted) showMsg(context, 'هذا الرقم محفوظ بالفعل في جهات الاتصال.');
+        return;
+      }
+      await FlutterContacts.insertContact(Contact(
+        displayName: name,
+        phones: [Phone(phone)],
+      ));
+      if (context.mounted) showMsg(context, 'تم حفظ الرقم في جهات الاتصال.');
+    } catch (error) {
+      if (context.mounted) showMsg(context, cleanError(error));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = profile;
@@ -3216,6 +3244,12 @@ class PublicProfilePage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
+            if (phone.isNotEmpty)
+              OutlinedButton.icon(
+                onPressed: () => _savePhoneToContacts(context, name, phone),
+                icon: const Icon(Icons.person_add_alt_1),
+                label: const Text('حفظ الرقم في جهات الاتصال'),
+              ),
             if (canMessage && id.isNotEmpty && id != currentUserId)
               FilledButton.icon(
                 style: FilledButton.styleFrom(
