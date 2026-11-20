@@ -61,6 +61,9 @@ class FakeDB {
         if (sql.includes("SELECT session_version FROM account_security")) {
           return { session_version: db.sessionVersion };
         }
+        if (sql.includes("SELECT 1 FROM revoked_sessions")) {
+          return db.revokedSessions?.has(this.params[0]) ? { 1: 1 } : null;
+        }
         if (sql.includes("SELECT 1 FROM friendships")) {
           return db.friendshipAllowed === false ? null : { 1: 1 };
         }
@@ -195,6 +198,10 @@ class FakeDB {
           db.readReceiptUpdate = { sql, params: this.params };
         }
         if (sql.includes("INSERT OR IGNORE INTO account_security")) db.sessionVersion ??= 0;
+        if (sql.includes("INSERT OR IGNORE INTO revoked_sessions")) {
+          db.revokedSessions ??= new Set();
+          db.revokedSessions.add(this.params[0]);
+        }
         if (sql.includes("INSERT INTO user_privacy")) {
           db.privacySettings = { searchable: this.params[1], read_receipts: this.params[2] };
         }
@@ -2065,4 +2072,25 @@ test("readiness probe fails closed when configuration or D1 is unavailable", asy
   const ready = await worker.default.fetch(new Request("https://api.example.test/health/ready"), { DB: readyDb, JWT_SECRET: secret });
   assert.equal(ready.status, 200);
   assert.deepEqual(await ready.json(), { status: "ready", service: "barq-api" });
+});
+
+
+test("logout revokes only the current bearer token and leaves another device session valid", async () => {
+  const db = new FakeDB();
+  const firstToken = await worker.signToken(user, secret, 0);
+  const secondToken = await worker.signToken({ ...user, username: "tester-device-2" }, secret, 0);
+  const env = { DB: db, JWT_SECRET: secret };
+  const logout = await worker.default.fetch(new Request("https://api.example.test/api/logout", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + firstToken }
+  }), env);
+  assert.equal(logout.status, 200);
+  const firstSession = await worker.default.fetch(new Request("https://api.example.test/api/me", {
+    headers: { Authorization: "Bearer " + firstToken }
+  }), env);
+  const secondSession = await worker.default.fetch(new Request("https://api.example.test/api/me", {
+    headers: { Authorization: "Bearer " + secondToken }
+  }), env);
+  assert.equal(firstSession.status, 401);
+  assert.equal(secondSession.status, 200);
 });
