@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const worker = await readFile(new URL("../src/src/index.js", import.meta.url), "utf8");
+const flutterApp = await readFile(new URL("../android/lib/main.dart", import.meta.url), "utf8");
 const testConfig = await readFile(new URL("../wrangler.test.toml", import.meta.url), "utf8");
 const productionConfig = await readFile(new URL("../wrangler.toml", import.meta.url), "utf8");
 
@@ -71,4 +72,11 @@ test("private invite codes are validated and attached to the registering account
   assert.ok(route.includes("registrationStatements.push"));
   assert.ok(!route.includes("referral_count"));
   assert.ok(!route.includes("invite_threshold"));
+});
+
+test("Flutter invite deep links reach the registration request", () => {
+  assert.ok(flutterApp.includes("BarqInviteLinks.pendingCode"));
+  assert.ok(flutterApp.includes("inviteCode: inviteCode.text.trim().isEmpty ? null : inviteCode.text.trim()"));
+  assert.ok(flutterApp.includes("'inviteCode': inviteCode.trim().toUpperCase()"));
+  assert.ok(worker.includes('body.inviteCode'));
 });
