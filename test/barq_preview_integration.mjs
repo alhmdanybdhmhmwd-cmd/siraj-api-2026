@@ -69,6 +69,30 @@ const friendsB = await call("/api/friends", { token: b.token });
 assert.ok(friendsA.friends.some(user => user.id === b.user.id), "contact addition must create the sender's contact link");
 assert.ok(friendsB.friends.some(user => user.id === a.user.id), "contact addition must be reciprocal");
 
+// A lost response followed by an offline-outbox retry must persist and notify
+// only one message. Reusing an ID for a different sender/recipient is rejected.
+const clientMessageId = "abcdef0123456789abcdef0123456789";
+const firstMessage = await call("/api/messages", {
+  method: "POST", token: a.token,
+  body: { receiverId: b.user.id, body: "idempotency integration check", clientMessageId },
+  expected: 201
+});
+assert.equal(firstMessage.id, clientMessageId);
+const retriedMessage = await call("/api/messages", {
+  method: "POST", token: a.token,
+  body: { receiverId: b.user.id, body: "idempotency integration check", clientMessageId }
+});
+assert.equal(retriedMessage.id, clientMessageId);
+assert.equal(retriedMessage.duplicate, true, "same client ID must be acknowledged as a duplicate");
+await call("/api/messages", {
+  method: "POST", token: b.token,
+  body: { receiverId: a.user.id, body: "different owner", clientMessageId },
+  expected: 409
+});
+const conversation = await call("/api/messages?with=" + encodeURIComponent(b.user.id), { token: a.token });
+assert.equal(conversation.messages.filter(message => message.id === clientMessageId).length, 1,
+  "retries must leave exactly one persisted message");
+
 await call("/api/contacts/match", { method: "POST", token: a.token, body: { phones: [] } }).then(result => {
   assert.deepEqual(result.users, []);
 });
