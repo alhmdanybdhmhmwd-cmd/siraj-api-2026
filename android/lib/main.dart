@@ -889,6 +889,9 @@ String newBarqMessageId() {
 }
 
 /// طابور محلي مشفر بواسطة flutter_secure_storage؛ لا يضم الرسائل المؤقتة.
+bool barqOfflineSyncShouldPause(Object error) =>
+    error.toString().contains('NETWORK_DIAGNOSTIC');
+
 List<Map<String, dynamic>> barqOfflineItemsNotOnServerPage(
   List<Map<String, dynamic>> queuedItems,
   List<Map<String, dynamic>> serverMessages,
@@ -976,9 +979,11 @@ class BarqOfflineQueue {
           );
           final remaining = await _read(_outboxKey);
           await _write(_outboxKey, remaining.where((entry) => entry['id'] != item['id']).toList());
-        } catch (_) {
-          // يبقى العنصر في الطابور حتى يتاح الاتصال بالخادم.
-          break;
+        } catch (error) {
+          // توقف عند انقطاع الشبكة؛ أما الرفض الخاص برسالة واحدة فلا ينبغي
+          // أن يمنع إرسال بقية الرسائل المعلقة في الطابور.
+          if (barqOfflineSyncShouldPause(error)) break;
+          continue;
         }
       }
     } finally {
