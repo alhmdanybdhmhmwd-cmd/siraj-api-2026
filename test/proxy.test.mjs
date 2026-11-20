@@ -54,7 +54,7 @@ test("profile photo proxy rejects uploads above 5 MB before reading or forwardin
     let streamRead = false;
     const req = {
       url: "/api/profile/photo/me", method: "POST",
-      headers: { "content-length": String(5 * 1024 * 1024 + 1) },
+      headers: { "content-length": String(4 * 1024 * 1024 + 1) },
       async *[Symbol.asyncIterator]() { streamRead = true; }
     };
     await handler(req, res);
