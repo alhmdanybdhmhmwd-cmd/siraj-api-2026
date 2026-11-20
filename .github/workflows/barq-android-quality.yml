@@ -6,6 +6,7 @@ on:
     branches: ["barq/phase-2-android-ci-2026-11-20"]
     paths:
       - "android/**"
+      - "BARQ_PHASE_2_ANDROID_GITHUB_READY.zip"
       - ".github/workflows/barq-android-quality.yml"
 
 permissions:
@@ -17,13 +18,18 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - name: Verify Android source is present
+      - name: Prepare Android source
         shell: bash
         run: |
+          if [ -f BARQ_PHASE_2_ANDROID_GITHUB_READY.zip ] && [ ! -f android/pubspec.yaml ]; then
+            unzip -q BARQ_PHASE_2_ANDROID_GITHUB_READY.zip
+          fi
           if [ ! -f android/pubspec.yaml ]; then
-            echo "::error::Android source is not committed. Extract the validated project into the repository's android/ directory first."
+            echo "::error::Expected android/pubspec.yaml or BARQ_PHASE_2_ANDROID_GITHUB_READY.zip at repository root."
             exit 1
           fi
+          test -f android/pubspec.lock
+          test -f android/lib/main.dart
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
