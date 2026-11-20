@@ -326,3 +326,13 @@ test("group role management is owner-controlled and member removal respects owne
   assert.ok(flutterApp.includes("مغادرة المجموعة"));
   assert.ok(flutterApp.includes("current_role"));
 });
+
+
+test("status surfaces and notifications use the approved SPARK feature name", () => {
+  assert.ok(flutterApp.includes("label: 'SPARK'"));
+  assert.ok(flutterApp.includes("النشر في SPARK"));
+  assert.ok(flutterApp.includes("نشر في SPARK"));
+  assert.ok(flutterApp.includes("Text('SPARK'"));
+  assert.ok(flutterApp.includes("حالات SPARK الجديدة"));
+  assert.ok(worker.includes("شارك لحظة جديدة في SPARK"));
+});
