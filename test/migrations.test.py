@@ -272,3 +272,42 @@ class RecoveryMigrationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_preview_group_roles_are_limited_and_cascade_with_membership(self):
+        self.db.execute(
+            "INSERT INTO users (id, username, display_name, password_hash, password_salt) VALUES ('owner', 'groupowner', 'Owner', 'hash', 'salt')"
+        )
+        self.db.execute(
+            "INSERT INTO users (id, username, display_name, password_hash, password_salt) VALUES ('admin', 'groupadmin', 'Admin', 'hash', 'salt')"
+        )
+        self.db.execute(
+            "INSERT INTO users (id, username, display_name, password_hash, password_salt) VALUES ('member', 'groupmember', 'Member', 'hash', 'salt')"
+        )
+        self.db.execute(
+            "INSERT INTO chat_groups (id, name, owner_id) VALUES ('g1', 'Group', 'owner')"
+        )
+        self.db.executemany(
+            "INSERT INTO group_members (group_id, user_id) VALUES ('g1', ?)",
+            [('owner',), ('admin',), ('member',)],
+        )
+        self.db.execute(
+            "INSERT INTO group_member_roles (group_id, user_id, role) VALUES ('g1', 'admin', 'admin')"
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT role FROM group_member_roles WHERE group_id = 'g1' AND user_id = 'admin'"
+            ).fetchone()[0],
+            "admin",
+        )
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute(
+                "INSERT INTO group_member_roles (group_id, user_id, role) VALUES ('g1', 'member', 'owner')"
+            )
+        self.db.execute(
+            "DELETE FROM group_members WHERE group_id = 'g1' AND user_id = 'admin'"
+        )
+        self.assertIsNone(
+            self.db.execute(
+                "SELECT role FROM group_member_roles WHERE group_id = 'g1' AND user_id = 'admin'"
+            ).fetchone()
+        )
