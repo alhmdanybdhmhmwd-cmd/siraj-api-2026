@@ -16,7 +16,7 @@ The Worker contains route handlers for:
 - `POST /api/profile`
 - `GET|POST /api/privacy`
 - `GET|POST /api/notification-settings`
-- `GET|POST|DELETE /api/devices/token` (method support is route-specific)
+- `POST|DELETE /api/devices/token`
 - `GET|POST /api/statuses`
 - `GET /api/users/search`
 - `POST /api/contacts` and `POST /api/contacts/match`
@@ -28,8 +28,9 @@ The Worker contains route handlers for:
 ## Gaps requiring follow-up before claiming full Android/API integration
 
 1. **Ephemeral messages:** Android calls `GET|POST /api/ephemeral-messages`; no matching handler exists in this Worker source revision. Do not present ephemeral messaging as server-integrated on this revision.
-2. **Referral link:** Android calls `GET /api/referrals`; no matching handler was found in this Worker source revision. Keep the product requirement to a private invite link only; do not add referral counts, badges, rewards, or friend thresholds.
-3. **Voice transcription:** Android posts audio to `/api/transcribe`; no matching handler exists in this Worker revision. The feature is not server-integrated on this branch.\n4. **Profile photo:** the Android profile update method currently sends display name and phone only. This review found no corresponding Android profile-photo upload method in that API client. Profile image upload/display remains unverified.
+2. **Private invite link:** Android calls `GET /api/referrals`; no matching handler was found in this Worker source revision. The required product behavior is a private invite link only. Do not add referral counts, badges, rewards, or friend thresholds.
+3. **Voice transcription:** Android posts audio to `/api/transcribe`; no matching handler exists in this Worker revision. The feature is not server-integrated on this branch.
+4. **Profile photo:** the Android profile update method currently sends display name and phone only. This review found no corresponding Android profile-photo upload method in that API client. Profile image upload/display remains unverified.
 
 ## Safety and verification limits
 
@@ -40,4 +41,4 @@ The Worker contains route handlers for:
 
 ## Next engineering action
 
-Resolve the two missing route contracts (ephemeral messaging and private invite-link retrieval) in a reviewed, isolated change, then add automated contract tests that compare the Android client expectations with the Worker handlers. Keep profile-photo upload as a separately tracked integration gap.
+Resolve the missing route contracts (ephemeral messages and private invite-link retrieval) in reviewed, isolated changes, then add automated contract tests that compare Android client expectations with Worker handlers. Keep profile-photo upload as a separately tracked integration gap.
