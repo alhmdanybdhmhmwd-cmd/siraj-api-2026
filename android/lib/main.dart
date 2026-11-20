@@ -2217,6 +2217,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         allowMultiple: false,
         withData: true,
       );
+      if (!mounted) return;
       if (result == null || result.files.isEmpty) return;
       final file = result.files.single;
       final bytes = file.bytes;
