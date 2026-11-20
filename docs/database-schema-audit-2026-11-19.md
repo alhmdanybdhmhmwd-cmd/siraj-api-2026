@@ -121,3 +121,31 @@ The CI run for audit documentation commit
 `44539078738`. This confirms the repository tests, SQLite recovery migration
 test, and Worker syntax check pass; it does not validate the missing core
 schema or a live D1 database.
+
+
+## Live isolated D1 verification — 2026-11-20
+
+A read-only schema inspection was added to the isolated test-D1 workflow and
+completed successfully in run `44803949658` on commit
+`9b32bb1eb12449cf5cd999b4a0fa5484385ca8d6`. The workflow first verified the
+dedicated test configuration and applied only the already-versioned migrations
+to `barq-phase2-test-2026-11-20` (database ID
+`5bfada32-4f9b-4edb-85dd-3b3b30ab73b0)); it did not target production.
+
+The read-only `sqlite_master` and `pragma_*` queries confirmed:
+
+- The core tables `users`, `friendships`, and `messages` are absent from
+  this isolated D1 database.
+- The only non-system tables present are `d1_migrations`,
+  `ephemeral_messages`, `recovery_codes`, `recovery_rate_limits`, and
+  `revoked_sessions` (plus Cloudflare's internal `_cf_KV`).
+- Consequently, there is no `users.phone` column or phone uniqueness index
+  to inspect in this test database yet.
+
+This confirms that the current isolated D1 is not ready for live account,
+contact, friendship, messaging, or profile-photo integration tests. Do not
+deploy the application Preview against this incomplete database and do not
+invent a guessed base schema. Obtain the authoritative schema definition for
+`users`, `friendships`, and `messages` from a verified backup or the
+application owner, then review its constraints and indexes before creating a
+versioned base migration for the isolated test database only.
