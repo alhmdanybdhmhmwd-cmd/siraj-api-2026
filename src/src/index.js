@@ -1878,6 +1878,18 @@ export default {
         `).run();
 
         await ensureProfilePhotos(env);
+        // A first-ever SPARK feed request must not query status_views before
+        // the table has been created by the viewer endpoint.
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_views (
+            status_id TEXT NOT NULL,
+            viewer_id TEXT NOT NULL,
+            viewed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (status_id, viewer_id),
+            FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE,
+            FOREIGN KEY (viewer_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
         const result = await env.DB.prepare(
           `SELECT s.id, s.user_id AS userId, u.username,
                   u.display_name AS displayName, s.content,
