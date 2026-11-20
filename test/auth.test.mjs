@@ -131,6 +131,10 @@ class FakeDB {
         return { results: [] };
       },
       async run() {
+        if (sql.includes("DELETE FROM ephemeral_messages WHERE delete_at IS NOT NULL")) {
+          db.ephemeralCleanupCutoff = this.params[0];
+          return { meta: { changes: db.expiredEphemeralCount || 0 } };
+        }
         if (sql.includes("INSERT INTO status_posts")) {
           db.statusPosts ??= [];
           db.statusPosts.push(this.params);
@@ -226,6 +230,18 @@ class FakeDB {
   }
 }
 
+
+test("scheduled ephemeral cleanup removes rows at or before the expiry cutoff", async () => {
+  const db = new FakeDB();
+  db.expiredEphemeralCount = 3;
+  const now = Date.UTC(2026, 10, 20, 12, 0, 20);
+  const result = await worker.cleanupExpiredEphemeralMessages({ DB: db }, now);
+  assert.deepEqual(result, {
+    deleted: 3,
+    cutoff: Math.floor(now / 1000)
+  });
+  assert.equal(db.ephemeralCleanupCutoff, Math.floor(now / 1000));
+});
 
 test("private conversation pagination uses a stable cursor and marks only returned incoming messages read", async () => {
   const db = new FakeDB();
