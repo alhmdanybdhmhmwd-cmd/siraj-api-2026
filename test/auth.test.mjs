@@ -633,7 +633,7 @@ test("registration issues a one-time 160-bit recovery code and stores only its s
   const db = new FakeDB();
   const response = await worker.default.fetch(new Request("https://api.example.test/api/register", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ displayName: "New User", username: "new_user", password: "new-secure-password" })
+    body: JSON.stringify({ displayName: "New User", phone: "+967700000009", password: "new-secure-password" })
   }), { DB: db, JWT_SECRET: secret });
   assert.equal(response.status, 201);
   const data = await response.json();
@@ -651,7 +651,7 @@ test("concurrent registrations cannot claim equivalent Yemen local and internati
     body: JSON.stringify({ displayName: username, username, password: "new-secure-password", phone })
   }), { DB: db, JWT_SECRET: secret });
   const responses = await Promise.all([
-    register("local_user", "0770000002"),
+    register("local_user", "+967770000002"),
     register("intl_user", "+967770000002")
   ]);
   assert.deepEqual(responses.map(response => response.status).sort(), [201, 409]);
