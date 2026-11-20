@@ -7,7 +7,7 @@ APP = ROOT / "android" / "android" / "app"
 GRADLE = (APP / "build.gradle.kts").read_text(encoding="utf-8")
 FIREBASE = json.loads((APP / "google-services.json").read_text(encoding="utf-8"))
 
-application_id = re.search(r'applicationId\\s*=\\s*"([^"]+)"', GRADLE)
+application_id = re.search(r'applicationId\s*=\\s*"([^"]+)"', GRADLE)
 namespace = re.search(r'namespace\\s*=\\s*"([^"]+)"', GRADLE)
 assert application_id, "Android applicationId is missing."
 assert namespace, "Android namespace is missing."
