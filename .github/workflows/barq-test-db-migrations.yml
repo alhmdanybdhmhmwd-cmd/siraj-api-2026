@@ -8,6 +8,8 @@ on:
       - barq/phase-2-android-ci-2026-11-20
     paths:
       - .github/workflows/barq-test-db-migrations.yml
+      - wrangler.test.toml
+      - migrations/**
 
 permissions:
   contents: read
