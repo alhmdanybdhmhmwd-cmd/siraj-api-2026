@@ -31,6 +31,10 @@ Latest verified source commit before this documentation update: `f6ff468ce7a1614
 - Local Worker HTTP health probe run `44781710942`: passed for both `/health/live` and `/health/ready`, using local isolated D1 state.
 - Scheduled cleanup now deletes expired revoked-session token hashes; a unit test verifies the expiry cutoff. Logout authentication tests also assert expiry-aware revocation lookup and that raw bearer tokens are never stored. The cron schedule remains every 15 minutes in both production and isolated test Wrangler configs.
 
+## Deferred by user to final beta device-testing window
+
+The cross-network reachability issue involving the `workers.dev` hostname and the Vercel Preview proxy is intentionally deferred. Do not block progress on later product phases because of this item. Revisit it only during the final beta test on the user's own phone, test the result together, fix any reproduced issue, and repeat verification before final release. No claim of global reachability is allowed before that test passes. This deferral does not authorize production deployment or production changes.
+
 ## Still required to close Phase 2
 
 1. Backend CI recheck completed on `1aee039df3300ad928046df49db41c329640027e` (97/97 Node tests plus 4/4 SQLite migration tests passing). Android quality gate run `44779226464` passed Dart analysis, Flutter tests, ARM64 debug APK build, and debug artifact upload (82,173,540 bytes). The optimized ARM64 release test APK build/upload also completed successfully; artifacts are available in run `44779226464`.
