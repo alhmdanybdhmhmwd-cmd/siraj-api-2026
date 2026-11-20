@@ -14,6 +14,18 @@ void main() {
     expect(normalizeBarqRegistrationPhone(' ٠٧٧٠٠٠٠٠٠٠ ', '+967'), '+967770000000');
   });
 
+  test('saved contact comparison normalizes Arabic digits and phone punctuation', () {
+    expect(
+      normalizeBarqContactPhoneDigits('+٩٦٧ (٧٧) ٠٠٠-٠٠٠١'),
+      '967770000001',
+    );
+    expect(
+      normalizeBarqContactPhoneDigits('+967 77 000 0001'),
+      normalizeBarqContactPhoneDigits('+٩٦٧ (٧٧) ٠٠٠-٠٠٠١'),
+    );
+    expect(normalizeBarqContactPhoneDigits('---'), isEmpty);
+  });
+
   test('message merge deduplicates by id and keeps chronological order', () {
     final merged = mergeMessages(
       [
