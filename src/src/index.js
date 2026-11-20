@@ -2046,7 +2046,7 @@ export default {
 
       // Only the owner can promote/demote admins. The owner role is implicit
       // and cannot be assigned or removed through this endpoint.
-      const groupRoleMatch = path.match(/^\/api\\/groups\\/([^/]+)\\/members\\/([^/]+)\\/role$/);
+      const groupRoleMatch = path.match(/^\/api\/groups\/([^/]+)\/members\/([^/]+)\/role$/);
       if (method === "POST" && groupRoleMatch) {
         const groupId = groupRoleMatch[1];
         const targetUserId = groupRoleMatch[2];
@@ -2086,7 +2086,7 @@ export default {
 
       // Members may leave themselves; owners can remove any non-owner member,
       // while admins can remove ordinary members but not fellow admins.
-      const groupMemberActionMatch = path.match(/^\/api\\/groups\\/([^/]+)\\/members\\/([^/]+)$/);
+      const groupMemberActionMatch = path.match(/^\/api\/groups\/([^/]+)\/members\/([^/]+)$/);
       if (method === "DELETE" && groupMemberActionMatch) {
         const groupId = groupMemberActionMatch[1];
         const targetUserId = groupMemberActionMatch[2];
