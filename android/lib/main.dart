@@ -405,6 +405,23 @@ class Api {
         'phone': phone.trim(),
       }))['user']);
 
+  static Future<void> uploadProfilePhoto(List<int> bytes, String contentType) async {
+    final response = await http.put(
+      Uri.parse('$apiBase/api/profile/photo/me'),
+      headers: {
+        if (token != null) 'Authorization': 'Bearer $token',
+        'Content-Type': contentType,
+      },
+      body: bytes,
+    ).timeout(const Duration(seconds: 45));
+    dynamic decoded;
+    try { decoded = jsonDecode(response.body); } catch (_) { decoded = <String, dynamic>{}; }
+    final data = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception((data['error'] ?? 'تعذر رفع صورة الملف الشخصي').toString());
+    }
+  }
+
   static Future<Map<String, dynamic>> privacy() async =>
       _map((await request('GET', '/api/privacy'))['privacy']);
 
@@ -2193,6 +2210,79 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
       );
 
+  Future<void> pickProfilePhoto() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.single;
+      final bytes = file.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        showMsg(context, 'تعذر قراءة الصورة المختارة. جرّب صورة أخرى.');
+        return;
+      }
+      if (bytes.length > 5 * 1024 * 1024) {
+        showMsg(context, 'حجم الصورة أكبر من 5 ميجابايت. اختر صورة أصغر.');
+        return;
+      }
+      final extension = file.extension?.toLowerCase() ?? '';
+      final contentType = switch (extension) {
+        'jpg' || 'jpeg' => 'image/jpeg',
+        'png' => 'image/png',
+        'webp' => 'image/webp',
+        _ => '',
+      };
+      if (contentType.isEmpty) {
+        showMsg(context, 'الصيغ المدعومة هي JPG وPNG وWebP.');
+        return;
+      }
+      if (!mounted) return;
+      final accepted = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: panel,
+          title: const Text('معاينة صورة الملف الشخصي'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(18),
+                child: Image.memory(bytes, width: 220, height: 220, fit: BoxFit.cover),
+              ),
+              const SizedBox(height: 10),
+              Text(file.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white70)),
+              const SizedBox(height: 4),
+              const Text('سيتم رفع الصورة بشكل خاص إلى حسابك.',
+                  style: TextStyle(color: Colors.white60, fontSize: 12)),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('إلغاء')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('اعتماد الصورة'),
+            ),
+          ],
+        ),
+      );
+      if (accepted != true || !mounted) return;
+      showMsg(context, 'جارٍ رفع الصورة...');
+      await Api.uploadProfilePhoto(bytes, contentType);
+      final refreshed = await Api.me();
+      if (!mounted) return;
+      setState(() => me = refreshed);
+      showMsg(context, 'تم تحديث صورة الملف الشخصي.');
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    }
+  }
+
   Future<void> editProfileDialog() async {
     final nameController = TextEditingController(
       text: field(me, ['displayName', 'display_name']),
@@ -2482,10 +2572,40 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   shape: BoxShape.circle,
                   border: Border.all(color: electricBlue.withValues(alpha: 0.55), width: 2),
                 ),
-                child: CircleAvatar(
-                  radius: 39,
-                  backgroundColor: const Color(0xFF46391F),
-                  child: Text(displayName.isNotEmpty ? displayName.characters.first : 'س', style: const TextStyle(color: gold, fontSize: 32)),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    CircleAvatar(
+                      radius: 39,
+                      backgroundColor: const Color(0xFF46391F),
+                      backgroundImage: field(me, ['photoUrl']).isNotEmpty
+                          ? NetworkImage(
+                              '$apiBase${field(me, ['photoUrl'])}?v=${Uri.encodeComponent(field(me, ['photoUpdatedAt']))}',
+                              headers: {'Authorization': 'Bearer ${Api.token}'},
+                            )
+                          : null,
+                      child: field(me, ['photoUrl']).isEmpty
+                          ? Text(displayName.isNotEmpty ? displayName.characters.first : 'س',
+                              style: const TextStyle(color: gold, fontSize: 32))
+                          : null,
+                    ),
+                    Positioned(
+                      right: -5,
+                      bottom: -5,
+                      child: Material(
+                        color: electricBlue,
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: pickProfilePhoto,
+                          child: const Padding(
+                            padding: EdgeInsets.all(6),
+                            child: Icon(Icons.camera_alt_rounded, size: 16, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 12),
