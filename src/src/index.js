@@ -1128,8 +1128,7 @@ export default {
         ).bind(friendId, currentUser.sub).run();
 
         const result = await env.DB.prepare(
-          `SELECT id, sender_id, receiver_id, body, created_at, read_at,
-                        reply_to_id, reply_to_body, reply_to_sender_id, delete_at
+          `SELECT id, sender_id, receiver_id, body, created_at, read_at, delete_at
            FROM ephemeral_messages
            WHERE ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))
              AND (delete_at IS NULL OR delete_at > unixepoch())
@@ -1817,6 +1816,9 @@ export default {
             sender_id TEXT NOT NULL,
             body TEXT NOT NULL,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            reply_to_id TEXT,
+            reply_to_body TEXT,
+            reply_to_sender_id TEXT,
             FOREIGN KEY (group_id) REFERENCES chat_groups(id) ON DELETE CASCADE,
             FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
           )
@@ -2071,10 +2073,11 @@ const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
 
         if (Number(inserted?.meta?.changes || 0) === 0) {
           const existing = await env.DB.prepare(
-            "SELECT sender_id, receiver_id, body FROM messages WHERE id = ?"
+            "SELECT sender_id, receiver_id, body, reply_to_id FROM messages WHERE id = ?"
           ).bind(id).first();
           if (!existing || existing.sender_id !== currentUser.sub ||
-              existing.receiver_id !== receiverId || existing.body !== message) {
+              existing.receiver_id !== receiverId || existing.body !== message ||
+              (existing.reply_to_id || "") !== (reply.id || "")) {
             return json({ error: "Client message ID conflict" }, 409);
           }
           return json({ message: "Message already accepted", id, duplicate: true });
