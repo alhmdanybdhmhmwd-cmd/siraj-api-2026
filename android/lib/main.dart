@@ -4116,6 +4116,8 @@ class _ChatPageState extends State<ChatPage> {
                                       children: [
                                         Text(_messageTime(field(m, ['created_at', 'createdAt'])),
                                           style: TextStyle(fontSize: 10, color: Colors.white.withValues(alpha: 0.55))),
+                                        if (field(m, ['edited_at', 'editedAt']).isNotEmpty)
+                                          const Text('تم التعديل', style: TextStyle(fontSize: 9, color: Colors.white54)),
                                         if (mine) ...[
                                           const SizedBox(width: 4),
                                           Icon(field(m, ['read_at', 'readAt']).isNotEmpty ? Icons.done_all : Icons.done,
@@ -4552,9 +4554,17 @@ class _GroupChatPageState extends State<GroupChatPage> {
                                 style: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic)),
                             ],
                           ],
-                          Align(alignment: Alignment.centerLeft, child: Text(
-                            _messageTime(field(m, ['created_at'])),
-                            style: const TextStyle(color: Colors.white54, fontSize: 10))),
+                          Align(alignment: Alignment.centerLeft, child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(_messageTime(field(m, ['created_at'])),
+                                style: const TextStyle(color: Colors.white54, fontSize: 10)),
+                              if (field(m, ['edited_at', 'editedAt']).isNotEmpty) ...[
+                                const SizedBox(width: 5),
+                                const Text('تم التعديل', style: TextStyle(color: Colors.white54, fontSize: 9)),
+                              ],
+                            ],
+                          )),
                         ]),
                       ),
                     );
