@@ -96,6 +96,27 @@ const conversation = await call("/api/messages?with=" + encodeURIComponent(b.use
 assert.equal(conversation.messages.filter(message => message.id === clientMessageId).length, 1,
   "retries must leave exactly one persisted message");
 
+const privateSearch = await call("/api/messages/search?with=" + encodeURIComponent(b.user.id) + "&q=integration", { token: a.token });
+assert.ok(privateSearch.messages.some(message => message.id === clientMessageId),
+  "server-side private search must find matching conversation messages");
+await call("/api/messages/search?with=" + encodeURIComponent(a.user.id) + "&q=integration", { token: b.token })
+  .then(result => assert.ok(result.messages.some(message => message.id === clientMessageId)));
+await call("/api/messages/search?with=" + encodeURIComponent(b.user.id) + "&q=x", { token: a.token, expected: 400 });
+await call("/api/messages/search?with=" + encodeURIComponent(a.user.id) + "&q=integration", { token: a.token, expected: 403 });
+
+const group = await call("/api/groups", { method: "POST", token: a.token, body: { name: "Search Test " + suffix } });
+assert.ok(group.group?.id);
+await call("/api/groups/" + encodeURIComponent(group.group.id) + "/members", {
+  method: "POST", token: a.token, body: { userId: b.user.id }, expected: 201
+});
+await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages", {
+  method: "POST", token: a.token, body: { body: "group-search-needle-" + suffix }, expected: 201
+});
+const groupSearch = await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages/search?q=group-search-needle", { token: b.token });
+assert.ok(groupSearch.messages.some(message => message.body.includes("group-search-needle")),
+  "group search must return matching messages to group members");
+await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages/search?q=x", { token: b.token, expected: 400 });
+
 await call("/api/contacts/match", { method: "POST", token: a.token, body: { phones: [] } }).then(result => {
   assert.deepEqual(result.users, []);
 });
