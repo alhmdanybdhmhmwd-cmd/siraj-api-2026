@@ -892,7 +892,7 @@ export default {
           return json({ error: "Speech transcription is not configured" }, 503);
         }
         const contentType = (request.headers.get("Content-Type") || "").split(";")[0].trim().toLowerCase();
-        if (!/^audio\\/(mpeg|mp4|aac|wav|ogg|webm|x-wav|3gpp|amr)$/.test(contentType)) {
+        const allowedAudioTypes = new Set(["audio/mpeg", "audio/mp4", "audio/aac", "audio/wav", "audio/ogg", "audio/webm", "audio/x-wav", "audio/3gpp", "audio/amr"]);
           return json({ error: "Unsupported audio format" }, 415);
         }
         const declaredLength = Number(request.headers.get("Content-Length"));
