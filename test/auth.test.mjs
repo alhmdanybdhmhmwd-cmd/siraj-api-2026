@@ -294,6 +294,49 @@ class FakeDB {
 }
 
 
+
+test("ephemeral messages start the ten-second TTL on recipient read and schedule physical deletion", async () => {
+  const db = new FakeDB();
+  db.ephemeralRows = [{
+    id: "ephemeral-1",
+    sender_id: "friend-1",
+    receiver_id: user.id,
+    body: "one-time text",
+    created_at: Math.floor(Date.now() / 1000),
+    read_at: null,
+    delete_at: null
+  }];
+  const token = await worker.signToken(user, secret, 0);
+  const originalSetTimeout = globalThis.setTimeout;
+  const delays = [];
+  const pending = [];
+  globalThis.setTimeout = (callback, delay, ...args) => {
+    delays.push(delay);
+    queueMicrotask(() => callback(...args));
+    return 0;
+  };
+  try {
+    const response = await worker.default.fetch(new Request(
+      "https://api.example.test/api/ephemeral-messages?with=friend-1",
+      { headers: { Authorization: "Bearer " + token } }
+    ), { DB: db, JWT_SECRET: secret }, {
+      waitUntil(promise) { pending.push(promise); }
+    });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.messages.length, 1);
+    assert.ok(payload.messages[0].read_at);
+    assert.ok(payload.messages[0].delete_at >= payload.messages[0].read_at + 10);
+    assert.equal(delays.length, 1);
+    assert.ok(delays[0] >= 0 && delays[0] <= 10000);
+    await Promise.all(pending);
+    assert.deepEqual(db.ephemeralRows, []);
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+  }
+});
+
+
 test("profile photo upload rejects mismatched image bytes before contacting storage", async () => {
   const db = new FakeDB();
   const token = await worker.signToken(user, secret, 0);
