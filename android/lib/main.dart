@@ -1091,12 +1091,21 @@ Widget personAvatar(Map<String, dynamic> person, {double radius = 22}) {
   return CircleAvatar(
     radius: radius,
     backgroundColor: const Color(0xFF46391F),
-    backgroundImage: imageUrl.isNotEmpty
-        ? NetworkImage(imageUrl, headers: {'Authorization': 'Bearer ${Api.token}'})
-        : null,
     child: imageUrl.isEmpty
         ? Text(name.characters.first, style: TextStyle(color: gold, fontSize: radius * 0.85))
-        : null,
+        : ClipOval(
+            child: Image.network(
+              imageUrl,
+              width: radius * 2,
+              height: radius * 2,
+              fit: BoxFit.cover,
+              headers: {'Authorization': 'Bearer ${Api.token}'},
+              errorBuilder: (_, __, ___) => Center(
+                child: Text(name.characters.first,
+                    style: TextStyle(color: gold, fontSize: radius * 0.85)),
+              ),
+            ),
+          ),
   );
 }
 
@@ -3106,12 +3115,21 @@ class PublicProfilePage extends StatelessWidget {
                 ),
                 child: CircleAvatar(
                   backgroundColor: const Color(0xFF46391F),
-                  backgroundImage: imageUrl.isNotEmpty
-                      ? NetworkImage(imageUrl, headers: {'Authorization': 'Bearer ${Api.token}'})
-                      : null,
                   child: imageUrl.isEmpty
                       ? Text(name.characters.first, style: const TextStyle(color: gold, fontSize: 48))
-                      : null,
+                      : ClipOval(
+                          child: Image.network(
+                            imageUrl,
+                            width: 124,
+                            height: 124,
+                            fit: BoxFit.cover,
+                            headers: {'Authorization': 'Bearer ${Api.token}'},
+                            errorBuilder: (_, __, ___) => Center(
+                              child: Text(name.characters.first,
+                                  style: const TextStyle(color: gold, fontSize: 48)),
+                            ),
+                          ),
+                        ),
                 ),
               ),
             ),
