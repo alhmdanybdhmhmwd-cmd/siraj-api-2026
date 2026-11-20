@@ -5954,8 +5954,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
               tooltip: 'أدوات المحادثة',
             ),
             IconButton(onPressed: showGroupMembers, icon: const Icon(Icons.people_alt_outlined, color: gold), tooltip: 'أعضاء المجموعة'),
-            if (const ['owner', 'admin'].contains('owner') &&
-                ['owner', 'admin'].contains(field(widget.group, ['current_role'], 'member')))
+            if (['owner', 'admin'].contains(field(widget.group, ['current_role'], 'member')))
               IconButton(onPressed: widget.onAddMember, icon: const Icon(Icons.person_add_alt_1, color: gold), tooltip: 'إضافة عضو'),
             IconButton(onPressed: loadMessages, icon: const Icon(Icons.refresh, color: gold)),
           ],
