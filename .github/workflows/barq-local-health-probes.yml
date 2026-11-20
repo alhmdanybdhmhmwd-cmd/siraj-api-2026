@@ -33,7 +33,7 @@ jobs:
           cleanup() { kill "$(cat "$RUNNER_TEMP/barq-worker.pid")" 2>/dev/null || true; }
           trap cleanup EXIT
           for attempt in $(seq 1 40); do
-            if curl --silent --fail http://127.0.0.1:8787/health/live > "$RUNNER_TEMP/live.json"; then break; fi
+            if curl --connect-timeout 2 --max-time 5 --silent --fail http://127.0.0.1:8787/health/live > "$RUNNER_TEMP/live.json"; then break; fi
             sleep 2
           done
           node --input-type=module <<'NODE'
@@ -41,7 +41,7 @@ jobs:
           const live = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/live.json', 'utf8'));
           if (live.status !== 'alive' || live.service !== 'barq-api') throw new Error('Live endpoint response mismatch');
           NODE
-          curl --silent --show-error --fail http://127.0.0.1:8787/health/ready > "$RUNNER_TEMP/ready.json"
+          curl --connect-timeout 2 --max-time 8 --silent --show-error --fail http://127.0.0.1:8787/health/ready > "$RUNNER_TEMP/ready.json"
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
           const ready = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/ready.json', 'utf8'));
