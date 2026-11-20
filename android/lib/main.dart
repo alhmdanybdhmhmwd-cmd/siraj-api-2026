@@ -765,6 +765,27 @@ class Api {
     return transcript;
   }
 
+  static Future<Uint8List> fetchAttachmentBytes(String attachmentId) async {
+    final headers = {if (token != null) 'Authorization': 'Bearer $token'};
+    http.Response response;
+    try {
+      response = await http.get(
+        Uri.parse('$mediaWorkerBase/api/media/${Uri.encodeComponent(attachmentId)}'),
+        headers: headers,
+      ).timeout(const Duration(minutes: 2));
+      if (response.statusCode >= 500) throw const HttpException('Media Worker unavailable');
+    } catch (_) {
+      response = await http.get(
+        Uri.parse('$apiBase/api/media/${Uri.encodeComponent(attachmentId)}'),
+        headers: headers,
+      ).timeout(const Duration(minutes: 2));
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('تعذر معاينة الملف (${response.statusCode}).');
+    }
+    return response.bodyBytes;
+  }
+
   static Future<void> downloadAttachment({
     required String attachmentId,
     required String fileName,
@@ -3546,26 +3567,119 @@ Map<String, dynamic>? _attachmentData(Map<String, dynamic> message) {
 Widget _attachmentTile(
   Map<String, dynamic> attachment,
   VoidCallback onDownload,
-) {
-  final name = field(attachment, ['fileName'], 'ملف مرفق');
-  final type = field(attachment, ['contentType']);
-  final icon = type.startsWith('image/') ? Icons.image_outlined
-      : type.startsWith('video/') ? Icons.video_file_outlined
-      : type.startsWith('audio/') ? Icons.audio_file_outlined
-      : Icons.insert_drive_file_outlined;
-  return Container(
-    padding: const EdgeInsets.all(10),
-    decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(10)),
-    child: Row(mainAxisSize: MainAxisSize.min, children: [
-      Icon(icon, color: gold),
-      const SizedBox(width: 8),
-      Flexible(child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 190),
-        child: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
-      )),
-      IconButton(onPressed: onDownload, icon: const Icon(Icons.download, color: gold), tooltip: 'تنزيل الملف'),
-    ]),
-  );
+) => _AttachmentTile(attachment: attachment, onDownload: onDownload);
+
+class _AttachmentTile extends StatefulWidget {
+  final Map<String, dynamic> attachment;
+  final VoidCallback onDownload;
+
+  const _AttachmentTile({required this.attachment, required this.onDownload});
+
+  @override
+  State<_AttachmentTile> createState() => _AttachmentTileState();
+}
+
+class _AttachmentTileState extends State<_AttachmentTile> {
+  Future<Uint8List>? _previewFuture;
+
+  bool get _isImage => field(widget.attachment, ['contentType']).toLowerCase().startsWith('image/');
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreview();
+  }
+
+  void _loadPreview() {
+    if (_isImage) {
+      final id = field(widget.attachment, ['attachmentId']);
+      if (id.isNotEmpty) _previewFuture = Api.fetchAttachmentBytes(id);
+    }
+  }
+
+  void _openImage(Uint8List bytes) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: InteractiveViewer(
+                minScale: 0.7,
+                maxScale: 5,
+                child: Center(
+                  child: Image.memory(bytes, fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined, color: Colors.white70, size: 56)),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 4, right: 4,
+              child: IconButton(
+                tooltip: 'إغلاق المعاينة',
+                onPressed: () => Navigator.pop(dialogContext),
+                icon: const Icon(Icons.close, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final name = field(widget.attachment, ['fileName'], 'ملف مرفق');
+    final type = field(widget.attachment, ['contentType']).toLowerCase();
+    final icon = type.startsWith('image/') ? Icons.image_outlined
+        : type.startsWith('video/') ? Icons.video_file_outlined
+        : type.startsWith('audio/') ? Icons.audio_file_outlined
+        : Icons.insert_drive_file_outlined;
+
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 290),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(10)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        if (_isImage && _previewFuture != null)
+          FutureBuilder<Uint8List>(
+            future: _previewFuture,
+            builder: (context, snapshot) {
+              if (snapshot.hasData) {
+                return GestureDetector(
+                  onTap: () => _openImage(snapshot.data!),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.memory(snapshot.data!, width: 76, height: 76, fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const SizedBox(width: 76, height: 76, child: Icon(Icons.broken_image_outlined, color: gold))),
+                  ),
+                );
+              }
+              if (snapshot.hasError) {
+                return IconButton(
+                  tooltip: 'إعادة تحميل المعاينة',
+                  onPressed: () => setState(() => _loadPreview()),
+                  icon: const Icon(Icons.refresh, color: gold),
+                );
+              }
+              return const SizedBox(width: 76, height: 76,
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: gold)));
+            },
+          )
+        else
+          Icon(icon, color: gold, size: 28),
+        const SizedBox(width: 9),
+        Flexible(child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 150),
+          child: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
+        )),
+        IconButton(onPressed: widget.onDownload, icon: const Icon(Icons.download, color: gold), tooltip: 'تنزيل الملف'),
+      ]),
+    );
+  }
 }
 
 class NearbyDevicesPage extends StatefulWidget {
