@@ -607,7 +607,7 @@ export default {
       console.error("Ephemeral message cleanup failed:", error);
     }
   },
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders });
     }
@@ -1097,7 +1097,24 @@ export default {
            ORDER BY created_at ASC, id ASC
            LIMIT 200`
         ).bind(currentUser.sub, friendId, friendId, currentUser.sub).all();
-        return json({ messages: result.results || [] });
+        const messages = result.results || [];
+        // Schedule physical D1 deletion for ten seconds after the recipient's first read.
+        // Cron cleanup remains a recovery path if the request's background task is interrupted.
+        if (ctx && typeof ctx.waitUntil === "function") {
+          for (const message of messages) {
+            const deleteAt = Number(message.delete_at || 0);
+            if (!message.id || !Number.isFinite(deleteAt) || deleteAt <= 0) continue;
+            const delay = Math.max(0, deleteAt * 1000 - Date.now());
+            ctx.waitUntil(
+              new Promise(resolve => setTimeout(resolve, delay))
+                .then(() => env.DB.prepare(
+                  "DELETE FROM ephemeral_messages WHERE id = ? AND delete_at IS NOT NULL AND delete_at <= unixepoch()"
+                ).bind(message.id).run())
+                .catch(error => console.error("Ephemeral message deletion task failed:", error?.name || "Error"))
+            );
+          }
+        }
+        return json({ messages });
       }
 
       // Rotate the one-time recovery code after verifying the current password.
