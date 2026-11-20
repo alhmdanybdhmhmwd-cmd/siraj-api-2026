@@ -3660,10 +3660,12 @@ class _AttachmentTileState extends State<_AttachmentTile> {
         if (mounted) setState(() => _audioDuration = duration);
       });
       _audioCompleteSubscription = player.onPlayerComplete.listen((_) {
-        if (mounted) setState(() {
-          _audioPlaying = false;
-          _audioPosition = _audioDuration;
-        });
+        if (mounted) {
+          setState(() {
+            _audioPlaying = false;
+            _audioPosition = _audioDuration;
+          });
+        }
       });
     }
     try {
@@ -3844,10 +3846,12 @@ class _VideoAttachmentDialogState extends State<_VideoAttachmentDialog> {
   Future<void> _initializeVideo() async {
     final id = field(widget.attachment, ['attachmentId']);
     if (id.isEmpty) {
-      if (mounted) setState(() {
-        _loading = false;
-        _error = 'معرّف الفيديو غير متوفر.';
-      });
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'معرّف الفيديو غير متوفر.';
+        });
+      }
       return;
     }
     final headers = {if (Api.token != null) 'Authorization': 'Bearer \${Api.token}'};
@@ -3877,10 +3881,12 @@ class _VideoAttachmentDialogState extends State<_VideoAttachmentDialog> {
         await candidate?.dispose();
       }
     }
-    if (mounted) setState(() {
-      _loading = false;
-      _error = cleanError(lastError ?? 'تعذر تشغيل الفيديو.');
-    });
+    if (mounted) {
+      setState(() {
+        _loading = false;
+        _error = cleanError(lastError ?? 'تعذر تشغيل الفيديو.');
+      });
+    }
   }
 
   @override
