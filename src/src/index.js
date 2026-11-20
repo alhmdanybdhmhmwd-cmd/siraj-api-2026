@@ -609,13 +609,10 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
     try {
       const response = await storage.fetch(storageUrl, { method: "DELETE" });
       if (response.ok || response.status === 404) {
-        const sparkStatus = await env.DB.prepare(
-          "SELECT status_id FROM status_media WHERE object_key = ?"
-        ).bind(key).first();
-        if (sparkStatus?.status_id) {
-          await env.DB.prepare("DELETE FROM status_media WHERE status_id = ?").bind(sparkStatus.status_id).run();
-          await env.DB.prepare("DELETE FROM status_posts WHERE id = ?").bind(sparkStatus.status_id).run();
-        }
+        await env.DB.prepare(
+          "DELETE FROM status_posts WHERE id IN (SELECT status_id FROM status_media WHERE object_key = ?)"
+        ).bind(key).run();
+        await env.DB.prepare("DELETE FROM status_media WHERE object_key = ?").bind(key).run();
         await env.DB.prepare("DELETE FROM media_access WHERE object_key = ?").bind(key).run();
         await env.DB.prepare(
           "DELETE FROM media_expirations WHERE object_key = ? AND expires_at <= ?"
