@@ -496,13 +496,15 @@ class Api {
   static Future<List<Map<String, dynamic>>> messages(String friendId) async =>
       _list((await messagesPage(friendId))['messages']);
 
-  static Future<List<Map<String, dynamic>>> searchPrivateMessages(
-    String friendId, String query, {int limit = 30}
+  static Future<Map<String, dynamic>> searchPrivateMessages(
+    String friendId, String query, {int limit = 30, Map<String, dynamic>? before}
   ) async {
     final params = Uri(queryParameters: {
       'with': friendId, 'q': query.trim(), 'limit': limit.toString(),
+      if (before?['before'] != null) 'before': before!['before'].toString(),
+      if (before?['beforeId'] != null) 'beforeId': before!['beforeId'].toString(),
     }).query;
-    return _list((await request('GET', '/api/messages/search?$params'))['messages']);
+    return request('GET', '/api/messages/search?$params');
   }
 
   static Future<void> sendMessage(String receiverId, String body, {String? clientMessageId, String? replyToId}) async {
@@ -590,13 +592,15 @@ class Api {
   static Future<List<Map<String, dynamic>>> groupMessages(String groupId) async =>
       _list((await groupMessagesPage(groupId))['messages']);
 
-  static Future<List<Map<String, dynamic>>> searchGroupMessages(
-    String groupId, String query, {int limit = 30}
+  static Future<Map<String, dynamic>> searchGroupMessages(
+    String groupId, String query, {int limit = 30, Map<String, dynamic>? before}
   ) async {
     final params = Uri(queryParameters: {
       'q': query.trim(), 'limit': limit.toString(),
+      if (before?['before'] != null) 'before': before!['before'].toString(),
+      if (before?['beforeId'] != null) 'beforeId': before!['beforeId'].toString(),
     }).query;
-    return _list((await request('GET', '/api/groups/${Uri.encodeComponent(groupId)}/messages/search?$params'))['messages']);
+    return request('GET', '/api/groups/${Uri.encodeComponent(groupId)}/messages/search?$params');
   }
 
   static Future<void> sendGroupMessage(String groupId, String body, {String? replyToId}) async {
@@ -1402,20 +1406,29 @@ List<Map<String, dynamic>> searchConversationMessages(
 
 Future<void> showConversationSearch(
   BuildContext context,
-  Future<List<Map<String, dynamic>>> Function(String query) search,
+  Future<Map<String, dynamic>> Function(String query, Map<String, dynamic>? before) search,
 ) async {
   final controller = TextEditingController();
   List<Map<String, dynamic>> matches = [];
+  Map<String, dynamic>? nextCursor;
   bool searching = false;
   bool searched = false;
+  bool hasMore = false;
   String? searchError;
-  Future<void> runSearch(StateSetter refresh) async {
+  Future<void> runSearch(StateSetter refresh, {bool older = false}) async {
     final query = controller.text.trim();
-    if (query.length < 2 || searching) return;
+    if (query.length < 2 || searching || (older && !hasMore)) return;
     refresh(() { searching = true; searchError = null; });
     try {
-      final result = await search(query);
-      refresh(() { matches = result; searched = true; });
+      final result = await search(query, older ? nextCursor : null);
+      final found = _list(result['messages']);
+      refresh(() {
+        matches = older ? mergeMessages(matches, found) : found;
+        nextCursor = result['nextCursor'] is Map
+            ? Map<String, dynamic>.from(result['nextCursor']) : null;
+        hasMore = result['hasMore'] == true;
+        searched = true;
+      });
     } catch (error) {
       refresh(() { searchError = cleanError(error); searched = true; });
     } finally {
@@ -1448,7 +1461,7 @@ Future<void> showConversationSearch(
               ),
               const SizedBox(height: 10),
               Expanded(
-                child: searching
+                child: searching && matches.isEmpty
                     ? const Center(child: CircularProgressIndicator(color: gold))
                     : searchError != null
                         ? Center(child: Text(searchError!, textAlign: TextAlign.center))
@@ -1457,9 +1470,18 @@ Future<void> showConversationSearch(
                             : matches.isEmpty
                                 ? const Center(child: Text('لا توجد نتائج مطابقة'))
                                 : ListView.separated(
-                                    itemCount: matches.length,
+                                    itemCount: matches.length + (hasMore ? 1 : 0),
                                     separatorBuilder: (_, __) => const Divider(height: 1),
                                     itemBuilder: (context, index) {
+                                      if (index == matches.length) {
+                                        return Center(child: TextButton.icon(
+                                          onPressed: searching ? null : () => runSearch(refresh, older: true),
+                                          icon: searching
+                                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                                              : const Icon(Icons.history),
+                                          label: const Text('نتائج أقدم'),
+                                        ));
+                                      }
                                       final message = matches[index];
                                       return ListTile(
                                         dense: true,
@@ -4200,7 +4222,7 @@ class _ChatPageState extends State<ChatPage> {
           ),
           actions: [
             IconButton(
-              onPressed: () => showConversationSearch(context, (query) => Api.searchPrivateMessages(friendId, query)),
+              onPressed: () => showConversationSearch(context, (query) => (query, before) => Api.searchPrivateMessages(friendId, query, before: before)),
               icon: const Icon(Icons.search, color: gold),
               tooltip: 'البحث في المحادثة',
             ),
@@ -4688,7 +4710,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
           ]),
           actions: [
             IconButton(
-              onPressed: () => showConversationSearch(context, (query) => Api.searchGroupMessages(groupId, query)),
+              onPressed: () => showConversationSearch(context, (query) => (query, before) => Api.searchGroupMessages(groupId, query, before: before)),
               icon: const Icon(Icons.search, color: gold),
               tooltip: 'البحث في المحادثة',
             ),
