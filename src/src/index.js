@@ -1280,7 +1280,26 @@ export default {
                WHERE mine.user_id = ? AND theirs.user_id = ?
                LIMIT 1`
             ).bind(currentUser.sub, targetUserId).first();
-            if (!sharedGroup) return json({ error: "Profile photo access denied" }, 403);
+            if (!sharedGroup) {
+              // A discoverable public profile may be opened from search or matched
+              // phone contacts without a friendship or shared group. Keep private
+              // profiles protected by the same searchable preference as discovery.
+              await env.DB.prepare(`
+                CREATE TABLE IF NOT EXISTS user_privacy (
+                  user_id TEXT PRIMARY KEY,
+                  searchable INTEGER NOT NULL DEFAULT 1,
+                  read_receipts INTEGER NOT NULL DEFAULT 1,
+                  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+              `).run();
+              const privacy = await env.DB.prepare(
+                "SELECT searchable FROM user_privacy WHERE user_id = ?"
+              ).bind(targetUserId).first();
+              if (Number(privacy?.searchable ?? 1) !== 1) {
+                return json({ error: "Profile photo access denied" }, 403);
+              }
+            }
           }
         }
         const photo = await env.DB.prepare(
