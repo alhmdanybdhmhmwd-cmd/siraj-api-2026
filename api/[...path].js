@@ -25,7 +25,7 @@ module.exports = async (req, res) => {
       return res.status(413).json({ error: "File must be between 1 byte and 60 MB" });
     }
     if (isProfilePhotoUpload && Number.isFinite(declaredLength) && declaredLength > maxProfilePhotoBytes) {
-      return res.status(413).json({ error: "Profile photo must not exceed 5 MB" });
+      return res.status(413).json({ error: "Profile photo must not exceed 4 MiB" });
     }
 
     const chunks = [];
@@ -38,7 +38,7 @@ module.exports = async (req, res) => {
         return res.status(413).json({ error: "File must be between 1 byte and 60 MB" });
       }
       if (isProfilePhotoUpload && receivedBytes > maxProfilePhotoBytes) {
-        return res.status(413).json({ error: "Profile photo must not exceed 5 MB" });
+        return res.status(413).json({ error: "Profile photo must not exceed 4 MiB" });
       }
       chunks.push(buffer);
     }
