@@ -59,3 +59,16 @@ test("private invite codes are stable per account and do not add reward mechanic
   assert.ok(!worker.includes("referral_count"));
   assert.ok(!worker.includes("invite_threshold"));
 });
+
+test("private invite codes are validated and attached to the registering account", () => {
+  const start = worker.indexOf('path === "/api/register"');
+  const end = worker.indexOf("// Recover an account", start);
+  const route = worker.slice(start, end);
+  assert.ok(route.includes('body.inviteCode'));
+  assert.ok(route.includes('SELECT user_id FROM user_invite_codes WHERE invite_code = ?'));
+  assert.ok(route.includes("CREATE TABLE IF NOT EXISTS user_invites"));
+  assert.ok(route.includes("INSERT INTO user_invites (invitee_user_id, inviter_user_id)"));
+  assert.ok(route.includes("registrationStatements.push"));
+  assert.ok(!route.includes("referral_count"));
+  assert.ok(!route.includes("invite_threshold"));
+});
