@@ -19,7 +19,16 @@ The dedicated Cloudflare D1 test database has been created and verified.
 - The production `wrangler.toml` remains unchanged.
 
 ## Validation status
-The isolated database provisioning and separation checks passed. The migration workflow applies the repository migration set only to the test database; its result must be checked in GitHub Actions before considering the test schema initialized.
+- Isolated database provisioning: passed.
+- Database identity and production-separation verification: passed.
+- Test-only Wrangler configuration guard: passed in CI.
+- Migration `0001_recovery_codes.sql`: successfully applied to the isolated test database (4 SQL commands executed).
+- No migration was applied to production.
+
+## Remaining phase-2 checks
+- Runtime HTTP health probes against a deployed test Worker.
+- Flutter/Dart analysis and build validation; the current build environment does not have Flutter/Dart installed.
+- Do not deploy or merge to production as part of these checks.
 
 Required GitHub Actions settings:
 - Secret: `BARQ_CLOUDFLARE_API_TOKEN`
