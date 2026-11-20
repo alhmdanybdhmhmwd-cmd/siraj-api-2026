@@ -889,6 +889,20 @@ String newBarqMessageId() {
 }
 
 /// طابور محلي مشفر بواسطة flutter_secure_storage؛ لا يضم الرسائل المؤقتة.
+List<Map<String, dynamic>> barqOfflineItemsNotOnServerPage(
+  List<Map<String, dynamic>> queuedItems,
+  List<Map<String, dynamic>> serverMessages,
+) {
+  final serverIds = serverMessages
+      .map((item) => field(item, ['id', 'message_id']))
+      .where((id) => id.isNotEmpty)
+      .toSet();
+  if (serverIds.isEmpty) return queuedItems;
+  return queuedItems
+      .where((item) => !serverIds.contains(field(item, ['id', 'message_id'])))
+      .toList();
+}
+
 class BarqOfflineQueue {
   static const String _outboxKey = 'barq_offline_outbox_v1';
   static const String _inboxKey = 'barq_offline_inbox_v1';
@@ -940,12 +954,11 @@ class BarqOfflineQueue {
   }
 
   static Future<void> reconcile(List<Map<String, dynamic>> serverMessages) async {
-    final ids = serverMessages.map((item) => field(item, ['id'])).where((id) => id.isNotEmpty).toSet();
-    if (ids.isEmpty) return;
+    if (serverMessages.isEmpty) return;
     final outbox = await _read(_outboxKey);
     final inbox = await _read(_inboxKey);
-    await _write(_outboxKey, outbox.where((item) => !ids.contains(field(item, ['id']))).toList());
-    await _write(_inboxKey, inbox.where((item) => !ids.contains(field(item, ['id']))).toList());
+    await _write(_outboxKey, barqOfflineItemsNotOnServerPage(outbox, serverMessages));
+    await _write(_inboxKey, barqOfflineItemsNotOnServerPage(inbox, serverMessages));
   }
 
   static Future<void> syncOutbox() async {
@@ -5134,6 +5147,9 @@ class _ChatPageState extends State<ChatPage> {
     try {
       final page = await Api.messagesPage(friendId, before: olderMessageCursor);
       final older = Api._list(page['messages']);
+      // Older pages can contain messages already received over Nearby. Reconcile
+      // them too, or those inbox entries remain in secure storage indefinitely.
+      await BarqOfflineQueue.reconcile(older);
       if (mounted) {
         setState(() {
         messages = mergeMessages(older, messages);
