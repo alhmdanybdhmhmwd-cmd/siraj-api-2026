@@ -2687,7 +2687,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           },
           destinations: const [
             NavigationDestination(icon: Icon(Icons.chat_bubble_outline), label: 'المحادثات'),
-            NavigationDestination(icon: Icon(Icons.circle_outlined), label: 'الحالات'),
+            NavigationDestination(icon: Icon(Icons.circle_outlined), label: 'SPARK'),
             NavigationDestination(icon: Icon(Icons.people_outline), label: 'الأشخاص'),
             NavigationDestination(icon: Icon(Icons.groups_outlined), label: 'المجموعات'),
             NavigationDestination(icon: Icon(Icons.person_outline), label: 'حسابي'),
@@ -2703,7 +2703,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: panel,
-        title: const Text('نشر حالة نصية'),
+        title: const Text('النشر في SPARK'),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -2727,7 +2727,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 if (mounted) showMsg(context, cleanError(e));
               }
             },
-            child: const Text('نشر الحالة'),
+            child: const Text('نشر في SPARK'),
           ),
         ],
       ),
@@ -2744,7 +2744,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         children: [
           const Padding(
             padding: EdgeInsets.all(8),
-            child: Text('الحالات', style: TextStyle(color: gold, fontSize: 21, fontWeight: FontWeight.bold)),
+            child: Text('SPARK', style: TextStyle(color: gold, fontSize: 21, fontWeight: FontWeight.bold)),
           ),
           if (statuses.isEmpty)
             const Padding(
@@ -2754,7 +2754,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 SizedBox(height: 12),
                 Text('لا توجد حالات نشطة', style: TextStyle(color: gold, fontSize: 18)),
                 SizedBox(height: 6),
-                Text('انشر أول حالة أو اسحب للأسفل لتحديث الحالات.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60)),
+                Text('انشر أول لحظة في SPARK أو اسحب للأسفل للتحديث.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60)),
               ]),
             ),
           for (final status in statuses)
@@ -3312,7 +3312,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               title: const Text('رسائل المجموعات'), value: groupsEnabled,
               onChanged: saving ? null : (v) => setDialog(() => groupsEnabled = v)),
             SwitchListTile(contentPadding: EdgeInsets.zero, activeThumbColor: gold,
-              title: const Text('الحالات الجديدة'), value: statusesEnabled,
+              title: const Text('حالات SPARK الجديدة'), value: statusesEnabled,
               onChanged: saving ? null : (v) => setDialog(() => statusesEnabled = v)),
             const SizedBox(height: 8),
             const Text('هذه تفضيلات محفوظة في حسابك؛ وصول إشعارات الهاتف الفعلية يتطلب استكمال ربط خدمة الإرسال.', style: TextStyle(color: Colors.white60, fontSize: 12)),
@@ -3508,7 +3508,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           child: ListTile(
             leading: const Icon(Icons.notifications_outlined, color: gold),
             title: const Text('تفضيلات الإشعارات'),
-            subtitle: const Text('الرسائل الخاصة والمجموعات والحالات'),
+            subtitle: const Text('الرسائل الخاصة والمجموعات وSPARK'),
             trailing: const Icon(Icons.chevron_left),
             onTap: notificationSettingsDialog,
           ),
