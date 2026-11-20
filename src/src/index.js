@@ -1277,8 +1277,8 @@ export default {
           if (Number.isFinite(declaredLength) && declaredLength > maxPhotoBytes) {
             return json({ error: "Profile photo must not exceed 4 MiB" }, 413);
           }
-          const bytes = new Uint8Array(await request.arrayBuffer());
-          if (!bytes.length || bytes.length > maxPhotoBytes) {
+          const bytes = await readRequestBodyLimited(request, maxPhotoBytes);
+          if (!bytes || !bytes.length) {
             return json({ error: "Profile photo must be between 1 byte and 4 MiB" }, 413);
           }
           if (detectProfileImageType(bytes) !== contentType) {
@@ -2646,8 +2646,8 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         if (Number.isFinite(declaredLength) && declaredLength > maxMediaBytes) {
           return json({ error: "File must be between 1 byte and 60 MB" }, 413);
         }
-        const bytes = await request.arrayBuffer();
-        if (!bytes.byteLength || bytes.byteLength > maxMediaBytes) {
+        const bytes = await readRequestBodyLimited(request, maxMediaBytes);
+        if (!bytes || !bytes.byteLength) {
           return json({ error: "File must be between 1 byte and 60 MB" }, 413);
         }
         const suppliedName = safeFileName(request.headers.get("X-File-Name") || "attachment");
