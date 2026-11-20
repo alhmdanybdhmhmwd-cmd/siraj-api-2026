@@ -1,4 +1,5 @@
 name: BARQ isolated D1 test database
+# Provisioning is restricted to the dedicated test database name; production ID is guarded.
 
 on:
   workflow_dispatch:
