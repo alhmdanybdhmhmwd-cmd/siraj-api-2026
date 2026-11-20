@@ -1819,59 +1819,7 @@ test("group attachment upload persists group-scoped access without a private rec
 
 
 
-test("group attachment upload persists group-scoped D1 access before returning success", async () => {
-  const db = new FakeDB();
-  const originalPrepare = db.prepare.bind(db);
-  let savedAccess = null;
-  let savedGroupMessage = null;
-  db.prepare = sql => {
-    const statement = originalPrepare(sql);
-    const run = statement.run.bind(statement);
-    statement.run = async () => {
-      if (sql.includes("INSERT INTO media_access")) savedAccess = [...statement.params];
-      if (sql.includes("INSERT INTO group_messages")) savedGroupMessage = [...statement.params];
-      return run();
-    };
-    return statement;
-  };
-  const token = await worker.signToken(user, secret, 0);
-  const storageMethods = [];
-  globalThis.__fakeTigrisHandler = async (_url, options) => {
-    storageMethods.push(options.method);
-    return new Response(null, { status: 200 });
-  };
-  try {
-    const response = await worker.default.fetch(new Request("https://api.example.test/api/media", {
-      method: "POST",
-      headers: {
-        Authorization: "Bearer " + token,
-        "Content-Type": "application/pdf",
-        "X-Group-Id": "group-42",
-        "X-File-Name": "guide.pdf"
-      },
-      body: new Uint8Array([1, 2, 3, 4])
-    }), {
-      DB: db,
-      JWT_SECRET: secret,
-      TIGRIS_ACCESS_KEY_ID: "test-access",
-      TIGRIS_SECRET_ACCESS_KEY: "test-secret"
-    });
-    assert.equal(response.status, 201);
-    const result = await response.json();
-    assert.ok(savedAccess, "group upload must persist a D1 authorization row");
-    assert.deepEqual(savedAccess.slice(1, 7), [
-      user.id, null, "group-42", "guide.pdf", "application/pdf", savedAccess[6]
-    ]);
-    assert.equal(savedAccess[6], savedAccess[6]);
-    assert.ok(savedGroupMessage, "group attachment message must be persisted");
-    assert.equal(savedGroupMessage[1], "group-42");
-    assert.equal(savedGroupMessage[2], user.id);
-    assert.equal(result.attachment.fileName, "guide.pdf");
-    assert.deepEqual(storageMethods, ["PUT"]);
-  } finally {
-    delete globalThis.__fakeTigrisHandler;
-  }
-});
+
 
 test("expired attachment is denied and deleted before any media bytes are downloaded", async () => {
   const db = new FakeDB();
