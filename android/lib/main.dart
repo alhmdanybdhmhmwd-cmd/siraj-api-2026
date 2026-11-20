@@ -1029,6 +1029,73 @@ class BarqNearbyService {
   }
 }
 
+List<Map<String, dynamic>> searchConversationMessages(
+  Iterable<Map<String, dynamic>> items,
+  String query,
+) {
+  final needle = query.trim().toLowerCase();
+  if (needle.isEmpty) return const [];
+  return items.where((message) {
+    final body = field(message, ['body', 'content', 'message']).toLowerCase();
+    final sender = field(message, ['display_name', 'displayName', 'username']).toLowerCase();
+    return body.contains(needle) || sender.contains(needle);
+  }).toList();
+}
+
+Future<void> showConversationSearch(
+  BuildContext context,
+  List<Map<String, dynamic>> messages,
+) async {
+  final controller = TextEditingController();
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, refresh) {
+        final matches = searchConversationMessages(messages, controller.text);
+        return AlertDialog(
+          title: const Text('البحث في المحادثة'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 420,
+            child: Column(
+              children: [
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  onChanged: (_) => refresh(() {}),
+                  decoration: inputDecoration('ابحث في الرسائل المحمّلة', Icons.search),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: controller.text.trim().isEmpty
+                      ? const Center(child: Text('اكتب كلمة للبحث'))
+                      : matches.isEmpty
+                          ? const Center(child: Text('لا توجد نتائج مطابقة'))
+                          : ListView.separated(
+                              itemCount: matches.length,
+                              separatorBuilder: (_, __) => const Divider(height: 1),
+                              itemBuilder: (context, index) {
+                                final message = matches[index];
+                                final text = field(message, ['body', 'content', 'message']);
+                                return ListTile(
+                                  dense: true,
+                                  title: Text(text, maxLines: 3, overflow: TextOverflow.ellipsis),
+                                  subtitle: Text(_messageTime(field(message, ['created_at', 'createdAt']))),
+                                );
+                              },
+                            ),
+                ),
+              ],
+            ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق'))],
+        );
+      },
+    ),
+  );
+  controller.dispose();
+}
+
 List<Map<String, dynamic>> mergeMessages(
   Iterable<Map<String, dynamic>> first,
   Iterable<Map<String, dynamic>> second,
@@ -3738,7 +3805,19 @@ class _ChatPageState extends State<ChatPage> {
               ],
             ]),
           ),
-          actions: [IconButton(onPressed: loadMessages, icon: const Icon(Icons.refresh, color: gold))],
+          actions: [
+            IconButton(
+              onPressed: () => showConversationSearch(context, messages),
+              icon: const Icon(Icons.search, color: gold),
+              tooltip: 'البحث في المحادثة',
+            ),
+            IconButton(
+              onPressed: () => showConversationSearch(context, messages),
+              icon: const Icon(Icons.search, color: gold),
+              tooltip: 'البحث في المحادثة',
+            ),
+            IconButton(onPressed: loadMessages, icon: const Icon(Icons.refresh, color: gold)),
+          ],
         ),
         body: Column(
           children: [
