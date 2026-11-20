@@ -279,6 +279,40 @@ test("profile photo upload rejects mismatched image bytes before contacting stor
 });
 
 
+test("profile photo upload enforces the 4 MiB limit before storage", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  let storageCalled = false;
+  globalThis.__fakeTigrisHandler = async () => {
+    storageCalled = true;
+    return new Response(null, { status: 200 });
+  };
+  try {
+    const bytes = new Uint8Array(4 * 1024 * 1024 + 1);
+    bytes.set([0xff, 0xd8, 0xff]);
+    const response = await worker.default.fetch(new Request(
+      "https://api.example.test/api/profile/photo/me",
+      {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + token,
+          "Content-Type": "image/jpeg"
+        },
+        body: bytes
+      }
+    ), {
+      DB: db, JWT_SECRET: secret,
+      TIGRIS_ACCESS_KEY_ID: "test-access",
+      TIGRIS_SECRET_ACCESS_KEY: "test-secret"
+    });
+    assert.equal(response.status, 413);
+    assert.equal(storageCalled, false);
+    assert.match((await response.json()).error, /4 MiB/);
+  } finally {
+    delete globalThis.__fakeTigrisHandler;
+  }
+});
+
 test("profile photo reads deny non-friends before contacting private object storage", async () => {
   const db = new FakeDB();
   db.friendshipAllowed = false;
