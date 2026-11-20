@@ -53,6 +53,22 @@ test("ephemeral messages stay private and start a ten-second expiry on first rec
   assert.ok(!route.includes("sendSirajPush"), "ephemeral content must not trigger Firebase push");
 });
 
+test("speech transcription requires authentication, validates audio, rate-limits, and uses Workers AI without persistence", () => {
+  assert.ok(worker.includes('path === "/api/transcribe"'));
+  const start = worker.indexOf('path === "/api/transcribe"');
+  const end = worker.indexOf("// A single private invite code", start);
+  const route = worker.slice(start, end);
+  assert.ok(route.includes('env.AI.run("@cf/openai/whisper"'));
+  assert.ok(route.includes("maxTranscriptionBytes = 10 * 1024 * 1024"));
+  assert.ok(route.includes("transcription_rate_limits"));
+  assert.ok(route.includes("attempts") && route.includes("> 10"));
+  assert.ok(!route.includes("INSERT INTO messages"));
+  assert.ok(!route.includes("sendSirajPush"));
+  assert.ok(route.includes("return json({ text })"));
+  assert.ok(productionConfig.includes("[ai]") && productionConfig.includes('binding = "AI"'));
+  assert.ok(testConfig.includes("[ai]") && testConfig.includes('binding = "AI"'));
+});
+
 test("private invite codes are stable per account and do not add reward mechanics", () => {
   assert.ok(worker.includes('path === "/api/referrals"'));
   assert.ok(worker.includes("CREATE TABLE IF NOT EXISTS user_invite_codes"));
