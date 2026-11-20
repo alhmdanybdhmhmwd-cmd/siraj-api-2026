@@ -204,5 +204,71 @@ class RecoveryMigrationTests(unittest.TestCase):
         )
 
 
+    def test_message_reactions_and_pins_are_idempotent_and_scoped(self):
+        tables = {
+            row[0] for row in self.db.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+        indexes = {
+            row[0] for row in self.db.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'index'"
+            )
+        }
+        self.assertIn("message_reactions", tables)
+        self.assertIn("pinned_messages", tables)
+        self.assertIn("idx_message_reactions_message", indexes)
+        self.assertIn("idx_pinned_messages_conversation", indexes)
+
+        self.db.execute(
+            """INSERT INTO message_reactions
+               (scope_type, scope_id, message_id, user_id, emoji)
+               VALUES ('private', 'u1:u2', 'm1', 'u1', '❤️')"""
+        )
+        self.db.execute(
+            """INSERT OR IGNORE INTO message_reactions
+               (scope_type, scope_id, message_id, user_id, emoji)
+               VALUES ('private', 'u1:u2', 'm1', 'u1', '❤️')"""
+        )
+        self.db.execute(
+            """INSERT INTO message_reactions
+               (scope_type, scope_id, message_id, user_id, emoji)
+               VALUES ('private', 'u1:u2', 'm1', 'u2', '❤️')"""
+        )
+        self.assertEqual(
+            self.db.execute("SELECT COUNT(*) FROM message_reactions").fetchone()[0],
+            2,
+        )
+
+        self.db.execute(
+            """INSERT INTO pinned_messages
+               (scope_type, scope_id, message_id, pinned_by)
+               VALUES ('private', 'u1:u2', 'm1', 'u1')"""
+        )
+        self.db.execute(
+            """INSERT OR IGNORE INTO pinned_messages
+               (scope_type, scope_id, message_id, pinned_by)
+               VALUES ('private', 'u1:u2', 'm1', 'u1')"""
+        )
+        self.db.execute(
+            """INSERT INTO pinned_messages
+               (scope_type, scope_id, message_id, pinned_by)
+               VALUES ('private', 'u1:u2', 'm1', 'u2')"""
+        )
+        self.assertEqual(
+            self.db.execute("SELECT COUNT(*) FROM pinned_messages").fetchone()[0],
+            2,
+        )
+        self.db.execute(
+            """DELETE FROM pinned_messages
+               WHERE scope_type = 'private' AND scope_id = 'u1:u2'
+                 AND message_id = 'm1' AND pinned_by = 'u1'"""
+        )
+        self.assertEqual(
+            self.db.execute("SELECT pinned_by FROM pinned_messages").fetchall(),
+            [("u2",)],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
