@@ -243,7 +243,8 @@ test("proxy forwards authenticated POST requests for device-scoped logout", asyn
     assert.equal(forwarded.url, "https://siraj-api.alhmdanybdhmhmwd.workers.dev/api/logout");
     assert.equal(forwarded.method, "POST");
     assert.equal(forwarded.headers.Authorization, "Bearer device-session-token");
-    assert.equal(forwarded.body, undefined);
+    assert.equal(Buffer.isBuffer(forwarded.body), true);
+    assert.equal(forwarded.body.length, 0);
     assert.deepEqual(JSON.parse(res.body.toString()), { message: "تم تسجيل الخروج من هذا الجهاز." });
   } finally {
     globalThis.fetch = originalFetch;
