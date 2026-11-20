@@ -46,6 +46,9 @@ const int maxTranscriptionBytes = 2 * 1024 * 1024;
 
 bool isBarqTranscriptionSizeAllowed(int byteLength) =>
     byteLength > 0 && byteLength <= maxTranscriptionBytes;
+
+bool isBarqMessageTextAllowed(String value) =>
+    value.trim().isNotEmpty && value.trim().length <= 5000;
 const int proxyMediaThresholdBytes = 4 * 1024 * 1024;
 
 const storage = FlutterSecureStorage();
@@ -5149,7 +5152,7 @@ class _ChatPageState extends State<ChatPage> {
   Future<void> send() async {
     final text = controller.text.trim();
     if (text.isEmpty || sending) return;
-    if (text.length > 5000) {
+    if (!isBarqMessageTextAllowed(text)) {
       showMsg(context, 'الرسالة طويلة جدًا؛ الحد الأقصى 5000 حرف.');
       return;
     }
@@ -5702,6 +5705,10 @@ class _GroupChatPageState extends State<GroupChatPage> {
   Future<void> send() async {
     final body = controller.text.trim();
     if (body.isEmpty || sending) return;
+    if (!isBarqMessageTextAllowed(body)) {
+      showMsg(context, 'الرسالة طويلة جدًا؛ الحد الأقصى 5000 حرف.');
+      return;
+    }
     setState(() => sending = true);
     try {
       await Api.sendGroupMessage(groupId, body,
