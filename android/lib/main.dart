@@ -42,6 +42,10 @@ const String mediaWorkerBase = String.fromEnvironment(
   defaultValue: 'https://siraj-api.alhmdanybdhmhmwd.workers.dev',
 );
 const int maxAttachmentBytes = 60 * 1024 * 1024;
+const int maxTranscriptionBytes = 2 * 1024 * 1024;
+
+bool isBarqTranscriptionSizeAllowed(int byteLength) =>
+    byteLength > 0 && byteLength <= maxTranscriptionBytes;
 const int proxyMediaThresholdBytes = 4 * 1024 * 1024;
 
 const storage = FlutterSecureStorage();
@@ -741,6 +745,9 @@ class Api {
       throw Exception('هذا المرفق ليس تسجيلًا صوتيًا.');
     }
     final audioBytes = audioResponse.bodyBytes;
+    if (!isBarqTranscriptionSizeAllowed(audioBytes.length)) {
+      throw Exception('تحويل الصوت إلى نص متاح للتسجيلات حتى 2 ميغابايت.');
+    }
     final primaryTranscribeBase = audioBytes.length <= proxyMediaThresholdBytes
         ? apiBase : mediaWorkerBase;
     final fallbackTranscribeBase = primaryTranscribeBase == apiBase ? mediaWorkerBase : null;
