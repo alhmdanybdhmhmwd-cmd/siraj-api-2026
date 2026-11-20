@@ -11,13 +11,73 @@ class RecoveryMigrationTests(unittest.TestCase):
     def setUp(self):
         self.db = sqlite3.connect(":memory:")
         self.db.execute("PRAGMA foreign_keys = ON")
-        # The users table belongs to the existing application schema.
-        self.db.execute("CREATE TABLE users (id TEXT PRIMARY KEY)")
         for migration in MIGRATIONS:
             self.db.executescript(migration.read_text(encoding="utf-8"))
 
     def tearDown(self):
         self.db.close()
+
+
+    def test_preview_core_schema_matches_worker_contract(self):
+        columns = {
+            row[1] for row in self.db.execute("PRAGMA table_info(users)")
+        }
+        self.assertTrue({
+            "id", "username", "display_name", "password_hash",
+            "password_salt", "phone"
+        }.issubset(columns))
+
+        # Username uniqueness is enforced; phone intentionally is not, because
+        # equivalent local/international forms are normalized in Worker logic.
+        self.db.execute(
+            """INSERT INTO users
+               (id, username, display_name, password_hash, password_salt, phone)
+               VALUES ('u1', 'sparkuser', 'Spark User', 'hash', 'salt', '+967700000001')"""
+        )
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute(
+                """INSERT INTO users
+                   (id, username, display_name, password_hash, password_salt, phone)
+                   VALUES ('u2', 'SPARKUSER', 'Duplicate', 'hash', 'salt', '+967700000002')"""
+            )
+        self.db.execute(
+            """INSERT INTO users
+               (id, username, display_name, password_hash, password_salt, phone)
+               VALUES ('u3', 'otheruser', 'Other User', 'hash', 'salt', '+967700000001')"""
+        )
+
+        self.db.execute(
+            "INSERT INTO friendships (user_id, friend_id) VALUES ('u1', 'u3')"
+        )
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute(
+                "INSERT INTO friendships (user_id, friend_id) VALUES ('u1', 'u3')"
+            )
+
+        self.db.execute(
+            "INSERT INTO messages (id, sender_id, receiver_id, body) VALUES ('m1', 'u1', 'u3', 'hello')"
+        )
+        self.db.execute(
+            "UPDATE messages SET read_at = CURRENT_TIMESTAMP WHERE id = 'm1' AND read_at IS NULL"
+        )
+        row = self.db.execute(
+            "SELECT sender_id, receiver_id, body, created_at, read_at FROM messages WHERE id = 'm1'"
+        ).fetchone()
+        self.assertEqual(row[:3], ("u1", "u3", "hello"))
+        self.assertTrue(row[3])
+        self.assertTrue(row[4])
+
+        foreign_keys = {
+            (table, from_column, target_table)
+            for table in ("friendships", "messages")
+            for _, _, target_table, from_column, _, _, _, _ in self.db.execute(
+                f"PRAGMA foreign_key_list({table})"
+            )
+        }
+        self.assertIn(("friendships", "user_id", "users"), foreign_keys)
+        self.assertIn(("friendships", "friend_id", "users"), foreign_keys)
+        self.assertIn(("messages", "sender_id", "users"), foreign_keys)
+        self.assertIn(("messages", "receiver_id", "users"), foreign_keys)
 
     def test_migration_creates_recovery_tables_and_index(self):
         tables = {
