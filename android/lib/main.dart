@@ -8,6 +8,7 @@ import 'package:pdfrx/pdfrx.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:video_player/video_player.dart';
+import 'package:record/record.dart';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -3558,6 +3559,182 @@ String _mimeForExtension(String extension) {
   }
 }
 
+class BarqVoiceRecordButton extends StatefulWidget {
+  final bool disabled;
+  final Future<void> Function(List<int> bytes, Duration duration) onSend;
+
+  const BarqVoiceRecordButton({
+    super.key,
+    required this.disabled,
+    required this.onSend,
+  });
+
+  @override
+  State<BarqVoiceRecordButton> createState() => _BarqVoiceRecordButtonState();
+}
+
+class _BarqVoiceRecordButtonState extends State<BarqVoiceRecordButton> {
+  final AudioRecorder _recorder = AudioRecorder();
+  Stopwatch? _stopwatch;
+  Timer? _ticker;
+  String? _recordingPath;
+  Duration _elapsed = Duration.zero;
+  bool _recording = false;
+  bool _busy = false;
+
+  Future<void> _toggleRecording() async {
+    if (_busy) return;
+    if (_recording) {
+      await _finishRecording();
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      if (!await _recorder.hasPermission()) {
+        throw Exception('يلزم السماح لبرق باستخدام الميكروفون لتسجيل الرسائل الصوتية.');
+      }
+      if (!await _recorder.isEncoderSupported(AudioEncoder.aacLc)) {
+        throw Exception('تسجيل الصوت بهذا التنسيق غير مدعوم على هذا الجهاز.');
+      }
+      final path = Directory.systemTemp.path + Platform.pathSeparator +
+          'barq_voice_' + DateTime.now().microsecondsSinceEpoch.toString() + '.m4a';
+      await _recorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          bitRate: 64000,
+          sampleRate: 24000,
+          numChannels: 1,
+          autoGain: true,
+          echoCancel: true,
+          noiseSuppress: true,
+        ),
+        path: path,
+      );
+      _recordingPath = path;
+      _stopwatch = Stopwatch()..start();
+      _elapsed = Duration.zero;
+      _ticker?.cancel();
+      _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted && _stopwatch != null) {
+          setState(() => _elapsed = _stopwatch!.elapsed);
+        }
+      });
+      if (mounted) setState(() => _recording = true);
+    } catch (error) {
+      if (mounted) showMsg(context, cleanError(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _finishRecording() async {
+    setState(() {
+      _busy = true;
+      _recording = false;
+    });
+    _ticker?.cancel();
+    _ticker = null;
+    final duration = _stopwatch?.elapsed ?? _elapsed;
+    _stopwatch?.stop();
+    try {
+      final path = await _recorder.stop() ?? _recordingPath;
+      _recordingPath = null;
+      if (path == null || path.isEmpty) {
+        throw Exception('تعذر حفظ التسجيل الصوتي.');
+      }
+      final file = File(path);
+      if (!await file.exists()) throw Exception('ملف التسجيل الصوتي غير موجود.');
+      final bytes = await file.readAsBytes();
+      try { await file.delete(); } catch (_) {}
+      if (bytes.isEmpty) throw Exception('التسجيل الصوتي فارغ.');
+      if (bytes.length > maxAttachmentBytes) {
+        throw Exception('حجم التسجيل تجاوز الحد المسموح.');
+      }
+      await widget.onSend(bytes, duration);
+    } catch (error) {
+      if (mounted) showMsg(context, cleanError(error));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _elapsed = Duration.zero;
+          _stopwatch = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _cancelRecording() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    _ticker?.cancel();
+    _ticker = null;
+    _stopwatch?.stop();
+    try {
+      await _recorder.cancel();
+      final path = _recordingPath;
+      _recordingPath = null;
+      if (path != null) {
+        try {
+          final file = File(path);
+          if (await file.exists()) await file.delete();
+        } catch (_) {}
+      }
+    } catch (error) {
+      if (mounted) showMsg(context, cleanError(error));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _recording = false;
+          _busy = false;
+          _elapsed = Duration.zero;
+          _stopwatch = null;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    if (_recording) {
+      unawaited(_recorder.cancel());
+    }
+    unawaited(_recorder.dispose());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (_recording)
+          Padding(
+            padding: const EdgeInsets.only(left: 2),
+            child: Text(formatBarqMediaDuration(_elapsed),
+              style: const TextStyle(color: Colors.redAccent, fontSize: 10)),
+          ),
+        IconButton(
+          tooltip: _recording ? 'إنهاء التسجيل وإرساله' : 'تسجيل رسالة صوتية',
+          onPressed: _busy || (widget.disabled && !_recording) ? null : _toggleRecording,
+          icon: _busy
+              ? const SizedBox(width: 20, height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: gold))
+              : Icon(_recording ? Icons.stop_circle_rounded : Icons.mic_none_rounded,
+                  color: _recording ? Colors.redAccent : gold),
+        ),
+        if (_recording)
+          IconButton(
+            tooltip: 'إلغاء التسجيل',
+            onPressed: _busy ? null : _cancelRecording,
+            icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+          ),
+      ],
+    );
+  }
+}
+
 List<Uri> extractBarqLinks(String text) {
   final matches = RegExp(r'(?:https?://|www\.)[^\s<>()]+', caseSensitive: false).allMatches(text);
   final links = <Uri>[];
@@ -4740,6 +4917,25 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
+  Future<void> _sendVoiceRecording(List<int> bytes, Duration duration) async {
+    if (BarqFeatures.lightningMode || ephemeralMode || sending) return;
+    setState(() => sending = true);
+    try {
+      await Api.uploadAttachment(
+        bytes: bytes,
+        fileName: 'barq_voice_' + DateTime.now().millisecondsSinceEpoch.toString() + '.m4a',
+        contentType: 'audio/mp4',
+        recipientId: friendId,
+      );
+      await loadMessages();
+      if (mounted) showMsg(context, 'تم إرسال التسجيل الصوتي (' + formatBarqMediaDuration(duration) + ').');
+    } catch (error) {
+      if (mounted) showMsg(context, cleanError(error));
+    } finally {
+      if (mounted) setState(() => sending = false);
+    }
+  }
+
   Future<void> pickAndSendFile() async {
     if (BarqFeatures.lightningMode) {
       showMsg(context, 'وضع البرق مفعّل: إرسال الوسائط والملفات متوقف مؤقتًا.');
@@ -5000,6 +5196,8 @@ class _ChatPageState extends State<ChatPage> {
                         icon: const Icon(Icons.attach_file, color: gold),
                         tooltip: 'إرسال ملف أو صورة أو فيديو',
                       ),
+                    if (!BarqFeatures.lightningMode && !ephemeralMode)
+                      BarqVoiceRecordButton(disabled: sending, onSend: _sendVoiceRecording),
                     Expanded(
                       child: TextField(
                         controller: controller,
@@ -5191,6 +5389,25 @@ class _GroupChatPageState extends State<GroupChatPage> {
       await loadMessages();
     } catch (e) { if (mounted) showMsg(context, cleanError(e)); }
     finally { if (mounted) setState(() => sending = false); }
+  }
+
+  Future<void> _sendVoiceRecording(List<int> bytes, Duration duration) async {
+    if (BarqFeatures.lightningMode || sending) return;
+    setState(() => sending = true);
+    try {
+      await Api.uploadAttachment(
+        bytes: bytes,
+        fileName: 'barq_voice_' + DateTime.now().millisecondsSinceEpoch.toString() + '.m4a',
+        contentType: 'audio/mp4',
+        groupId: groupId,
+      );
+      await loadMessages();
+      if (mounted) showMsg(context, 'تم إرسال التسجيل الصوتي (' + formatBarqMediaDuration(duration) + ') للمجموعة.');
+    } catch (error) {
+      if (mounted) showMsg(context, cleanError(error));
+    } finally {
+      if (mounted) setState(() => sending = false);
+    }
   }
 
   Future<void> pickAndSendFile() async {
@@ -5459,6 +5676,8 @@ class _GroupChatPageState extends State<GroupChatPage> {
               if (!BarqFeatures.lightningMode)
                 IconButton(onPressed: sending ? null : pickAndSendFile,
                   icon: const Icon(Icons.attach_file, color: gold), tooltip: 'إرسال ملف أو صورة أو فيديو'),
+              if (!BarqFeatures.lightningMode)
+                BarqVoiceRecordButton(disabled: sending, onSend: _sendVoiceRecording),
               Expanded(child: TextField(controller: controller, minLines: 1, maxLines: 4,
                 decoration: inputDecoration('اكتب رسالة للمجموعة...', Icons.message).copyWith(
                   helperText: replyToMessage == null ? null : 'الرد على: ${messageReplyPreview(replyToMessage!)}',
