@@ -1067,6 +1067,28 @@ String field(Map<String, dynamic> data, List<String> keys, [String fallback = ''
   return fallback;
 }
 
+Widget personAvatar(Map<String, dynamic> person, {double radius = 22}) {
+  final user = person['user'] is Map
+      ? Map<String, dynamic>.from(person['user'])
+      : person;
+  final name = field(user, ['displayName', 'display_name', 'name', 'username'], '؟');
+  final photoUrl = field(user, ['photoUrl', 'photo_url']);
+  final photoUpdatedAt = field(user, ['photoUpdatedAt', 'photo_updated_at']);
+  final imageUrl = photoUrl.isEmpty
+      ? ''
+      : '$apiBase$photoUrl?v=${Uri.encodeComponent(photoUpdatedAt)}';
+  return CircleAvatar(
+    radius: radius,
+    backgroundColor: const Color(0xFF46391F),
+    backgroundImage: imageUrl.isNotEmpty
+        ? NetworkImage(imageUrl, headers: {'Authorization': 'Bearer ${Api.token}'})
+        : null,
+    child: imageUrl.isEmpty
+        ? Text(name.characters.first, style: TextStyle(color: gold, fontSize: radius * 0.85))
+        : null,
+  );
+}
+
 class StartupPage extends StatefulWidget {
   const StartupPage({super.key});
 
@@ -1981,7 +2003,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 onTap: () => Navigator.push(context, MaterialPageRoute(
                   builder: (_) => PublicProfilePage(person: friend, currentUserId: myId),
                 )),
-                child: const CircleAvatar(child: Icon(Icons.person, color: gold)),
+                child: personAvatar(friend),
               ),
               title: InkWell(
                 onTap: () => Navigator.push(context, MaterialPageRoute(
@@ -2077,7 +2099,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 onTap: () => Navigator.push(context, MaterialPageRoute(
                   builder: (_) => PublicProfilePage(person: person, currentUserId: myId),
                 )),
-                child: const CircleAvatar(child: Icon(Icons.person, color: gold)),
+                child: personAvatar(person),
               ),
               title: InkWell(
                 onTap: () => Navigator.push(context, MaterialPageRoute(
@@ -3434,11 +3456,7 @@ class _ChatPageState extends State<ChatPage> {
               builder: (_) => PublicProfilePage(person: widget.friend, currentUserId: widget.currentUserId),
             )),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              CircleAvatar(
-                radius: 17,
-                backgroundColor: const Color(0xFF46391F),
-                child: Text(name.characters.first, style: const TextStyle(color: gold, fontSize: 14)),
-              ),
+              personAvatar(widget.friend, radius: 17),
               const SizedBox(width: 9),
               Flexible(child: Text(name, overflow: TextOverflow.ellipsis)),
               if (BarqFeatures.lightningMode) ...[
