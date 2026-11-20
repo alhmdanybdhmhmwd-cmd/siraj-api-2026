@@ -29,7 +29,7 @@ The Worker contains route handlers for:
 
 1. **Ephemeral messages:** Android calls `GET|POST /api/ephemeral-messages`; no matching handler exists in this Worker source revision. Do not present ephemeral messaging as server-integrated on this revision.
 2. **Referral link:** Android calls `GET /api/referrals`; no matching handler was found in this Worker source revision. Keep the product requirement to a private invite link only; do not add referral counts, badges, rewards, or friend thresholds.
-3. **Profile photo:** the Android profile update method currently sends display name and phone only. This review found no corresponding Android profile-photo upload method in that API client. Profile image upload/display remains unverified.
+3. **Voice transcription:** Android posts audio to `/api/transcribe`; no matching handler exists in this Worker revision. The feature is not server-integrated on this branch.\n4. **Profile photo:** the Android profile update method currently sends display name and phone only. This review found no corresponding Android profile-photo upload method in that API client. Profile image upload/display remains unverified.
 
 ## Safety and verification limits
 
