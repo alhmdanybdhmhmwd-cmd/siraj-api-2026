@@ -24,7 +24,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/barq-local-d1"
-          npm ci
+          npm install --no-audit --no-fund
           npx --yes wrangler@4 dev --config wrangler.test.toml --local --ip 127.0.0.1 --port 8787 --var JWT_SECRET:barq-local-runtime-test-only-secret --persist-to "$RUNNER_TEMP/barq-local-d1" > "$RUNNER_TEMP/barq-worker.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/barq-worker.pid"
           sleep 2
