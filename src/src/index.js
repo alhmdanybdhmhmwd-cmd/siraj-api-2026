@@ -289,6 +289,7 @@ function cleanUser(user) {
 async function readJsonRequestLimited(request, maxBytes = 256 * 1024) {
   const declaredLength = Number(request.headers.get("Content-Length"));
   if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    try { await request.body?.cancel(); } catch (_) {}
     const error = new Error("JSON request body is too large");
     error.status = 413;
     throw error;
