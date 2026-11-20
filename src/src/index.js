@@ -540,6 +540,17 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
     throw new Error("Media storage credentials are not configured");
   }
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS media_expirations (object_key TEXT PRIMARY KEY, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS media_access (
+      object_key TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL,
+      recipient_id TEXT,
+      group_id TEXT,
+      file_name TEXT NOT NULL,
+      content_type TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    )
+  `).run();
   const cutoff = new Date(now).toISOString();
   const expired = await env.DB.prepare(
     "SELECT object_key FROM media_expirations WHERE expires_at <= ? ORDER BY expires_at ASC LIMIT 100"
@@ -565,6 +576,7 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
     try {
       const response = await storage.fetch(storageUrl, { method: "DELETE" });
       if (response.ok || response.status === 404) {
+        await env.DB.prepare("DELETE FROM media_access WHERE object_key = ?").bind(key).run();
         await env.DB.prepare(
           "DELETE FROM media_expirations WHERE object_key = ? AND expires_at <= ?"
         ).bind(key, cutoff).run();
@@ -2643,6 +2655,17 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         const key = currentUser.sub + "/" + id;
         const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
         await env.DB.prepare("CREATE TABLE IF NOT EXISTS media_expirations (object_key TEXT PRIMARY KEY, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS media_access (
+            object_key TEXT PRIMARY KEY,
+            owner_id TEXT NOT NULL,
+            recipient_id TEXT,
+            group_id TEXT,
+            file_name TEXT NOT NULL,
+            content_type TEXT NOT NULL,
+            expires_at TEXT NOT NULL
+          )
+        `).run();
         const bucket = env.TIGRIS_BUCKET || "siraj-media";
         const objectPath = key.split("/").map(encodeURIComponent).join("/");
         const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
@@ -2681,6 +2704,9 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           await env.DB.prepare(
             "INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?)"
           ).bind(key, expiresAt).run();
+          await env.DB.prepare(
+            "INSERT INTO media_access (object_key, owner_id, recipient_id, group_id, file_name, content_type, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+          ).bind(key, currentUser.sub, recipientId || null, groupId || null, suppliedName, contentType, expiresAt).run();
           if (recipientId) {
             await env.DB.prepare(
               "INSERT INTO messages (id, sender_id, receiver_id, body) VALUES (?, ?, ?, ?)"
@@ -2694,6 +2720,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           // Avoid leaving an unreachable object or expiration record behind if persistence fails.
           try { await storage.fetch(storageUrl, { method: "DELETE" }); } catch (_) {}
           try {
+            await env.DB.prepare("DELETE FROM media_access WHERE object_key = ?").bind(key).run();
             await env.DB.prepare("DELETE FROM media_expirations WHERE object_key = ?").bind(key).run();
           } catch (_) {}
           throw error;
@@ -2752,36 +2779,72 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           region: "auto",
           retries: 2
         });
-        // Read only object metadata first; never download bytes before authorization.
+        // New uploads have an authorization record in D1, allowing access checks
+        // before any request is made to object storage. Legacy objects fall back
+        // to their existing signed metadata until they naturally expire.
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS media_access (
+            object_key TEXT PRIMARY KEY,
+            owner_id TEXT NOT NULL,
+            recipient_id TEXT,
+            group_id TEXT,
+            file_name TEXT NOT NULL,
+            content_type TEXT NOT NULL,
+            expires_at TEXT NOT NULL
+          )
+        `).run();
+        const accessRow = await env.DB.prepare(
+          "SELECT owner_id, recipient_id, group_id, file_name, content_type, expires_at FROM media_access WHERE object_key = ?"
+        ).bind(key).first();
+        let permitted = false;
+        if (accessRow) {
+          permitted = accessRow.owner_id === currentUser.sub;
+          if (!permitted && accessRow.recipient_id === currentUser.sub && accessRow.owner_id) {
+            const friendship = await env.DB.prepare(
+              "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
+            ).bind(currentUser.sub, accessRow.owner_id).first();
+            permitted = !!friendship;
+          }
+          if (!permitted && accessRow.group_id) {
+            const member = await env.DB.prepare(
+              "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
+            ).bind(accessRow.group_id, currentUser.sub).first();
+            permitted = !!member;
+          }
+          if (!permitted) return json({ error: "Attachment access denied" }, 403);
+        }
         const headResponse = await storage.fetch(storageUrl, { method: "HEAD" });
         if (headResponse.status === 404) return json({ error: "Attachment not found" }, 404);
         if (!headResponse.ok) return json({ error: "Media storage lookup failed", storageStatus: headResponse.status }, 502);
-        const ownerId = headResponse.headers.get("x-amz-meta-ownerid") || "";
-        const recipientId = headResponse.headers.get("x-amz-meta-recipientid") || "";
-        const groupId = headResponse.headers.get("x-amz-meta-groupid") || "";
-        let permitted = ownerId === currentUser.sub;
-        if (!permitted && recipientId === currentUser.sub && ownerId) {
-          const friendship = await env.DB.prepare(
-            "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
-          ).bind(currentUser.sub, ownerId).first();
-          permitted = !!friendship;
+        if (!accessRow) {
+          const ownerId = headResponse.headers.get("x-amz-meta-ownerid") || "";
+          const recipientId = headResponse.headers.get("x-amz-meta-recipientid") || "";
+          const groupId = headResponse.headers.get("x-amz-meta-groupid") || "";
+          permitted = ownerId === currentUser.sub;
+          if (!permitted && recipientId === currentUser.sub && ownerId) {
+            const friendship = await env.DB.prepare(
+              "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
+            ).bind(currentUser.sub, ownerId).first();
+            permitted = !!friendship;
+          }
+          if (!permitted && groupId) {
+            const member = await env.DB.prepare(
+              "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
+            ).bind(groupId, currentUser.sub).first();
+            permitted = !!member;
+          }
+          if (!permitted) return json({ error: "Attachment access denied" }, 403);
         }
-        if (!permitted && groupId) {
-          const member = await env.DB.prepare(
-            "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
-          ).bind(groupId, currentUser.sub).first();
-          permitted = !!member;
-        }
-        if (!permitted) return json({ error: "Attachment access denied" }, 403);
         // Check expiry only after authorization so an unrelated account cannot
         // trigger deletion of another user's object by guessing its identifier.
-        const expiresAt = headResponse.headers.get("x-amz-meta-expiresat");
+        const expiresAt = accessRow?.expires_at || headResponse.headers.get("x-amz-meta-expiresat");
         if (expiresAt && Number.isFinite(Date.parse(expiresAt)) && Date.parse(expiresAt) <= Date.now()) {
           try {
             const deletion = await storage.fetch(storageUrl, { method: "DELETE" });
             // Keep the expiration row when storage deletion fails so the scheduled
             // cleanup can retry instead of permanently orphaning the object.
             if (deletion.ok || deletion.status === 404) {
+              await env.DB.prepare("DELETE FROM media_access WHERE object_key = ?").bind(key).run();
               await env.DB.prepare("DELETE FROM media_expirations WHERE object_key = ? AND expires_at <= ?")
                 .bind(key, new Date().toISOString()).run();
             } else {
@@ -2796,8 +2859,9 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         if (storageResponse.status === 404) return json({ error: "Attachment not found" }, 404);
         if (!storageResponse.ok) return json({ error: "Media storage download failed", storageStatus: storageResponse.status }, 502);
         const headers = new Headers(corsHeaders);
-        headers.set("Content-Type", headResponse.headers.get("content-type") || "application/octet-stream");
-        const encodedName = headResponse.headers.get("x-amz-meta-filename") || "attachment";
+        headers.set("Content-Type", headResponse.headers.get("content-type") || accessRow?.content_type || "application/octet-stream");
+        const encodedName = headResponse.headers.get("x-amz-meta-filename") ||
+          (accessRow?.file_name ? encodeURIComponent(accessRow.file_name) : "attachment");
         let fileName = "attachment";
         try { fileName = decodeURIComponent(encodedName); } catch (_) { fileName = encodedName; }
         headers.set("Content-Disposition", "attachment; filename*=UTF-8''" + encodeURIComponent(safeFileName(fileName)));
