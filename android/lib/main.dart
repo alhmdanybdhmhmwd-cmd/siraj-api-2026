@@ -2936,7 +2936,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             children: [
               const ListTile(title: Text('مشاهدو SPARK', style: TextStyle(color: gold))),
               if (viewers.isEmpty)
-                const ListTile(title: Text('لم يشاهدها أحد بعد', textColor: Colors.white60)),
+                const ListTile(title: Text('لم يشاهدها أحد بعد', style: TextStyle(color: Colors.white60))),
               for (final viewer in viewers)
                 ListTile(
                   leading: const CircleAvatar(child: Icon(Icons.person)),
