@@ -1819,6 +1819,7 @@ export default {
             reply_to_id TEXT,
             reply_to_body TEXT,
             reply_to_sender_id TEXT,
+            edited_at TEXT,
             FOREIGN KEY (group_id) REFERENCES chat_groups(id) ON DELETE CASCADE,
             FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
           )
@@ -1902,7 +1903,7 @@ export default {
 
             // Group members may delete only messages they authored.
       const groupMessageActionMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/([^/]+)$/);
-      if (method === "DELETE" && groupMessageActionMatch) {
+      if ((method === "DELETE" || method === "PATCH") && groupMessageActionMatch) {
         const groupId = groupMessageActionMatch[1];
         const messageId = groupMessageActionMatch[2];
         const member = await env.DB.prepare(
@@ -1912,7 +1913,16 @@ export default {
         const owned = await env.DB.prepare(
           "SELECT id FROM group_messages WHERE id = ? AND group_id = ? AND sender_id = ?"
         ).bind(messageId, groupId, currentUser.sub).first();
-        if (!owned) return json({ error: "Message not found or cannot be deleted" }, 404);
+        if (!owned) return json({ error: "Message not found or cannot be changed" }, 404);
+        if (method === "PATCH") {
+          const body = await request.json();
+          const message = String(body.body || "").trim();
+          if (!message || message.length > 5000) return json({ error: "Invalid message" }, 400);
+          await env.DB.prepare(
+            "UPDATE group_messages SET body = ?, edited_at = CURRENT_TIMESTAMP WHERE id = ? AND group_id = ? AND sender_id = ?"
+          ).bind(message, messageId, groupId, currentUser.sub).run();
+          return json({ message: "Message updated", id: messageId, body: message, editedAt: true });
+        }
         await env.DB.prepare(
           "DELETE FROM group_messages WHERE id = ? AND group_id = ? AND sender_id = ?"
         ).bind(messageId, groupId, currentUser.sub).run();
@@ -2105,12 +2115,21 @@ const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
 
       // A sender may delete only their own private message.
       const privateMessageActionMatch = path.match(/^\/api\/messages\/([^/]+)$/);
-      if (method === "DELETE" && privateMessageActionMatch) {
+      if ((method === "DELETE" || method === "PATCH") && privateMessageActionMatch) {
         const messageId = privateMessageActionMatch[1];
         const owned = await env.DB.prepare(
           "SELECT id FROM messages WHERE id = ? AND sender_id = ?"
         ).bind(messageId, currentUser.sub).first();
-        if (!owned) return json({ error: "Message not found or cannot be deleted" }, 404);
+        if (!owned) return json({ error: "Message not found or cannot be changed" }, 404);
+        if (method === "PATCH") {
+          const body = await request.json();
+          const message = String(body.body || "").trim();
+          if (!message || message.length > 5000) return json({ error: "Invalid message" }, 400);
+          await env.DB.prepare(
+            "UPDATE messages SET body = ?, edited_at = CURRENT_TIMESTAMP WHERE id = ? AND sender_id = ?"
+          ).bind(message, messageId, currentUser.sub).run();
+          return json({ message: "Message updated", id: messageId, body: message, editedAt: true });
+        }
         await env.DB.prepare(
           "DELETE FROM messages WHERE id = ? AND sender_id = ?"
         ).bind(messageId, currentUser.sub).run();
