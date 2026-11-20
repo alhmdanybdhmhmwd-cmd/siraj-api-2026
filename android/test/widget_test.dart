@@ -9,6 +9,9 @@ void main() {
     expect(normalizeBarqRegistrationPhone('٠٧٧٠٠٠٠٠٠٠', '+967'), '+967770000000');
     expect(normalizeBarqRegistrationPhone('0770000000', '+967'), '+967770000000');
     expect(normalizeBarqRegistrationPhone('+447911123456', '+967'), '+447911123456');
+    expect(normalizeBarqRegistrationPhone(' +44 7911 123456 ', '+967'), '+447911123456');
+    expect(normalizeBarqRegistrationPhone(' 00 44 7911 123456 ', '+967'), '+447911123456');
+    expect(normalizeBarqRegistrationPhone(' ٠٧٧٠٠٠٠٠٠٠ ', '+967'), '+967770000000');
   });
 
   test('message merge deduplicates by id and keeps chronological order', () {
