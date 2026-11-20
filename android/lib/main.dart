@@ -624,6 +624,14 @@ class Api {
     await request('DELETE', '/api/groups/$groupId/members/$userId');
   }
 
+  static Future<void> transferGroupOwnership(String groupId, String userId) async {
+    await request(
+      'POST',
+      '/api/groups/$groupId/owner',
+      body: {'userId': userId},
+    );
+  }
+
   static Future<List<Map<String, dynamic>>> groupMembers(String groupId) async =>
       _list((await request('GET', '/api/groups/$groupId/members'))['members']);
 
@@ -3027,8 +3035,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               subtitle: Text('${field(group, ['description'], 'مجموعة برق')} • ${field(group, ['member_count'], '1')} أعضاء'),
               trailing: const Icon(Icons.chevron_left),
               onTap: () => Navigator.push(context, MaterialPageRoute(
-                builder: (_) => GroupChatPage(group: group, currentUserId: myId,
-                  onAddMember: () => addMemberDialog(group)))),
+                builder: (_) => GroupChatPage(
+                  group: group,
+                  currentUserId: myId,
+                  onAddMember: () => addMemberDialog(group),
+                  onGroupChanged: refreshAll,
+                ))),
             )),
         ],
       ),
@@ -5618,7 +5630,14 @@ class GroupChatPage extends StatefulWidget {
   final Map<String, dynamic> group;
   final String currentUserId;
   final VoidCallback onAddMember;
-  const GroupChatPage({super.key, required this.group, required this.currentUserId, required this.onAddMember});
+  final Future<void> Function() onGroupChanged;
+  const GroupChatPage({
+    super.key,
+    required this.group,
+    required this.currentUserId,
+    required this.onAddMember,
+    required this.onGroupChanged,
+  });
 
   @override
   State<GroupChatPage> createState() => _GroupChatPageState();
