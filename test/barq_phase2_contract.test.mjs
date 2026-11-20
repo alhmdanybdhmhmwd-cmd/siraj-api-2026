@@ -408,6 +408,10 @@ test("Android SPARK media flow supports authenticated upload, caption, image/vid
 });
 
 
+test("SPARK media upload metadata headers are allowed by Worker CORS", () => {
+  assert.ok(worker.includes("X-Status-Caption, X-Status-Id"));
+});
+
 test("SPARK stories can group multiple media objects under one owner-controlled status id", () => {
   const uploadStart = worker.indexOf('if (method === "POST" && path === "/api/statuses/media")');
   const uploadEnd = worker.indexOf("// Publish a 24-hour text status", uploadStart);
