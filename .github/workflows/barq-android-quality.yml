@@ -6,6 +6,7 @@ on:
     branches: ["barq/phase-2-android-ci-2026-11-20"]
     paths:
       - "android/**"
+      - "android/test/**"
       - "BARQ_PHASE_2_ANDROID_GITHUB_READY.zip"
       - ".github/workflows/barq-android-quality.yml"
 
