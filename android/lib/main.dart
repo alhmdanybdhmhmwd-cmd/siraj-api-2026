@@ -5283,14 +5283,14 @@ class _ChatPageState extends State<ChatPage> {
                 ),
                 BarqConversationTool(
                   icon: Icons.push_pin_outlined,
-                  title: 'الرسائل المثبتة (' + messages.where((message) => message['is_pinned'] == true).length.toString() + ')',
+                  title: 'الرسائل المثبتة (${messages.where((message) => message['is_pinned'] == true).length})',
                   subtitle: 'عرض المثبتة ضمن الرسائل المحمّلة',
                   onTap: () => showBarqMessageCollectionDialog(context,
                     title: 'الرسائل المثبتة', messages: messages, attachmentsOnly: false),
                 ),
                 BarqConversationTool(
                   icon: Icons.perm_media_outlined,
-                  title: 'الوسائط والملفات (' + messages.where((message) => _attachmentData(message) != null).length.toString() + ')',
+                  title: 'الوسائط والملفات (${messages.where((message) => _attachmentData(message) != null).length})',
                   subtitle: 'عرض المرفقات ضمن الرسائل المحمّلة',
                   onTap: () => showBarqMessageCollectionDialog(context,
                     title: 'الوسائط والملفات', messages: messages, attachmentsOnly: true),
@@ -5824,14 +5824,14 @@ class _GroupChatPageState extends State<GroupChatPage> {
                 ),
                 BarqConversationTool(
                   icon: Icons.push_pin_outlined,
-                  title: 'الرسائل المثبتة (' + messages.where((message) => message['is_pinned'] == true).length.toString() + ')',
+                  title: 'الرسائل المثبتة (${messages.where((message) => message['is_pinned'] == true).length})',
                   subtitle: 'عرض المثبتة ضمن الرسائل المحمّلة',
                   onTap: () => showBarqMessageCollectionDialog(context,
                     title: 'الرسائل المثبتة', messages: messages, attachmentsOnly: false),
                 ),
                 BarqConversationTool(
                   icon: Icons.perm_media_outlined,
-                  title: 'الوسائط والملفات (' + messages.where((message) => _attachmentData(message) != null).length.toString() + ')',
+                  title: 'الوسائط والملفات (${messages.where((message) => _attachmentData(message) != null).length})',
                   subtitle: 'عرض المرفقات ضمن الرسائل المحمّلة',
                   onTap: () => showBarqMessageCollectionDialog(context,
                     title: 'الوسائط والملفات', messages: messages, attachmentsOnly: true),
