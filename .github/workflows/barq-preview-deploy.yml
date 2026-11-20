@@ -47,14 +47,22 @@ jobs:
           assert test["d1_databases"][0]["database_id"] == "5bfada32-4f9b-4edb-85dd-3b3b30ab73b0"
           assert test["d1_databases"][0]["database_id"] != prod["d1_databases"][0]["database_id"]
           assert test["d1_databases"][0]["database_id"] != "0db93afd-4bf5-4423-9e25-7a2f4f4bdbe0"
+          assert test["vars"]["TIGRIS_BUCKET"] == "barq-preview-media"
+          assert test["vars"]["TIGRIS_BUCKET"] != prod["vars"]["TIGRIS_BUCKET"]
           assert "routes" not in test
-          assert "workers_dev" in test and test["workers_dev"] is True
+          assert test["workers_dev"] is True
           assert test["name"] != prod["name"]
-          print("Preview target guard passed: dedicated Worker + isolated D1, no production routes.")
+          print("Preview target guard passed: dedicated Worker + isolated D1/media namespace, no production routes.")
           PY
           npx --yes wrangler@4 whoami
       - name: Deploy isolated Preview Worker
-        run: npx --yes wrangler@4 deploy --config wrangler.test.toml
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 deploy --config wrangler.test.toml 2>&1 | tee deploy.log
+          URL="$(grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' deploy.log | head -n 1 || true)"
+          test -n "$URL"
+          echo "BARQ_PREVIEW_URL=$URL" >> "$GITHUB_ENV"
       - name: Install Preview-only secrets
         shell: bash
         run: |
@@ -66,9 +74,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          URL="https://barq-api-phase2-test.${CLOUDFLARE_ACCOUNT_ID}.workers.dev"
-          curl --connect-timeout 5 --max-time 15 --silent --show-error --fail "$URL/health/live" > live.json
-          curl --connect-timeout 5 --max-time 15 --silent --show-error --fail "$URL/health/ready" > ready.json
+          curl --connect-timeout 5 --max-time 15 --silent --show-error --fail "$BARQ_PREVIEW_URL/health/live" > live.json
+          curl --connect-timeout 5 --max-time 15 --silent --show-error --fail "$BARQ_PREVIEW_URL/health/ready" > ready.json
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
           const live = JSON.parse(fs.readFileSync('live.json', 'utf8'));
@@ -77,4 +84,4 @@ jobs:
           if (ready.status !== 'ready' || ready.service !== 'barq-api') throw new Error('Preview D1 readiness verification failed');
           console.log('Isolated Preview Worker is live and its test D1 is ready.');
           NODE
-          echo "Preview Worker URL: $URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "Preview Worker URL: $BARQ_PREVIEW_URL" >> "$GITHUB_STEP_SUMMARY"
