@@ -2921,21 +2921,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final media = rawMedia is List
         ? rawMedia.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList()
         : <Map<String, dynamic>>[];
-    if (media.isEmpty) {
-      showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: panel,
-          title: Text(field(status, ['displayName', 'display_name', 'username'], 'مستخدم برق')),
-          content: Text(field(status, ['content'])),
-        ),
-      );
-      return;
-    }
     Navigator.push<void>(
       context,
       MaterialPageRoute(
         builder: (_) => SparkMediaViewer(
+          statusId: field(status, ['id']),
           media: media,
           author: field(status, ['displayName', 'display_name', 'username'], 'مستخدم برق'),
           caption: field(status, ['content']),
@@ -5845,58 +5835,162 @@ class _ChatPageState extends State<ChatPage> {
 }
 
 
-class SparkMediaViewer extends StatelessWidget {
+class SparkMediaViewer extends StatefulWidget {
+  final String statusId;
   final List<Map<String, dynamic>> media;
   final String author;
   final String caption;
-  const SparkMediaViewer({super.key, required this.media, required this.author, required this.caption});
+  const SparkMediaViewer({super.key, required this.statusId, required this.media, required this.author, required this.caption});
+
+  @override
+  State<SparkMediaViewer> createState() => _SparkMediaViewerState();
+}
+
+class _SparkMediaViewerState extends State<SparkMediaViewer> {
+  final TextEditingController _replyController = TextEditingController();
+  List<Map<String, dynamic>> _replies = [];
+  bool _loadingReplies = true;
+  bool _sendingReply = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReplies();
+  }
+
+  Future<void> _loadReplies() async {
+    try {
+      final replies = await Api.sparkReplies(widget.statusId);
+      if (mounted) setState(() { _replies = replies; _loadingReplies = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loadingReplies = false);
+    }
+  }
+
+  Future<void> _react(String emoji) async {
+    try {
+      await Api.reactSparkStatus(widget.statusId, emoji);
+      if (mounted) showMsg(context, 'تم إرسال تفاعلك.');
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    }
+  }
+
+  Future<void> _sendReply() async {
+    final value = _replyController.text.trim();
+    if (value.isEmpty || _sendingReply) return;
+    setState(() => _sendingReply = true);
+    try {
+      await Api.replyToSpark(widget.statusId, value);
+      _replyController.clear();
+      await _loadReplies();
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => _sendingReply = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _replyController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final headers = <String, String>{if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'};
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(backgroundColor: Colors.black, title: Text(author), foregroundColor: Colors.white),
-      body: PageView.builder(
-        itemCount: media.length,
-        itemBuilder: (context, index) {
-          final item = media[index];
-          final attachmentId = (item['attachmentId'] ?? '').toString();
-          final contentType = (item['contentType'] ?? '').toString();
-          if (attachmentId.isEmpty) return const Center(child: Text('الوسائط غير متاحة', style: TextStyle(color: Colors.white)));
-          final uri = Api.sparkMediaUri(attachmentId);
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              if (contentType.startsWith('video/'))
-                _SparkVideoPage(uri: uri, headers: headers)
-              else
-                Center(
-                  child: InteractiveViewer(
-                    minScale: 0.8, maxScale: 4,
-                    child: Image.network(
-                      uri.toString(), headers: headers, fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined, color: Colors.white70, size: 52),
-                      loadingBuilder: (context, child, progress) => progress == null
-                          ? child
-                          : const Center(child: CircularProgressIndicator(color: gold)),
-                    ),
+      appBar: AppBar(backgroundColor: Colors.black, title: Text(widget.author), foregroundColor: Colors.white),
+      body: SafeArea(
+        child: Column(children: [
+          Expanded(
+            child: widget.media.isEmpty
+                ? Center(child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(widget.caption, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 22)),
+                  ))
+                : PageView.builder(
+                    itemCount: widget.media.length,
+                    itemBuilder: (context, index) {
+                      final item = widget.media[index];
+                      final attachmentId = (item['attachmentId'] ?? '').toString();
+                      final contentType = (item['contentType'] ?? '').toString();
+                      if (attachmentId.isEmpty) return const Center(child: Text('الوسائط غير متاحة', style: TextStyle(color: Colors.white)));
+                      final uri = Api.sparkMediaUri(attachmentId);
+                      return Stack(fit: StackFit.expand, children: [
+                        if (contentType.startsWith('video/'))
+                          _SparkVideoPage(uri: uri, headers: headers)
+                        else
+                          Center(child: InteractiveViewer(
+                            minScale: 0.8, maxScale: 4,
+                            child: Image.network(
+                              uri.toString(), headers: headers, fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined, color: Colors.white70, size: 52),
+                              loadingBuilder: (context, child, progress) => progress == null
+                                  ? child
+                                  : const Center(child: CircularProgressIndicator(color: gold)),
+                            ),
+                          )),
+                        if (widget.caption.trim().isNotEmpty)
+                          Positioned(left: 16, right: 16, bottom: 16, child: DecoratedBox(
+                            decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(12)),
+                            child: Padding(padding: const EdgeInsets.all(12), child: Text(widget.caption, style: const TextStyle(color: Colors.white, fontSize: 16))),
+                          )),
+                      ]);
+                    },
                   ),
-                ),
-              if (caption.trim().isNotEmpty)
-                Positioned(
-                  left: 16, right: 16, bottom: 28,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(12)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Text(caption, style: const TextStyle(color: Colors.white, fontSize: 16)),
-                    ),
+          ),
+          Container(
+            width: double.infinity, padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+            decoration: const BoxDecoration(color: Color(0xFF151515), border: Border(top: BorderSide(color: Colors.white12))),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+                for (final emoji in ['❤️', '🔥', '😂', '👍'])
+                  TextButton(onPressed: () => _react(emoji), child: Text(emoji, style: const TextStyle(fontSize: 24))),
+              ]),
+              SizedBox(
+                height: 84,
+                child: _loadingReplies
+                    ? const Center(child: CircularProgressIndicator(color: gold))
+                    : _replies.isEmpty
+                        ? const Center(child: Text('لا توجد ردود بعد', style: TextStyle(color: Colors.white54)))
+                        : ListView.builder(
+                            itemCount: _replies.length,
+                            itemBuilder: (context, index) {
+                              final reply = _replies[index];
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 3),
+                                child: Text(
+                                  '${reply['displayName'] ?? reply['username'] ?? 'مستخدم'}: ${reply['body'] ?? ''}',
+                                  style: const TextStyle(color: Colors.white70),
+                                ),
+                              );
+                            },
+                          ),
+              ),
+              Row(children: [
+                Expanded(child: TextField(
+                  controller: _replyController, maxLength: 1000,
+                  decoration: const InputDecoration(
+                    hintText: 'اكتب ردًا...', counterText: '',
+                    hintStyle: TextStyle(color: Colors.white54),
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
                   ),
+                  style: const TextStyle(color: Colors.white),
+                  onSubmitted: (_) => _sendReply(),
+                )),
+                IconButton(
+                  onPressed: _sendingReply ? null : _sendReply,
+                  icon: _sendingReply
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: gold))
+                      : const Icon(Icons.send_rounded, color: gold),
                 ),
-            ],
-          );
-        },
+              ]),
+            ]),
+          ),
+        ]),
       ),
     );
   }
@@ -5921,7 +6015,6 @@ class _SparkVideoPageState extends State<_SparkVideoPage> {
     _controller.initialize().then((_) {
       if (!mounted) return;
       _controller.setLooping(true);
-      _controller.play();
       setState(() {});
     }).catchError((Object error) {
       if (mounted) setState(() => _error = error);
