@@ -1,0 +1,11 @@
+name = "barq-api-phase2-test"
+main = "src/src/index.js"
+compatibility_date = "2026-11-16"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "barq-phase2-test-2026-11-20"
+database_id = "5bfada32-4f9b-4edb-85dd-3b3b30ab73b0"
+migrations_dir = "migrations"
+
+# Intentionally no production media bucket, production routes, or production vars.
