@@ -1927,7 +1927,7 @@ export default {
       }
 
             // Group reactions and personal pins are available only to current group members.
-      const groupInteractionMatch = path.match(/^\\/api\\/groups\\/([^/]+)\\/messages\\/([^/]+)\\/(reactions|pin)$/);
+      const groupInteractionMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/([^/]+)\/(reactions|pin)$/);
       if (groupInteractionMatch && (method === "POST" || method === "DELETE")) {
         const groupId = groupInteractionMatch[1];
         const messageId = groupInteractionMatch[2];
@@ -2208,7 +2208,7 @@ const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
       }
 
       // Private reactions and pins are scoped to the two participants only.
-      const privateInteractionMatch = path.match(/^\\/api\\/messages\\/([^/]+)\\/(reactions|pin)$/);
+      const privateInteractionMatch = path.match(/^\/api\/messages\/([^/]+)\/(reactions|pin)$/);
       if (privateInteractionMatch && (method === "POST" || method === "DELETE")) {
         const messageId = privateInteractionMatch[1];
         const action = privateInteractionMatch[2];
