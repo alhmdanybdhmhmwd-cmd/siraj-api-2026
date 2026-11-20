@@ -644,6 +644,22 @@ class Api {
     throw Exception('لم يُرجع الخادم معرّف لحظة SPARK.');
   }
 
+  static Future<void> reactSparkStatus(String statusId, String emoji, {bool remove = false}) async {
+    final path = '/api/statuses/${Uri.encodeComponent(statusId)}/reactions';
+    if (remove) {
+      await request('DELETE', '$path?emoji=${Uri.encodeQueryComponent(emoji)}');
+    } else {
+      await request('POST', path, body: {'emoji': emoji});
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> sparkReplies(String statusId) async =>
+      _list((await request('GET', '/api/statuses/${Uri.encodeComponent(statusId)}/replies'))['replies']);
+
+  static Future<void> replyToSpark(String statusId, String body) async {
+    await request('POST', '/api/statuses/${Uri.encodeComponent(statusId)}/replies', body: {'body': body});
+  }
+
   static Uri sparkMediaUri(String attachmentId) => Uri.parse(
     '$mediaWorkerBase/api/media/${Uri.encodeComponent(attachmentId)}',
   );
