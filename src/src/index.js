@@ -41,15 +41,6 @@ async function ensureAccountSecurity(env) {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `).run();
-  await env.DB.prepare(`
-    CREATE TABLE IF NOT EXISTS revoked_sessions (
-      token_hash TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      expires_at INTEGER NOT NULL,
-      revoked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-  `).run();
 }
 
 async function getSessionVersion(env, userId) {
