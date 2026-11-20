@@ -1179,7 +1179,7 @@ test("profile updates reject an existing phone written in an equivalent local fo
       Authorization: "Bearer " + token,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ displayName: "Tester", phone: "٠٧٠٠٠٠٠٠٠٢" })
+    body: JSON.stringify({ displayName: "Tester", phone: "+967700000002" })
   }), { DB: db, JWT_SECRET: secret });
   assert.equal(response.status, 409);
   assert.ok(db.phoneLookupQueries > 0);
