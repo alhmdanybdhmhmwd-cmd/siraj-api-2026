@@ -2044,8 +2044,9 @@ const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
             const ids = messages.map(item => item.id);
             const placeholders = ids.map(() => "?").join(",");
             const [reactionRows, pinRows] = await Promise.all([
-              env.DB.prepare(`SELECT message_id, emoji, user_id FROM message_reactions
-                WHERE scope_type = 'group' AND scope_id = ? AND message_id IN (${placeholders})`)
+              env.DB.prepare(`SELECT mr.message_id, mr.emoji, mr.user_id, u.display_name
+                FROM message_reactions mr JOIN users u ON u.id = mr.user_id
+                WHERE mr.scope_type = 'group' AND scope_id = ? AND message_id IN (${placeholders})`)
                 .bind(groupId, ...ids).all(),
               env.DB.prepare(`SELECT message_id FROM pinned_messages
                 WHERE scope_type = 'group' AND scope_id = ? AND pinned_by = ? AND message_id IN (${placeholders})`)
@@ -2054,7 +2055,7 @@ const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
             const reactionMap = new Map();
             for (const reaction of reactionRows.results || []) {
               if (!reactionMap.has(reaction.message_id)) reactionMap.set(reaction.message_id, []);
-              reactionMap.get(reaction.message_id).push({ emoji: reaction.emoji, user_id: reaction.user_id });
+              reactionMap.get(reaction.message_id).push({ emoji: reaction.emoji, user_id: reaction.user_id, display_name: reaction.display_name });
             }
             const pinnedIds = new Set((pinRows.results || []).map(item => item.message_id));
             for (const item of messages) {
@@ -2216,6 +2217,11 @@ const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
           "SELECT sender_id, receiver_id FROM messages WHERE id = ? AND (sender_id = ? OR receiver_id = ?)"
         ).bind(messageId, currentUser.sub, currentUser.sub).first();
         if (!target) return json({ error: "Message not found" }, 404);
+        const peerId = target.sender_id === currentUser.sub ? target.receiver_id : target.sender_id;
+        const friendship = await env.DB.prepare(
+          "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
+        ).bind(currentUser.sub, peerId).first();
+        if (!friendship) return json({ error: "Conversation access denied" }, 403);
         const scopeId = [target.sender_id, target.receiver_id].sort().join(":");
         if (action === "reactions") {
           const allowed = ["👍", "❤️", "😂", "😮", "😢", "😡", "🎉", "🔥"];
@@ -2357,8 +2363,9 @@ const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
           const placeholders = ids.map(() => "?").join(",");
           const scopeId = [currentUser.sub, friendId].sort().join(":");
           const [reactionRows, pinRows] = await Promise.all([
-            env.DB.prepare(`SELECT message_id, emoji, user_id FROM message_reactions
-              WHERE scope_type = 'private' AND scope_id = ? AND message_id IN (${placeholders})`)
+            env.DB.prepare(`SELECT mr.message_id, mr.emoji, mr.user_id, u.display_name
+              FROM message_reactions mr JOIN users u ON u.id = mr.user_id
+              WHERE mr.scope_type = 'private' AND scope_id = ? AND message_id IN (${placeholders})`)
               .bind(scopeId, ...ids).all(),
             env.DB.prepare(`SELECT message_id FROM pinned_messages
               WHERE scope_type = 'private' AND scope_id = ? AND pinned_by = ? AND message_id IN (${placeholders})`)
