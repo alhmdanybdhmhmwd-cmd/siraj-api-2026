@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { cleanupExpiredRateLimits } from "../src/src/index.js";
 
 const workerPath = new URL("../src/src/index.js", import.meta.url);
 let workerSource = await readFile(workerPath, "utf8");
@@ -82,7 +81,7 @@ test("scheduled rate-limit cleanup also removes expired transcription limiter ro
       }
     }
   };
-  const result = await cleanupExpiredRateLimits(env, 1_700_000_000_000);
+  const result = await workerModule.cleanupExpiredRateLimits(env, 1_700_000_000_000);
   assert.deepEqual(result, {
     login_rate_limits: 2,
     recovery_rate_limits: 2,
