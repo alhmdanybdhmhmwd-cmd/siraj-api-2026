@@ -496,6 +496,15 @@ class Api {
   static Future<List<Map<String, dynamic>>> messages(String friendId) async =>
       _list((await messagesPage(friendId))['messages']);
 
+  static Future<List<Map<String, dynamic>>> searchPrivateMessages(
+    String friendId, String query, {int limit = 30}
+  ) async {
+    final params = Uri(queryParameters: {
+      'with': friendId, 'q': query.trim(), 'limit': limit.toString(),
+    }).query;
+    return _list((await request('GET', '/api/messages/search?$params'))['messages']);
+  }
+
   static Future<void> sendMessage(String receiverId, String body, {String? clientMessageId, String? replyToId}) async {
     await request('POST', '/api/messages', body: {
       'receiverId': receiverId,
@@ -580,6 +589,15 @@ class Api {
 
   static Future<List<Map<String, dynamic>>> groupMessages(String groupId) async =>
       _list((await groupMessagesPage(groupId))['messages']);
+
+  static Future<List<Map<String, dynamic>>> searchGroupMessages(
+    String groupId, String query, {int limit = 30}
+  ) async {
+    final params = Uri(queryParameters: {
+      'q': query.trim(), 'limit': limit.toString(),
+    }).query;
+    return _list((await request('GET', '/api/groups/${Uri.encodeComponent(groupId)}/messages/search?$params'))['messages']);
+  }
 
   static Future<void> sendGroupMessage(String groupId, String body, {String? replyToId}) async {
     await request('POST', '/api/groups/$groupId/messages', body: {
@@ -1384,53 +1402,80 @@ List<Map<String, dynamic>> searchConversationMessages(
 
 Future<void> showConversationSearch(
   BuildContext context,
-  List<Map<String, dynamic>> messages,
+  Future<List<Map<String, dynamic>>> Function(String query) search,
 ) async {
   final controller = TextEditingController();
+  List<Map<String, dynamic>> matches = [];
+  bool searching = false;
+  bool searched = false;
+  String? searchError;
+  Future<void> runSearch(StateSetter refresh) async {
+    final query = controller.text.trim();
+    if (query.length < 2 || searching) return;
+    refresh(() { searching = true; searchError = null; });
+    try {
+      final result = await search(query);
+      refresh(() { matches = result; searched = true; });
+    } catch (error) {
+      refresh(() { searchError = cleanError(error); searched = true; });
+    } finally {
+      refresh(() { searching = false; });
+    }
+  }
   await showDialog<void>(
     context: context,
     builder: (dialogContext) => StatefulBuilder(
-      builder: (context, refresh) {
-        final matches = searchConversationMessages(messages, controller.text);
-        return AlertDialog(
-          title: const Text('البحث في المحادثة'),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 420,
-            child: Column(
-              children: [
-                TextField(
-                  controller: controller,
-                  autofocus: true,
-                  onChanged: (_) => refresh(() {}),
-                  decoration: inputDecoration('ابحث في الرسائل المحمّلة', Icons.search),
+      builder: (context, refresh) => AlertDialog(
+        title: const Text('البحث في المحادثة'),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 420,
+          child: Column(
+            children: [
+              TextField(
+                controller: controller,
+                autofocus: true,
+                textInputAction: TextInputAction.search,
+                onSubmitted: (_) => runSearch(refresh),
+                decoration: inputDecoration('ابحث في جميع رسائل المحادثة', Icons.search).copyWith(
+                  suffixIcon: IconButton(
+                    onPressed: searching ? null : () => runSearch(refresh),
+                    icon: searching
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.search),
+                  ),
                 ),
-                const SizedBox(height: 10),
-                Expanded(
-                  child: controller.text.trim().isEmpty
-                      ? const Center(child: Text('اكتب كلمة للبحث'))
-                      : matches.isEmpty
-                          ? const Center(child: Text('لا توجد نتائج مطابقة'))
-                          : ListView.separated(
-                              itemCount: matches.length,
-                              separatorBuilder: (_, __) => const Divider(height: 1),
-                              itemBuilder: (context, index) {
-                                final message = matches[index];
-                                final text = field(message, ['body', 'content', 'message']);
-                                return ListTile(
-                                  dense: true,
-                                  title: Text(text, maxLines: 3, overflow: TextOverflow.ellipsis),
-                                  subtitle: Text(_messageTime(field(message, ['created_at', 'createdAt']))),
-                                );
-                              },
-                            ),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: searching
+                    ? const Center(child: CircularProgressIndicator(color: gold))
+                    : searchError != null
+                        ? Center(child: Text(searchError!, textAlign: TextAlign.center))
+                        : !searched
+                            ? const Center(child: Text('اكتب كلمتين على الأقل ثم اضغط بحث'))
+                            : matches.isEmpty
+                                ? const Center(child: Text('لا توجد نتائج مطابقة'))
+                                : ListView.separated(
+                                    itemCount: matches.length,
+                                    separatorBuilder: (_, __) => const Divider(height: 1),
+                                    itemBuilder: (context, index) {
+                                      final message = matches[index];
+                                      return ListTile(
+                                        dense: true,
+                                        title: Text(field(message, ['body', 'content', 'message']),
+                                            maxLines: 3, overflow: TextOverflow.ellipsis),
+                                        subtitle: Text(field(message, ['display_name', 'username']) +
+                                            ' · ' + _messageTime(field(message, ['created_at', 'createdAt']))),
+                                      );
+                                    },
+                                  ),
+              ),
+            ],
           ),
-          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق'))],
-        );
-      },
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق'))],
+      ),
     ),
   );
   controller.dispose();
@@ -4156,7 +4201,7 @@ class _ChatPageState extends State<ChatPage> {
           ),
           actions: [
             IconButton(
-              onPressed: () => showConversationSearch(context, messages),
+              onPressed: () => showConversationSearch(context, (query) => Api.searchPrivateMessages(friendId, query)),
               icon: const Icon(Icons.search, color: gold),
               tooltip: 'البحث في المحادثة',
             ),
@@ -4644,7 +4689,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
           ]),
           actions: [
             IconButton(
-              onPressed: () => showConversationSearch(context, messages),
+              onPressed: () => showConversationSearch(context, (query) => Api.searchGroupMessages(groupId, query)),
               icon: const Icon(Icons.search, color: gold),
               tooltip: 'البحث في المحادثة',
             ),
