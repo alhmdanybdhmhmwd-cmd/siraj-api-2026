@@ -170,7 +170,23 @@ class SirajApp extends StatelessWidget {
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: dark,
-        colorScheme: const ColorScheme.dark(primary: gold, surface: panel),
+        colorScheme: const ColorScheme.dark(
+          primary: gold,
+          secondary: electricBlue,
+          surface: panel,
+        ),
+        navigationBarTheme: NavigationBarThemeData(
+          backgroundColor: panel,
+          indicatorColor: electricBlue.withValues(alpha: .18),
+          iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
+            color: states.contains(WidgetState.selected) ? electricBlue : Colors.white70,
+          )),
+          labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
+            color: states.contains(WidgetState.selected) ? gold : Colors.white70,
+            fontSize: 11,
+            fontWeight: states.contains(WidgetState.selected) ? FontWeight.w700 : FontWeight.w500,
+          )),
+        ),
         useMaterial3: true,
       ),
       home: const StartupPage(),
@@ -1377,7 +1393,7 @@ class _LoginPageState extends State<LoginPage> {
                               if (registering) ...[
                                 _input(name, 'الاسم الظاهر', Icons.person_outline),
                                 const SizedBox(height: 13),
-                                _input(phone, 'رقم الهاتف اليمني', Icons.phone_android, isPhone: true),
+                                _input(phone, 'رقم الهاتف', Icons.phone_android, isPhone: true),
                                 const SizedBox(height: 13),
                                 _input(optionalUsername, 'اسم المستخدم', Icons.alternate_email, optional: true),
                                 const SizedBox(height: 13),
