@@ -27,8 +27,8 @@ test("summary transcript keeps the newest messages within the input budget", () 
 
 test("summary transcript truncates an oversized newest message to stay within budget", () => {
   const transcript = prepareConversationSummaryTranscript([
-    { display_name: "أ", body: "رسالة قديمة" },
-    { display_name: "ب", body: "هذه أحدث رسالة طويلة جدًا يجب قصها" }
+    { display_name: "ب", body: "هذه أحدث رسالة طويلة جدًا يجب قصها" },
+    { display_name: "أ", body: "رسالة قديمة" }
   ], 30);
 
   assert.equal(transcript.length, 1);
