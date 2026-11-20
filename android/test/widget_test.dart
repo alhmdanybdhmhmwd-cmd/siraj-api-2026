@@ -56,6 +56,19 @@ void main() {
     expect(searchConversationMessages(messages, '   '), isEmpty);
   });
 
+  test('offline queue reconciliation removes IDs found on any server page only', () {
+    final queued = [
+      {'id': 'offline-old', 'body': 'وصلت دون إنترنت'},
+      {'id': 'offline-new', 'body': 'بانتظار المزامنة'},
+    ];
+    final remaining = barqOfflineItemsNotOnServerPage(queued, [
+      {'id': 'offline-old'},
+    ]);
+
+    expect(remaining.map((item) => item['id']).toList(), ['offline-new']);
+    expect(barqOfflineItemsNotOnServerPage(queued, []), same(queued));
+  });
+
   test('message merge deduplicates by id and keeps chronological order', () {
     final merged = mergeMessages(
       [
