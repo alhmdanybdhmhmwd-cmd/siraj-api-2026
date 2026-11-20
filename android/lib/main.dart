@@ -1124,6 +1124,8 @@ Widget messageReactionBar({
   required Map<String, dynamic> message,
   required String currentUserId,
   required Future<void> Function(String emoji, bool remove) onReaction,
+  Future<void> Function()? onPin,
+  bool isPinned = false,
 }) {
   final reactions = normalizeMessageReactions(message['reactions']);
   final grouped = <String, List<Map<String, dynamic>>>{};
@@ -1140,15 +1142,18 @@ Widget messageReactionBar({
       runSpacing: 4,
       children: [
         for (final entry in grouped.entries)
-          ActionChip(
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            backgroundColor: entry.value.any((item) => field(item, ['user_id']) == currentUserId)
-                ? const Color(0x554A8DFF) : Colors.black26,
-            label: Text('${entry.key} ${entry.value.length}', style: const TextStyle(fontSize: 11)),
-            onPressed: () => onReaction(
-              entry.key,
-              entry.value.any((item) => field(item, ['user_id']) == currentUserId),
+          Tooltip(
+            message: entry.value.map((item) => field(item, ['display_name', 'user_id'], 'مستخدم')).join('، '),
+            child: ActionChip(
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              backgroundColor: entry.value.any((item) => field(item, ['user_id']) == currentUserId)
+                  ? const Color(0x554A8DFF) : Colors.black26,
+              label: Text('${entry.key} ${entry.value.length}', style: const TextStyle(fontSize: 11)),
+              onPressed: () => onReaction(
+                entry.key,
+                entry.value.any((item) => field(item, ['user_id']) == currentUserId),
+              ),
             ),
           ),
         IconButton(
@@ -1162,6 +1167,16 @@ Widget messageReactionBar({
             if (emoji != null) await onReaction(emoji, false);
           },
         ),
+        if (onPin != null)
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            padding: EdgeInsets.zero,
+            tooltip: isPinned ? 'إلغاء تثبيت الرسالة' : 'تثبيت الرسالة',
+            icon: Icon(isPinned ? Icons.push_pin : Icons.push_pin_outlined,
+              size: 17, color: isPinned ? gold : Colors.white60),
+            onPressed: onPin,
+          ),
       ],
     ),
   );
@@ -4318,6 +4333,13 @@ class _ChatPageState extends State<ChatPage> {
                                           await Api.reactPrivateMessage(field(m, ['id', 'message_id']), emoji, remove: remove);
                                           if (mounted) await loadMessages(silent: true);
                                         },
+                                        isPinned: m['is_pinned'] == true,
+                                        onPin: m['is_ephemeral'] != true && m['is_offline_pending'] != true
+                                            ? () async {
+                                                await Api.pinPrivateMessage(field(m, ['id', 'message_id']), pinned: m['is_pinned'] != true);
+                                                if (mounted) await loadMessages(silent: true);
+                                              }
+                                            : null,
                                       ),
                                   ],
                                 ),
@@ -4783,6 +4805,11 @@ class _GroupChatPageState extends State<GroupChatPage> {
                             currentUserId: widget.currentUserId,
                             onReaction: (emoji, remove) async {
                               await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), emoji, remove: remove);
+                              if (mounted) await loadMessages(silent: true);
+                            },
+                            isPinned: m['is_pinned'] == true,
+                            onPin: () async {
+                              await Api.pinGroupMessage(groupId, field(m, ['id', 'message_id']), pinned: m['is_pinned'] != true);
                               if (mounted) await loadMessages(silent: true);
                             },
                           ),
