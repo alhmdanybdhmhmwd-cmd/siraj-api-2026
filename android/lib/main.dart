@@ -2790,6 +2790,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> publishSparkMediaDialog() async {
+    final pageContext = context;
     final picked = await FilePicker.platform.pickFiles(
       type: FileType.media, allowMultiple: false, withData: true,
     );
@@ -2811,9 +2812,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (mounted) showMsg(context, 'تعذر قراءة الملف المحدد.');
       return;
     }
+    if (!pageContext.mounted) return;
     final captionController = TextEditingController();
     await showDialog<void>(
-      context: context,
+      context: pageContext,
       builder: (dialogContext) {
         var uploading = false;
         return StatefulBuilder(
@@ -2845,10 +2847,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     );
                     if (dialogContext.mounted) Navigator.pop(dialogContext);
                     await refreshAll();
-                    if (mounted) showMsg(context, 'نُشرت اللحظة في SPARK لمدة 24 ساعة.');
+                    if (pageContext.mounted) {
+                      showMsg(pageContext, 'نُشرت اللحظة في SPARK لمدة 24 ساعة.');
+                    }
                   } catch (e) {
                     if (dialogContext.mounted) setDialogState(() => uploading = false);
-                    if (mounted) showMsg(context, cleanError(e));
+                    if (pageContext.mounted) showMsg(pageContext, cleanError(e));
                   }
                 },
                 child: const Text('نشر في SPARK'),
