@@ -47,14 +47,24 @@ jobs:
       - name: Run Flutter tests
         working-directory: android
         run: flutter test
-      - name: Build arm64 debug APK for validation only
+      - name: Build arm64 debug APK for diagnostics
         working-directory: android
         run: flutter build apk --debug --target-platform android-arm64
-      - name: Upload arm64 validation APK
+      - name: Upload arm64 debug diagnostics
         uses: actions/upload-artifact@v4
         with:
-          name: barq-android-validation-apk-arm64
+          name: barq-android-debug-diagnostics-arm64
           path: android/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 3
+      - name: Build optimized arm64 release APK for device testing
+        working-directory: android
+        run: flutter build apk --release --target-platform android-arm64 --split-per-abi
+      - name: Upload optimized arm64 test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: barq-android-test-apk-arm64
+          path: android/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           if-no-files-found: error
           retention-days: 7
 
