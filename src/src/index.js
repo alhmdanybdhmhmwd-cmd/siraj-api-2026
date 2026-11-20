@@ -1217,7 +1217,16 @@ export default {
                 OR (user_id = ? AND friend_id = ?)
              LIMIT 1`
           ).bind(currentUser.sub, targetUserId, targetUserId, currentUser.sub).first();
-          if (!friendship) return json({ error: "Profile photo access denied" }, 403);
+          if (!friendship) {
+            const sharedGroup = await env.DB.prepare(
+              `SELECT 1
+               FROM group_members mine
+               JOIN group_members theirs ON theirs.group_id = mine.group_id
+               WHERE mine.user_id = ? AND theirs.user_id = ?
+               LIMIT 1`
+            ).bind(currentUser.sub, targetUserId).first();
+            if (!sharedGroup) return json({ error: "Profile photo access denied" }, 403);
+          }
         }
         const photo = await env.DB.prepare(
           "SELECT object_key, content_type, updated_at FROM profile_photos WHERE user_id = ?"
