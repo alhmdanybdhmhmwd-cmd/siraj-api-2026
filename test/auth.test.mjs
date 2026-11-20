@@ -439,7 +439,11 @@ test("recipient read schedules physical ephemeral deletion after the ten-second 
   const token = await worker.signToken(user, secret, 0);
   const pending = [];
   const originalSetTimeout = globalThis.setTimeout;
+  const originalNow = Date.now;
+  let clockAdvance = 0;
+  Date.now = () => originalNow() + clockAdvance;
   globalThis.setTimeout = callback => {
+    clockAdvance = 11_000;
     callback();
     return 0;
   };
@@ -463,6 +467,7 @@ test("recipient read schedules physical ephemeral deletion after the ten-second 
     assert.equal(db.ephemeralRows.length, 0);
   } finally {
     globalThis.setTimeout = originalSetTimeout;
+    Date.now = originalNow;
   }
 });
 
