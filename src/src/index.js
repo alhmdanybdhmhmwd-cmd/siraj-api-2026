@@ -842,6 +842,80 @@ export default {
         return json({ error: "Unauthorized" }, 401);
       }
 
+      // Ephemeral private messages are stored only in D1 (never sent to Firebase).
+      // The ten-second deletion window starts when the recipient first fetches the message.
+      if (path === "/api/ephemeral-messages" && (method === "GET" || method === "POST")) {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS ephemeral_messages (
+            id TEXT PRIMARY KEY,
+            sender_id TEXT NOT NULL,
+            receiver_id TEXT NOT NULL,
+            body TEXT NOT NULL,
+            created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+            read_at INTEGER,
+            delete_at INTEGER,
+            FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        await env.DB.prepare(
+          "CREATE INDEX IF NOT EXISTS idx_ephemeral_conversation ON ephemeral_messages(sender_id, receiver_id, created_at)"
+        ).run();
+        await env.DB.prepare(
+          "DELETE FROM ephemeral_messages WHERE delete_at IS NOT NULL AND delete_at <= unixepoch()"
+        ).run();
+
+        if (method === "POST") {
+          const body = await request.json();
+          const receiverId = String(body.receiverId || "").trim();
+          const message = String(body.body || "").trim();
+          if (!receiverId || !message) {
+            return json({ error: "Receiver and message are required" }, 400);
+          }
+          if (receiverId === currentUser.sub) {
+            return json({ error: "Cannot message yourself" }, 400);
+          }
+          if (message.length > 5000) {
+            return json({ error: "Message is too long" }, 400);
+          }
+          const friendship = await env.DB.prepare(
+            "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
+          ).bind(currentUser.sub, receiverId).first();
+          if (!friendship) return json({ error: "You can only message friends" }, 403);
+
+          const id = crypto.randomUUID();
+          await env.DB.prepare(
+            "INSERT INTO ephemeral_messages (id, sender_id, receiver_id, body) VALUES (?, ?, ?, ?)"
+          ).bind(id, currentUser.sub, receiverId, message).run();
+          // Deliberately no push notification: ephemeral content must not be copied to Firebase.
+          return json({ message: "Ephemeral message sent", id }, 201);
+        }
+
+        const friendId = (url.searchParams.get("with") || "").trim();
+        if (!friendId) return json({ error: "Friend ID is required" }, 400);
+        const friendship = await env.DB.prepare(
+          "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
+        ).bind(currentUser.sub, friendId).first();
+        if (!friendship) return json({ error: "You can only view chats with friends" }, 403);
+
+        // First retrieval by the recipient is the read event; start the ten-second TTL once.
+        await env.DB.prepare(
+          `UPDATE ephemeral_messages
+           SET read_at = unixepoch(), delete_at = unixepoch() + 10
+           WHERE sender_id = ? AND receiver_id = ? AND read_at IS NULL`
+        ).bind(friendId, currentUser.sub).run();
+
+        const result = await env.DB.prepare(
+          `SELECT id, sender_id, receiver_id, body, created_at, read_at, delete_at
+           FROM ephemeral_messages
+           WHERE ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))
+             AND (delete_at IS NULL OR delete_at > unixepoch())
+           ORDER BY created_at ASC, id ASC
+           LIMIT 200`
+        ).bind(currentUser.sub, friendId, friendId, currentUser.sub).all();
+        return json({ messages: result.results || [] });
+      }
+
       // Rotate the one-time recovery code after verifying the current password.
       if (method === "POST" && path === "/api/recovery-code") {
         const body = await request.json();
