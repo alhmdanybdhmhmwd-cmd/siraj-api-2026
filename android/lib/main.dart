@@ -1826,8 +1826,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       final id = field(person, ['id', 'user_id']);
                       final uname = field(person, ['username'], 'مستخدم');
                       return ListTile(
+                        leading: personAvatar(person),
                         title: Text(field(person, ['displayName', 'display_name'], uname)),
                         subtitle: Text('@$uname'),
+                        onTap: () => Navigator.push(this.context, MaterialPageRoute(
+                          builder: (_) => PublicProfilePage(person: person, currentUserId: myId),
+                        )),
                         trailing: IconButton(
                           icon: const Icon(Icons.person_add_alt_1, color: gold),
                           onPressed: id.isEmpty ? null : () async {
@@ -2062,9 +2066,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             Card(
               color: panel,
               child: ListTile(
-                leading: const CircleAvatar(child: Icon(Icons.person, color: gold)),
+                leading: personAvatar(person),
                 title: Text(_personName(person)),
                 subtitle: Text(field(person, ['phone'], '@${_personUsername(person)}')),
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => PublicProfilePage(person: person, currentUserId: myId),
+                )),
                 trailing: IconButton(
                   icon: const Icon(Icons.person_add_alt_1, color: gold),
                   tooltip: 'إضافة مباشرة',
