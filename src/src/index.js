@@ -2056,7 +2056,7 @@ export default {
 
 
       // Private voice replies for SPARK. Audio objects inherit the parent status expiry.
-      const sparkAudioReplyMatch = path.match(/^\\/api\\/statuses\\/([^/]+)\\/audio-replies(?:\\/([^/]+))?$/);
+      const sparkAudioReplyMatch = path.match(/^\/api\/statuses\/([^/]+)\/audio-replies(?:\/([^/]+))?$/);
       if (sparkAudioReplyMatch) {
         let statusId, audioReplyId = null;
         try {
@@ -2106,6 +2106,7 @@ export default {
           if (!Number.isInteger(durationMs) || durationMs < 1000 || durationMs > 60000) {
             return json({ error: "SPARK voice replies must be between 1 and 60 seconds" }, 400);
           }
+          await env.DB.prepare("CREATE TABLE IF NOT EXISTS media_expirations (object_key TEXT PRIMARY KEY, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
           const maxAudioReplyBytes = 5 * 1024 * 1024;
           const declaredLength = Number(request.headers.get("Content-Length"));
           if (Number.isFinite(declaredLength) && declaredLength > maxAudioReplyBytes) {

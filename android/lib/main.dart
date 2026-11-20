@@ -6067,7 +6067,7 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
     _audioRecordingTimer?.cancel();
     _audioRecordingTimer = null;
     _audioRecordingWatch?.stop();
-    final durationMs = (_audioRecordingWatch?.elapsedMilliseconds ?? 0).clamp(0, 60000);
+    final durationMs = (_audioRecordingWatch?.elapsedMilliseconds ?? 0).clamp(0, 60000).toInt();
     String? path;
     try {
       path = await _audioRecorder.stop();
