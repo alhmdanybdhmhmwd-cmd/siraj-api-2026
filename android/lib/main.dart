@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'package:flutter/gestures.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:video_player/video_player.dart';
+import 'package:pdfrx/pdfrx.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -3571,7 +3574,12 @@ Widget _attachmentTile(
   VoidCallback onDownload,
 ) => _AttachmentTile(attachment: attachment, onDownload: onDownload);
 
-class _AttachmentTile extends StatefulWidget {
+List<Uri> extractBarqLinks(String text) {
+  final matches = RegExp(r'(?:https?://|www\.)[^\s<>()]+', caseSensitive: false).allMatches(text);
+  final links = <Uri>[];
+  for (final match in matches) {
+    var raw = match.group(0) ?? '';
+    raw = raw.replaceFirst(RegExp(r'[.,!?;:،؛\]\}]+
   final Map<String, dynamic> attachment;
   final VoidCallback onDownload;
 
@@ -3598,6 +3606,11 @@ class _AttachmentTileState extends State<_AttachmentTile> {
   bool get _isImage => _contentType.startsWith('image/');
   bool get _isAudio => _contentType.startsWith('audio/');
   bool get _isVideo => _contentType.startsWith('video/');
+  String get _fileName => field(widget.attachment, ['fileName'], 'ملف مرفق');
+  String get _extension => _fileName.contains('.') ? _fileName.split('.').last.toLowerCase() : '';
+  bool get _isPdf => _contentType == 'application/pdf' || _extension == 'pdf';
+  bool get _isTextDocument => {'txt', 'md', 'csv', 'json', 'log', 'xml'}.contains(_extension) || _contentType.startsWith('text/');
+  bool get _canPreviewDocument => _isPdf || _isTextDocument;
 
   @override
   void initState() {
@@ -3697,6 +3710,16 @@ class _AttachmentTileState extends State<_AttachmentTile> {
     await player.seek(Duration(milliseconds: milliseconds.round()));
   }
 
+  void _openDocument() {
+    showDialog<void>(
+      context: context,
+      builder: (_) => _DocumentAttachmentDialog(
+        attachment: widget.attachment,
+        isPdf: _isPdf,
+      ),
+    );
+  }
+
   void _openVideo() {
     showDialog<void>(
       context: context,
@@ -3784,6 +3807,15 @@ class _AttachmentTileState extends State<_AttachmentTile> {
             )),
             IconButton(onPressed: widget.onDownload, icon: const Icon(Icons.download, color: gold), tooltip: 'تنزيل الملف'),
           ]),
+          if (_canPreviewDocument)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _openDocument,
+                icon: const Icon(Icons.visibility_outlined, size: 16),
+                label: const Text('معاينة الملف'),
+              ),
+            ),
           if (_isAudio) ...[
             Row(children: [
               Text(formatBarqMediaDuration(_audioPosition),
@@ -3824,6 +3856,110 @@ String formatBarqMediaDuration(Duration duration) {
   return '$minutes:$seconds';
 }
 
+class _DocumentAttachmentDialog extends StatefulWidget {
+  final Map<String, dynamic> attachment;
+  final bool isPdf;
+  const _DocumentAttachmentDialog({required this.attachment, required this.isPdf});
+
+  @override
+  State<_DocumentAttachmentDialog> createState() => _DocumentAttachmentDialogState();
+}
+
+class _DocumentAttachmentDialogState extends State<_DocumentAttachmentDialog> {
+  Future<Uint8List>? _bytesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  void _load() {
+    final id = field(widget.attachment, ['attachmentId']);
+    _bytesFuture = id.isEmpty
+        ? Future.error(Exception('معرّف الملف غير متوفر.'))
+        : Api.fetchAttachmentBytes(id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final name = field(widget.attachment, ['fileName'], 'document');
+    return Dialog(
+      backgroundColor: panel,
+      insetPadding: const EdgeInsets.all(10),
+      child: SizedBox(
+        width: MediaQuery.sizeOf(context).width,
+        height: MediaQuery.sizeOf(context).height * 0.82,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Row(children: [
+                const Icon(Icons.description_outlined, color: gold),
+                const SizedBox(width: 8),
+                Expanded(child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.bold))),
+                IconButton(
+                  tooltip: 'إغلاق المعاينة',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ]),
+            ),
+            const Divider(height: 1, color: Colors.white24),
+            Expanded(
+              child: FutureBuilder<Uint8List>(
+                future: _bytesFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const Center(child: CircularProgressIndicator(color: gold));
+                  }
+                  if (snapshot.hasError || !snapshot.hasData) {
+                    return Center(child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.error_outline, color: Colors.redAccent, size: 38),
+                        const SizedBox(height: 8),
+                        Text(snapshot.error == null ? 'تعذر تحميل الملف.' : cleanError(snapshot.error!),
+                          textAlign: TextAlign.center),
+                        const SizedBox(height: 8),
+                        TextButton.icon(
+                          onPressed: () => setState(_load),
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('إعادة المحاولة'),
+                        ),
+                      ],
+                    ));
+                  }
+                  final bytes = snapshot.data!;
+                  if (widget.isPdf) {
+                    return PdfViewer.data(
+                      bytes,
+                      sourceName: name,
+                    );
+                  }
+                  final content = utf8.decode(bytes, allowMalformed: true);
+                  return Container(
+                    width: double.infinity,
+                    color: Colors.white,
+                    padding: const EdgeInsets.all(16),
+                    child: SingleChildScrollView(
+                      child: SelectableText(
+                        content,
+                        style: const TextStyle(color: Colors.black87, fontSize: 13, height: 1.5),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _VideoAttachmentDialog extends StatefulWidget {
   final Map<String, dynamic> attachment;
   const _VideoAttachmentDialog({required this.attachment});
@@ -3854,14 +3990,14 @@ class _VideoAttachmentDialogState extends State<_VideoAttachmentDialog> {
       }
       return;
     }
-    final headers = {if (Api.token != null) 'Authorization': 'Bearer \${Api.token}'};
+    final headers = {if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'};
     final bases = <String>[mediaWorkerBase, if (apiBase != mediaWorkerBase) apiBase];
     Object? lastError;
     for (final base in bases) {
       VideoPlayerController? candidate;
       try {
         candidate = VideoPlayerController.networkUrl(
-          Uri.parse('$base/api/media/\${Uri.encodeComponent(id)}'),
+          Uri.parse('$base/api/media/${Uri.encodeComponent(id)}'),
           httpHeaders: headers,
         );
         await candidate.initialize().timeout(const Duration(minutes: 2));
@@ -4768,7 +4904,7 @@ class _ChatPageState extends State<ChatPage> {
                                               : null,
                                           isPinned: m['is_pinned'] == true,
                                         ),
-                                        child: Text(field(m, ['body', 'content', 'message'])),
+                                        child: BarqMessageBody(text: field(m, ['body', 'content', 'message'])),
                                       ),
                                       if (BarqFeatures.autoTranslate && translatedMessages[field(m, ['id', 'message_id'])] != null) ...[
                                         const SizedBox(height: 6),
@@ -5247,7 +5383,3638 @@ class _GroupChatPageState extends State<GroupChatPage> {
                                 },
                                 isPinned: m['is_pinned'] == true,
                               ),
-                              child: Text(field(m, ['body'])),
+                              child: BarqMessageBody(text: field(m, ['body'])),
+                            ),
+                            if (BarqFeatures.autoTranslate && translatedMessages[field(m, ['id', 'message_id'])] != null) ...[
+                              const SizedBox(height: 6),
+                              const Divider(height: 1, color: Colors.white24),
+                              const SizedBox(height: 6),
+                              Text(translatedMessages[field(m, ['id', 'message_id'])]!,
+                                style: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic)),
+                            ],
+                          ],
+                          Align(alignment: Alignment.centerLeft, child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(_messageTime(field(m, ['created_at'])),
+                                style: const TextStyle(color: Colors.white54, fontSize: 10)),
+                              if (field(m, ['edited_at', 'editedAt']).isNotEmpty) ...[
+                                const SizedBox(width: 5),
+                                const Text('تم التعديل', style: TextStyle(color: Colors.white54, fontSize: 9)),
+                              ],
+                            ],
+                          )),
+                          if (m['is_pinned'] == true)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 4),
+                              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                Icon(Icons.push_pin, size: 12, color: gold),
+                                SizedBox(width: 3),
+                                Text('مثبتة', style: TextStyle(color: gold, fontSize: 10)),
+                              ]),
+                            ),
+                          messageReactionBar(
+                            context: context,
+                            message: m,
+                            currentUserId: widget.currentUserId,
+                            onReaction: (emoji, remove) async {
+                              await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), emoji, remove: remove);
+                              if (mounted) await loadMessages(silent: true);
+                            },
+                            isPinned: m['is_pinned'] == true,
+                            onPin: () async {
+                              await Api.pinGroupMessage(groupId, field(m, ['id', 'message_id']), pinned: m['is_pinned'] != true);
+                              if (mounted) await loadMessages(silent: true);
+                            },
+                          ),
+                        ]),
+                      ),
+                    );
+                  },
+                )),
+          SafeArea(top: false, child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+            child: Row(children: [
+              if (!BarqFeatures.lightningMode)
+                IconButton(onPressed: sending ? null : pickAndSendFile,
+                  icon: const Icon(Icons.attach_file, color: gold), tooltip: 'إرسال ملف أو صورة أو فيديو'),
+              Expanded(child: TextField(controller: controller, minLines: 1, maxLines: 4,
+                decoration: inputDecoration('اكتب رسالة للمجموعة...', Icons.message).copyWith(
+                  helperText: replyToMessage == null ? null : 'الرد على: ${messageReplyPreview(replyToMessage!)}',
+                  helperStyle: const TextStyle(color: gold, fontSize: 10),
+                ), onSubmitted: (_) => send())),
+              const SizedBox(width: 8),
+              if (replyToMessage != null)
+                IconButton(onPressed: sending ? null : () => setState(() => replyToMessage = null),
+                  icon: const Icon(Icons.close, color: Colors.white70), tooltip: 'إلغاء الرد'),
+              IconButton.filled(
+                style: IconButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+                onPressed: sending ? null : send,
+                icon: sending ? const SizedBox(width: 18, height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)) : const Icon(Icons.send),
+              ),
+            ]),
+          )),
+        ]),
+      ),
+    );
+  }
+}
+), '');
+    if (raw.isEmpty) continue;
+    final uri = Uri.tryParse(raw.startsWith('www.') ? 'https://$raw' : raw);
+    if (uri == null || !{'http', 'https'}.contains(uri.scheme) || uri.host.isEmpty) continue;
+    if (!links.any((existing) => existing == uri)) links.add(uri);
+  }
+  return links;
+}
+
+class BarqMessageBody extends StatefulWidget {
+  final String text;
+  const BarqMessageBody({super.key, required this.text});
+
+  @override
+  State<BarqMessageBody> createState() => _BarqMessageBodyState();
+}
+
+class _BarqMessageBodyState extends State<BarqMessageBody> {
+  final List<TapGestureRecognizer> _recognizers = [];
+
+  @override
+  void dispose() {
+    for (final recognizer in _recognizers) {
+      recognizer.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _openLink(Uri uri) async {
+    try {
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened && mounted) showMsg(context, 'تعذر فتح الرابط على هذا الجهاز.');
+    } catch (error) {
+      if (mounted) showMsg(context, cleanError(error));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    for (final recognizer in _recognizers) {
+      recognizer.dispose();
+    }
+    _recognizers.clear();
+    final matches = RegExp(r'(?:https?://|www\.)[^\s<>()]+', caseSensitive: false).allMatches(widget.text).toList();
+    final spans = <TextSpan>[];
+    var cursor = 0;
+    final links = extractBarqLinks(widget.text);
+    for (final match in matches) {
+      final raw = match.group(0) ?? '';
+      final visible = raw.replaceFirst(RegExp(r'[.,!?;:،؛\]\}]+
+  final Map<String, dynamic> attachment;
+  final VoidCallback onDownload;
+
+  const _AttachmentTile({required this.attachment, required this.onDownload});
+
+  @override
+  State<_AttachmentTile> createState() => _AttachmentTileState();
+}
+
+class _AttachmentTileState extends State<_AttachmentTile> {
+  Future<Uint8List>? _previewFuture;
+  AudioPlayer? _audioPlayer;
+  StreamSubscription<PlayerState>? _audioStateSubscription;
+  StreamSubscription<Duration>? _audioPositionSubscription;
+  StreamSubscription<Duration>? _audioDurationSubscription;
+  StreamSubscription<void>? _audioCompleteSubscription;
+  Duration _audioPosition = Duration.zero;
+  Duration _audioDuration = Duration.zero;
+  bool _audioLoading = false;
+  bool _audioPlaying = false;
+  String? _audioError;
+
+  String get _contentType => field(widget.attachment, ['contentType']).toLowerCase();
+  bool get _isImage => _contentType.startsWith('image/');
+  bool get _isAudio => _contentType.startsWith('audio/');
+  bool get _isVideo => _contentType.startsWith('video/');
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreview();
+  }
+
+  void _loadPreview() {
+    if (_isImage) {
+      final id = field(widget.attachment, ['attachmentId']);
+      if (id.isNotEmpty) _previewFuture = Api.fetchAttachmentBytes(id);
+    }
+  }
+
+  void _openImage(Uint8List bytes) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: InteractiveViewer(
+                minScale: 0.7,
+                maxScale: 5,
+                child: Center(
+                  child: Image.memory(bytes, fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined, color: Colors.white70, size: 56)),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 4, right: 4,
+              child: IconButton(
+                tooltip: 'إغلاق المعاينة',
+                onPressed: () => Navigator.pop(dialogContext),
+                icon: const Icon(Icons.close, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleAudio() async {
+    final id = field(widget.attachment, ['attachmentId']);
+    if (id.isEmpty || _audioLoading) return;
+    final player = _audioPlayer ??= AudioPlayer();
+    if (_audioStateSubscription == null) {
+      _audioStateSubscription = player.onPlayerStateChanged.listen((state) {
+        if (mounted) setState(() => _audioPlaying = state == PlayerState.playing);
+      });
+      _audioPositionSubscription = player.onPositionChanged.listen((position) {
+        if (mounted) setState(() => _audioPosition = position);
+      });
+      _audioDurationSubscription = player.onDurationChanged.listen((duration) {
+        if (mounted) setState(() => _audioDuration = duration);
+      });
+      _audioCompleteSubscription = player.onPlayerComplete.listen((_) {
+        if (mounted) {
+          setState(() {
+            _audioPlaying = false;
+            _audioPosition = _audioDuration;
+          });
+        }
+      });
+    }
+    try {
+      if (_audioPlaying) {
+        await player.pause();
+        return;
+      }
+      if (_audioPosition > Duration.zero && _audioPosition < _audioDuration) {
+        await player.resume();
+        return;
+      }
+      setState(() {
+        _audioLoading = true;
+        _audioError = null;
+      });
+      final bytes = await Api.fetchAttachmentBytes(id);
+      if (!mounted) return;
+      await player.play(BytesSource(bytes));
+    } catch (error) {
+      if (mounted) setState(() => _audioError = cleanError(error));
+    } finally {
+      if (mounted) setState(() => _audioLoading = false);
+    }
+  }
+
+  Future<void> _seekAudio(double milliseconds) async {
+    final player = _audioPlayer;
+    if (player == null) return;
+    await player.seek(Duration(milliseconds: milliseconds.round()));
+  }
+
+  void _openVideo() {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _VideoAttachmentDialog(attachment: widget.attachment),
+    );
+  }
+
+  @override
+  void dispose() {
+    _audioStateSubscription?.cancel();
+    _audioPositionSubscription?.cancel();
+    _audioDurationSubscription?.cancel();
+    _audioCompleteSubscription?.cancel();
+    _audioPlayer?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final name = field(widget.attachment, ['fileName'], 'ملف مرفق');
+    final icon = _isImage ? Icons.image_outlined
+        : _isVideo ? Icons.video_file_outlined
+        : _isAudio ? Icons.audio_file_outlined
+        : Icons.insert_drive_file_outlined;
+
+    Widget leading;
+    if (_isImage && _previewFuture != null) {
+      leading = FutureBuilder<Uint8List>(
+        future: _previewFuture,
+        builder: (context, snapshot) {
+          if (snapshot.hasData) {
+            return GestureDetector(
+              onTap: () => _openImage(snapshot.data!),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.memory(snapshot.data!, width: 76, height: 76, fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox(width: 76, height: 76, child: Icon(Icons.broken_image_outlined, color: gold))),
+              ),
+            );
+          }
+          if (snapshot.hasError) {
+            return IconButton(
+              tooltip: 'إعادة تحميل المعاينة',
+              onPressed: () => setState(() => _loadPreview()),
+              icon: const Icon(Icons.refresh, color: gold),
+            );
+          }
+          return const SizedBox(width: 76, height: 76,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: gold)));
+        },
+      );
+    } else if (_isAudio) {
+      leading = IconButton(
+        tooltip: _audioPlaying ? 'إيقاف مؤقت' : 'تشغيل التسجيل الصوتي',
+        onPressed: _audioLoading ? null : _toggleAudio,
+        icon: _audioLoading
+            ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: gold))
+            : Icon(_audioPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill, color: gold, size: 34),
+      );
+    } else if (_isVideo) {
+      leading = IconButton(
+        tooltip: 'تشغيل الفيديو',
+        onPressed: _openVideo,
+        icon: const Icon(Icons.play_circle_fill, color: gold, size: 34),
+      );
+    } else {
+      leading = Icon(icon, color: gold, size: 28);
+    }
+
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 290),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(10)),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            leading,
+            const SizedBox(width: 9),
+            Flexible(child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 150),
+              child: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
+            )),
+            IconButton(onPressed: widget.onDownload, icon: const Icon(Icons.download, color: gold), tooltip: 'تنزيل الملف'),
+          ]),
+          if (_isAudio) ...[
+            Row(children: [
+              Text(formatBarqMediaDuration(_audioPosition),
+                style: const TextStyle(color: Colors.white70, fontSize: 10)),
+              Expanded(
+                child: Slider(
+                  min: 0,
+                  max: (_audioDuration.inMilliseconds > 0 ? _audioDuration.inMilliseconds : 1).toDouble(),
+                  value: _audioPosition.inMilliseconds.clamp(
+                    0, _audioDuration.inMilliseconds > 0 ? _audioDuration.inMilliseconds : 1,
+                  ).toDouble(),
+                  onChanged: _audioDuration > Duration.zero ? _seekAudio : null,
+                  activeColor: gold,
+                  inactiveColor: Colors.white24,
+                ),
+              ),
+              Text(formatBarqMediaDuration(_audioDuration),
+                style: const TextStyle(color: Colors.white70, fontSize: 10)),
+            ]),
+            if (_audioError != null)
+              Text(_audioError!, style: const TextStyle(color: Colors.redAccent, fontSize: 11)),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+String formatBarqMediaDuration(Duration duration) {
+  final totalSeconds = duration.inSeconds;
+  final minutes = (totalSeconds ~/ 60).toString().padLeft(2, '0');
+  final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
+  final hours = totalSeconds ~/ 3600;
+  if (hours > 0) {
+    final remainingMinutes = ((totalSeconds % 3600) ~/ 60).toString().padLeft(2, '0');
+    return '$hours:$remainingMinutes:$seconds';
+  }
+  return '$minutes:$seconds';
+}
+
+class _VideoAttachmentDialog extends StatefulWidget {
+  final Map<String, dynamic> attachment;
+  const _VideoAttachmentDialog({required this.attachment});
+
+  @override
+  State<_VideoAttachmentDialog> createState() => _VideoAttachmentDialogState();
+}
+
+class _VideoAttachmentDialogState extends State<_VideoAttachmentDialog> {
+  VideoPlayerController? _controller;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeVideo();
+  }
+
+  Future<void> _initializeVideo() async {
+    final id = field(widget.attachment, ['attachmentId']);
+    if (id.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'معرّف الفيديو غير متوفر.';
+        });
+      }
+      return;
+    }
+    final headers = {if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'};
+    final bases = <String>[mediaWorkerBase, if (apiBase != mediaWorkerBase) apiBase];
+    Object? lastError;
+    for (final base in bases) {
+      VideoPlayerController? candidate;
+      try {
+        candidate = VideoPlayerController.networkUrl(
+          Uri.parse('$base/api/media/${Uri.encodeComponent(id)}'),
+          httpHeaders: headers,
+        );
+        await candidate.initialize().timeout(const Duration(minutes: 2));
+        if (!mounted) {
+          await candidate.dispose();
+          return;
+        }
+        await candidate.setLooping(false);
+        setState(() {
+          _controller = candidate;
+          _loading = false;
+          _error = null;
+        });
+        return;
+      } catch (error) {
+        lastError = error;
+        await candidate?.dispose();
+      }
+    }
+    if (mounted) {
+      setState(() {
+        _loading = false;
+        _error = cleanError(lastError ?? 'تعذر تشغيل الفيديو.');
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    return Dialog(
+      backgroundColor: Colors.black,
+      insetPadding: const EdgeInsets.all(12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(children: [
+              const Expanded(child: Text('مشغّل الفيديو', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+              IconButton(
+                tooltip: 'إغلاق',
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close, color: Colors.white),
+              ),
+            ]),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.all(32),
+                child: CircularProgressIndicator(color: gold),
+              )
+            else if (_error != null)
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(children: [
+                  const Icon(Icons.error_outline, color: Colors.redAccent, size: 36),
+                  const SizedBox(height: 8),
+                  Text(_error!, style: const TextStyle(color: Colors.white70), textAlign: TextAlign.center),
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _loading = true;
+                        _error = null;
+                      });
+                      _initializeVideo();
+                    },
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('إعادة المحاولة'),
+                  ),
+                ]),
+              )
+            else if (controller != null)
+              AspectRatio(
+                aspectRatio: controller.value.aspectRatio > 0 ? controller.value.aspectRatio : 16 / 9,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    VideoPlayer(controller),
+                    IconButton.filled(
+                      onPressed: () async {
+                        if (controller.value.isPlaying) {
+                          await controller.pause();
+                        } else {
+                          await controller.play();
+                        }
+                        if (mounted) setState(() {});
+                      },
+                      iconSize: 36,
+                      icon: Icon(controller.value.isPlaying ? Icons.pause : Icons.play_arrow),
+                    ),
+                    Positioned(
+                      left: 8, right: 8, bottom: 4,
+                      child: VideoProgressIndicator(
+                        controller,
+                        allowScrubbing: true,
+                        colors: const VideoProgressColors(
+                          playedColor: gold,
+                          bufferedColor: Colors.white54,
+                          backgroundColor: Colors.white24,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class NearbyDevicesPage extends StatefulWidget {
+  final Map<String, dynamic> user;
+  final List<Map<String, dynamic>> friends;
+  const NearbyDevicesPage({super.key, required this.user, required this.friends});
+
+  @override
+  State<NearbyDevicesPage> createState() => _NearbyDevicesPageState();
+}
+
+class _NearbyDevicesPageState extends State<NearbyDevicesPage> {
+  List<Map<String, dynamic>> friends = [];
+  final Map<String, String> discovered = {};
+  String statusText = 'جارٍ تجهيز الاتصال بالأجهزة القريبة...';
+  bool starting = true;
+  StreamSubscription<Map<String, dynamic>>? subscription;
+
+  @override
+  void initState() {
+    super.initState();
+    subscription = BarqNearbyService.instance.events.listen(_onNearbyEvent);
+    _start();
+  }
+
+  void _onNearbyEvent(Map<String, dynamic> event) {
+    if (!mounted) return;
+    final type = event['type'];
+    if (type == 'endpoint_found') {
+      setState(() => discovered[event['endpointId'].toString()] = event['userId'].toString());
+    } else if (type == 'endpoint_lost') {
+      setState(() => discovered.remove(event['endpointId'].toString()));
+    } else if (type == 'connection_request') {
+      _confirmConnection(event);
+    } else if (type == 'connection_result') {
+      setState(() => statusText = event['success'] == true ? 'تم الاتصال بالجهاز القريب.' : 'تعذر الاتصال: ${event['status']}');
+    } else if (type == 'message_received') {
+      setState(() => statusText = 'وصلت رسالة دون إنترنت من أحد أصدقائك.');
+    } else if (type == 'stopped') {
+      setState(() => statusText = 'تم إيقاف البحث والاتصالات القريبة.');
+    }
+  }
+
+  Future<void> _start() async {
+    if (mounted) setState(() => starting = true);
+    try {
+      if (BarqNearbyService.instance.isRunning) {
+        await BarqNearbyService.instance.stop();
+      }
+      friends = widget.friends;
+      if (friends.isEmpty) {
+        final raw = await storage.read(key: 'barq_cached_friends');
+        final decoded = raw == null ? null : jsonDecode(raw);
+        if (decoded is List) {
+          friends = decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+        }
+      }
+      if (friends.isEmpty) throw Exception('افتح برق مرة واحدة مع الإنترنت لمزامنة جهات اتصالك قبل استخدام المراسلة القريبة.');
+      await BarqNearbyService.instance.start(
+        userId: field(widget.user, ['id', 'user_id']),
+        displayName: field(widget.user, ['displayName', 'display_name', 'username'], 'مستخدم برق'),
+        friends: friends,
+      );
+      if (mounted) setState(() => statusText = 'يبحث برق عن أصدقائك القريبين. أبقِ هذه الخدمة نشطة على الهاتفين.');
+    } catch (e) {
+      await BarqNearbyService.instance.stop();
+      if (mounted) setState(() => statusText = cleanError(e));
+    } finally {
+      if (mounted) setState(() => starting = false);
+    }
+  }
+
+  Future<void> _confirmConnection(Map<String, dynamic> event) async {
+    final endpointId = event['endpointId']?.toString() ?? '';
+    final name = event['name']?.toString() ?? 'جهاز قريب';
+    final token = event['authenticationToken']?.toString() ?? '';
+    final accepted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: panel,
+        title: const Text('تأكيد اتصال جهاز قريب'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(name),
+          const SizedBox(height: 12),
+          const Text('قارن رمز الأمان مع الرمز الظاهر على الهاتف الآخر. لا توافق إذا اختلف الرمزان.'),
+          const SizedBox(height: 12),
+          SelectableText(token, style: const TextStyle(color: gold, fontSize: 26, fontWeight: FontWeight.bold, letterSpacing: 3)),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('رفض')),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+            onPressed: () => Navigator.pop(dialogContext, true), child: const Text('الرمز متطابق — قبول')),
+        ],
+      ),
+    );
+    if (!mounted || endpointId.isEmpty) return;
+    try {
+      if (accepted == true) {
+        await BarqNearbyService.instance.acceptConnection(endpointId);
+      } else {
+        await BarqNearbyService.instance.rejectConnection(endpointId);
+      }
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    }
+  }
+
+  String _friendName(String id) {
+    for (final friend in friends) {
+      final person = friend['user'] is Map ? Map<String, dynamic>.from(friend['user']) : friend;
+      if (field(person, ['id', 'user_id']) == id) {
+        return field(person, ['displayName', 'display_name', 'username'], 'صديق برق');
+      }
+    }
+    return 'صديق برق';
+  }
+
+  @override
+  void dispose() {
+    subscription?.cancel();
+    // لا نوقف النقل عند مغادرة الشاشة؛ قد يعود المستخدم إلى المحادثة لإرسال النص.
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final connected = BarqNearbyService.instance.connected;
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(title: const Text('الأجهزة القريبة')),
+        body: ListView(padding: const EdgeInsets.all(16), children: [
+          Card(color: panel, child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Row(children: [Icon(Icons.wifi_tethering, color: gold), SizedBox(width: 8), Text('مراسلة محلية دون إنترنت', style: TextStyle(fontWeight: FontWeight.bold))]),
+            const SizedBox(height: 8),
+            Text(statusText),
+            const SizedBox(height: 8),
+            const Text('يعتمد على Bluetooth وWi‑Fi القريب. لا يقرأ موقعك ولا يخزنه، لكن قد يطلب Android إذن الموقع وتشغيل خدمة الموقع لأجل اكتشاف الأجهزة. لا تُرسل ملفات أو صور عبر هذا الوضع.', style: TextStyle(color: Colors.white60, fontSize: 12)),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(child: OutlinedButton.icon(onPressed: starting ? null : _start, icon: const Icon(Icons.refresh), label: const Text('إعادة البحث'))),
+              const SizedBox(width: 8),
+              Expanded(child: OutlinedButton.icon(onPressed: () async { await BarqNearbyService.instance.stop(); if (mounted) setState(() => discovered.clear()); }, icon: const Icon(Icons.stop_circle_outlined), label: const Text('إيقاف'))),
+            ]),
+          ]))),
+          const SizedBox(height: 12),
+          Text('الأجهزة المتصلة (${connected.length})', style: const TextStyle(color: gold, fontWeight: FontWeight.bold)),
+          if (connected.isEmpty) const ListTile(title: Text('لا توجد أجهزة متصلة بعد.')),
+          ...connected.map((entry) => ListTile(leading: const Icon(Icons.link, color: gold), title: Text(_friendName(entry.value)), subtitle: const Text('متصل وجاهز للرسائل النصية'))),
+          const SizedBox(height: 12),
+          Text('الأصدقاء القريبون (${discovered.length})', style: const TextStyle(color: gold, fontWeight: FontWeight.bold)),
+          if (discovered.isEmpty) const ListTile(title: Text('لا يظهر أصدقاؤك الآن. افتح الشاشة نفسها على هاتف صديقك وتأكد من تشغيل Bluetooth والموقع.'), dense: true),
+          ...discovered.entries.map((entry) => Card(color: panel, child: ListTile(
+            leading: const Icon(Icons.phone_android, color: gold),
+            title: Text(_friendName(entry.value)),
+            subtitle: const Text('قريب — لم يتم الاتصال بعد'),
+            trailing: IconButton(icon: const Icon(Icons.link, color: gold), tooltip: 'طلب اتصال', onPressed: () async {
+              try { await BarqNearbyService.instance.requestConnection(entry.key); }
+              catch (e) {
+                if (!context.mounted) return;
+                showMsg(context, cleanError(e));
+              }
+            }),
+          ))),
+        ]),
+      ),
+    );
+  }
+}
+
+class PublicProfilePage extends StatelessWidget {
+  final Map<String, dynamic> person;
+  final String currentUserId;
+  final bool canMessage;
+
+  const PublicProfilePage({
+    super.key,
+    required this.person,
+    required this.currentUserId,
+    this.canMessage = false,
+  });
+
+  Map<String, dynamic> get profile => person['user'] is Map
+      ? Map<String, dynamic>.from(person['user'])
+      : person;
+
+  Future<void> _savePhoneToContacts(BuildContext context, String name, String phone) async {
+    try {
+      final permitted = await FlutterContacts.requestPermission();
+      if (!permitted) {
+        if (context.mounted) showMsg(context, 'يلزم السماح بالوصول إلى جهات الاتصال لحفظ الرقم.');
+        return;
+      }
+      final existing = await FlutterContacts.getContacts(withProperties: true, withPhoto: false);
+      final target = normalizeBarqContactPhoneDigits(phone);
+      final alreadySaved = target.isNotEmpty && existing.any((contact) =>
+          contact.phones.any((entry) =>
+              normalizeBarqContactPhoneDigits(entry.number) == target));
+      if (alreadySaved) {
+        if (context.mounted) showMsg(context, 'هذا الرقم محفوظ بالفعل في جهات الاتصال.');
+        return;
+      }
+      await FlutterContacts.insertContact(Contact(
+        displayName: name,
+        phones: [Phone(phone)],
+      ));
+      if (context.mounted) showMsg(context, 'تم حفظ الرقم في جهات الاتصال.');
+    } catch (error) {
+      if (context.mounted) showMsg(context, cleanError(error));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = profile;
+    final id = field(user, ['id', 'user_id', 'friend_id', 'sender_id']).trim();
+    final canOpenChat = id.isNotEmpty && id != currentUserId.trim();
+    final name = field(user, ['displayName', 'display_name', 'name', 'username'], 'مستخدم برق');
+    final username = field(user, ['username'], 'user');
+    final phone = field(user, ['phone']);
+    final photoUrl = profilePhotoPath(user);
+    final photoUpdatedAt = field(user, ['photoUpdatedAt', 'photo_updated_at']);
+    final imageUrl = photoUrl.isEmpty
+        ? ''
+        : '$apiBase$photoUrl?v=${Uri.encodeComponent(photoUpdatedAt)}';
+
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(title: const Text('الملف الشخصي')),
+        body: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            const SizedBox(height: 18),
+            Center(
+              child: Container(
+                width: 132,
+                height: 132,
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: electricBlue.withValues(alpha: 0.75), width: 2),
+                  boxShadow: [
+                    BoxShadow(color: electricBlue.withValues(alpha: 0.18), blurRadius: 24),
+                  ],
+                ),
+                child: CircleAvatar(
+                  backgroundColor: const Color(0xFF46391F),
+                  child: imageUrl.isEmpty
+                      ? Text(name.characters.first, style: const TextStyle(color: gold, fontSize: 48))
+                      : ClipOval(
+                          child: Image.network(
+                            imageUrl,
+                            width: 124,
+                            height: 124,
+                            fit: BoxFit.cover,
+                            headers: {'Authorization': 'Bearer ${Api.token}'},
+                            errorBuilder: (_, __, ___) => Center(
+                              child: Text(name.characters.first,
+                                  style: const TextStyle(color: gold, fontSize: 48)),
+                            ),
+                          ),
+                        ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(name, textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 25, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 5),
+            Text('@$username', textAlign: TextAlign.center,
+                style: const TextStyle(color: gold, fontSize: 16)),
+            const SizedBox(height: 26),
+            Card(
+              color: panel,
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.badge_outlined, color: gold),
+                    title: const Text('اسم المستخدم'),
+                    subtitle: Text('@$username'),
+                  ),
+                  if (phone.isNotEmpty) const Divider(height: 1, indent: 16, endIndent: 16),
+                  if (phone.isNotEmpty)
+                    ListTile(
+                      leading: const Icon(Icons.phone_outlined, color: gold),
+                      title: const Text('رقم الهاتف'),
+                      subtitle: Text(phone, textDirection: TextDirection.ltr),
+                    ),
+                  const Divider(height: 1, indent: 16, endIndent: 16),
+                  const ListTile(
+                    leading: Icon(Icons.flash_on_rounded, color: gold),
+                    title: Text('على برق'),
+                    subtitle: Text('التواصل بنبض الضوء'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            if (phone.isNotEmpty)
+              OutlinedButton.icon(
+                onPressed: () => _savePhoneToContacts(context, name, phone),
+                icon: const Icon(Icons.person_add_alt_1),
+                label: const Text('حفظ الرقم في جهات الاتصال'),
+              ),
+            if (canMessage)
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: electricBlue,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(50),
+                ),
+                onPressed: canOpenChat
+                    ? () => Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ChatPage(friend: person, currentUserId: currentUserId),
+                          ),
+                        )
+                    : null,
+                icon: const Icon(Icons.chat_bubble_outline),
+                label: const Text('إرسال رسالة'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ChatPage extends StatefulWidget {
+  final Map<String, dynamic> friend;
+  final String currentUserId;
+  const ChatPage({super.key, required this.friend, required this.currentUserId});
+
+  @override
+  State<ChatPage> createState() => _ChatPageState();
+}
+
+class _ChatPageState extends State<ChatPage> {
+  final controller = TextEditingController();
+  List<Map<String, dynamic>> messages = [];
+  final Map<String, String> translatedMessages = {};
+  final Set<String> translatingMessageIds = {};
+  final Set<String> translationFailedMessageIds = {};
+  final Map<String, String> voiceTranscripts = {};
+  final Set<String> transcribingMessageIds = {};
+  bool loading = true;
+  bool sending = false;
+  bool refreshing = false;
+  bool ephemeralMode = false;
+  bool hasOlderMessages = false;
+  bool loadingOlderMessages = false;
+  Map<String, dynamic>? olderMessageCursor;
+  Map<String, dynamic>? replyToMessage;
+  Timer? refreshTimer;
+  Timer? _ephemeralExpiryTimer;
+  StreamSubscription<Map<String, dynamic>>? realtimeSubscription;
+  StreamSubscription<Map<String, dynamic>>? nearbySubscription;
+
+  Map<String, dynamic> get person =>
+      widget.friend['user'] is Map
+          ? Map<String, dynamic>.from(widget.friend['user'])
+          : widget.friend;
+
+  String get friendId => field(person, ['id', 'user_id', 'friend_id']);
+
+  @override
+  void initState() {
+    super.initState();
+    loadMessages();
+    nearbySubscription = BarqNearbyService.instance.events.listen((event) {
+      if (event['type'] == 'message_received' && event['senderId'] == friendId) {
+        loadMessages(silent: true);
+      }
+    });
+    realtimeSubscription = SirajRealtime.instance.events.listen((event) {
+      if (event['type'] != 'message') return;
+      final sender = event['senderId']?.toString();
+      final receiver = event['receiverId']?.toString();
+      if (sender == friendId || receiver == friendId) {
+        loadMessages(silent: true);
+      }
+    });
+    // مزامنة الرسائل عبر REST/Vercel كل 5 ثوانٍ دون الاعتماد على workers.dev.
+    refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted && !sending && !refreshing) loadMessages(silent: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    refreshTimer?.cancel();
+    _ephemeralExpiryTimer?.cancel();
+    realtimeSubscription?.cancel();
+    nearbySubscription?.cancel();
+    controller.dispose();
+    super.dispose();
+  }
+
+  void _scheduleEphemeralExpiry() {
+    _ephemeralExpiryTimer?.cancel();
+    final nowMillis = DateTime.now().millisecondsSinceEpoch;
+    final deadlines = messages
+        .map(_ephemeralDeleteAt)
+        .where((value) => value != null)
+        .map((value) => value! * 1000)
+        .where((deadline) => deadline > nowMillis)
+        .toList();
+    if (deadlines.isEmpty) return;
+    deadlines.sort();
+    _ephemeralExpiryTimer = Timer(
+      Duration(milliseconds: deadlines.first - nowMillis),
+      () {
+        if (!mounted) return;
+        final visible = filterExpiredEphemeralMessages(messages);
+        if (visible.length != messages.length) {
+          setState(() => messages = visible);
+        }
+        _scheduleEphemeralExpiry();
+      },
+    );
+  }
+
+  Future<void> _transcribeVoiceMessage(
+    Map<String, dynamic> message,
+    Map<String, dynamic> attachment,
+  ) async {
+    final id = field(message, ['id', 'message_id']);
+    if (id.isEmpty || transcribingMessageIds.contains(id) || voiceTranscripts.containsKey(id)) return;
+    if (!await confirmVoiceTranscription(context) || !mounted) return;
+    setState(() => transcribingMessageIds.add(id));
+    try {
+      final transcript = await Api.transcribeAttachment(
+        field(attachment, ['attachmentId']),
+        expectedContentType: field(attachment, ['contentType']),
+      );
+      if (mounted) setState(() => voiceTranscripts[id] = transcript);
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => transcribingMessageIds.remove(id));
+    }
+  }
+
+  Future<void> _translateMessages(List<Map<String, dynamic>> items) async {
+    if (!BarqFeatures.autoTranslate) return;
+    for (final message in items) {
+      final id = field(message, ['id', 'message_id']);
+      final senderId = field(message, ['sender_id', 'senderId']);
+      final original = field(message, ['body', 'content', 'message']);
+      if (id.isEmpty || senderId == widget.currentUserId || original.isEmpty ||
+          _attachmentData(message) != null || translatedMessages.containsKey(id) ||
+          translatingMessageIds.contains(id) || translationFailedMessageIds.contains(id)) {
+        continue;
+      }
+      translatingMessageIds.add(id);
+      try {
+        final translated = await BarqTranslator.translateArabicEnglish(original);
+        if (mounted && translated.isNotEmpty) {
+          setState(() => translatedMessages[id] = translated);
+        } else {
+          translationFailedMessageIds.add(id);
+        }
+      } catch (_) {
+        translationFailedMessageIds.add(id);
+        // تبقى الرسالة الأصلية ظاهرة ولا نكرر المحاولة تلقائيًا كل دورة تحديث.
+      } finally {
+        translatingMessageIds.remove(id);
+      }
+    }
+  }
+
+  Future<void> loadMessages({bool silent = false}) async {
+    if (refreshing) return;
+    refreshing = true;
+    try {
+      await BarqOfflineQueue.syncOutbox();
+      final page = await Api.messagesPage(friendId);
+      final data = Api._list(page['messages']);
+      await BarqOfflineQueue.reconcile(data);
+      final localPending = await BarqOfflineQueue.conversation(friendId, widget.currentUserId);
+      List<Map<String, dynamic>> temporary = [];
+      try {
+        temporary = await Api.ephemeralMessages(friendId);
+      } catch (_) {
+        // النسخ القديمة من الخادم لا تملك مسار الرسائل المؤقتة بعد.
+      }
+      if (mounted) {
+        setState(() {
+        final existingRegular = messages.where((item) => item['is_ephemeral'] != true).toList();
+        final regular = silent && existingRegular.isNotEmpty
+            ? mergeMessages(existingRegular, data) : data;
+        messages = filterExpiredEphemeralMessages(
+          mergeMessages(mergeMessages(regular, temporary), localPending),
+        );
+        if (!silent || olderMessageCursor == null) {
+          olderMessageCursor = page['nextCursor'] is Map
+              ? Map<String, dynamic>.from(page['nextCursor']) : null;
+        }
+        hasOlderMessages = page['hasMore'] == true || (silent && hasOlderMessages);
+        loading = false;
+      });
+        _scheduleEphemeralExpiry();
+        if (BarqFeatures.autoTranslate) _translateMessages(data);
+      }
+    } catch (e) {
+      if (mounted) {
+        final stillVisible = filterExpiredEphemeralMessages(messages);
+        final localPending = await BarqOfflineQueue.conversation(friendId, widget.currentUserId);
+        setState(() {
+          messages = mergeMessages(stillVisible, localPending);
+          loading = false;
+        });
+        _scheduleEphemeralExpiry();
+        if (!silent && localPending.isEmpty && mounted) showMsg(context, cleanError(e));
+      }
+    } finally {
+      refreshing = false;
+    }
+  }
+
+  Future<void> loadOlderMessages() async {
+    if (loadingOlderMessages || !hasOlderMessages || olderMessageCursor == null) return;
+    setState(() => loadingOlderMessages = true);
+    try {
+      final page = await Api.messagesPage(friendId, before: olderMessageCursor);
+      final older = Api._list(page['messages']);
+      if (mounted) {
+        setState(() {
+        messages = mergeMessages(older, messages);
+        olderMessageCursor = page['nextCursor'] is Map
+            ? Map<String, dynamic>.from(page['nextCursor']) : null;
+        hasOlderMessages = page['hasMore'] == true;
+      });
+      }
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => loadingOlderMessages = false);
+    }
+  }
+
+  Future<void> send() async {
+    final text = controller.text.trim();
+    if (text.isEmpty || sending) return;
+    if (text.length > 5000) {
+      showMsg(context, 'الرسالة طويلة جدًا؛ الحد الأقصى 5000 حرف.');
+      return;
+    }
+    setState(() => sending = true);
+    try {
+      if (ephemeralMode) {
+        if (replyToMessage != null) throw Exception('الرسائل المؤقتة لا تدعم الرد على رسالة أخرى. ألغِ الرد أولاً.');
+        await Api.sendEphemeralMessage(friendId, text);
+      } else {
+        final messageId = newBarqMessageId();
+        try {
+          await Api.sendMessage(friendId, text, clientMessageId: messageId,
+            replyToId: replyToMessage == null ? null : field(replyToMessage!, ['id', 'message_id']));
+        } catch (e) {
+          if (!e.toString().contains('NETWORK_DIAGNOSTIC')) rethrow;
+          final localMessage = {
+            'id': messageId,
+            'sender_id': widget.currentUserId,
+            'receiver_id': friendId,
+            'body': text,
+            if (replyToMessage != null) 'reply_to_id': field(replyToMessage!, ['id', 'message_id']),
+            if (replyToMessage != null) 'reply_to_body': field(replyToMessage!, ['body', 'content', 'message']),
+            if (replyToMessage != null) 'reply_to_sender_id': field(replyToMessage!, ['sender_id']),
+            'created_at': DateTime.now().toUtc().toIso8601String(),
+          };
+          await BarqOfflineQueue.enqueueOutgoing(localMessage);
+          var deliveredNearby = false;
+          try {
+            if (replyToMessage == null) {
+              deliveredNearby = await BarqNearbyService.instance.sendTextMessage(
+                receiverId: friendId, messageId: messageId, body: text, senderId: widget.currentUserId,
+              );
+            }
+          } catch (_) {}
+          if (mounted) {
+            setState(() => messages = mergeMessages(messages, [{...localMessage, 'is_offline_pending': true}]));
+            showMsg(context, deliveredNearby
+                ? 'تم تسليم الرسالة للجهاز القريب، وستُزامن مع الخادم عند عودة الإنترنت.'
+                : replyToMessage != null
+                    ? 'تم حفظ الرد محليًا وسيُرسل مع الاقتباس عند عودة الإنترنت.'
+                    : 'حُفظت الرسالة محليًا. افتح الأجهزة القريبة لتسليمها الآن، وستُزامن تلقائيًا عند عودة الإنترنت.');
+          }
+          controller.clear();
+          if (mounted) setState(() => replyToMessage = null);
+          return;
+        }
+      }
+      controller.clear();
+      if (mounted) setState(() => replyToMessage = null);
+      await loadMessages();
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => sending = false);
+    }
+  }
+
+  Future<void> pickAndSendFile() async {
+    if (BarqFeatures.lightningMode) {
+      showMsg(context, 'وضع البرق مفعّل: إرسال الوسائط والملفات متوقف مؤقتًا.');
+      return;
+    }
+    try {
+      final result = await FilePicker.platform.pickFiles(withData: true, allowMultiple: false);
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.single;
+      final bytes = file.bytes;
+      if (bytes == null) throw Exception('تعذر قراءة الملف من الجهاز.');
+      setState(() => sending = true);
+      await Api.uploadAttachment(
+        bytes: bytes,
+        fileName: file.name,
+        contentType: file.extension == null ? 'application/octet-stream' : _mimeForExtension(file.extension!),
+        recipientId: friendId,
+      );
+      await loadMessages();
+      if (mounted) showMsg(context, 'تم إرسال الملف.');
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => sending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final name = field(person, ['displayName', 'display_name', 'name', 'username'], 'محادثة');
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(
+          title: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => PublicProfilePage(person: widget.friend, currentUserId: widget.currentUserId, canMessage: true),
+            )),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              personAvatar(widget.friend, radius: 17),
+              const SizedBox(width: 9),
+              Flexible(child: Text(name, overflow: TextOverflow.ellipsis)),
+              if (BarqFeatures.lightningMode) ...[
+                const SizedBox(width: 6),
+                const Icon(Icons.flash_on_rounded, color: gold, size: 18),
+              ],
+            ]),
+          ),
+          actions: [
+            IconButton(
+              onPressed: () => showConversationSearch(context, (query, before) => Api.searchPrivateMessages(friendId, query, before: before)),
+              icon: const Icon(Icons.search, color: gold),
+              tooltip: 'البحث في المحادثة',
+            ),
+            IconButton(onPressed: loadMessages, icon: const Icon(Icons.refresh, color: gold)),
+          ],
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: loading
+                  ? const Center(child: CircularProgressIndicator(color: gold))
+                  : messages.isEmpty
+                      ? const Center(child: Text('لا توجد رسائل بعد. ابدأ المحادثة.', style: TextStyle(color: Colors.white60)))
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: messages.length + (hasOlderMessages ? 1 : 0),
+                          itemBuilder: (context, index) {
+                            if (hasOlderMessages && index == 0) {
+                              return Center(child: TextButton.icon(
+                                onPressed: loadingOlderMessages ? null : loadOlderMessages,
+                                icon: loadingOlderMessages
+                                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                                    : const Icon(Icons.history),
+                                label: const Text('تحميل الرسائل الأقدم'),
+                              ));
+                            }
+                            final m = messages[index - (hasOlderMessages ? 1 : 0)];
+                            final sender = field(m, ['sender_id']);
+                            final mine = sender == widget.currentUserId;
+                            return Align(
+                              alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+                              child: Container(
+                                constraints: const BoxConstraints(maxWidth: 300),
+                                margin: const EdgeInsets.symmetric(vertical: 4),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: mine ? const Color(0xFF46391F) : panel,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (m['is_offline_pending'] == true)
+                                      const Padding(
+                                        padding: EdgeInsets.only(bottom: 5),
+                                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                          Icon(Icons.wifi_off_rounded, size: 12, color: Colors.white54),
+                                          SizedBox(width: 4),
+                                          Text('رسالة دون إنترنت — بانتظار المزامنة', style: TextStyle(color: Colors.white54, fontSize: 10)),
+                                        ]),
+                                      ),
+                                    if (m['is_ephemeral'] == true)
+                                      const Padding(
+                                        padding: EdgeInsets.only(bottom: 5),
+                                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                          Icon(Icons.timer_outlined, size: 13, color: gold),
+                                          SizedBox(width: 4),
+                                          Text('رسالة مؤقتة', style: TextStyle(color: gold, fontSize: 10)),
+                                        ]),
+                                      ),
+                                    if (field(m, ['reply_to_id']).isNotEmpty)
+                                      Container(
+                                        width: double.infinity,
+                                        margin: const EdgeInsets.only(bottom: 7),
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8),
+                                          border: const Border(right: BorderSide(color: gold, width: 3))),
+                                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                          Text(field(m, ['reply_to_sender_id']) == widget.currentUserId ? 'رد على رسالتك' : 'رد على رسالة',
+                                            style: const TextStyle(color: gold, fontSize: 10, fontWeight: FontWeight.bold)),
+                                          Text(messageReplyPreview(m), maxLines: 2, overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                                        ]),
+                                      ),
+                                    if (_attachmentData(m) case final attachment?) ...[
+                                      _attachmentTile(attachment, () async {
+                                        try {
+                                          await Api.downloadAttachment(
+                                            attachmentId: field(attachment, ['attachmentId']),
+                                            fileName: field(attachment, ['fileName'], 'attachment'),
+                                          );
+                                        } catch (e) { if (context.mounted) showMsg(context, cleanError(e)); }
+                                      }),
+                                      if (field(attachment, ['contentType']).startsWith('audio/'))
+                                        TextButton.icon(
+                                          onPressed: transcribingMessageIds.contains(field(m, ['id', 'message_id']))
+                                              ? null : () => _transcribeVoiceMessage(m, attachment),
+                                          icon: transcribingMessageIds.contains(field(m, ['id', 'message_id']))
+                                              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                              : const Icon(Icons.subtitles_outlined, size: 16),
+                                          label: const Text('تحويل الصوت إلى نص'),
+                                        ),
+                                      if (voiceTranscripts[field(m, ['id', 'message_id'])] != null)
+                                        Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8)),
+                                          child: Text(voiceTranscripts[field(m, ['id', 'message_id'])]!),
+                                        ),
+                                    ] else ...[
+                                      GestureDetector(
+                                        onLongPress: () => showMessageActions(
+                                          context,
+                                          message: m,
+                                          canDelete: mine && m['is_ephemeral'] != true && m['is_offline_pending'] != true,
+                                          onDelete: () async {
+                                            await Api.deletePrivateMessage(field(m, ['id', 'message_id']));
+                                            if (mounted) await loadMessages();
+                                          },
+                                          onReply: (message) async {
+                                            setState(() => replyToMessage = Map<String, dynamic>.from(message));
+                                          },
+                                          onEdit: mine && m['is_ephemeral'] != true && m['is_offline_pending'] != true && _attachmentData(m) == null
+                                              ? (body) async {
+                                                  await Api.editPrivateMessage(field(m, ['id', 'message_id']), body);
+                                                  if (mounted) await loadMessages();
+                                                }
+                                              : null,
+                                          onReact: m['is_ephemeral'] != true && m['is_offline_pending'] != true
+                                              ? (emoji) async {
+                                                  await Api.reactPrivateMessage(field(m, ['id', 'message_id']), emoji);
+                                                  if (mounted) await loadMessages(silent: true);
+                                                }
+                                              : null,
+                                          onPin: m['is_ephemeral'] != true && m['is_offline_pending'] != true
+                                              ? () async {
+                                                  await Api.pinPrivateMessage(field(m, ['id', 'message_id']), pinned: m['is_pinned'] != true);
+                                                  if (mounted) await loadMessages(silent: true);
+                                                }
+                                              : null,
+                                          isPinned: m['is_pinned'] == true,
+                                        ),
+                                        child: BarqMessageBody(text: field(m, ['body', 'content', 'message'])),
+                                      ),
+                                      if (BarqFeatures.autoTranslate && translatedMessages[field(m, ['id', 'message_id'])] != null) ...[
+                                        const SizedBox(height: 6),
+                                        const Divider(height: 1, color: Colors.white24),
+                                        const SizedBox(height: 6),
+                                        Text(translatedMessages[field(m, ['id', 'message_id'])]!,
+                                          style: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic)),
+                                      ],
+                                    ],
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(_messageTime(field(m, ['created_at', 'createdAt'])),
+                                          style: TextStyle(fontSize: 10, color: Colors.white.withValues(alpha: 0.55))),
+                                        if (field(m, ['edited_at', 'editedAt']).isNotEmpty)
+                                          const Text('تم التعديل', style: TextStyle(fontSize: 9, color: Colors.white54)),
+                                        if (mine) ...[
+                                          const SizedBox(width: 4),
+                                          Icon(field(m, ['read_at', 'readAt']).isNotEmpty ? Icons.done_all : Icons.done,
+                                            size: 13, color: field(m, ['read_at', 'readAt']).isNotEmpty ? Colors.lightBlueAccent : Colors.white54),
+                                        ],
+                                      ],
+                                    ),
+                                    if (m['is_pinned'] == true)
+                                      const Padding(
+                                        padding: EdgeInsets.only(top: 4),
+                                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                          Icon(Icons.push_pin, size: 12, color: gold),
+                                          SizedBox(width: 3),
+                                          Text('مثبتة', style: TextStyle(color: gold, fontSize: 10)),
+                                        ]),
+                                      ),
+                                    if (m['is_ephemeral'] != true && m['is_offline_pending'] != true)
+                                      messageReactionBar(
+                                        context: context,
+                                        message: m,
+                                        currentUserId: widget.currentUserId,
+                                        onReaction: (emoji, remove) async {
+                                          await Api.reactPrivateMessage(field(m, ['id', 'message_id']), emoji, remove: remove);
+                                          if (mounted) await loadMessages(silent: true);
+                                        },
+                                        isPinned: m['is_pinned'] == true,
+                                        onPin: m['is_ephemeral'] != true && m['is_offline_pending'] != true
+                                            ? () async {
+                                                await Api.pinPrivateMessage(field(m, ['id', 'message_id']), pinned: m['is_pinned'] != true);
+                                                if (mounted) await loadMessages(silent: true);
+                                              }
+                                            : null,
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+            ),
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+                child: Row(
+                  children: [
+                    IconButton(
+                      onPressed: sending ? null : () => setState(() { ephemeralMode = !ephemeralMode; replyToMessage = null; }),
+                      icon: Icon(Icons.timer_outlined, color: ephemeralMode ? gold : Colors.white54),
+                      tooltip: ephemeralMode ? 'إيقاف الرسائل المؤقتة' : 'إرسال رسالة تختفي بعد قراءتها',
+                    ),
+                    if (!BarqFeatures.lightningMode)
+                      IconButton(
+                        onPressed: sending ? null : pickAndSendFile,
+                        icon: const Icon(Icons.attach_file, color: gold),
+                        tooltip: 'إرسال ملف أو صورة أو فيديو',
+                      ),
+                    Expanded(
+                      child: TextField(
+                        controller: controller,
+                        minLines: 1,
+                        maxLines: 4,
+                        decoration: inputDecoration(
+                          ephemeralMode ? 'رسالة مؤقتة — تختفي بعد القراءة' : 'اكتب رسالتك...',
+                          ephemeralMode ? Icons.timer_outlined : Icons.message,
+                        ).copyWith(
+                          helperText: replyToMessage == null ? null : 'الرد على: ${messageReplyPreview(replyToMessage!)}',
+                          helperStyle: const TextStyle(color: gold, fontSize: 10),
+                        ),
+                        onSubmitted: (_) => send(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    if (replyToMessage != null)
+                      IconButton(onPressed: sending ? null : () => setState(() => replyToMessage = null),
+                        icon: const Icon(Icons.close, color: Colors.white70), tooltip: 'إلغاء الرد'),
+                    IconButton.filled(
+                      style: IconButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+                      onPressed: sending ? null : send,
+                      icon: sending
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                          : const Icon(Icons.send),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+}
+
+
+class GroupChatPage extends StatefulWidget {
+  final Map<String, dynamic> group;
+  final String currentUserId;
+  final VoidCallback onAddMember;
+  const GroupChatPage({super.key, required this.group, required this.currentUserId, required this.onAddMember});
+
+  @override
+  State<GroupChatPage> createState() => _GroupChatPageState();
+}
+
+class _GroupChatPageState extends State<GroupChatPage> {
+  final controller = TextEditingController();
+  List<Map<String, dynamic>> messages = [];
+  final Map<String, String> translatedMessages = {};
+  final Set<String> translatingMessageIds = {};
+  final Set<String> translationFailedMessageIds = {};
+  final Map<String, String> voiceTranscripts = {};
+  final Set<String> transcribingMessageIds = {};
+  bool loading = true;
+  bool sending = false;
+  bool refreshing = false;
+  bool hasOlderMessages = false;
+  bool loadingOlderMessages = false;
+  Map<String, dynamic>? olderMessageCursor;
+  Map<String, dynamic>? replyToMessage;
+  Timer? refreshTimer;
+  String get groupId => field(widget.group, ['id']);
+
+  @override
+  void initState() {
+    super.initState();
+    loadMessages();
+    refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted && !sending && !refreshing) loadMessages(silent: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    refreshTimer?.cancel();
+    controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _transcribeVoiceMessage(
+    Map<String, dynamic> message,
+    Map<String, dynamic> attachment,
+  ) async {
+    final id = field(message, ['id', 'message_id']);
+    if (id.isEmpty || transcribingMessageIds.contains(id) || voiceTranscripts.containsKey(id)) return;
+    if (!await confirmVoiceTranscription(context) || !mounted) return;
+    setState(() => transcribingMessageIds.add(id));
+    try {
+      final transcript = await Api.transcribeAttachment(
+        field(attachment, ['attachmentId']),
+        expectedContentType: field(attachment, ['contentType']),
+      );
+      if (mounted) setState(() => voiceTranscripts[id] = transcript);
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => transcribingMessageIds.remove(id));
+    }
+  }
+
+  Future<void> _translateMessages(List<Map<String, dynamic>> items) async {
+    if (!BarqFeatures.autoTranslate) return;
+    for (final message in items) {
+      final id = field(message, ['id', 'message_id']);
+      final senderId = field(message, ['sender_id', 'senderId']);
+      final original = field(message, ['body', 'content', 'message']);
+      if (id.isEmpty || senderId == widget.currentUserId || original.isEmpty ||
+          _attachmentData(message) != null || translatedMessages.containsKey(id) ||
+          translatingMessageIds.contains(id) || translationFailedMessageIds.contains(id)) {
+        continue;
+      }
+      translatingMessageIds.add(id);
+      try {
+        final translated = await BarqTranslator.translateArabicEnglish(original);
+        if (mounted && translated.isNotEmpty) {
+          setState(() => translatedMessages[id] = translated);
+        } else {
+          translationFailedMessageIds.add(id);
+        }
+      } catch (_) {
+        translationFailedMessageIds.add(id);
+        // تبقى الرسالة الأصلية ظاهرة ولا نكرر المحاولة تلقائيًا كل دورة تحديث.
+      } finally {
+        translatingMessageIds.remove(id);
+      }
+    }
+  }
+
+  Future<void> loadMessages({bool silent = false}) async {
+    if (refreshing) return;
+    refreshing = true;
+    try {
+      final page = await Api.groupMessagesPage(groupId);
+      final data = Api._list(page['messages']);
+      if (mounted) {
+        setState(() {
+        messages = silent && messages.isNotEmpty ? mergeMessages(messages, data) : data;
+        if (!silent || olderMessageCursor == null) {
+          olderMessageCursor = page['nextCursor'] is Map
+              ? Map<String, dynamic>.from(page['nextCursor']) : null;
+        }
+        hasOlderMessages = page['hasMore'] == true || (silent && hasOlderMessages);
+        loading = false;
+      });
+        if (BarqFeatures.autoTranslate) _translateMessages(data);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => loading = false);
+        if (!silent) showMsg(context, cleanError(e));
+      }
+    } finally { refreshing = false; }
+  }
+
+  Future<void> loadOlderMessages() async {
+    if (loadingOlderMessages || !hasOlderMessages || olderMessageCursor == null) return;
+    setState(() => loadingOlderMessages = true);
+    try {
+      final page = await Api.groupMessagesPage(groupId, before: olderMessageCursor);
+      final older = Api._list(page['messages']);
+      if (mounted) {
+        setState(() {
+        messages = mergeMessages(older, messages);
+        olderMessageCursor = page['nextCursor'] is Map
+            ? Map<String, dynamic>.from(page['nextCursor']) : null;
+        hasOlderMessages = page['hasMore'] == true;
+      });
+      }
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => loadingOlderMessages = false);
+    }
+  }
+
+  Future<void> send() async {
+    final body = controller.text.trim();
+    if (body.isEmpty || sending) return;
+    setState(() => sending = true);
+    try {
+      await Api.sendGroupMessage(groupId, body,
+        replyToId: replyToMessage == null ? null : field(replyToMessage!, ['id', 'message_id']));
+      controller.clear();
+      if (mounted) setState(() => replyToMessage = null);
+      await loadMessages();
+    } catch (e) { if (mounted) showMsg(context, cleanError(e)); }
+    finally { if (mounted) setState(() => sending = false); }
+  }
+
+  Future<void> pickAndSendFile() async {
+    if (BarqFeatures.lightningMode) {
+      showMsg(context, 'وضع البرق مفعّل: إرسال الوسائط والملفات متوقف مؤقتًا.');
+      return;
+    }
+    try {
+      final result = await FilePicker.platform.pickFiles(withData: true, allowMultiple: false);
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.single;
+      final bytes = file.bytes;
+      if (bytes == null) throw Exception('تعذر قراءة الملف من الجهاز.');
+      setState(() => sending = true);
+      await Api.uploadAttachment(
+        bytes: bytes,
+        fileName: file.name,
+        contentType: file.extension == null ? 'application/octet-stream' : _mimeForExtension(file.extension!),
+        groupId: groupId,
+      );
+      await loadMessages();
+      if (mounted) showMsg(context, 'تم إرسال الملف للمجموعة.');
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => sending = false);
+    }
+  }
+
+  Future<void> showGroupMembers() async {
+    try {
+      final members = await Api.groupMembers(groupId);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: panel,
+          title: const Text('أعضاء المجموعة'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 320,
+            child: members.isEmpty
+                ? const Center(child: Text('لا يوجد أعضاء لعرضهم.'))
+                : ListView.builder(
+                    itemCount: members.length,
+                    itemBuilder: (context, index) {
+                      final member = members[index];
+                      final isOwner = member['is_owner'] == 1 || member['is_owner'] == true;
+                      return ListTile(
+                        leading: personAvatar(member),
+                        title: Text(field(member, ['display_name', 'displayName', 'username'], 'عضو')),
+                        subtitle: Text(isOwner ? 'مالك المجموعة' : '@${field(member, ['username'])}'),
+                        onTap: () {
+                          Navigator.pop(dialogContext);
+                          Navigator.push(context, MaterialPageRoute(
+                            builder: (_) => PublicProfilePage(
+                              person: member,
+                              currentUserId: widget.currentUserId,
+                            ),
+                          ));
+                        },
+                      );
+                    },
+                  ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق'))],
+        ),
+      );
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Row(mainAxisSize: MainAxisSize.min, children: [
+            Flexible(child: Text(field(widget.group, ['name'], 'مجموعة'), overflow: TextOverflow.ellipsis)),
+            if (BarqFeatures.lightningMode) ...[
+              const SizedBox(width: 6),
+              const Icon(Icons.flash_on_rounded, color: gold, size: 18),
+            ],
+          ]),
+          actions: [
+            IconButton(
+              onPressed: () => showConversationSearch(context, (query, before) => Api.searchGroupMessages(groupId, query, before: before)),
+              icon: const Icon(Icons.search, color: gold),
+              tooltip: 'البحث في المحادثة',
+            ),
+            IconButton(onPressed: showGroupMembers, icon: const Icon(Icons.people_alt_outlined, color: gold), tooltip: 'أعضاء المجموعة'),
+            IconButton(onPressed: widget.onAddMember, icon: const Icon(Icons.person_add_alt_1, color: gold), tooltip: 'إضافة عضو'),
+            IconButton(onPressed: loadMessages, icon: const Icon(Icons.refresh, color: gold)),
+          ],
+        ),
+        body: Column(children: [
+          Expanded(child: loading
+            ? const Center(child: CircularProgressIndicator(color: gold))
+            : messages.isEmpty
+              ? const Center(child: Text('لا توجد رسائل بعد. ابدأ الحديث مع مجموعتك.', style: TextStyle(color: Colors.white60)))
+              : ListView.builder(
+                  padding: const EdgeInsets.all(12), itemCount: messages.length + (hasOlderMessages ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (hasOlderMessages && index == 0) {
+                      return Center(child: TextButton.icon(
+                        onPressed: loadingOlderMessages ? null : loadOlderMessages,
+                        icon: loadingOlderMessages
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.history),
+                        label: const Text('تحميل الرسائل الأقدم'),
+                      ));
+                    }
+                    final m = messages[index - (hasOlderMessages ? 1 : 0)];
+                    final mine = field(m, ['sender_id']) == widget.currentUserId;
+                    return Align(
+                      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Container(
+                        constraints: const BoxConstraints(maxWidth: 310),
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: mine ? const Color(0xFF46391F) : panel,
+                          borderRadius: BorderRadius.circular(15)),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          if (field(m, ['reply_to_id']).isNotEmpty)
+                            Container(
+                              width: double.infinity,
+                              margin: const EdgeInsets.only(bottom: 7),
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8),
+                                border: const Border(right: BorderSide(color: gold, width: 3))),
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                Text(field(m, ['reply_to_sender_id']) == widget.currentUserId ? 'رد على رسالتك' : 'رد على رسالة',
+                                  style: const TextStyle(color: gold, fontSize: 10, fontWeight: FontWeight.bold)),
+                                Text(messageReplyPreview(m), maxLines: 2, overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                              ]),
+                            ),
+                          if (!mine)
+                            InkWell(
+                              borderRadius: BorderRadius.circular(8),
+                              onTap: () => Navigator.push(context, MaterialPageRoute(
+                                builder: (_) => PublicProfilePage(
+                                  person: {
+                                    'id': field(m, ['sender_id']),
+                                    'username': field(m, ['username']),
+                                    'display_name': field(m, ['display_name']),
+                                    'photo_updated_at': field(m, ['photo_updated_at']),
+                                  },
+                                  currentUserId: widget.currentUserId,
+                                ),
+                              )),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 3),
+                                child: Text(field(m, ['display_name', 'username'], 'عضو'),
+                                  style: const TextStyle(color: gold, fontSize: 11)),
+                              ),
+                            ),
+                          if (_attachmentData(m) case final attachment?) ...[
+                            _attachmentTile(attachment, () async {
+                              try {
+                                await Api.downloadAttachment(
+                                  attachmentId: field(attachment, ['attachmentId']),
+                                  fileName: field(attachment, ['fileName'], 'attachment'),
+                                );
+                              } catch (e) { if (context.mounted) showMsg(context, cleanError(e)); }
+                            }),
+                            if (field(attachment, ['contentType']).startsWith('audio/'))
+                              TextButton.icon(
+                                onPressed: transcribingMessageIds.contains(field(m, ['id', 'message_id']))
+                                    ? null : () => _transcribeVoiceMessage(m, attachment),
+                                icon: transcribingMessageIds.contains(field(m, ['id', 'message_id']))
+                                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                    : const Icon(Icons.subtitles_outlined, size: 16),
+                                label: const Text('تحويل الصوت إلى نص'),
+                              ),
+                            if (voiceTranscripts[field(m, ['id', 'message_id'])] != null)
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8)),
+                                child: Text(voiceTranscripts[field(m, ['id', 'message_id'])]!),
+                              ),
+                          ] else ...[
+                            GestureDetector(
+                              onLongPress: () => showMessageActions(
+                                context,
+                                message: m,
+                                canDelete: mine,
+                                onDelete: () async {
+                                  await Api.deleteGroupMessage(groupId, field(m, ['id', 'message_id']));
+                                  if (mounted) await loadMessages();
+                                },
+                                onReply: (message) async {
+                                  setState(() => replyToMessage = Map<String, dynamic>.from(message));
+                                },
+                                onEdit: mine && _attachmentData(m) == null
+                                    ? (body) async {
+                                        await Api.editGroupMessage(groupId, field(m, ['id', 'message_id']), body);
+                                        if (mounted) await loadMessages();
+                                      }
+                                    : null,
+                                onReact: (emoji) async {
+                                  await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), emoji);
+                                  if (mounted) await loadMessages(silent: true);
+                                },
+                                onPin: () async {
+                                  await Api.pinGroupMessage(groupId, field(m, ['id', 'message_id']), pinned: m['is_pinned'] != true);
+                                  if (mounted) await loadMessages(silent: true);
+                                },
+                                isPinned: m['is_pinned'] == true,
+                              ),
+                              child: BarqMessageBody(text: field(m, ['body'])),
+                            ),
+                            if (BarqFeatures.autoTranslate && translatedMessages[field(m, ['id', 'message_id'])] != null) ...[
+                              const SizedBox(height: 6),
+                              const Divider(height: 1, color: Colors.white24),
+                              const SizedBox(height: 6),
+                              Text(translatedMessages[field(m, ['id', 'message_id'])]!,
+                                style: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic)),
+                            ],
+                          ],
+                          Align(alignment: Alignment.centerLeft, child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(_messageTime(field(m, ['created_at'])),
+                                style: const TextStyle(color: Colors.white54, fontSize: 10)),
+                              if (field(m, ['edited_at', 'editedAt']).isNotEmpty) ...[
+                                const SizedBox(width: 5),
+                                const Text('تم التعديل', style: TextStyle(color: Colors.white54, fontSize: 9)),
+                              ],
+                            ],
+                          )),
+                          if (m['is_pinned'] == true)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 4),
+                              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                Icon(Icons.push_pin, size: 12, color: gold),
+                                SizedBox(width: 3),
+                                Text('مثبتة', style: TextStyle(color: gold, fontSize: 10)),
+                              ]),
+                            ),
+                          messageReactionBar(
+                            context: context,
+                            message: m,
+                            currentUserId: widget.currentUserId,
+                            onReaction: (emoji, remove) async {
+                              await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), emoji, remove: remove);
+                              if (mounted) await loadMessages(silent: true);
+                            },
+                            isPinned: m['is_pinned'] == true,
+                            onPin: () async {
+                              await Api.pinGroupMessage(groupId, field(m, ['id', 'message_id']), pinned: m['is_pinned'] != true);
+                              if (mounted) await loadMessages(silent: true);
+                            },
+                          ),
+                        ]),
+                      ),
+                    );
+                  },
+                )),
+          SafeArea(top: false, child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+            child: Row(children: [
+              if (!BarqFeatures.lightningMode)
+                IconButton(onPressed: sending ? null : pickAndSendFile,
+                  icon: const Icon(Icons.attach_file, color: gold), tooltip: 'إرسال ملف أو صورة أو فيديو'),
+              Expanded(child: TextField(controller: controller, minLines: 1, maxLines: 4,
+                decoration: inputDecoration('اكتب رسالة للمجموعة...', Icons.message).copyWith(
+                  helperText: replyToMessage == null ? null : 'الرد على: ${messageReplyPreview(replyToMessage!)}',
+                  helperStyle: const TextStyle(color: gold, fontSize: 10),
+                ), onSubmitted: (_) => send())),
+              const SizedBox(width: 8),
+              if (replyToMessage != null)
+                IconButton(onPressed: sending ? null : () => setState(() => replyToMessage = null),
+                  icon: const Icon(Icons.close, color: Colors.white70), tooltip: 'إلغاء الرد'),
+              IconButton.filled(
+                style: IconButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+                onPressed: sending ? null : send,
+                icon: sending ? const SizedBox(width: 18, height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)) : const Icon(Icons.send),
+              ),
+            ]),
+          )),
+        ]),
+      ),
+    );
+  }
+}
+), '');
+      if (visible.isEmpty) continue;
+      final start = match.start;
+      final end = start + visible.length;
+      if (start > cursor) spans.add(TextSpan(text: widget.text.substring(cursor, start)));
+      final uri = Uri.tryParse(visible.startsWith('www.') ? 'https://$visible' : visible);
+      if (uri != null && {'http', 'https'}.contains(uri.scheme) && uri.host.isNotEmpty) {
+        final recognizer = TapGestureRecognizer()..onTap = () => _openLink(uri);
+        _recognizers.add(recognizer);
+        spans.add(TextSpan(
+          text: visible,
+          style: const TextStyle(color: gold, decoration: TextDecoration.underline),
+          recognizer: recognizer,
+        ));
+      } else {
+        spans.add(TextSpan(text: visible));
+      }
+      cursor = end;
+    }
+    if (cursor < widget.text.length) spans.add(TextSpan(text: widget.text.substring(cursor)));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text.rich(TextSpan(children: spans), style: DefaultTextStyle.of(context).style),
+        for (final uri in links.take(2))
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Material(
+              color: Colors.black.withValues(alpha: 0.20),
+              borderRadius: BorderRadius.circular(10),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () => _openLink(uri),
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: electricBlue.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        child: const Icon(Icons.link, color: electricBlue),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(uri.host, maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: gold, fontWeight: FontWeight.bold, fontSize: 12)),
+                            const SizedBox(height: 3),
+                            Text(uri.path.isEmpty ? uri.toString() : '\${uri.path}\${uri.hasQuery ? '?…' : ''}',
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                            const SizedBox(height: 2),
+                            const Text('فتح الرابط', style: TextStyle(color: Colors.white54, fontSize: 10)),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.open_in_new, color: Colors.white54, size: 17),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _AttachmentTile extends StatefulWidget {
+  final Map<String, dynamic> attachment;
+  final VoidCallback onDownload;
+
+  const _AttachmentTile({required this.attachment, required this.onDownload});
+
+  @override
+  State<_AttachmentTile> createState() => _AttachmentTileState();
+}
+
+class _AttachmentTileState extends State<_AttachmentTile> {
+  Future<Uint8List>? _previewFuture;
+  AudioPlayer? _audioPlayer;
+  StreamSubscription<PlayerState>? _audioStateSubscription;
+  StreamSubscription<Duration>? _audioPositionSubscription;
+  StreamSubscription<Duration>? _audioDurationSubscription;
+  StreamSubscription<void>? _audioCompleteSubscription;
+  Duration _audioPosition = Duration.zero;
+  Duration _audioDuration = Duration.zero;
+  bool _audioLoading = false;
+  bool _audioPlaying = false;
+  String? _audioError;
+
+  String get _contentType => field(widget.attachment, ['contentType']).toLowerCase();
+  bool get _isImage => _contentType.startsWith('image/');
+  bool get _isAudio => _contentType.startsWith('audio/');
+  bool get _isVideo => _contentType.startsWith('video/');
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreview();
+  }
+
+  void _loadPreview() {
+    if (_isImage) {
+      final id = field(widget.attachment, ['attachmentId']);
+      if (id.isNotEmpty) _previewFuture = Api.fetchAttachmentBytes(id);
+    }
+  }
+
+  void _openImage(Uint8List bytes) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: InteractiveViewer(
+                minScale: 0.7,
+                maxScale: 5,
+                child: Center(
+                  child: Image.memory(bytes, fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined, color: Colors.white70, size: 56)),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 4, right: 4,
+              child: IconButton(
+                tooltip: 'إغلاق المعاينة',
+                onPressed: () => Navigator.pop(dialogContext),
+                icon: const Icon(Icons.close, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleAudio() async {
+    final id = field(widget.attachment, ['attachmentId']);
+    if (id.isEmpty || _audioLoading) return;
+    final player = _audioPlayer ??= AudioPlayer();
+    if (_audioStateSubscription == null) {
+      _audioStateSubscription = player.onPlayerStateChanged.listen((state) {
+        if (mounted) setState(() => _audioPlaying = state == PlayerState.playing);
+      });
+      _audioPositionSubscription = player.onPositionChanged.listen((position) {
+        if (mounted) setState(() => _audioPosition = position);
+      });
+      _audioDurationSubscription = player.onDurationChanged.listen((duration) {
+        if (mounted) setState(() => _audioDuration = duration);
+      });
+      _audioCompleteSubscription = player.onPlayerComplete.listen((_) {
+        if (mounted) {
+          setState(() {
+            _audioPlaying = false;
+            _audioPosition = _audioDuration;
+          });
+        }
+      });
+    }
+    try {
+      if (_audioPlaying) {
+        await player.pause();
+        return;
+      }
+      if (_audioPosition > Duration.zero && _audioPosition < _audioDuration) {
+        await player.resume();
+        return;
+      }
+      setState(() {
+        _audioLoading = true;
+        _audioError = null;
+      });
+      final bytes = await Api.fetchAttachmentBytes(id);
+      if (!mounted) return;
+      await player.play(BytesSource(bytes));
+    } catch (error) {
+      if (mounted) setState(() => _audioError = cleanError(error));
+    } finally {
+      if (mounted) setState(() => _audioLoading = false);
+    }
+  }
+
+  Future<void> _seekAudio(double milliseconds) async {
+    final player = _audioPlayer;
+    if (player == null) return;
+    await player.seek(Duration(milliseconds: milliseconds.round()));
+  }
+
+  void _openVideo() {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _VideoAttachmentDialog(attachment: widget.attachment),
+    );
+  }
+
+  @override
+  void dispose() {
+    _audioStateSubscription?.cancel();
+    _audioPositionSubscription?.cancel();
+    _audioDurationSubscription?.cancel();
+    _audioCompleteSubscription?.cancel();
+    _audioPlayer?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final name = field(widget.attachment, ['fileName'], 'ملف مرفق');
+    final icon = _isImage ? Icons.image_outlined
+        : _isVideo ? Icons.video_file_outlined
+        : _isAudio ? Icons.audio_file_outlined
+        : Icons.insert_drive_file_outlined;
+
+    Widget leading;
+    if (_isImage && _previewFuture != null) {
+      leading = FutureBuilder<Uint8List>(
+        future: _previewFuture,
+        builder: (context, snapshot) {
+          if (snapshot.hasData) {
+            return GestureDetector(
+              onTap: () => _openImage(snapshot.data!),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.memory(snapshot.data!, width: 76, height: 76, fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox(width: 76, height: 76, child: Icon(Icons.broken_image_outlined, color: gold))),
+              ),
+            );
+          }
+          if (snapshot.hasError) {
+            return IconButton(
+              tooltip: 'إعادة تحميل المعاينة',
+              onPressed: () => setState(() => _loadPreview()),
+              icon: const Icon(Icons.refresh, color: gold),
+            );
+          }
+          return const SizedBox(width: 76, height: 76,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: gold)));
+        },
+      );
+    } else if (_isAudio) {
+      leading = IconButton(
+        tooltip: _audioPlaying ? 'إيقاف مؤقت' : 'تشغيل التسجيل الصوتي',
+        onPressed: _audioLoading ? null : _toggleAudio,
+        icon: _audioLoading
+            ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: gold))
+            : Icon(_audioPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill, color: gold, size: 34),
+      );
+    } else if (_isVideo) {
+      leading = IconButton(
+        tooltip: 'تشغيل الفيديو',
+        onPressed: _openVideo,
+        icon: const Icon(Icons.play_circle_fill, color: gold, size: 34),
+      );
+    } else {
+      leading = Icon(icon, color: gold, size: 28);
+    }
+
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 290),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(10)),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            leading,
+            const SizedBox(width: 9),
+            Flexible(child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 150),
+              child: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
+            )),
+            IconButton(onPressed: widget.onDownload, icon: const Icon(Icons.download, color: gold), tooltip: 'تنزيل الملف'),
+          ]),
+          if (_isAudio) ...[
+            Row(children: [
+              Text(formatBarqMediaDuration(_audioPosition),
+                style: const TextStyle(color: Colors.white70, fontSize: 10)),
+              Expanded(
+                child: Slider(
+                  min: 0,
+                  max: (_audioDuration.inMilliseconds > 0 ? _audioDuration.inMilliseconds : 1).toDouble(),
+                  value: _audioPosition.inMilliseconds.clamp(
+                    0, _audioDuration.inMilliseconds > 0 ? _audioDuration.inMilliseconds : 1,
+                  ).toDouble(),
+                  onChanged: _audioDuration > Duration.zero ? _seekAudio : null,
+                  activeColor: gold,
+                  inactiveColor: Colors.white24,
+                ),
+              ),
+              Text(formatBarqMediaDuration(_audioDuration),
+                style: const TextStyle(color: Colors.white70, fontSize: 10)),
+            ]),
+            if (_audioError != null)
+              Text(_audioError!, style: const TextStyle(color: Colors.redAccent, fontSize: 11)),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+String formatBarqMediaDuration(Duration duration) {
+  final totalSeconds = duration.inSeconds;
+  final minutes = (totalSeconds ~/ 60).toString().padLeft(2, '0');
+  final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
+  final hours = totalSeconds ~/ 3600;
+  if (hours > 0) {
+    final remainingMinutes = ((totalSeconds % 3600) ~/ 60).toString().padLeft(2, '0');
+    return '$hours:$remainingMinutes:$seconds';
+  }
+  return '$minutes:$seconds';
+}
+
+class _VideoAttachmentDialog extends StatefulWidget {
+  final Map<String, dynamic> attachment;
+  const _VideoAttachmentDialog({required this.attachment});
+
+  @override
+  State<_VideoAttachmentDialog> createState() => _VideoAttachmentDialogState();
+}
+
+class _VideoAttachmentDialogState extends State<_VideoAttachmentDialog> {
+  VideoPlayerController? _controller;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeVideo();
+  }
+
+  Future<void> _initializeVideo() async {
+    final id = field(widget.attachment, ['attachmentId']);
+    if (id.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'معرّف الفيديو غير متوفر.';
+        });
+      }
+      return;
+    }
+    final headers = {if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'};
+    final bases = <String>[mediaWorkerBase, if (apiBase != mediaWorkerBase) apiBase];
+    Object? lastError;
+    for (final base in bases) {
+      VideoPlayerController? candidate;
+      try {
+        candidate = VideoPlayerController.networkUrl(
+          Uri.parse('$base/api/media/${Uri.encodeComponent(id)}'),
+          httpHeaders: headers,
+        );
+        await candidate.initialize().timeout(const Duration(minutes: 2));
+        if (!mounted) {
+          await candidate.dispose();
+          return;
+        }
+        await candidate.setLooping(false);
+        setState(() {
+          _controller = candidate;
+          _loading = false;
+          _error = null;
+        });
+        return;
+      } catch (error) {
+        lastError = error;
+        await candidate?.dispose();
+      }
+    }
+    if (mounted) {
+      setState(() {
+        _loading = false;
+        _error = cleanError(lastError ?? 'تعذر تشغيل الفيديو.');
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    return Dialog(
+      backgroundColor: Colors.black,
+      insetPadding: const EdgeInsets.all(12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(children: [
+              const Expanded(child: Text('مشغّل الفيديو', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+              IconButton(
+                tooltip: 'إغلاق',
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close, color: Colors.white),
+              ),
+            ]),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.all(32),
+                child: CircularProgressIndicator(color: gold),
+              )
+            else if (_error != null)
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(children: [
+                  const Icon(Icons.error_outline, color: Colors.redAccent, size: 36),
+                  const SizedBox(height: 8),
+                  Text(_error!, style: const TextStyle(color: Colors.white70), textAlign: TextAlign.center),
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _loading = true;
+                        _error = null;
+                      });
+                      _initializeVideo();
+                    },
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('إعادة المحاولة'),
+                  ),
+                ]),
+              )
+            else if (controller != null)
+              AspectRatio(
+                aspectRatio: controller.value.aspectRatio > 0 ? controller.value.aspectRatio : 16 / 9,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    VideoPlayer(controller),
+                    IconButton.filled(
+                      onPressed: () async {
+                        if (controller.value.isPlaying) {
+                          await controller.pause();
+                        } else {
+                          await controller.play();
+                        }
+                        if (mounted) setState(() {});
+                      },
+                      iconSize: 36,
+                      icon: Icon(controller.value.isPlaying ? Icons.pause : Icons.play_arrow),
+                    ),
+                    Positioned(
+                      left: 8, right: 8, bottom: 4,
+                      child: VideoProgressIndicator(
+                        controller,
+                        allowScrubbing: true,
+                        colors: const VideoProgressColors(
+                          playedColor: gold,
+                          bufferedColor: Colors.white54,
+                          backgroundColor: Colors.white24,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class NearbyDevicesPage extends StatefulWidget {
+  final Map<String, dynamic> user;
+  final List<Map<String, dynamic>> friends;
+  const NearbyDevicesPage({super.key, required this.user, required this.friends});
+
+  @override
+  State<NearbyDevicesPage> createState() => _NearbyDevicesPageState();
+}
+
+class _NearbyDevicesPageState extends State<NearbyDevicesPage> {
+  List<Map<String, dynamic>> friends = [];
+  final Map<String, String> discovered = {};
+  String statusText = 'جارٍ تجهيز الاتصال بالأجهزة القريبة...';
+  bool starting = true;
+  StreamSubscription<Map<String, dynamic>>? subscription;
+
+  @override
+  void initState() {
+    super.initState();
+    subscription = BarqNearbyService.instance.events.listen(_onNearbyEvent);
+    _start();
+  }
+
+  void _onNearbyEvent(Map<String, dynamic> event) {
+    if (!mounted) return;
+    final type = event['type'];
+    if (type == 'endpoint_found') {
+      setState(() => discovered[event['endpointId'].toString()] = event['userId'].toString());
+    } else if (type == 'endpoint_lost') {
+      setState(() => discovered.remove(event['endpointId'].toString()));
+    } else if (type == 'connection_request') {
+      _confirmConnection(event);
+    } else if (type == 'connection_result') {
+      setState(() => statusText = event['success'] == true ? 'تم الاتصال بالجهاز القريب.' : 'تعذر الاتصال: ${event['status']}');
+    } else if (type == 'message_received') {
+      setState(() => statusText = 'وصلت رسالة دون إنترنت من أحد أصدقائك.');
+    } else if (type == 'stopped') {
+      setState(() => statusText = 'تم إيقاف البحث والاتصالات القريبة.');
+    }
+  }
+
+  Future<void> _start() async {
+    if (mounted) setState(() => starting = true);
+    try {
+      if (BarqNearbyService.instance.isRunning) {
+        await BarqNearbyService.instance.stop();
+      }
+      friends = widget.friends;
+      if (friends.isEmpty) {
+        final raw = await storage.read(key: 'barq_cached_friends');
+        final decoded = raw == null ? null : jsonDecode(raw);
+        if (decoded is List) {
+          friends = decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+        }
+      }
+      if (friends.isEmpty) throw Exception('افتح برق مرة واحدة مع الإنترنت لمزامنة جهات اتصالك قبل استخدام المراسلة القريبة.');
+      await BarqNearbyService.instance.start(
+        userId: field(widget.user, ['id', 'user_id']),
+        displayName: field(widget.user, ['displayName', 'display_name', 'username'], 'مستخدم برق'),
+        friends: friends,
+      );
+      if (mounted) setState(() => statusText = 'يبحث برق عن أصدقائك القريبين. أبقِ هذه الخدمة نشطة على الهاتفين.');
+    } catch (e) {
+      await BarqNearbyService.instance.stop();
+      if (mounted) setState(() => statusText = cleanError(e));
+    } finally {
+      if (mounted) setState(() => starting = false);
+    }
+  }
+
+  Future<void> _confirmConnection(Map<String, dynamic> event) async {
+    final endpointId = event['endpointId']?.toString() ?? '';
+    final name = event['name']?.toString() ?? 'جهاز قريب';
+    final token = event['authenticationToken']?.toString() ?? '';
+    final accepted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: panel,
+        title: const Text('تأكيد اتصال جهاز قريب'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(name),
+          const SizedBox(height: 12),
+          const Text('قارن رمز الأمان مع الرمز الظاهر على الهاتف الآخر. لا توافق إذا اختلف الرمزان.'),
+          const SizedBox(height: 12),
+          SelectableText(token, style: const TextStyle(color: gold, fontSize: 26, fontWeight: FontWeight.bold, letterSpacing: 3)),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('رفض')),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+            onPressed: () => Navigator.pop(dialogContext, true), child: const Text('الرمز متطابق — قبول')),
+        ],
+      ),
+    );
+    if (!mounted || endpointId.isEmpty) return;
+    try {
+      if (accepted == true) {
+        await BarqNearbyService.instance.acceptConnection(endpointId);
+      } else {
+        await BarqNearbyService.instance.rejectConnection(endpointId);
+      }
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    }
+  }
+
+  String _friendName(String id) {
+    for (final friend in friends) {
+      final person = friend['user'] is Map ? Map<String, dynamic>.from(friend['user']) : friend;
+      if (field(person, ['id', 'user_id']) == id) {
+        return field(person, ['displayName', 'display_name', 'username'], 'صديق برق');
+      }
+    }
+    return 'صديق برق';
+  }
+
+  @override
+  void dispose() {
+    subscription?.cancel();
+    // لا نوقف النقل عند مغادرة الشاشة؛ قد يعود المستخدم إلى المحادثة لإرسال النص.
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final connected = BarqNearbyService.instance.connected;
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(title: const Text('الأجهزة القريبة')),
+        body: ListView(padding: const EdgeInsets.all(16), children: [
+          Card(color: panel, child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Row(children: [Icon(Icons.wifi_tethering, color: gold), SizedBox(width: 8), Text('مراسلة محلية دون إنترنت', style: TextStyle(fontWeight: FontWeight.bold))]),
+            const SizedBox(height: 8),
+            Text(statusText),
+            const SizedBox(height: 8),
+            const Text('يعتمد على Bluetooth وWi‑Fi القريب. لا يقرأ موقعك ولا يخزنه، لكن قد يطلب Android إذن الموقع وتشغيل خدمة الموقع لأجل اكتشاف الأجهزة. لا تُرسل ملفات أو صور عبر هذا الوضع.', style: TextStyle(color: Colors.white60, fontSize: 12)),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(child: OutlinedButton.icon(onPressed: starting ? null : _start, icon: const Icon(Icons.refresh), label: const Text('إعادة البحث'))),
+              const SizedBox(width: 8),
+              Expanded(child: OutlinedButton.icon(onPressed: () async { await BarqNearbyService.instance.stop(); if (mounted) setState(() => discovered.clear()); }, icon: const Icon(Icons.stop_circle_outlined), label: const Text('إيقاف'))),
+            ]),
+          ]))),
+          const SizedBox(height: 12),
+          Text('الأجهزة المتصلة (${connected.length})', style: const TextStyle(color: gold, fontWeight: FontWeight.bold)),
+          if (connected.isEmpty) const ListTile(title: Text('لا توجد أجهزة متصلة بعد.')),
+          ...connected.map((entry) => ListTile(leading: const Icon(Icons.link, color: gold), title: Text(_friendName(entry.value)), subtitle: const Text('متصل وجاهز للرسائل النصية'))),
+          const SizedBox(height: 12),
+          Text('الأصدقاء القريبون (${discovered.length})', style: const TextStyle(color: gold, fontWeight: FontWeight.bold)),
+          if (discovered.isEmpty) const ListTile(title: Text('لا يظهر أصدقاؤك الآن. افتح الشاشة نفسها على هاتف صديقك وتأكد من تشغيل Bluetooth والموقع.'), dense: true),
+          ...discovered.entries.map((entry) => Card(color: panel, child: ListTile(
+            leading: const Icon(Icons.phone_android, color: gold),
+            title: Text(_friendName(entry.value)),
+            subtitle: const Text('قريب — لم يتم الاتصال بعد'),
+            trailing: IconButton(icon: const Icon(Icons.link, color: gold), tooltip: 'طلب اتصال', onPressed: () async {
+              try { await BarqNearbyService.instance.requestConnection(entry.key); }
+              catch (e) {
+                if (!context.mounted) return;
+                showMsg(context, cleanError(e));
+              }
+            }),
+          ))),
+        ]),
+      ),
+    );
+  }
+}
+
+class PublicProfilePage extends StatelessWidget {
+  final Map<String, dynamic> person;
+  final String currentUserId;
+  final bool canMessage;
+
+  const PublicProfilePage({
+    super.key,
+    required this.person,
+    required this.currentUserId,
+    this.canMessage = false,
+  });
+
+  Map<String, dynamic> get profile => person['user'] is Map
+      ? Map<String, dynamic>.from(person['user'])
+      : person;
+
+  Future<void> _savePhoneToContacts(BuildContext context, String name, String phone) async {
+    try {
+      final permitted = await FlutterContacts.requestPermission();
+      if (!permitted) {
+        if (context.mounted) showMsg(context, 'يلزم السماح بالوصول إلى جهات الاتصال لحفظ الرقم.');
+        return;
+      }
+      final existing = await FlutterContacts.getContacts(withProperties: true, withPhoto: false);
+      final target = normalizeBarqContactPhoneDigits(phone);
+      final alreadySaved = target.isNotEmpty && existing.any((contact) =>
+          contact.phones.any((entry) =>
+              normalizeBarqContactPhoneDigits(entry.number) == target));
+      if (alreadySaved) {
+        if (context.mounted) showMsg(context, 'هذا الرقم محفوظ بالفعل في جهات الاتصال.');
+        return;
+      }
+      await FlutterContacts.insertContact(Contact(
+        displayName: name,
+        phones: [Phone(phone)],
+      ));
+      if (context.mounted) showMsg(context, 'تم حفظ الرقم في جهات الاتصال.');
+    } catch (error) {
+      if (context.mounted) showMsg(context, cleanError(error));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = profile;
+    final id = field(user, ['id', 'user_id', 'friend_id', 'sender_id']).trim();
+    final canOpenChat = id.isNotEmpty && id != currentUserId.trim();
+    final name = field(user, ['displayName', 'display_name', 'name', 'username'], 'مستخدم برق');
+    final username = field(user, ['username'], 'user');
+    final phone = field(user, ['phone']);
+    final photoUrl = profilePhotoPath(user);
+    final photoUpdatedAt = field(user, ['photoUpdatedAt', 'photo_updated_at']);
+    final imageUrl = photoUrl.isEmpty
+        ? ''
+        : '$apiBase$photoUrl?v=${Uri.encodeComponent(photoUpdatedAt)}';
+
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(title: const Text('الملف الشخصي')),
+        body: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            const SizedBox(height: 18),
+            Center(
+              child: Container(
+                width: 132,
+                height: 132,
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: electricBlue.withValues(alpha: 0.75), width: 2),
+                  boxShadow: [
+                    BoxShadow(color: electricBlue.withValues(alpha: 0.18), blurRadius: 24),
+                  ],
+                ),
+                child: CircleAvatar(
+                  backgroundColor: const Color(0xFF46391F),
+                  child: imageUrl.isEmpty
+                      ? Text(name.characters.first, style: const TextStyle(color: gold, fontSize: 48))
+                      : ClipOval(
+                          child: Image.network(
+                            imageUrl,
+                            width: 124,
+                            height: 124,
+                            fit: BoxFit.cover,
+                            headers: {'Authorization': 'Bearer ${Api.token}'},
+                            errorBuilder: (_, __, ___) => Center(
+                              child: Text(name.characters.first,
+                                  style: const TextStyle(color: gold, fontSize: 48)),
+                            ),
+                          ),
+                        ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(name, textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 25, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 5),
+            Text('@$username', textAlign: TextAlign.center,
+                style: const TextStyle(color: gold, fontSize: 16)),
+            const SizedBox(height: 26),
+            Card(
+              color: panel,
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.badge_outlined, color: gold),
+                    title: const Text('اسم المستخدم'),
+                    subtitle: Text('@$username'),
+                  ),
+                  if (phone.isNotEmpty) const Divider(height: 1, indent: 16, endIndent: 16),
+                  if (phone.isNotEmpty)
+                    ListTile(
+                      leading: const Icon(Icons.phone_outlined, color: gold),
+                      title: const Text('رقم الهاتف'),
+                      subtitle: Text(phone, textDirection: TextDirection.ltr),
+                    ),
+                  const Divider(height: 1, indent: 16, endIndent: 16),
+                  const ListTile(
+                    leading: Icon(Icons.flash_on_rounded, color: gold),
+                    title: Text('على برق'),
+                    subtitle: Text('التواصل بنبض الضوء'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            if (phone.isNotEmpty)
+              OutlinedButton.icon(
+                onPressed: () => _savePhoneToContacts(context, name, phone),
+                icon: const Icon(Icons.person_add_alt_1),
+                label: const Text('حفظ الرقم في جهات الاتصال'),
+              ),
+            if (canMessage)
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: electricBlue,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(50),
+                ),
+                onPressed: canOpenChat
+                    ? () => Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ChatPage(friend: person, currentUserId: currentUserId),
+                          ),
+                        )
+                    : null,
+                icon: const Icon(Icons.chat_bubble_outline),
+                label: const Text('إرسال رسالة'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ChatPage extends StatefulWidget {
+  final Map<String, dynamic> friend;
+  final String currentUserId;
+  const ChatPage({super.key, required this.friend, required this.currentUserId});
+
+  @override
+  State<ChatPage> createState() => _ChatPageState();
+}
+
+class _ChatPageState extends State<ChatPage> {
+  final controller = TextEditingController();
+  List<Map<String, dynamic>> messages = [];
+  final Map<String, String> translatedMessages = {};
+  final Set<String> translatingMessageIds = {};
+  final Set<String> translationFailedMessageIds = {};
+  final Map<String, String> voiceTranscripts = {};
+  final Set<String> transcribingMessageIds = {};
+  bool loading = true;
+  bool sending = false;
+  bool refreshing = false;
+  bool ephemeralMode = false;
+  bool hasOlderMessages = false;
+  bool loadingOlderMessages = false;
+  Map<String, dynamic>? olderMessageCursor;
+  Map<String, dynamic>? replyToMessage;
+  Timer? refreshTimer;
+  Timer? _ephemeralExpiryTimer;
+  StreamSubscription<Map<String, dynamic>>? realtimeSubscription;
+  StreamSubscription<Map<String, dynamic>>? nearbySubscription;
+
+  Map<String, dynamic> get person =>
+      widget.friend['user'] is Map
+          ? Map<String, dynamic>.from(widget.friend['user'])
+          : widget.friend;
+
+  String get friendId => field(person, ['id', 'user_id', 'friend_id']);
+
+  @override
+  void initState() {
+    super.initState();
+    loadMessages();
+    nearbySubscription = BarqNearbyService.instance.events.listen((event) {
+      if (event['type'] == 'message_received' && event['senderId'] == friendId) {
+        loadMessages(silent: true);
+      }
+    });
+    realtimeSubscription = SirajRealtime.instance.events.listen((event) {
+      if (event['type'] != 'message') return;
+      final sender = event['senderId']?.toString();
+      final receiver = event['receiverId']?.toString();
+      if (sender == friendId || receiver == friendId) {
+        loadMessages(silent: true);
+      }
+    });
+    // مزامنة الرسائل عبر REST/Vercel كل 5 ثوانٍ دون الاعتماد على workers.dev.
+    refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted && !sending && !refreshing) loadMessages(silent: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    refreshTimer?.cancel();
+    _ephemeralExpiryTimer?.cancel();
+    realtimeSubscription?.cancel();
+    nearbySubscription?.cancel();
+    controller.dispose();
+    super.dispose();
+  }
+
+  void _scheduleEphemeralExpiry() {
+    _ephemeralExpiryTimer?.cancel();
+    final nowMillis = DateTime.now().millisecondsSinceEpoch;
+    final deadlines = messages
+        .map(_ephemeralDeleteAt)
+        .where((value) => value != null)
+        .map((value) => value! * 1000)
+        .where((deadline) => deadline > nowMillis)
+        .toList();
+    if (deadlines.isEmpty) return;
+    deadlines.sort();
+    _ephemeralExpiryTimer = Timer(
+      Duration(milliseconds: deadlines.first - nowMillis),
+      () {
+        if (!mounted) return;
+        final visible = filterExpiredEphemeralMessages(messages);
+        if (visible.length != messages.length) {
+          setState(() => messages = visible);
+        }
+        _scheduleEphemeralExpiry();
+      },
+    );
+  }
+
+  Future<void> _transcribeVoiceMessage(
+    Map<String, dynamic> message,
+    Map<String, dynamic> attachment,
+  ) async {
+    final id = field(message, ['id', 'message_id']);
+    if (id.isEmpty || transcribingMessageIds.contains(id) || voiceTranscripts.containsKey(id)) return;
+    if (!await confirmVoiceTranscription(context) || !mounted) return;
+    setState(() => transcribingMessageIds.add(id));
+    try {
+      final transcript = await Api.transcribeAttachment(
+        field(attachment, ['attachmentId']),
+        expectedContentType: field(attachment, ['contentType']),
+      );
+      if (mounted) setState(() => voiceTranscripts[id] = transcript);
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => transcribingMessageIds.remove(id));
+    }
+  }
+
+  Future<void> _translateMessages(List<Map<String, dynamic>> items) async {
+    if (!BarqFeatures.autoTranslate) return;
+    for (final message in items) {
+      final id = field(message, ['id', 'message_id']);
+      final senderId = field(message, ['sender_id', 'senderId']);
+      final original = field(message, ['body', 'content', 'message']);
+      if (id.isEmpty || senderId == widget.currentUserId || original.isEmpty ||
+          _attachmentData(message) != null || translatedMessages.containsKey(id) ||
+          translatingMessageIds.contains(id) || translationFailedMessageIds.contains(id)) {
+        continue;
+      }
+      translatingMessageIds.add(id);
+      try {
+        final translated = await BarqTranslator.translateArabicEnglish(original);
+        if (mounted && translated.isNotEmpty) {
+          setState(() => translatedMessages[id] = translated);
+        } else {
+          translationFailedMessageIds.add(id);
+        }
+      } catch (_) {
+        translationFailedMessageIds.add(id);
+        // تبقى الرسالة الأصلية ظاهرة ولا نكرر المحاولة تلقائيًا كل دورة تحديث.
+      } finally {
+        translatingMessageIds.remove(id);
+      }
+    }
+  }
+
+  Future<void> loadMessages({bool silent = false}) async {
+    if (refreshing) return;
+    refreshing = true;
+    try {
+      await BarqOfflineQueue.syncOutbox();
+      final page = await Api.messagesPage(friendId);
+      final data = Api._list(page['messages']);
+      await BarqOfflineQueue.reconcile(data);
+      final localPending = await BarqOfflineQueue.conversation(friendId, widget.currentUserId);
+      List<Map<String, dynamic>> temporary = [];
+      try {
+        temporary = await Api.ephemeralMessages(friendId);
+      } catch (_) {
+        // النسخ القديمة من الخادم لا تملك مسار الرسائل المؤقتة بعد.
+      }
+      if (mounted) {
+        setState(() {
+        final existingRegular = messages.where((item) => item['is_ephemeral'] != true).toList();
+        final regular = silent && existingRegular.isNotEmpty
+            ? mergeMessages(existingRegular, data) : data;
+        messages = filterExpiredEphemeralMessages(
+          mergeMessages(mergeMessages(regular, temporary), localPending),
+        );
+        if (!silent || olderMessageCursor == null) {
+          olderMessageCursor = page['nextCursor'] is Map
+              ? Map<String, dynamic>.from(page['nextCursor']) : null;
+        }
+        hasOlderMessages = page['hasMore'] == true || (silent && hasOlderMessages);
+        loading = false;
+      });
+        _scheduleEphemeralExpiry();
+        if (BarqFeatures.autoTranslate) _translateMessages(data);
+      }
+    } catch (e) {
+      if (mounted) {
+        final stillVisible = filterExpiredEphemeralMessages(messages);
+        final localPending = await BarqOfflineQueue.conversation(friendId, widget.currentUserId);
+        setState(() {
+          messages = mergeMessages(stillVisible, localPending);
+          loading = false;
+        });
+        _scheduleEphemeralExpiry();
+        if (!silent && localPending.isEmpty && mounted) showMsg(context, cleanError(e));
+      }
+    } finally {
+      refreshing = false;
+    }
+  }
+
+  Future<void> loadOlderMessages() async {
+    if (loadingOlderMessages || !hasOlderMessages || olderMessageCursor == null) return;
+    setState(() => loadingOlderMessages = true);
+    try {
+      final page = await Api.messagesPage(friendId, before: olderMessageCursor);
+      final older = Api._list(page['messages']);
+      if (mounted) {
+        setState(() {
+        messages = mergeMessages(older, messages);
+        olderMessageCursor = page['nextCursor'] is Map
+            ? Map<String, dynamic>.from(page['nextCursor']) : null;
+        hasOlderMessages = page['hasMore'] == true;
+      });
+      }
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => loadingOlderMessages = false);
+    }
+  }
+
+  Future<void> send() async {
+    final text = controller.text.trim();
+    if (text.isEmpty || sending) return;
+    if (text.length > 5000) {
+      showMsg(context, 'الرسالة طويلة جدًا؛ الحد الأقصى 5000 حرف.');
+      return;
+    }
+    setState(() => sending = true);
+    try {
+      if (ephemeralMode) {
+        if (replyToMessage != null) throw Exception('الرسائل المؤقتة لا تدعم الرد على رسالة أخرى. ألغِ الرد أولاً.');
+        await Api.sendEphemeralMessage(friendId, text);
+      } else {
+        final messageId = newBarqMessageId();
+        try {
+          await Api.sendMessage(friendId, text, clientMessageId: messageId,
+            replyToId: replyToMessage == null ? null : field(replyToMessage!, ['id', 'message_id']));
+        } catch (e) {
+          if (!e.toString().contains('NETWORK_DIAGNOSTIC')) rethrow;
+          final localMessage = {
+            'id': messageId,
+            'sender_id': widget.currentUserId,
+            'receiver_id': friendId,
+            'body': text,
+            if (replyToMessage != null) 'reply_to_id': field(replyToMessage!, ['id', 'message_id']),
+            if (replyToMessage != null) 'reply_to_body': field(replyToMessage!, ['body', 'content', 'message']),
+            if (replyToMessage != null) 'reply_to_sender_id': field(replyToMessage!, ['sender_id']),
+            'created_at': DateTime.now().toUtc().toIso8601String(),
+          };
+          await BarqOfflineQueue.enqueueOutgoing(localMessage);
+          var deliveredNearby = false;
+          try {
+            if (replyToMessage == null) {
+              deliveredNearby = await BarqNearbyService.instance.sendTextMessage(
+                receiverId: friendId, messageId: messageId, body: text, senderId: widget.currentUserId,
+              );
+            }
+          } catch (_) {}
+          if (mounted) {
+            setState(() => messages = mergeMessages(messages, [{...localMessage, 'is_offline_pending': true}]));
+            showMsg(context, deliveredNearby
+                ? 'تم تسليم الرسالة للجهاز القريب، وستُزامن مع الخادم عند عودة الإنترنت.'
+                : replyToMessage != null
+                    ? 'تم حفظ الرد محليًا وسيُرسل مع الاقتباس عند عودة الإنترنت.'
+                    : 'حُفظت الرسالة محليًا. افتح الأجهزة القريبة لتسليمها الآن، وستُزامن تلقائيًا عند عودة الإنترنت.');
+          }
+          controller.clear();
+          if (mounted) setState(() => replyToMessage = null);
+          return;
+        }
+      }
+      controller.clear();
+      if (mounted) setState(() => replyToMessage = null);
+      await loadMessages();
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => sending = false);
+    }
+  }
+
+  Future<void> pickAndSendFile() async {
+    if (BarqFeatures.lightningMode) {
+      showMsg(context, 'وضع البرق مفعّل: إرسال الوسائط والملفات متوقف مؤقتًا.');
+      return;
+    }
+    try {
+      final result = await FilePicker.platform.pickFiles(withData: true, allowMultiple: false);
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.single;
+      final bytes = file.bytes;
+      if (bytes == null) throw Exception('تعذر قراءة الملف من الجهاز.');
+      setState(() => sending = true);
+      await Api.uploadAttachment(
+        bytes: bytes,
+        fileName: file.name,
+        contentType: file.extension == null ? 'application/octet-stream' : _mimeForExtension(file.extension!),
+        recipientId: friendId,
+      );
+      await loadMessages();
+      if (mounted) showMsg(context, 'تم إرسال الملف.');
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => sending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final name = field(person, ['displayName', 'display_name', 'name', 'username'], 'محادثة');
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(
+          title: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => PublicProfilePage(person: widget.friend, currentUserId: widget.currentUserId, canMessage: true),
+            )),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              personAvatar(widget.friend, radius: 17),
+              const SizedBox(width: 9),
+              Flexible(child: Text(name, overflow: TextOverflow.ellipsis)),
+              if (BarqFeatures.lightningMode) ...[
+                const SizedBox(width: 6),
+                const Icon(Icons.flash_on_rounded, color: gold, size: 18),
+              ],
+            ]),
+          ),
+          actions: [
+            IconButton(
+              onPressed: () => showConversationSearch(context, (query, before) => Api.searchPrivateMessages(friendId, query, before: before)),
+              icon: const Icon(Icons.search, color: gold),
+              tooltip: 'البحث في المحادثة',
+            ),
+            IconButton(onPressed: loadMessages, icon: const Icon(Icons.refresh, color: gold)),
+          ],
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: loading
+                  ? const Center(child: CircularProgressIndicator(color: gold))
+                  : messages.isEmpty
+                      ? const Center(child: Text('لا توجد رسائل بعد. ابدأ المحادثة.', style: TextStyle(color: Colors.white60)))
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: messages.length + (hasOlderMessages ? 1 : 0),
+                          itemBuilder: (context, index) {
+                            if (hasOlderMessages && index == 0) {
+                              return Center(child: TextButton.icon(
+                                onPressed: loadingOlderMessages ? null : loadOlderMessages,
+                                icon: loadingOlderMessages
+                                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                                    : const Icon(Icons.history),
+                                label: const Text('تحميل الرسائل الأقدم'),
+                              ));
+                            }
+                            final m = messages[index - (hasOlderMessages ? 1 : 0)];
+                            final sender = field(m, ['sender_id']);
+                            final mine = sender == widget.currentUserId;
+                            return Align(
+                              alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+                              child: Container(
+                                constraints: const BoxConstraints(maxWidth: 300),
+                                margin: const EdgeInsets.symmetric(vertical: 4),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: mine ? const Color(0xFF46391F) : panel,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (m['is_offline_pending'] == true)
+                                      const Padding(
+                                        padding: EdgeInsets.only(bottom: 5),
+                                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                          Icon(Icons.wifi_off_rounded, size: 12, color: Colors.white54),
+                                          SizedBox(width: 4),
+                                          Text('رسالة دون إنترنت — بانتظار المزامنة', style: TextStyle(color: Colors.white54, fontSize: 10)),
+                                        ]),
+                                      ),
+                                    if (m['is_ephemeral'] == true)
+                                      const Padding(
+                                        padding: EdgeInsets.only(bottom: 5),
+                                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                          Icon(Icons.timer_outlined, size: 13, color: gold),
+                                          SizedBox(width: 4),
+                                          Text('رسالة مؤقتة', style: TextStyle(color: gold, fontSize: 10)),
+                                        ]),
+                                      ),
+                                    if (field(m, ['reply_to_id']).isNotEmpty)
+                                      Container(
+                                        width: double.infinity,
+                                        margin: const EdgeInsets.only(bottom: 7),
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8),
+                                          border: const Border(right: BorderSide(color: gold, width: 3))),
+                                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                          Text(field(m, ['reply_to_sender_id']) == widget.currentUserId ? 'رد على رسالتك' : 'رد على رسالة',
+                                            style: const TextStyle(color: gold, fontSize: 10, fontWeight: FontWeight.bold)),
+                                          Text(messageReplyPreview(m), maxLines: 2, overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                                        ]),
+                                      ),
+                                    if (_attachmentData(m) case final attachment?) ...[
+                                      _attachmentTile(attachment, () async {
+                                        try {
+                                          await Api.downloadAttachment(
+                                            attachmentId: field(attachment, ['attachmentId']),
+                                            fileName: field(attachment, ['fileName'], 'attachment'),
+                                          );
+                                        } catch (e) { if (context.mounted) showMsg(context, cleanError(e)); }
+                                      }),
+                                      if (field(attachment, ['contentType']).startsWith('audio/'))
+                                        TextButton.icon(
+                                          onPressed: transcribingMessageIds.contains(field(m, ['id', 'message_id']))
+                                              ? null : () => _transcribeVoiceMessage(m, attachment),
+                                          icon: transcribingMessageIds.contains(field(m, ['id', 'message_id']))
+                                              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                              : const Icon(Icons.subtitles_outlined, size: 16),
+                                          label: const Text('تحويل الصوت إلى نص'),
+                                        ),
+                                      if (voiceTranscripts[field(m, ['id', 'message_id'])] != null)
+                                        Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8)),
+                                          child: Text(voiceTranscripts[field(m, ['id', 'message_id'])]!),
+                                        ),
+                                    ] else ...[
+                                      GestureDetector(
+                                        onLongPress: () => showMessageActions(
+                                          context,
+                                          message: m,
+                                          canDelete: mine && m['is_ephemeral'] != true && m['is_offline_pending'] != true,
+                                          onDelete: () async {
+                                            await Api.deletePrivateMessage(field(m, ['id', 'message_id']));
+                                            if (mounted) await loadMessages();
+                                          },
+                                          onReply: (message) async {
+                                            setState(() => replyToMessage = Map<String, dynamic>.from(message));
+                                          },
+                                          onEdit: mine && m['is_ephemeral'] != true && m['is_offline_pending'] != true && _attachmentData(m) == null
+                                              ? (body) async {
+                                                  await Api.editPrivateMessage(field(m, ['id', 'message_id']), body);
+                                                  if (mounted) await loadMessages();
+                                                }
+                                              : null,
+                                          onReact: m['is_ephemeral'] != true && m['is_offline_pending'] != true
+                                              ? (emoji) async {
+                                                  await Api.reactPrivateMessage(field(m, ['id', 'message_id']), emoji);
+                                                  if (mounted) await loadMessages(silent: true);
+                                                }
+                                              : null,
+                                          onPin: m['is_ephemeral'] != true && m['is_offline_pending'] != true
+                                              ? () async {
+                                                  await Api.pinPrivateMessage(field(m, ['id', 'message_id']), pinned: m['is_pinned'] != true);
+                                                  if (mounted) await loadMessages(silent: true);
+                                                }
+                                              : null,
+                                          isPinned: m['is_pinned'] == true,
+                                        ),
+                                        child: BarqMessageBody(text: field(m, ['body', 'content', 'message'])),
+                                      ),
+                                      if (BarqFeatures.autoTranslate && translatedMessages[field(m, ['id', 'message_id'])] != null) ...[
+                                        const SizedBox(height: 6),
+                                        const Divider(height: 1, color: Colors.white24),
+                                        const SizedBox(height: 6),
+                                        Text(translatedMessages[field(m, ['id', 'message_id'])]!,
+                                          style: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic)),
+                                      ],
+                                    ],
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(_messageTime(field(m, ['created_at', 'createdAt'])),
+                                          style: TextStyle(fontSize: 10, color: Colors.white.withValues(alpha: 0.55))),
+                                        if (field(m, ['edited_at', 'editedAt']).isNotEmpty)
+                                          const Text('تم التعديل', style: TextStyle(fontSize: 9, color: Colors.white54)),
+                                        if (mine) ...[
+                                          const SizedBox(width: 4),
+                                          Icon(field(m, ['read_at', 'readAt']).isNotEmpty ? Icons.done_all : Icons.done,
+                                            size: 13, color: field(m, ['read_at', 'readAt']).isNotEmpty ? Colors.lightBlueAccent : Colors.white54),
+                                        ],
+                                      ],
+                                    ),
+                                    if (m['is_pinned'] == true)
+                                      const Padding(
+                                        padding: EdgeInsets.only(top: 4),
+                                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                          Icon(Icons.push_pin, size: 12, color: gold),
+                                          SizedBox(width: 3),
+                                          Text('مثبتة', style: TextStyle(color: gold, fontSize: 10)),
+                                        ]),
+                                      ),
+                                    if (m['is_ephemeral'] != true && m['is_offline_pending'] != true)
+                                      messageReactionBar(
+                                        context: context,
+                                        message: m,
+                                        currentUserId: widget.currentUserId,
+                                        onReaction: (emoji, remove) async {
+                                          await Api.reactPrivateMessage(field(m, ['id', 'message_id']), emoji, remove: remove);
+                                          if (mounted) await loadMessages(silent: true);
+                                        },
+                                        isPinned: m['is_pinned'] == true,
+                                        onPin: m['is_ephemeral'] != true && m['is_offline_pending'] != true
+                                            ? () async {
+                                                await Api.pinPrivateMessage(field(m, ['id', 'message_id']), pinned: m['is_pinned'] != true);
+                                                if (mounted) await loadMessages(silent: true);
+                                              }
+                                            : null,
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+            ),
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+                child: Row(
+                  children: [
+                    IconButton(
+                      onPressed: sending ? null : () => setState(() { ephemeralMode = !ephemeralMode; replyToMessage = null; }),
+                      icon: Icon(Icons.timer_outlined, color: ephemeralMode ? gold : Colors.white54),
+                      tooltip: ephemeralMode ? 'إيقاف الرسائل المؤقتة' : 'إرسال رسالة تختفي بعد قراءتها',
+                    ),
+                    if (!BarqFeatures.lightningMode)
+                      IconButton(
+                        onPressed: sending ? null : pickAndSendFile,
+                        icon: const Icon(Icons.attach_file, color: gold),
+                        tooltip: 'إرسال ملف أو صورة أو فيديو',
+                      ),
+                    Expanded(
+                      child: TextField(
+                        controller: controller,
+                        minLines: 1,
+                        maxLines: 4,
+                        decoration: inputDecoration(
+                          ephemeralMode ? 'رسالة مؤقتة — تختفي بعد القراءة' : 'اكتب رسالتك...',
+                          ephemeralMode ? Icons.timer_outlined : Icons.message,
+                        ).copyWith(
+                          helperText: replyToMessage == null ? null : 'الرد على: ${messageReplyPreview(replyToMessage!)}',
+                          helperStyle: const TextStyle(color: gold, fontSize: 10),
+                        ),
+                        onSubmitted: (_) => send(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    if (replyToMessage != null)
+                      IconButton(onPressed: sending ? null : () => setState(() => replyToMessage = null),
+                        icon: const Icon(Icons.close, color: Colors.white70), tooltip: 'إلغاء الرد'),
+                    IconButton.filled(
+                      style: IconButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+                      onPressed: sending ? null : send,
+                      icon: sending
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                          : const Icon(Icons.send),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+}
+
+
+class GroupChatPage extends StatefulWidget {
+  final Map<String, dynamic> group;
+  final String currentUserId;
+  final VoidCallback onAddMember;
+  const GroupChatPage({super.key, required this.group, required this.currentUserId, required this.onAddMember});
+
+  @override
+  State<GroupChatPage> createState() => _GroupChatPageState();
+}
+
+class _GroupChatPageState extends State<GroupChatPage> {
+  final controller = TextEditingController();
+  List<Map<String, dynamic>> messages = [];
+  final Map<String, String> translatedMessages = {};
+  final Set<String> translatingMessageIds = {};
+  final Set<String> translationFailedMessageIds = {};
+  final Map<String, String> voiceTranscripts = {};
+  final Set<String> transcribingMessageIds = {};
+  bool loading = true;
+  bool sending = false;
+  bool refreshing = false;
+  bool hasOlderMessages = false;
+  bool loadingOlderMessages = false;
+  Map<String, dynamic>? olderMessageCursor;
+  Map<String, dynamic>? replyToMessage;
+  Timer? refreshTimer;
+  String get groupId => field(widget.group, ['id']);
+
+  @override
+  void initState() {
+    super.initState();
+    loadMessages();
+    refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted && !sending && !refreshing) loadMessages(silent: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    refreshTimer?.cancel();
+    controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _transcribeVoiceMessage(
+    Map<String, dynamic> message,
+    Map<String, dynamic> attachment,
+  ) async {
+    final id = field(message, ['id', 'message_id']);
+    if (id.isEmpty || transcribingMessageIds.contains(id) || voiceTranscripts.containsKey(id)) return;
+    if (!await confirmVoiceTranscription(context) || !mounted) return;
+    setState(() => transcribingMessageIds.add(id));
+    try {
+      final transcript = await Api.transcribeAttachment(
+        field(attachment, ['attachmentId']),
+        expectedContentType: field(attachment, ['contentType']),
+      );
+      if (mounted) setState(() => voiceTranscripts[id] = transcript);
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => transcribingMessageIds.remove(id));
+    }
+  }
+
+  Future<void> _translateMessages(List<Map<String, dynamic>> items) async {
+    if (!BarqFeatures.autoTranslate) return;
+    for (final message in items) {
+      final id = field(message, ['id', 'message_id']);
+      final senderId = field(message, ['sender_id', 'senderId']);
+      final original = field(message, ['body', 'content', 'message']);
+      if (id.isEmpty || senderId == widget.currentUserId || original.isEmpty ||
+          _attachmentData(message) != null || translatedMessages.containsKey(id) ||
+          translatingMessageIds.contains(id) || translationFailedMessageIds.contains(id)) {
+        continue;
+      }
+      translatingMessageIds.add(id);
+      try {
+        final translated = await BarqTranslator.translateArabicEnglish(original);
+        if (mounted && translated.isNotEmpty) {
+          setState(() => translatedMessages[id] = translated);
+        } else {
+          translationFailedMessageIds.add(id);
+        }
+      } catch (_) {
+        translationFailedMessageIds.add(id);
+        // تبقى الرسالة الأصلية ظاهرة ولا نكرر المحاولة تلقائيًا كل دورة تحديث.
+      } finally {
+        translatingMessageIds.remove(id);
+      }
+    }
+  }
+
+  Future<void> loadMessages({bool silent = false}) async {
+    if (refreshing) return;
+    refreshing = true;
+    try {
+      final page = await Api.groupMessagesPage(groupId);
+      final data = Api._list(page['messages']);
+      if (mounted) {
+        setState(() {
+        messages = silent && messages.isNotEmpty ? mergeMessages(messages, data) : data;
+        if (!silent || olderMessageCursor == null) {
+          olderMessageCursor = page['nextCursor'] is Map
+              ? Map<String, dynamic>.from(page['nextCursor']) : null;
+        }
+        hasOlderMessages = page['hasMore'] == true || (silent && hasOlderMessages);
+        loading = false;
+      });
+        if (BarqFeatures.autoTranslate) _translateMessages(data);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => loading = false);
+        if (!silent) showMsg(context, cleanError(e));
+      }
+    } finally { refreshing = false; }
+  }
+
+  Future<void> loadOlderMessages() async {
+    if (loadingOlderMessages || !hasOlderMessages || olderMessageCursor == null) return;
+    setState(() => loadingOlderMessages = true);
+    try {
+      final page = await Api.groupMessagesPage(groupId, before: olderMessageCursor);
+      final older = Api._list(page['messages']);
+      if (mounted) {
+        setState(() {
+        messages = mergeMessages(older, messages);
+        olderMessageCursor = page['nextCursor'] is Map
+            ? Map<String, dynamic>.from(page['nextCursor']) : null;
+        hasOlderMessages = page['hasMore'] == true;
+      });
+      }
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => loadingOlderMessages = false);
+    }
+  }
+
+  Future<void> send() async {
+    final body = controller.text.trim();
+    if (body.isEmpty || sending) return;
+    setState(() => sending = true);
+    try {
+      await Api.sendGroupMessage(groupId, body,
+        replyToId: replyToMessage == null ? null : field(replyToMessage!, ['id', 'message_id']));
+      controller.clear();
+      if (mounted) setState(() => replyToMessage = null);
+      await loadMessages();
+    } catch (e) { if (mounted) showMsg(context, cleanError(e)); }
+    finally { if (mounted) setState(() => sending = false); }
+  }
+
+  Future<void> pickAndSendFile() async {
+    if (BarqFeatures.lightningMode) {
+      showMsg(context, 'وضع البرق مفعّل: إرسال الوسائط والملفات متوقف مؤقتًا.');
+      return;
+    }
+    try {
+      final result = await FilePicker.platform.pickFiles(withData: true, allowMultiple: false);
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.single;
+      final bytes = file.bytes;
+      if (bytes == null) throw Exception('تعذر قراءة الملف من الجهاز.');
+      setState(() => sending = true);
+      await Api.uploadAttachment(
+        bytes: bytes,
+        fileName: file.name,
+        contentType: file.extension == null ? 'application/octet-stream' : _mimeForExtension(file.extension!),
+        groupId: groupId,
+      );
+      await loadMessages();
+      if (mounted) showMsg(context, 'تم إرسال الملف للمجموعة.');
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) setState(() => sending = false);
+    }
+  }
+
+  Future<void> showGroupMembers() async {
+    try {
+      final members = await Api.groupMembers(groupId);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: panel,
+          title: const Text('أعضاء المجموعة'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 320,
+            child: members.isEmpty
+                ? const Center(child: Text('لا يوجد أعضاء لعرضهم.'))
+                : ListView.builder(
+                    itemCount: members.length,
+                    itemBuilder: (context, index) {
+                      final member = members[index];
+                      final isOwner = member['is_owner'] == 1 || member['is_owner'] == true;
+                      return ListTile(
+                        leading: personAvatar(member),
+                        title: Text(field(member, ['display_name', 'displayName', 'username'], 'عضو')),
+                        subtitle: Text(isOwner ? 'مالك المجموعة' : '@${field(member, ['username'])}'),
+                        onTap: () {
+                          Navigator.pop(dialogContext);
+                          Navigator.push(context, MaterialPageRoute(
+                            builder: (_) => PublicProfilePage(
+                              person: member,
+                              currentUserId: widget.currentUserId,
+                            ),
+                          ));
+                        },
+                      );
+                    },
+                  ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق'))],
+        ),
+      );
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Row(mainAxisSize: MainAxisSize.min, children: [
+            Flexible(child: Text(field(widget.group, ['name'], 'مجموعة'), overflow: TextOverflow.ellipsis)),
+            if (BarqFeatures.lightningMode) ...[
+              const SizedBox(width: 6),
+              const Icon(Icons.flash_on_rounded, color: gold, size: 18),
+            ],
+          ]),
+          actions: [
+            IconButton(
+              onPressed: () => showConversationSearch(context, (query, before) => Api.searchGroupMessages(groupId, query, before: before)),
+              icon: const Icon(Icons.search, color: gold),
+              tooltip: 'البحث في المحادثة',
+            ),
+            IconButton(onPressed: showGroupMembers, icon: const Icon(Icons.people_alt_outlined, color: gold), tooltip: 'أعضاء المجموعة'),
+            IconButton(onPressed: widget.onAddMember, icon: const Icon(Icons.person_add_alt_1, color: gold), tooltip: 'إضافة عضو'),
+            IconButton(onPressed: loadMessages, icon: const Icon(Icons.refresh, color: gold)),
+          ],
+        ),
+        body: Column(children: [
+          Expanded(child: loading
+            ? const Center(child: CircularProgressIndicator(color: gold))
+            : messages.isEmpty
+              ? const Center(child: Text('لا توجد رسائل بعد. ابدأ الحديث مع مجموعتك.', style: TextStyle(color: Colors.white60)))
+              : ListView.builder(
+                  padding: const EdgeInsets.all(12), itemCount: messages.length + (hasOlderMessages ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (hasOlderMessages && index == 0) {
+                      return Center(child: TextButton.icon(
+                        onPressed: loadingOlderMessages ? null : loadOlderMessages,
+                        icon: loadingOlderMessages
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.history),
+                        label: const Text('تحميل الرسائل الأقدم'),
+                      ));
+                    }
+                    final m = messages[index - (hasOlderMessages ? 1 : 0)];
+                    final mine = field(m, ['sender_id']) == widget.currentUserId;
+                    return Align(
+                      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Container(
+                        constraints: const BoxConstraints(maxWidth: 310),
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: mine ? const Color(0xFF46391F) : panel,
+                          borderRadius: BorderRadius.circular(15)),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          if (field(m, ['reply_to_id']).isNotEmpty)
+                            Container(
+                              width: double.infinity,
+                              margin: const EdgeInsets.only(bottom: 7),
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8),
+                                border: const Border(right: BorderSide(color: gold, width: 3))),
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                Text(field(m, ['reply_to_sender_id']) == widget.currentUserId ? 'رد على رسالتك' : 'رد على رسالة',
+                                  style: const TextStyle(color: gold, fontSize: 10, fontWeight: FontWeight.bold)),
+                                Text(messageReplyPreview(m), maxLines: 2, overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                              ]),
+                            ),
+                          if (!mine)
+                            InkWell(
+                              borderRadius: BorderRadius.circular(8),
+                              onTap: () => Navigator.push(context, MaterialPageRoute(
+                                builder: (_) => PublicProfilePage(
+                                  person: {
+                                    'id': field(m, ['sender_id']),
+                                    'username': field(m, ['username']),
+                                    'display_name': field(m, ['display_name']),
+                                    'photo_updated_at': field(m, ['photo_updated_at']),
+                                  },
+                                  currentUserId: widget.currentUserId,
+                                ),
+                              )),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 3),
+                                child: Text(field(m, ['display_name', 'username'], 'عضو'),
+                                  style: const TextStyle(color: gold, fontSize: 11)),
+                              ),
+                            ),
+                          if (_attachmentData(m) case final attachment?) ...[
+                            _attachmentTile(attachment, () async {
+                              try {
+                                await Api.downloadAttachment(
+                                  attachmentId: field(attachment, ['attachmentId']),
+                                  fileName: field(attachment, ['fileName'], 'attachment'),
+                                );
+                              } catch (e) { if (context.mounted) showMsg(context, cleanError(e)); }
+                            }),
+                            if (field(attachment, ['contentType']).startsWith('audio/'))
+                              TextButton.icon(
+                                onPressed: transcribingMessageIds.contains(field(m, ['id', 'message_id']))
+                                    ? null : () => _transcribeVoiceMessage(m, attachment),
+                                icon: transcribingMessageIds.contains(field(m, ['id', 'message_id']))
+                                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                    : const Icon(Icons.subtitles_outlined, size: 16),
+                                label: const Text('تحويل الصوت إلى نص'),
+                              ),
+                            if (voiceTranscripts[field(m, ['id', 'message_id'])] != null)
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8)),
+                                child: Text(voiceTranscripts[field(m, ['id', 'message_id'])]!),
+                              ),
+                          ] else ...[
+                            GestureDetector(
+                              onLongPress: () => showMessageActions(
+                                context,
+                                message: m,
+                                canDelete: mine,
+                                onDelete: () async {
+                                  await Api.deleteGroupMessage(groupId, field(m, ['id', 'message_id']));
+                                  if (mounted) await loadMessages();
+                                },
+                                onReply: (message) async {
+                                  setState(() => replyToMessage = Map<String, dynamic>.from(message));
+                                },
+                                onEdit: mine && _attachmentData(m) == null
+                                    ? (body) async {
+                                        await Api.editGroupMessage(groupId, field(m, ['id', 'message_id']), body);
+                                        if (mounted) await loadMessages();
+                                      }
+                                    : null,
+                                onReact: (emoji) async {
+                                  await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), emoji);
+                                  if (mounted) await loadMessages(silent: true);
+                                },
+                                onPin: () async {
+                                  await Api.pinGroupMessage(groupId, field(m, ['id', 'message_id']), pinned: m['is_pinned'] != true);
+                                  if (mounted) await loadMessages(silent: true);
+                                },
+                                isPinned: m['is_pinned'] == true,
+                              ),
+                              child: BarqMessageBody(text: field(m, ['body'])),
                             ),
                             if (BarqFeatures.autoTranslate && translatedMessages[field(m, ['id', 'message_id'])] != null) ...[
                               const SizedBox(height: 6),
