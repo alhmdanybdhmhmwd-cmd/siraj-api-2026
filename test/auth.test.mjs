@@ -60,6 +60,9 @@ class FakeDB {
         if (sql.includes("SELECT 1 FROM friendships")) {
           return db.friendshipAllowed === false ? null : { 1: 1 };
         }
+        if (sql.includes("FROM group_members mine")) {
+          return db.sharedGroupAllowed === true ? { 1: 1 } : null;
+        }
         if (sql.includes("SELECT object_key, content_type, updated_at FROM profile_photos")) {
           return db.profilePhoto ? { ...db.profilePhoto } : null;
         }
@@ -333,6 +336,35 @@ test("profile photo reads deny non-friends before contacting private object stor
     });
     assert.equal(response.status, 403);
     assert.equal(storageCalled, false);
+  } finally {
+    delete globalThis.__fakeTigrisHandler;
+  }
+});
+
+test("shared group members can view each other's private profile photos", async () => {
+  const db = new FakeDB();
+  db.friendshipAllowed = false;
+  db.sharedGroupAllowed = true;
+  db.profilePhoto = {
+    object_key: "profiles/group-member/photo-object",
+    content_type: "image/webp",
+    updated_at: "2026-11-20 12:00:00"
+  };
+  const image = Uint8Array.from([0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50]);
+  globalThis.__fakeTigrisHandler = async () => new Response(image, { status: 200 });
+  try {
+    const token = await worker.signToken(user, secret, 0);
+    const response = await worker.default.fetch(new Request(
+      "https://api.example.test/api/profile/photo/group-member",
+      { headers: { Authorization: "Bearer " + token } }
+    ), {
+      DB: db, JWT_SECRET: secret,
+      TIGRIS_ACCESS_KEY_ID: "test-access",
+      TIGRIS_SECRET_ACCESS_KEY: "test-secret"
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "image/webp");
+    assert.deepEqual(new Uint8Array(await response.arrayBuffer()), image);
   } finally {
     delete globalThis.__fakeTigrisHandler;
   }
