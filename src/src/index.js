@@ -276,6 +276,16 @@ function cleanUser(user) {
   };
 }
 
+function detectProfileImageType(bytes) {
+  const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47 &&
+      b[4] === 0x0d && b[5] === 0x0a && b[6] === 0x1a && b[7] === 0x0a) return "image/png";
+  if (b.length >= 12 && String.fromCharCode(...b.slice(0, 4)) === "RIFF" &&
+      String.fromCharCode(...b.slice(8, 12)) === "WEBP") return "image/webp";
+  return null;
+}
+
 function safeFileName(value) {
   let decoded = String(value || "attachment");
   try { decoded = decodeURIComponent(decoded); } catch (_) {}
@@ -1089,6 +1099,140 @@ export default {
         return json({
           recoveryCode: recovery.code,
           message: "احفظ رمز الاسترداد في مكان آمن؛ لن يظهر مرة أخرى."
+        });
+      }
+
+      // Private profile photos use their own namespace and never enter chat-media expiry.
+      const profilePhotoMatch = path.match(/^\\/api\\/profile\\/photo\\/([^/]+)$/);
+      if (profilePhotoMatch && (method === "GET" || method === "POST")) {
+        if (!env.TIGRIS_ACCESS_KEY_ID || !env.TIGRIS_SECRET_ACCESS_KEY) {
+          return json({ error: "Profile photo storage is not configured" }, 503);
+        }
+        let targetUserId;
+        try { targetUserId = decodeURIComponent(profilePhotoMatch[1]); } catch (_) {
+          return json({ error: "Invalid profile identifier" }, 400);
+        }
+        if (!targetUserId || targetUserId.length > 128) {
+          return json({ error: "Invalid profile identifier" }, 400);
+        }
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS profile_photos (
+            user_id TEXT PRIMARY KEY,
+            object_key TEXT NOT NULL UNIQUE,
+            content_type TEXT NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+
+        if (method === "POST") {
+          if (targetUserId !== currentUser.sub) return json({ error: "You can only update your own photo" }, 403);
+          const contentType = (request.headers.get("Content-Type") || "").split(";")[0].trim().toLowerCase();
+          if (!["image/jpeg", "image/png", "image/webp"].includes(contentType)) {
+            return json({ error: "Use a JPEG, PNG, or WebP image" }, 415);
+          }
+          const declaredLength = Number(request.headers.get("Content-Length"));
+          const maxPhotoBytes = 5 * 1024 * 1024;
+          if (Number.isFinite(declaredLength) && declaredLength > maxPhotoBytes) {
+            return json({ error: "Profile photo must not exceed 5 MB" }, 413);
+          }
+          const bytes = new Uint8Array(await request.arrayBuffer());
+          if (!bytes.length || bytes.length > maxPhotoBytes) {
+            return json({ error: "Profile photo must be between 1 byte and 5 MB" }, 413);
+          }
+          if (detectProfileImageType(bytes) !== contentType) {
+            return json({ error: "Image content does not match its declared type" }, 415);
+          }
+          const previous = await env.DB.prepare(
+            "SELECT object_key FROM profile_photos WHERE user_id = ?"
+          ).bind(currentUser.sub).first();
+          const objectKey = "profiles/" + currentUser.sub + "/" + crypto.randomUUID();
+          const bucket = env.TIGRIS_BUCKET || "siraj-media";
+          const objectPath = objectKey.split("/").map(encodeURIComponent).join("/");
+          const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
+          const storage = new AwsClient({
+            accessKeyId: env.TIGRIS_ACCESS_KEY_ID,
+            secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY,
+            service: "s3",
+            region: "auto",
+            retries: 2
+          });
+          const putResponse = await storage.fetch(storageUrl, {
+            method: "PUT",
+            headers: {
+              "Content-Type": contentType,
+              "x-amz-meta-ownerid": currentUser.sub,
+              "x-amz-meta-contenttype": contentType
+            },
+            body: bytes
+          });
+          if (!putResponse.ok) {
+            return json({ error: "Profile photo upload failed", storageStatus: putResponse.status }, 502);
+          }
+          try {
+            await env.DB.prepare(`
+              INSERT INTO profile_photos (user_id, object_key, content_type, updated_at)
+              VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+              ON CONFLICT(user_id) DO UPDATE SET
+                object_key = excluded.object_key,
+                content_type = excluded.content_type,
+                updated_at = CURRENT_TIMESTAMP
+            `).bind(currentUser.sub, objectKey, contentType).run();
+          } catch (error) {
+            try { await storage.fetch(storageUrl, { method: "DELETE" }); } catch (_) {}
+            throw error;
+          }
+          if (previous?.object_key && previous.object_key !== objectKey) {
+            const oldPath = String(previous.object_key).split("/").map(encodeURIComponent).join("/");
+            try {
+              await storage.fetch("https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + oldPath, { method: "DELETE" });
+            } catch (error) {
+              console.error("Previous profile photo cleanup failed:", error?.name || "Error");
+            }
+          }
+          const saved = await env.DB.prepare(
+            "SELECT updated_at FROM profile_photos WHERE user_id = ?"
+          ).bind(currentUser.sub).first();
+          return json({
+            photoUrl: "/api/profile/photo/" + encodeURIComponent(currentUser.sub),
+            updatedAt: saved?.updated_at || null
+          }, 201);
+        }
+
+        if (targetUserId !== currentUser.sub) {
+          const friendship = await env.DB.prepare(
+            `SELECT 1 FROM friendships
+             WHERE (user_id = ? AND friend_id = ?)
+                OR (user_id = ? AND friend_id = ?)
+             LIMIT 1`
+          ).bind(currentUser.sub, targetUserId, targetUserId, currentUser.sub).first();
+          if (!friendship) return json({ error: "Profile photo access denied" }, 403);
+        }
+        const photo = await env.DB.prepare(
+          "SELECT object_key, content_type, updated_at FROM profile_photos WHERE user_id = ?"
+        ).bind(targetUserId).first();
+        if (!photo?.object_key) return json({ error: "Profile photo not found" }, 404);
+        const objectPath = String(photo.object_key).split("/").map(encodeURIComponent).join("/");
+        const storageUrl = "https://" + encodeURIComponent(env.TIGRIS_BUCKET || "siraj-media") + ".t3.storage.dev/" + objectPath;
+        const storage = new AwsClient({
+          accessKeyId: env.TIGRIS_ACCESS_KEY_ID,
+          secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY,
+          service: "s3",
+          region: "auto",
+          retries: 2
+        });
+        const stored = await storage.fetch(storageUrl, { method: "GET" });
+        if (stored.status === 404) return json({ error: "Profile photo not found" }, 404);
+        if (!stored.ok) return json({ error: "Profile photo could not be loaded" }, 502);
+        return new Response(await stored.arrayBuffer(), {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": photo.content_type,
+            "Cache-Control": "private, max-age=300",
+            "Vary": "Authorization",
+            "X-Content-Type-Options": "nosniff"
+          }
         });
       }
 
