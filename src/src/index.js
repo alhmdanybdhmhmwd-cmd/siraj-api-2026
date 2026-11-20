@@ -2015,9 +2015,10 @@ export default {
         const id = clientMessageId || crypto.randomUUID();
 
         const inserted = await env.DB.prepare(
-          `INSERT OR IGNORE INTO messages
+          `INSERT INTO messages
            (id, sender_id, receiver_id, body)
-           VALUES (?, ?, ?, ?)`
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(id) DO NOTHING`
         ).bind(id, currentUser.sub, receiverId, message).run();
 
         if (Number(inserted?.meta?.changes || 0) === 0) {
