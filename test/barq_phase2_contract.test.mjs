@@ -336,3 +336,21 @@ test("status surfaces and notifications use the approved SPARK feature name", ()
   assert.ok(flutterApp.includes("حالات SPARK الجديدة"));
   assert.ok(worker.includes("شارك لحظة جديدة في SPARK"));
 });
+
+
+test("group ownership transfer is conditional, owner-only, and limited to existing members", () => {
+  const start = worker.indexOf("const groupOwnershipMatch");
+  const end = worker.indexOf("const groupMemberActionMatch", start);
+  const route = worker.slice(start, end);
+  assert.ok(start >= 0);
+  assert.ok(route.includes('method === "POST"'));
+  assert.ok(route.includes("owner_id = ?"));
+  assert.ok(route.includes("owner_id = ? AND EXISTS"));
+  assert.ok(route.includes("FROM group_members"));
+  assert.ok(route.includes("targetUserId === currentUser.sub"));
+  assert.ok(route.includes("Number(results?.[0]?.meta?.changes || 0) !== 1"));
+  assert.ok(route.includes("DELETE FROM group_member_roles"));
+  assert.ok(flutterApp.includes("transferGroupOwnership"));
+  assert.ok(flutterApp.includes("barqCanTransferGroupOwnership"));
+  assert.ok(flutterApp.includes("نقل ملكية المجموعة"));
+});
