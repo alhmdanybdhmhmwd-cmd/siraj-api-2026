@@ -383,6 +383,8 @@ test("SPARK media reads enforce active friend visibility and expire with their s
   assert.ok(mediaRoute.includes("FROM friendships reciprocal"));
   assert.ok(mediaRoute.includes("reciprocal.user_id = ? AND reciprocal.friend_id = ?"));
   assert.ok(mediaRoute.includes("sparkMedia.expiresAt"));
+  assert.ok(mediaRoute.includes("!Number.isFinite(sparkExpiry) || sparkExpiry <= Date.now()"));
+  assert.ok(mediaRoute.indexOf("sparkExpiry <= Date.now()") < mediaRoute.indexOf("permitted = sparkMedia.ownerId === currentUser.sub"));
   assert.ok(mediaRoute.includes("if (!accessRow && !sparkMedia)"));
   assert.ok(mediaRoute.includes("SPARK media access denied"));
 

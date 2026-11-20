@@ -3433,8 +3433,14 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         ).bind(key).first();
         let permitted = false;
         if (sparkMedia) {
+          // Expiry applies to the owner too: possession of the original status
+          // must never keep its media readable after the 24-hour lifetime.
+          const sparkExpiry = Date.parse(sparkMedia.expiresAt);
+          if (!Number.isFinite(sparkExpiry) || sparkExpiry <= Date.now()) {
+            return json({ error: "SPARK media not found or expired" }, 410);
+          }
           permitted = sparkMedia.ownerId === currentUser.sub;
-          if (!permitted && Date.parse(sparkMedia.expiresAt) > Date.now()) {
+          if (!permitted) {
             const friendship = await env.DB.prepare(
               `SELECT 1 FROM friendships f
                WHERE f.user_id = ? AND f.friend_id = ?
