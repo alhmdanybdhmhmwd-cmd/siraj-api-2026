@@ -92,6 +92,24 @@ await call("/api/messages", {
   body: { receiverId: a.user.id, body: "different owner", clientMessageId },
   expected: 409
 });
+
+const secondPrivateId = randomUUID().replaceAll("-", "");
+await call("/api/messages", {
+  method: "POST", token: a.token,
+  body: { receiverId: b.user.id, body: "second pagination fixture", clientMessageId: secondPrivateId },
+  expected: 201
+});
+const firstPrivatePage = await call("/api/messages?with=" + encodeURIComponent(b.user.id) + "&limit=1", { token: a.token });
+assert.equal(firstPrivatePage.messages.length, 1);
+assert.equal(firstPrivatePage.hasMore, true, "private history must advertise older pages");
+assert.ok(firstPrivatePage.nextCursor?.before && firstPrivatePage.nextCursor?.beforeId);
+const olderPrivatePage = await call("/api/messages?with=" + encodeURIComponent(b.user.id) +
+  "&limit=1&before=" + encodeURIComponent(firstPrivatePage.nextCursor.before) +
+  "&beforeId=" + encodeURIComponent(firstPrivatePage.nextCursor.beforeId), { token: a.token });
+assert.equal(olderPrivatePage.messages.length, 1);
+assert.notEqual(firstPrivatePage.messages[0].id, olderPrivatePage.messages[0].id,
+  "private cursor pages must not repeat the boundary message");
+assert.equal(olderPrivatePage.hasMore, false);
 const conversation = await call("/api/messages?with=" + encodeURIComponent(b.user.id), { token: a.token });
 assert.equal(conversation.messages.filter(message => message.id === clientMessageId).length, 1,
   "retries must leave exactly one persisted message");
@@ -112,6 +130,20 @@ await call("/api/groups/" + encodeURIComponent(group.group.id) + "/members", {
 await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages", {
   method: "POST", token: a.token, body: { body: "group-search-needle-" + suffix }, expected: 201
 });
+await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages", {
+  method: "POST", token: a.token, body: { body: "second group pagination fixture" }, expected: 201
+});
+const firstGroupPage = await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages?limit=1", { token: b.token });
+assert.equal(firstGroupPage.messages.length, 1);
+assert.equal(firstGroupPage.hasMore, true);
+assert.ok(firstGroupPage.nextCursor?.before && firstGroupPage.nextCursor?.beforeId);
+const olderGroupPage = await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages?limit=1&before=" +
+  encodeURIComponent(firstGroupPage.nextCursor.before) + "&beforeId=" +
+  encodeURIComponent(firstGroupPage.nextCursor.beforeId), { token: b.token });
+assert.equal(olderGroupPage.messages.length, 1);
+assert.notEqual(firstGroupPage.messages[0].id, olderGroupPage.messages[0].id,
+  "group cursor pages must not repeat the boundary message");
+assert.equal(olderGroupPage.hasMore, false);
 const groupSearch = await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages/search?q=group-search-needle", { token: b.token });
 assert.ok(groupSearch.messages.some(message => message.body.includes("group-search-needle")),
   "group search must return matching messages to group members");
