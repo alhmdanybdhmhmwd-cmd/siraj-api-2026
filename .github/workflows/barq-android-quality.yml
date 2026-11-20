@@ -73,3 +73,4 @@ jobs:
           retention-days: 7
 
 # Trigger quality validation after the Android source archive was extracted.
+# Keep push validation independent from manual APK diagnostics.
