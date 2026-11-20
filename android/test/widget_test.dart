@@ -176,4 +176,54 @@ void main() {
     expect(visible.map((message) => message['id']).toList(),
         ['regular', 'unread', 'active']);
   });
+  testWidgets('own message actions allow copying and confirmed deletion', (tester) async {
+    var deleted = false;
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(builder: (context) => Scaffold(
+        body: TextButton(
+          onPressed: () => showMessageActions(
+            context,
+            message: {'id': 'message-1', 'body': 'رسالة تجريبية'},
+            canDelete: true,
+            onDelete: () async { deleted = true; },
+          ),
+          child: const Text('فتح الإجراءات'),
+        ),
+      )),
+    ));
+
+    await tester.tap(find.text('فتح الإجراءات'));
+    await tester.pumpAndSettle();
+    expect(find.text('نسخ الرسالة'), findsOneWidget);
+    expect(find.text('حذف الرسالة'), findsOneWidget);
+
+    await tester.tap(find.text('حذف الرسالة'));
+    await tester.pumpAndSettle();
+    expect(find.text('حذف الرسالة؟'), findsOneWidget);
+    await tester.tap(find.text('حذف').last);
+    await tester.pumpAndSettle();
+    expect(deleted, isTrue);
+  });
+
+  testWidgets('other users message actions do not expose delete', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(builder: (context) => Scaffold(
+        body: TextButton(
+          onPressed: () => showMessageActions(
+            context,
+            message: {'id': 'message-2', 'body': 'رسالة صديق'},
+            canDelete: false,
+            onDelete: () async {},
+          ),
+          child: const Text('فتح الإجراءات'),
+        ),
+      )),
+    ));
+
+    await tester.tap(find.text('فتح الإجراءات'));
+    await tester.pumpAndSettle();
+    expect(find.text('نسخ الرسالة'), findsOneWidget);
+    expect(find.text('حذف الرسالة'), findsNothing);
+  });
+
 }
