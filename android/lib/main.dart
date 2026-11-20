@@ -1306,19 +1306,78 @@ class _LoginPageState extends State<LoginPage> {
   String _normalizedInternationalPhone(String raw) =>
       normalizeBarqRegistrationPhone(raw, selectedCountryCode);
 
-  Widget _countryCodePicker() => DropdownButtonFormField<String>(
-    initialValue: selectedCountryCode,
-    isExpanded: true,
-    dropdownColor: panel,
-    style: const TextStyle(color: Colors.white, fontSize: 14),
-    decoration: _barqDecoration('رمز الدولة', Icons.public),
-    items: countryCodes.map((country) => DropdownMenuItem<String>(
-      value: country.$2,
-      child: Text('${country.$1}  (${country.$2})', overflow: TextOverflow.ellipsis),
-    )).toList(),
-    onChanged: busy ? null : (value) {
-      if (value != null) setState(() => selectedCountryCode = value);
+  Widget _countryCodePicker() => InkWell(
+    borderRadius: BorderRadius.circular(20),
+    onTap: busy ? null : () async {
+      final searchController = TextEditingController();
+      final selected = await showModalBottomSheet<String>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: panel,
+        builder: (sheetContext) => StatefulBuilder(
+          builder: (context, setSheetState) {
+            final query = searchController.text.trim().toLowerCase();
+            final filtered = countryCodes.where((country) =>
+              country.$1.toLowerCase().contains(query) || country.$2.contains(query)
+            ).toList();
+            return SafeArea(
+              child: SizedBox(
+                height: MediaQuery.sizeOf(context).height * 0.78,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  child: Column(
+                    children: [
+                      const Text('اختر الدولة أو ابحث عنها',
+                        style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: searchController,
+                        autofocus: true,
+                        decoration: _barqDecoration('اسم الدولة أو مفتاح الاتصال', Icons.search),
+                        onChanged: (_) => setSheetState(() {}),
+                      ),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: filtered.isEmpty
+                          ? const Center(child: Text('لا توجد دولة مطابقة', style: TextStyle(color: Colors.white70)))
+                          : ListView.builder(
+                              itemCount: filtered.length,
+                              itemBuilder: (context, index) {
+                                final country = filtered[index];
+                                return ListTile(
+                                  dense: true,
+                                  title: Text(country.$1, style: const TextStyle(color: Colors.white)),
+                                  trailing: Text(country.$2, style: const TextStyle(color: gold, fontWeight: FontWeight.bold)),
+                                  onTap: () => Navigator.pop(sheetContext, country.$2),
+                                );
+                              },
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      );
+      searchController.dispose();
+      if (selected != null && mounted) setState(() => selectedCountryCode = selected);
     },
+    child: InputDecorator(
+      decoration: _barqDecoration('رمز الدولة', Icons.public),
+      child: Row(
+        children: [
+          Expanded(child: Text(
+            countryCodes.firstWhere((country) => country.$2 == selectedCountryCode).$1,
+            style: const TextStyle(color: Colors.white),
+          )),
+          Text(selectedCountryCode, style: const TextStyle(color: gold, fontWeight: FontWeight.bold)),
+          const SizedBox(width: 8),
+          const Icon(Icons.expand_more, color: Colors.white70),
+        ],
+      ),
+    ),
   );
 
   Future<void> submit() async {
