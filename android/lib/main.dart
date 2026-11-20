@@ -1188,15 +1188,19 @@ class _StartupPageState extends State<StartupPage> {
   }
 }
 
+String normalizeBarqPhoneDigits(String raw) => raw.trim().replaceAllMapped(
+  RegExp(r'[٠-٩۰-۹]'),
+  (match) {
+    final code = match.group(0)!.codeUnitAt(0);
+    return String.fromCharCode(code >= 0x06f0 && code <= 0x06f9
+        ? code - 0x06f0 + 48 : code - 0x0660 + 48);
+  },
+);
+
 String normalizeBarqInternationalPhone(String raw) {
-  var value = raw.trim().replaceAllMapped(RegExp(r'[٠-٩۰-۹]'), (m) {
-    final c = m.group(0)!.codeUnitAt(0);
-    return String.fromCharCode(c >= 0x06f0 && c <= 0x06f9
-        ? c - 0x06f0 + 48 : c - 0x0660 + 48);
-  });
-  value = value.replaceAll(RegExp(r'[\s().-]'), '');
-  if (value.startsWith('00')) value = '+${value.substring(2)}';
-  if (!value.startsWith('+')) value = '+$value';
+  var value = normalizeBarqPhoneDigits(raw).replaceAll(RegExp(r'[\s().-]'), '');
+  if (value.startsWith('00')) value = '+'.concat(value.substring(2));
+  if (!value.startsWith('+')) value = '+'.concat(value);
   return value;
 }
 class LoginPage extends StatefulWidget {
@@ -1255,13 +1259,13 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   String _normalizedInternationalPhone(String raw) {
-    final value = raw.trim();
+    final value = normalizeBarqPhoneDigits(raw);
     if (value.startsWith('+') || value.startsWith('00')) {
       return normalizeBarqInternationalPhone(value);
     }
     // Remove the common national trunk prefix before applying the selected country code.
     final nationalNumber = value.replaceFirst(RegExp(r'^0+'), '');
-    return normalizeBarqInternationalPhone('$selectedCountryCode$nationalNumber');
+    return normalizeBarqInternationalPhone(selectedCountryCode + nationalNumber);
   }
 
   Widget _countryCodePicker() => DropdownButtonFormField<String>(
