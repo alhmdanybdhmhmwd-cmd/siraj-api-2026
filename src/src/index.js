@@ -3154,7 +3154,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         const headResponse = await storage.fetch(storageUrl, { method: "HEAD" });
         if (headResponse.status === 404) return json({ error: "Attachment not found" }, 404);
         if (!headResponse.ok) return json({ error: "Media storage lookup failed", storageStatus: headResponse.status }, 502);
-        if (!accessRow) {
+        if (!accessRow && !sparkMedia) {
           const ownerId = headResponse.headers.get("x-amz-meta-ownerid") || "";
           const recipientId = headResponse.headers.get("x-amz-meta-recipientid") || "";
           const groupId = headResponse.headers.get("x-amz-meta-groupid") || "";
@@ -3175,7 +3175,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         }
         // Check expiry only after authorization so an unrelated account cannot
         // trigger deletion of another user's object by guessing its identifier.
-        const expiresAt = accessRow?.expires_at || headResponse.headers.get("x-amz-meta-expiresat");
+        const expiresAt = sparkMedia?.expiresAt || accessRow?.expires_at || headResponse.headers.get("x-amz-meta-expiresat");
         if (expiresAt && Number.isFinite(Date.parse(expiresAt)) && Date.parse(expiresAt) <= Date.now()) {
           try {
             const deletion = await storage.fetch(storageUrl, { method: "DELETE" });
