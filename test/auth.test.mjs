@@ -1869,6 +1869,92 @@ test("group attachment upload persists group-scoped access without a private rec
 
 
 
+
+test("attachment upload rolls back the stored object and D1 access rows when message persistence fails", async () => {
+  const db = new FakeDB();
+  const originalPrepare = db.prepare.bind(db);
+  const cleanupStatements = [];
+  db.prepare = sql => {
+    const statement = originalPrepare(sql);
+    const first = statement.first.bind(statement);
+    const run = statement.run.bind(statement);
+    statement.first = async () => sql.includes("SELECT 1 FROM friendships") ? { 1: 1 } : first();
+    statement.run = async () => {
+      if (sql.includes("INSERT INTO messages")) throw new Error("simulated message persistence failure");
+      if (sql.includes("DELETE FROM media_access") || sql.includes("DELETE FROM media_expirations")) {
+        cleanupStatements.push(sql);
+      }
+      return run();
+    };
+    return statement;
+  };
+  const token = await worker.signToken(user, secret, 0);
+  const storageMethods = [];
+  globalThis.__fakeTigrisHandler = async (_url, options) => {
+    storageMethods.push(options.method);
+    return new Response(null, { status: options.method === "DELETE" ? 204 : 200 });
+  };
+  try {
+    const response = await worker.default.fetch(new Request("https://api.example.test/api/media", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + token,
+        "Content-Type": "image/jpeg",
+        "X-Recipient-Id": "friend-1"
+      },
+      body: new Uint8Array([0xff, 0xd8, 0xff])
+    }), {
+      DB: db,
+      JWT_SECRET: secret,
+      TIGRIS_ACCESS_KEY_ID: "test-access",
+      TIGRIS_SECRET_ACCESS_KEY: "test-secret"
+    });
+    assert.equal(response.status, 500);
+    assert.deepEqual(storageMethods, ["PUT", "DELETE"]);
+    assert.ok(cleanupStatements.some(sql => sql.includes("DELETE FROM media_access")));
+    assert.ok(cleanupStatements.some(sql => sql.includes("DELETE FROM media_expirations")));
+  } finally {
+    delete globalThis.__fakeTigrisHandler;
+  }
+});
+
+test("attachment upload stops before storage when the destination friendship is missing", async () => {
+  const db = new FakeDB();
+  const originalPrepare = db.prepare.bind(db);
+  db.prepare = sql => {
+    const statement = originalPrepare(sql);
+    const first = statement.first.bind(statement);
+    statement.first = async () => sql.includes("SELECT 1 FROM friendships") ? null : first();
+    return statement;
+  };
+  const token = await worker.signToken(user, secret, 0);
+  const storageMethods = [];
+  globalThis.__fakeTigrisHandler = async (_url, options) => {
+    storageMethods.push(options.method);
+    return new Response(null, { status: 200 });
+  };
+  try {
+    const response = await worker.default.fetch(new Request("https://api.example.test/api/media", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + token,
+        "Content-Type": "image/jpeg",
+        "X-Recipient-Id": "not-a-contact"
+      },
+      body: new Uint8Array([0xff, 0xd8, 0xff])
+    }), {
+      DB: db,
+      JWT_SECRET: secret,
+      TIGRIS_ACCESS_KEY_ID: "test-access",
+      TIGRIS_SECRET_ACCESS_KEY: "test-secret"
+    });
+    assert.equal(response.status, 403);
+    assert.deepEqual(storageMethods, []);
+  } finally {
+    delete globalThis.__fakeTigrisHandler;
+  }
+});
+
 test("expired attachment is denied and deleted before any media bytes are downloaded", async () => {
   const db = new FakeDB();
   const token = await worker.signToken(user, secret, 0);
