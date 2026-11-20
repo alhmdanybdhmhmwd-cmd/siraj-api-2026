@@ -45,10 +45,10 @@ jobs:
           if (existing) {
             if (!existing.uuid || existing.uuid === process.env.PRODUCTION_DB_ID) throw new Error('Existing test DB identity is unsafe; refusing to continue.');
             fs.writeFileSync('created-db-id.txt', existing.uuid);
-            fs.appendFileSync(process.env.GITHUB_OUTPUT, 'exists=true\\n');
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, 'exists=true\n');
             console.log('Verified existing isolated test DB; no duplicate will be created:', existing.uuid);
           } else {
-            fs.appendFileSync(process.env.GITHUB_OUTPUT, 'exists=false\\n');
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, 'exists=false\n');
             console.log('Safety check passed: production DB identified and target name unused.');
           }
           NODE
