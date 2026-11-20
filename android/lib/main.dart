@@ -604,11 +604,12 @@ class Api {
     await request('POST', '/api/statuses', body: {'content': content});
   }
 
-  static Future<void> publishSparkMedia({
+  static Future<String> publishSparkMedia({
     required List<int> bytes,
     required String fileName,
     required String contentType,
     String caption = '',
+    String? statusId,
   }) async {
     if (BarqFeatures.lightningMode) {
       throw Exception('وضع البرق مفعّل: نشر الصور والفيديو متوقف مؤقتًا.');
@@ -626,6 +627,7 @@ class Api {
         'Content-Type': contentType,
         'X-File-Name': Uri.encodeComponent(fileName),
         'X-Status-Caption': caption.trim(),
+        if (statusId != null) 'X-Status-Id': statusId,
       },
       body: bytes,
     ).timeout(const Duration(minutes: 3));
@@ -637,6 +639,9 @@ class Api {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception((data['error'] ?? 'تعذر نشر الوسائط (${response.statusCode}).').toString());
     }
+    final status = data['status'];
+    if (status is Map && status['id'] != null) return status['id'].toString();
+    throw Exception('لم يُرجع الخادم معرّف لحظة SPARK.');
   }
 
   static Uri sparkMediaUri(String attachmentId) => Uri.parse(
