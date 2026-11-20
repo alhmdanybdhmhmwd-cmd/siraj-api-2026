@@ -436,4 +436,11 @@ void main() {
     expect(selectedTool, 'pinned');
   });
 
+  test('audio transcription enforces the worker two-megabyte limit', () {
+    expect(isBarqTranscriptionSizeAllowed(0), isFalse);
+    expect(isBarqTranscriptionSizeAllowed(1), isTrue);
+    expect(isBarqTranscriptionSizeAllowed(2 * 1024 * 1024), isTrue);
+    expect(isBarqTranscriptionSizeAllowed(2 * 1024 * 1024 + 1), isFalse);
+  });
+
 }
