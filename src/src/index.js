@@ -2085,7 +2085,7 @@ export default {
       }
 
       // Only the current owner can transfer ownership to an existing group member.
-      const groupOwnershipMatch = path.match(/^\\/api\\/groups\\/([^/]+)\\/owner$/);
+      const groupOwnershipMatch = path.match(/^\/api\/groups\/([^/]+)\/owner$/);
       if (method === "POST" && groupOwnershipMatch) {
         const groupId = groupOwnershipMatch[1];
         const body = await readJsonRequestLimited(request);
