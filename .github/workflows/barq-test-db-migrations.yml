@@ -35,3 +35,10 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
           npx --yes wrangler@4 d1 migrations apply barq-phase2-test-2026-11-20 --remote --config wrangler.test.toml
+
+      - name: Verify remote isolated revocation schema without reading user data
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 d1 execute barq-phase2-test-2026-11-20 --remote --config wrangler.test.toml --command "SELECT token_hash, user_id, expires_at, revoked_at FROM revoked_sessions LIMIT 0;"
+
