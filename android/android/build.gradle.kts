@@ -19,12 +19,14 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
-// Align every Android library module with the app compile SDK.
-// Apply after each plugin project has been evaluated because some Flutter
-// plugins overwrite their compileSdk during their own Gradle configuration.
-subprojects {
-    afterEvaluate {
-        extensions.findByType<com.android.build.api.dsl.LibraryExtension>()?.compileSdk = 37
+// Align Android library modules after all project build scripts have run.
+// A project-level afterEvaluate callback is too late here because app evaluation
+// can eagerly evaluate plugin projects through evaluationDependsOn(":app").
+gradle.projectsEvaluated {
+    subprojects.forEach { project ->
+        project.extensions
+            .findByType<com.android.build.api.dsl.LibraryExtension>()
+            ?.compileSdk = 37
     }
 }
 
