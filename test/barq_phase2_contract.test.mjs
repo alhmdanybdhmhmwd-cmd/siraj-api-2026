@@ -71,6 +71,8 @@ test("message editing is PATCH-only for the authenticated author in private and 
   assert.ok(groupRoute.includes("UPDATE group_messages SET body = ?, edited_at = CURRENT_TIMESTAMP"));
   assert.ok(groupRoute.includes("sender_id = ?"));
   assert.ok(groupRoute.includes("message.length > 5000"));
+  assert.ok(worker.includes("gm.edited_at"));
+  assert.ok(worker.includes("reply_to_sender_id, edited_at"));
 
   assert.ok(flutterApp.includes("editPrivateMessage"));
   assert.ok(flutterApp.includes("editGroupMessage"));
