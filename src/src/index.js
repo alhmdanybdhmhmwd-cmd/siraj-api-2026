@@ -1897,7 +1897,26 @@ export default {
         return json({ message: "Member added" }, 201);
       }
 
-      const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
+            // Group members may delete only messages they authored.
+      const groupMessageActionMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/([^/]+)$/);
+      if (method === "DELETE" && groupMessageActionMatch) {
+        const groupId = groupMessageActionMatch[1];
+        const messageId = groupMessageActionMatch[2];
+        const member = await env.DB.prepare(
+          "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
+        ).bind(groupId, currentUser.sub).first();
+        if (!member) return json({ error: "Group not found" }, 404);
+        const owned = await env.DB.prepare(
+          "SELECT id FROM group_messages WHERE id = ? AND group_id = ? AND sender_id = ?"
+        ).bind(messageId, groupId, currentUser.sub).first();
+        if (!owned) return json({ error: "Message not found or cannot be deleted" }, 404);
+        await env.DB.prepare(
+          "DELETE FROM group_messages WHERE id = ? AND group_id = ? AND sender_id = ?"
+        ).bind(messageId, groupId, currentUser.sub).run();
+        return json({ message: "Message deleted", id: messageId });
+      }
+
+const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
       if (groupMessagesMatch) {
         const groupId = groupMessagesMatch[1];
         const member = await env.DB.prepare(
@@ -2050,6 +2069,20 @@ export default {
           message: "Message sent",
           id
         }, 201);
+      }
+
+      // A sender may delete only their own private message.
+      const privateMessageActionMatch = path.match(/^\/api\/messages\/([^/]+)$/);
+      if (method === "DELETE" && privateMessageActionMatch) {
+        const messageId = privateMessageActionMatch[1];
+        const owned = await env.DB.prepare(
+          "SELECT id FROM messages WHERE id = ? AND sender_id = ?"
+        ).bind(messageId, currentUser.sub).first();
+        if (!owned) return json({ error: "Message not found or cannot be deleted" }, 404);
+        await env.DB.prepare(
+          "DELETE FROM messages WHERE id = ? AND sender_id = ?"
+        ).bind(messageId, currentUser.sub).run();
+        return json({ message: "Message deleted", id: messageId });
       }
 
       // Get conversation messages
