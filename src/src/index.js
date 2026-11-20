@@ -857,7 +857,7 @@ export default {
         ).bind(currentUser.sub).first();
         if (existing?.invite_code) return json({ inviteCode: existing.invite_code });
 
-        const inviteCode = base64url(crypto.getRandomValues(new Uint8Array(9)));
+        const inviteCode = Array.from(crypto.getRandomValues(new Uint8Array(6)), byte => byte.toString(16).padStart(2, "0")).join("").toUpperCase();
         await env.DB.prepare(
           "INSERT OR IGNORE INTO user_invite_codes (user_id, invite_code) VALUES (?, ?)"
         ).bind(currentUser.sub, inviteCode).run();
