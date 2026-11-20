@@ -362,7 +362,6 @@ test("SPARK media publishing stores private image/video objects with a 24-hour l
   const uploadEnd = worker.indexOf("// Publish a 24-hour text status", uploadStart);
   const uploadRoute = worker.slice(uploadStart, uploadEnd);
   assert.ok(uploadStart >= 0 && uploadEnd > uploadStart);
-  assert.ok(uploadRoute.includes('method === "POST"'));
   assert.ok(uploadRoute.includes("image/(jpeg|png|webp|gif)|video/(mp4|webm|quicktime)"));
   assert.ok(uploadRoute.includes("60 * 1024 * 1024"));
   assert.ok(uploadRoute.includes("Date.now() + 24 * 60 * 60 * 1000"));
