@@ -7,41 +7,25 @@ const testConfig = await readFile(new URL("../wrangler.test.toml", import.meta.u
 const productionConfig = await readFile(new URL("../wrangler.toml", import.meta.url), "utf8");
 
 function hasPath(path) {
-  const escaped = path.replace(/[.*+?^${}()|[\]\\]/g, "\\function hasRoute(method, path) {
-  const escaped = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`method === ["']${method}["'] && path === ["']${escaped}["']`).test(worker);
-}");
-  return new RegExp(`path === ["']${escaped}["']`).test(worker);
+  return worker.includes('path === "' + path + '"') ||
+    worker.includes("path === '" + path + "'");
 }
 
-test("liveness probe is independent from database readiness", () => {
-  assert.match(worker, /path === ["']\/health\/live["']/);
-  assert.match(worker, /path === ["']\/health\/ready["']/);
-  assert.match(worker, /SELECT 1 AS ok/);
+test("health probes and read-only readiness query are present", () => {
+  assert.ok(hasPath("/health/live"));
+  assert.ok(hasPath("/health/ready"));
+  assert.ok(worker.includes("SELECT 1 AS ok"));
 });
 
-test("phase 2 core account and messaging routes remain present", () => {
-  for (const [method, path] of [
-    ["POST", "/api/register"],
-    ["POST", "/api/login"],
-    ["POST", "/api/password/recover"],
-    ["POST", "/api/profile"],
-    ["GET", "/api/me"],
-    ["GET", "/api/privacy"],
-    ["POST", "/api/privacy"],
-    ["GET", "/api/notification-settings"],
-    ["POST", "/api/notification-settings"],
-    ["GET", "/api/friends"],
-    ["POST", "/api/contacts"],
-    ["POST", "/api/contacts/match"],
-    ["POST", "/api/messages"],
-    ["GET", "/api/messages"],
-    ["POST", "/api/statuses"],
-    ["GET", "/api/statuses"],
-    ["POST", "/api/groups"],
-    ["GET", "/api/groups"],
-  ]) {
-    assert.ok(hasPath(path), `Missing route path ${path}`);
+test("phase 2 core API route paths remain present", () => {
+  const paths = [
+    "/api/register", "/api/login", "/api/password/recover",
+    "/api/profile", "/api/me", "/api/privacy",
+    "/api/notification-settings", "/api/friends", "/api/contacts",
+    "/api/contacts/match", "/api/messages", "/api/statuses", "/api/groups"
+  ];
+  for (const path of paths) {
+    assert.ok(hasPath(path), "Missing route path " + path);
   }
 });
 
@@ -51,6 +35,7 @@ test("isolated test D1 is not the production database", () => {
   assert.ok(testId, "test D1 database_id must be configured");
   assert.ok(productionId, "production D1 database_id must be configured");
   assert.notEqual(testId, productionId);
-  assert.match(testConfig, /database_name\s*=\s*"barq-phase2-test-/);
-  assert.doesNotMatch(testConfig, /\[vars\]|\[\[routes\]\]/);
+  assert.ok(testConfig.includes('database_name = "barq-phase2-test-'));
+  assert.ok(!testConfig.includes("[vars]"));
+  assert.ok(!testConfig.includes("[[routes]]"));
 });
