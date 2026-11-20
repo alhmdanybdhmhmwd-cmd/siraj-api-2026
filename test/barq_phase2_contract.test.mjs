@@ -358,7 +358,7 @@ test("group ownership transfer is conditional, owner-only, and limited to existi
 
 
 test("SPARK media publishing stores private image/video objects with a 24-hour lifetime", () => {
-  const uploadStart = worker.indexOf('path === "/api/statuses/media"');
+  const uploadStart = worker.indexOf('if (method === "POST" && path === "/api/statuses/media")');
   const uploadEnd = worker.indexOf("// Publish a 24-hour text status", uploadStart);
   const uploadRoute = worker.slice(uploadStart, uploadEnd);
   assert.ok(uploadStart >= 0 && uploadEnd > uploadStart);
@@ -375,7 +375,7 @@ test("SPARK media publishing stores private image/video objects with a 24-hour l
 });
 
 test("SPARK media reads enforce active friend visibility and expire with their status", () => {
-  const mediaStart = worker.indexOf("const mediaMatch = path.match(/^\\/api\\/media\\/(.+)$/)");
+  const mediaStart = worker.indexOf("const mediaMatch = path.match");
   const mediaEnd = worker.indexOf("return json({ error: \"Route not found\" }, 404)", mediaStart);
   const mediaRoute = worker.slice(mediaStart, mediaEnd);
   assert.ok(mediaStart >= 0);
@@ -389,8 +389,8 @@ test("SPARK media reads enforce active friend visibility and expire with their s
   const cleanupStart = worker.indexOf("async function cleanupExpiredMedia");
   const cleanupEnd = worker.indexOf("async function cleanupExpiredEphemeralMessages", cleanupStart);
   const cleanup = worker.slice(cleanupStart, cleanupEnd);
-  assert.ok(cleanup.includes("SELECT status_id FROM status_media WHERE object_key = ?"));
-  assert.ok(cleanup.includes("DELETE FROM status_media WHERE status_id = ?"));
+  assert.ok(cleanup.includes("DELETE FROM status_posts WHERE id IN (SELECT status_id FROM status_media WHERE object_key = ?)"));
+  assert.ok(cleanup.includes("DELETE FROM status_media WHERE object_key = ?"));
   assert.ok(cleanup.includes("DELETE FROM status_posts WHERE id = ?"));
 });
 
