@@ -1205,7 +1205,9 @@ String normalizeBarqInternationalPhone(String raw) {
 }
 
 String normalizeBarqRegistrationPhone(String raw, String countryCode) {
-  final value = normalizeBarqPhoneDigits(raw);
+  final value = normalizeBarqPhoneDigits(raw)
+      .trim()
+      .replaceAll(RegExp(r'[\\s().-]'), '');
   if (value.startsWith('+') || value.startsWith('00')) {
     return normalizeBarqInternationalPhone(value);
   }
