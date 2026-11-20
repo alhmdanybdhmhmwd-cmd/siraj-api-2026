@@ -448,7 +448,7 @@ async function sendSirajPush(env, recipientId, senderId, senderName, messageText
                 title: category === "groups"
                   ? "رسالة في " + String(options.groupName || "مجموعة برق").slice(0, 65)
                   : category === "statuses"
-                    ? "حالة جديدة من " + String(senderName || "مستخدم برق").slice(0, 80)
+                    ? "SPARK جديد من " + String(senderName || "مستخدم برق").slice(0, 80)
                     : "رسالة من " + String(senderName || "مستخدم برق").slice(0, 80),
                 body: category === "statuses" ? "شارك لحظة جديدة في SPARK" : preview || "لديك رسالة جديدة"
               },
