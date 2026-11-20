@@ -1145,11 +1145,11 @@ export default {
           const declaredLength = Number(request.headers.get("Content-Length"));
           const maxPhotoBytes = 4 * 1024 * 1024;
           if (Number.isFinite(declaredLength) && declaredLength > maxPhotoBytes) {
-            return json({ error: "Profile photo must not exceed 5 MB" }, 413);
+            return json({ error: "Profile photo must not exceed 4 MiB" }, 413);
           }
           const bytes = new Uint8Array(await request.arrayBuffer());
           if (!bytes.length || bytes.length > maxPhotoBytes) {
-            return json({ error: "Profile photo must be between 1 byte and 5 MB" }, 413);
+            return json({ error: "Profile photo must be between 1 byte and 4 MiB" }, 413);
           }
           if (detectProfileImageType(bytes) !== contentType) {
             return json({ error: "Image content does not match its declared type" }, 415);
