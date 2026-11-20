@@ -7,7 +7,7 @@ function safeMessageText(value) {
   try {
     const parsed = JSON.parse(raw);
     if (parsed && parsed.type === "attachment") {
-      const name = String(parsed.fileName || "ملف").replace(/[\\r\\n]/g, " ").slice(0, 80);
+      const name = String(parsed.fileName || "ملف").replace(/[\r\n]/g, " ").slice(0, 80);
       return "[مرفق: " + name + "]";
     }
   } catch (_) {}
