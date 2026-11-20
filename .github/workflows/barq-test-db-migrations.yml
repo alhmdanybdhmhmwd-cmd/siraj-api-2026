@@ -42,3 +42,14 @@ jobs:
           set -euo pipefail
           npx --yes wrangler@4 d1 execute barq-phase2-test-2026-11-20 --remote --config wrangler.test.toml --command "SELECT token_hash, user_id, expires_at, revoked_at FROM revoked_sessions LIMIT 0;"
 
+      - name: Inspect isolated users schema and phone uniqueness (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Core users table definition:"
+          npx --yes wrangler@4 d1 execute barq-phase2-test-2026-11-20 --remote --config wrangler.test.toml --command "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users';"
+          echo "Users columns:"
+          npx --yes wrangler@4 d1 execute barq-phase2-test-2026-11-20 --remote --config wrangler.test.toml --command "SELECT cid, name, type, \"notnull\", pk FROM pragma_table_info('users') ORDER BY cid;"
+          echo "Users indexes and indexed columns:"
+          npx --yes wrangler@4 d1 execute barq-phase2-test-2026-11-20 --remote --config wrangler.test.toml --command "SELECT il.name AS index_name, il.\"unique\" AS is_unique, ii.seqno, ii.name AS column_name FROM pragma_index_list('users') AS il JOIN pragma_index_info(il.name) AS ii ORDER BY il.name, ii.seqno;"
+
