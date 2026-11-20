@@ -49,6 +49,8 @@ jobs:
           npx --yes wrangler@4 d1 execute barq-phase2-test-2026-11-20 --remote --config wrangler.test.toml --command "SELECT id, username, display_name, password_hash, password_salt, phone FROM users LIMIT 0;"
           npx --yes wrangler@4 d1 execute barq-phase2-test-2026-11-20 --remote --config wrangler.test.toml --command "SELECT user_id, friend_id FROM friendships LIMIT 0;"
           npx --yes wrangler@4 d1 execute barq-phase2-test-2026-11-20 --remote --config wrangler.test.toml --command "SELECT id, sender_id, receiver_id, body, created_at, read_at FROM messages LIMIT 0;"
+          npx --yes wrangler@4 d1 execute barq-phase2-test-2026-11-20 --remote --config wrangler.test.toml --command "SELECT id, sender_id, receiver_id, body, reply_to_id, reply_to_body, reply_to_sender_id FROM messages LIMIT 0;"
+          npx --yes wrangler@4 d1 execute barq-phase2-test-2026-11-20 --remote --config wrangler.test.toml --command "SELECT id, group_id, sender_id, body, reply_to_id, reply_to_body, reply_to_sender_id FROM group_messages LIMIT 0;"
 
       - name: Inspect isolated users schema and phone uniqueness (read-only)
         shell: bash
