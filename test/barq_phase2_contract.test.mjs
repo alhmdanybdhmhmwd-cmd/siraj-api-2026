@@ -205,3 +205,34 @@ test("private and group message pins are per-user, scoped, and removable by the 
   assert.ok(flutterApp.includes("إلغاء تثبيت الرسالة"));
   assert.ok(interactionMigration.includes("PRIMARY KEY (scope_type, scope_id, message_id, pinned_by)"));
 });
+
+test("server-side message search is scoped, authenticated, bounded, and rate-limited", () => {
+  const privateStart = worker.indexOf('path === "/api/messages/search"');
+  const privateEnd = worker.indexOf("// Get conversation messages", privateStart);
+  const privateSearch = worker.slice(privateStart, privateEnd);
+  const groupStart = worker.indexOf("const groupMessageSearchMatch");
+  const groupEnd = worker.indexOf("const groupMessagesMatch", groupStart);
+  const groupSearch = worker.slice(groupStart, groupEnd);
+  assert.ok(privateSearch.includes("friendships"));
+  assert.ok(privateSearch.includes("instr(lower(m.body), lower(?))"));
+  assert.ok(privateSearch.includes("message-search-private"));
+  assert.ok(privateSearch.includes("Math.min(50"));
+  assert.ok(groupSearch.includes("group_members"));
+  assert.ok(groupSearch.includes("instr(lower(gm.body), lower(?))"));
+  assert.ok(groupSearch.includes("message-search-group"));
+  assert.ok(groupSearch.includes("Math.min(50"));
+  assert.ok(app.includes("searchPrivateMessages"));
+  assert.ok(app.includes("searchGroupMessages"));
+  assert.ok(app.includes("جميع رسائل المحادثة"));
+  assert.ok(app.includes("Api.searchPrivateMessages(friendId, query)"));
+  assert.ok(app.includes("Api.searchGroupMessages(groupId, query)"));
+});
+
+test("private and group message pagination uses stable compound cursors and merges without duplicates", () => {
+  assert.ok(worker.includes("created_at < ? OR (created_at = ? AND id < ?)"));
+  assert.ok(worker.includes("nextCursor: hasMore && oldest"));
+  assert.ok(app.includes("mergeMessages(older, messages)"));
+  assert.ok(app.includes("Api.messagesPage(friendId, before: olderMessageCursor)"));
+  assert.ok(app.includes("Api.groupMessagesPage(groupId, before: olderMessageCursor)"));
+  assert.ok(app.includes("final unique = <String, Map<String, dynamic>>{}"));
+});
