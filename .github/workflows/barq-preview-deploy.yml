@@ -41,8 +41,6 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
           test -n "$BARQ_PREVIEW_JWT_SECRET"
-          test -n "$BARQ_PREVIEW_TIGRIS_ACCESS_KEY_ID"
-          test -n "$BARQ_PREVIEW_TIGRIS_SECRET_ACCESS_KEY"
           python3 - <<'PY'
           import tomllib
           from pathlib import Path
@@ -74,8 +72,12 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s' "$BARQ_PREVIEW_JWT_SECRET" | npx --yes wrangler@4 secret put JWT_SECRET --config wrangler.test.toml
-          printf '%s' "$BARQ_PREVIEW_TIGRIS_ACCESS_KEY_ID" | npx --yes wrangler@4 secret put TIGRIS_ACCESS_KEY_ID --config wrangler.test.toml
-          printf '%s' "$BARQ_PREVIEW_TIGRIS_SECRET_ACCESS_KEY" | npx --yes wrangler@4 secret put TIGRIS_SECRET_ACCESS_KEY --config wrangler.test.toml
+          if [ -n "$BARQ_PREVIEW_TIGRIS_ACCESS_KEY_ID" ] && [ -n "$BARQ_PREVIEW_TIGRIS_SECRET_ACCESS_KEY" ]; then
+            printf '%s' "$BARQ_PREVIEW_TIGRIS_ACCESS_KEY_ID" | npx --yes wrangler@4 secret put TIGRIS_ACCESS_KEY_ID --config wrangler.test.toml
+            printf '%s' "$BARQ_PREVIEW_TIGRIS_SECRET_ACCESS_KEY" | npx --yes wrangler@4 secret put TIGRIS_SECRET_ACCESS_KEY --config wrangler.test.toml
+          else
+            echo "Preview media storage credentials are not configured; media routes remain unavailable in this Preview deployment."
+          fi
       - name: Verify deployed Preview health endpoints
         shell: bash
         run: |
