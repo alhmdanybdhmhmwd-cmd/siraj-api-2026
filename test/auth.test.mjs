@@ -1021,8 +1021,8 @@ class FakeGroupDB extends FakeDB {
 test("group members can view the roster and owner role but outsiders cannot", async () => {
   const db = new FakeGroupDB(true);
   db.groupMemberRows = [
-    { id: user.id, username: user.username, display_name: user.display_name, is_owner: 1 },
-    { id: "member-2", username: "member_two", display_name: "Member Two", is_owner: 0 }
+    { id: user.id, username: user.username, display_name: user.display_name, photo_updated_at: "2026-11-20 12:00:00", is_owner: 1 },
+    { id: "member-2", username: "member_two", display_name: "Member Two", photo_updated_at: "2026-11-20 12:01:00", is_owner: 0 }
   ];
   const token = await worker.signToken(user, secret, 0);
   const response = await worker.default.fetch(new Request(
@@ -1033,6 +1033,9 @@ test("group members can view the roster and owner role but outsiders cannot", as
   const data = await response.json();
   assert.deepEqual(data.members.map(item => item.id), [user.id, "member-2"]);
   assert.equal(data.members[0].is_owner, 1);
+  assert.equal(data.members[1].photo_updated_at, "2026-11-20 12:01:00");
+  assert.match(db.groupMemberListQuery, /LEFT JOIN profile_photos p ON p\.user_id = u\.id/);
+  assert.match(db.groupMemberListQuery, /p\.updated_at AS photo_updated_at/);
   assert.match(db.groupMemberListQuery, /JOIN chat_groups g/);
 
   const outsider = new FakeGroupDB(false);
@@ -1215,6 +1218,8 @@ test("group history fetches the newest 100 messages in chronological order", asy
     headers: { Authorization: "Bearer " + token }
   }), { DB: db, JWT_SECRET: secret });
   assert.equal(response.status, 200);
+  assert.match(db.groupHistoryQuery, /LEFT JOIN profile_photos p ON p\.user_id = u\.id/);
+  assert.match(db.groupHistoryQuery, /p\.updated_at AS photo_updated_at/);
   assert.match(db.groupHistoryQuery, /ORDER BY gm\.created_at DESC, gm\.id DESC\s+LIMIT \?/i);
   assert.match(db.groupHistoryQuery, /ORDER BY created_at ASC, id ASC/i);
   assert.equal(db.groupHistoryParams.at(-1), 101);
