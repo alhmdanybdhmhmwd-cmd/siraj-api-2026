@@ -4,7 +4,12 @@ import { readFile } from "node:fs/promises";
 
 const workerPath = new URL("../src/src/index.js", import.meta.url);
 let workerSource = await readFile(workerPath, "utf8");
+const summarySource = await readFile(new URL("../src/src/conversation_summary.js", import.meta.url), "utf8");
 workerSource = workerSource.replace('import { AwsClient } from "aws4fetch";', 'class AwsClient {}');
+workerSource = workerSource.replace(
+  'import { prepareConversationSummaryTranscript, buildConversationSummaryMessages, extractConversationSummaryText } from "./conversation_summary.js";',
+  summarySource
+);
 const workerModule = await import(
   "data:text/javascript;base64," + Buffer.from(workerSource).toString("base64")
 );
