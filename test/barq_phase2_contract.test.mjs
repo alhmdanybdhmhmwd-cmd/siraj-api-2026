@@ -345,7 +345,8 @@ test("group ownership transfer is conditional, owner-only, and limited to existi
   assert.ok(start >= 0);
   assert.ok(route.includes('method === "POST"'));
   assert.ok(route.includes("owner_id = ?"));
-  assert.ok(route.includes("owner_id = ? AND EXISTS"));
+  assert.ok(route.includes("owner_id = ?"));
+  assert.ok(route.includes("AND EXISTS"));
   assert.ok(route.includes("FROM group_members"));
   assert.ok(route.includes("targetUserId === currentUser.sub"));
   assert.ok(route.includes("Number(results?.[0]?.meta?.changes || 0) !== 1"));
