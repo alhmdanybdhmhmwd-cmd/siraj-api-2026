@@ -79,6 +79,34 @@ class RecoveryMigrationTests(unittest.TestCase):
         self.assertIn(("messages", "sender_id", "users"), foreign_keys)
         self.assertIn(("messages", "receiver_id", "users"), foreign_keys)
 
+    def test_preview_message_edit_migration_adds_edited_timestamps(self):
+        private_columns = {
+            row[1] for row in self.db.execute("PRAGMA table_info(messages)")
+        }
+        group_columns = {
+            row[1] for row in self.db.execute("PRAGMA table_info(group_messages)")
+        }
+        self.assertIn("edited_at", private_columns)
+        self.assertIn("edited_at", group_columns)
+
+        self.db.execute(
+            "INSERT INTO users (id, username, display_name, password_hash, password_salt) VALUES ('u1', 'edituser', 'Edit User', 'hash', 'salt')"
+        )
+        self.db.execute(
+            "INSERT INTO users (id, username, display_name, password_hash, password_salt) VALUES ('u2', 'otheredit', 'Other User', 'hash', 'salt')"
+        )
+        self.db.execute(
+            "INSERT INTO messages (id, sender_id, receiver_id, body) VALUES ('edit-1', 'u1', 'u2', 'before')"
+        )
+        self.db.execute(
+            "UPDATE messages SET body = 'after', edited_at = CURRENT_TIMESTAMP WHERE id = 'edit-1' AND sender_id = 'u1'"
+        )
+        body, edited_at = self.db.execute(
+            "SELECT body, edited_at FROM messages WHERE id = 'edit-1'"
+        ).fetchone()
+        self.assertEqual(body, "after")
+        self.assertTrue(edited_at)
+
     def test_migration_creates_recovery_tables_and_index(self):
         tables = {
             row[0] for row in self.db.execute(
