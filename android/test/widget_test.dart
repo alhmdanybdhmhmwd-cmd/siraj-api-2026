@@ -43,6 +43,19 @@ void main() {
     expect(normalizeBarqContactPhoneDigits('---'), isEmpty);
   });
 
+  test('conversation search matches message text and sender case-insensitively', () {
+    final messages = [
+      {'id': '1', 'body': 'مرحبا يا صديقي', 'display_name': 'Ali'},
+      {'id': '2', 'body': 'Good morning', 'display_name': 'Sara'},
+      {'id': '3', 'body': 'رسالة أخرى', 'display_name': 'Ali'},
+    ];
+
+    expect(searchConversationMessages(messages, 'صديقي').map((m) => m['id']), ['1']);
+    expect(searchConversationMessages(messages, 'ALI').map((m) => m['id']), ['1', '3']);
+    expect(searchConversationMessages(messages, 'not found'), isEmpty);
+    expect(searchConversationMessages(messages, '   '), isEmpty);
+  });
+
   test('message merge deduplicates by id and keeps chronological order', () {
     final merged = mergeMessages(
       [
