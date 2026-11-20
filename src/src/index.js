@@ -2001,7 +2001,40 @@ export default {
         return json({ message: "Message deleted", id: messageId });
       }
 
-const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
+const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/search$/);
+      if (method === "GET" && groupMessageSearchMatch) {
+        const groupId = groupMessageSearchMatch[1];
+        const query = (url.searchParams.get("q") || "").trim();
+        if (query.length < 2 || query.length > 100) {
+          return json({ error: "Search query must be between 2 and 100 characters" }, 400);
+        }
+        const member = await env.DB.prepare(
+          "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
+        ).bind(groupId, currentUser.sub).first();
+        if (!member) return json({ error: "Group not found" }, 404);
+        if (!(await consumeLoginAttempt(env, "message-search-group", currentUser.sub + ":" + groupId, 40))) {
+          return new Response(JSON.stringify({ error: "Too many message searches. Please try again in 15 minutes." }), {
+            status: 429, headers: { ...corsHeaders, "Retry-After": "900" }
+          });
+        }
+        const requestedLimit = Number(url.searchParams.get("limit") || 30);
+        const limit = Number.isInteger(requestedLimit) ? Math.min(50, Math.max(1, requestedLimit)) : 30;
+        await ensureProfilePhotos(env);
+        const result = await env.DB.prepare(`
+          SELECT gm.id, gm.group_id, gm.sender_id, gm.body, gm.created_at,
+                 gm.reply_to_id, gm.reply_to_body, gm.reply_to_sender_id, gm.edited_at,
+                 u.username, u.display_name, p.updated_at AS photo_updated_at
+          FROM group_messages gm
+          JOIN users u ON u.id = gm.sender_id
+          LEFT JOIN profile_photos p ON p.user_id = gm.sender_id
+          WHERE gm.group_id = ? AND instr(lower(gm.body), lower(?)) > 0
+          ORDER BY gm.created_at DESC, gm.id DESC
+          LIMIT ?
+        `).bind(groupId, query, limit).all();
+        return json({ messages: result.results || [], query, hasMore: (result.results || []).length === limit });
+      }
+
+      const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
       if (groupMessagesMatch) {
         const groupId = groupMessagesMatch[1];
         const member = await env.DB.prepare(
@@ -2272,6 +2305,40 @@ const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
           "DELETE FROM messages WHERE id = ? AND sender_id = ?"
         ).bind(messageId, currentUser.sub).run();
         return json({ message: "Message deleted", id: messageId });
+      }
+
+      // Search only within the authenticated private conversation.
+      if (method === "GET" && path === "/api/messages/search") {
+        const friendId = (url.searchParams.get("with") || "").trim();
+        const query = (url.searchParams.get("q") || "").trim();
+        if (!friendId) return json({ error: "Friend ID is required" }, 400);
+        if (query.length < 2 || query.length > 100) {
+          return json({ error: "Search query must be between 2 and 100 characters" }, 400);
+        }
+        const friendship = await env.DB.prepare(
+          "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
+        ).bind(currentUser.sub, friendId).first();
+        if (!friendship) return json({ error: "You can only search chats with friends" }, 403);
+        if (!(await consumeLoginAttempt(env, "message-search-private", currentUser.sub + ":" + friendId, 40))) {
+          return new Response(JSON.stringify({ error: "Too many message searches. Please try again in 15 minutes." }), {
+            status: 429, headers: { ...corsHeaders, "Retry-After": "900" }
+          });
+        }
+        const requestedLimit = Number(url.searchParams.get("limit") || 30);
+        const limit = Number.isInteger(requestedLimit) ? Math.min(50, Math.max(1, requestedLimit)) : 30;
+        const result = await env.DB.prepare(`
+          SELECT m.id, m.sender_id, m.receiver_id, m.body, m.created_at, m.read_at,
+                 m.reply_to_id, m.reply_to_body, m.reply_to_sender_id, m.edited_at,
+                 u.display_name, u.username
+          FROM messages m
+          JOIN users u ON u.id = m.sender_id
+          WHERE ((m.sender_id = ? AND m.receiver_id = ?)
+              OR (m.sender_id = ? AND m.receiver_id = ?))
+            AND instr(lower(m.body), lower(?)) > 0
+          ORDER BY m.created_at DESC, m.id DESC
+          LIMIT ?
+        `).bind(currentUser.sub, friendId, friendId, currentUser.sub, query, limit).all();
+        return json({ messages: result.results || [], query, hasMore: (result.results || []).length === limit });
       }
 
       // Get conversation messages
