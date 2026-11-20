@@ -583,7 +583,7 @@ async function cleanupExpiredRevokedSessions(env, now = Date.now()) {
 async function cleanupExpiredRateLimits(env, now = Date.now()) {
   const cutoff = Math.floor(now / 1000) - 24 * 60 * 60;
   const results = {};
-  for (const table of ["login_rate_limits", "recovery_rate_limits"]) {
+  for (const table of ["login_rate_limits", "recovery_rate_limits", "transcription_rate_limits"]) {
     try {
       const result = await env.DB.prepare(
         `DELETE FROM ${table} WHERE window_started < ?`
