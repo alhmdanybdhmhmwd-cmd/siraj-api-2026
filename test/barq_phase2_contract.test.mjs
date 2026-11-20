@@ -250,3 +250,10 @@ test("on-demand AI conversation summaries are membership-checked, rate-limited, 
   assert.ok(flutterApp.includes("لن يبدأ إرسال الرسائل قبل ضغطك على"));
   assert.ok(flutterApp.includes("لا تُرسل المرفقات"));
 });
+
+test("recorded AAC voice messages remain eligible for explicit transcription", () => {
+  assert.match(worker, /"audio\/mp4"/);
+  assert.match(worker, /maxTranscriptionBytes = 2 \* 1024 \* 1024/);
+  assert.match(flutterApp, /contentType: 'audio\/mp4'/);
+  assert.match(flutterApp, /isBarqTranscriptionSizeAllowed\(audioBytes\.length\)/);
+});
