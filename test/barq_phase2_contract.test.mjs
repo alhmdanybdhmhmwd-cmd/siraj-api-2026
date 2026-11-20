@@ -37,7 +37,10 @@ test("isolated test D1 is not the production database", () => {
   assert.ok(productionId, "production D1 database_id must be configured");
   assert.notEqual(testId, productionId);
   assert.ok(testConfig.includes('database_name = "barq-phase2-test-'));
-  assert.ok(!testConfig.includes("[vars]"));
+  assert.ok(testConfig.includes('name = "barq-api-phase2-test"'));
+  assert.ok(testConfig.includes("workers_dev = true"));
+  assert.ok(testConfig.includes('TIGRIS_BUCKET = "barq-preview-media"'));
+  assert.ok(!testConfig.includes('TIGRIS_BUCKET = "siraj-media"'));
   assert.ok(!testConfig.includes("[[routes]]"));
 });
 
