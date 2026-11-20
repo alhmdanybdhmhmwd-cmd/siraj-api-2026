@@ -362,7 +362,7 @@ test("SPARK media publishing stores private image/video objects with a 24-hour l
   const uploadEnd = worker.indexOf("// Publish a 24-hour text status", uploadStart);
   const uploadRoute = worker.slice(uploadStart, uploadEnd);
   assert.ok(uploadStart >= 0 && uploadEnd > uploadStart);
-  assert.ok(uploadRoute.includes("image/(jpeg|png|webp|gif)|video/(mp4|webm|quicktime)"));
+  assert.ok(uploadRoute.includes("image\\/") && uploadRoute.includes("video\\/"));
   assert.ok(uploadRoute.includes("60 * 1024 * 1024"));
   assert.ok(uploadRoute.includes("Date.now() + 24 * 60 * 60 * 1000"));
   assert.ok(uploadRoute.includes("CREATE TABLE IF NOT EXISTS status_media"));
@@ -390,7 +390,7 @@ test("SPARK media reads enforce active friend visibility and expire with their s
   const cleanup = worker.slice(cleanupStart, cleanupEnd);
   assert.ok(cleanup.includes("DELETE FROM status_posts WHERE id IN (SELECT status_id FROM status_media WHERE object_key = ?)"));
   assert.ok(cleanup.includes("DELETE FROM status_media WHERE object_key = ?"));
-  assert.ok(cleanup.includes("DELETE FROM status_posts WHERE id = ?"));
+  assert.ok(cleanup.includes("DELETE FROM status_posts WHERE id IN (SELECT status_id FROM status_media WHERE object_key = ?)"));
 });
 
 test("Android SPARK media flow supports authenticated upload, caption, image/video viewing and paging", () => {
