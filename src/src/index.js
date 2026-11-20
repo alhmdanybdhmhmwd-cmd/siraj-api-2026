@@ -568,6 +568,22 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
       expires_at TEXT NOT NULL
     )
   `).run();
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS status_posts (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL, content TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, expires_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `).run();
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS status_media (
+      status_id TEXT PRIMARY KEY, object_key TEXT NOT NULL UNIQUE,
+      file_name TEXT NOT NULL, content_type TEXT NOT NULL,
+      size INTEGER NOT NULL, caption TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE
+    )
+  `).run();
   const cutoff = new Date(now).toISOString();
   const expired = await env.DB.prepare(
     "SELECT object_key FROM media_expirations WHERE expires_at <= ? ORDER BY expires_at ASC LIMIT 100"
@@ -593,6 +609,13 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
     try {
       const response = await storage.fetch(storageUrl, { method: "DELETE" });
       if (response.ok || response.status === 404) {
+        const sparkStatus = await env.DB.prepare(
+          "SELECT status_id FROM status_media WHERE object_key = ?"
+        ).bind(key).first();
+        if (sparkStatus?.status_id) {
+          await env.DB.prepare("DELETE FROM status_media WHERE status_id = ?").bind(sparkStatus.status_id).run();
+          await env.DB.prepare("DELETE FROM status_posts WHERE id = ?").bind(sparkStatus.status_id).run();
+        }
         await env.DB.prepare("DELETE FROM media_access WHERE object_key = ?").bind(key).run();
         await env.DB.prepare(
           "DELETE FROM media_expirations WHERE object_key = ? AND expires_at <= ?"
@@ -3110,6 +3133,13 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         const accessRow = await env.DB.prepare(
           "SELECT owner_id, recipient_id, group_id, file_name, content_type, expires_at FROM media_access WHERE object_key = ?"
         ).bind(key).first();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_posts (
+            id TEXT PRIMARY KEY, user_id TEXT NOT NULL, content TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, expires_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
         await env.DB.prepare(`
           CREATE TABLE IF NOT EXISTS status_media (
             status_id TEXT PRIMARY KEY, object_key TEXT NOT NULL UNIQUE,
