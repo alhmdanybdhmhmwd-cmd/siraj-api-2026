@@ -1,0 +1,47 @@
+name: BARQ Android quality gate
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["barq/phase-2-android-ci-2026-11-20"]
+    paths:
+      - "android/**"
+      - ".github/workflows/barq-android-quality.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  android-quality:
+    if: ${{ hashFiles('android/pubspec.yaml') != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        working-directory: android
+        run: flutter pub get
+      - name: Analyze Dart source
+        working-directory: android
+        run: flutter analyze
+      - name: Run Flutter tests
+        working-directory: android
+        run: flutter test
+      - name: Build debug APK for validation only
+        working-directory: android
+        run: flutter build apk --debug
+      - name: Upload validation APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: barq-android-validation-apk
+          path: android/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
