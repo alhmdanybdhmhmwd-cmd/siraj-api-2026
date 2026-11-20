@@ -70,6 +70,32 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('حفظ الرقم في جهات الاتصال'), findsOneWidget);
     expect(find.text('إرسال رسالة'), findsOneWidget);
+    final sendButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'إرسال رسالة'),
+    );
+    expect(sendButton.onPressed, isNotNull);
+  });
+
+
+  testWidgets('public profile disables messaging for the current user', (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: PublicProfilePage(
+        person: {
+          'id': 'current-user',
+          'display_name': 'حسابي',
+          'username': 'my_account',
+        },
+        currentUserId: 'current-user',
+        canMessage: true,
+      ),
+    ));
+
+    await tester.drag(find.byType(ListView), const Offset(0, -700));
+    await tester.pumpAndSettle();
+    final sendButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'إرسال رسالة'),
+    );
+    expect(sendButton.onPressed, isNull);
   });
 
   testWidgets('public profile accepts nested API user and hides message action by default', (tester) async {
