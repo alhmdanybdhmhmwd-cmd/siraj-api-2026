@@ -22,4 +22,19 @@ void main() {
     expect(field({'display_name': 'برق'}, ['displayName', 'display_name']), 'برق');
     expect(field({}, ['username'], 'مستخدم'), 'مستخدم');
   });
+
+  test('ephemeral messages disappear at their first-read expiry deadline', () {
+    final now = DateTime.utc(2026, 11, 20, 12);
+    final nowSeconds = now.millisecondsSinceEpoch ~/ 1000;
+    final visible = filterExpiredEphemeralMessages([
+      {'id': 'regular', 'body': 'يبقى', 'is_ephemeral': false},
+      {'id': 'unread', 'body': 'بانتظار القراءة', 'is_ephemeral': true},
+      {'id': 'active', 'body': 'ينتهي لاحقًا', 'is_ephemeral': true, 'delete_at': nowSeconds + 10},
+      {'id': 'expired', 'body': 'انتهى', 'is_ephemeral': true, 'delete_at': nowSeconds},
+      {'id': 'expired-string', 'body': 'انتهى أيضًا', 'is_ephemeral': true, 'delete_at': (nowSeconds - 1).toString()},
+    ], now: now);
+
+    expect(visible.map((message) => message['id']).toList(),
+        ['regular', 'unread', 'active']);
+  });
 }
