@@ -347,4 +347,10 @@ void main() {
     expect(find.text('تثبيت الرسالة'), findsOneWidget);
   });
 
+  test('media duration formatter supports minute and hour lengths', () {
+    expect(formatBarqMediaDuration(const Duration(seconds: 0)), '00:00');
+    expect(formatBarqMediaDuration(const Duration(minutes: 2, seconds: 9)), '02:09');
+    expect(formatBarqMediaDuration(const Duration(hours: 1, minutes: 3, seconds: 5)), '1:03:05');
+  });
+
 }
