@@ -1951,7 +1951,7 @@ const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
           const statement = env.DB.prepare(`
             SELECT * FROM (
               SELECT gm.id, gm.group_id, gm.sender_id, gm.body, gm.created_at,
-                     gm.reply_to_id, gm.reply_to_body, gm.reply_to_sender_id,
+                     gm.reply_to_id, gm.reply_to_body, gm.reply_to_sender_id, gm.edited_at,
                      u.username, u.display_name, p.updated_at AS photo_updated_at
               FROM group_messages gm
               JOIN users u ON u.id = gm.sender_id
@@ -2174,7 +2174,7 @@ const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
           ? await env.DB.prepare(
               `SELECT * FROM (
                  SELECT id, sender_id, receiver_id, body, created_at, read_at,
-                        reply_to_id, reply_to_body, reply_to_sender_id
+                        reply_to_id, reply_to_body, reply_to_sender_id, edited_at, edited_at
                  FROM messages
                  WHERE ((sender_id = ? AND receiver_id = ?)
                     OR (sender_id = ? AND receiver_id = ?))
