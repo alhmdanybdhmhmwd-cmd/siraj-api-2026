@@ -1762,8 +1762,13 @@ export default {
         if (!requestedStatusId) {
           try {
             const recipients = await env.DB.prepare(
-              "SELECT friend_id FROM friendships WHERE user_id = ?"
-            ).bind(currentUser.sub).all();
+              `SELECT f.friend_id FROM friendships f
+             WHERE f.user_id = ?
+               AND EXISTS (
+                 SELECT 1 FROM friendships reciprocal
+                 WHERE reciprocal.user_id = f.friend_id AND reciprocal.friend_id = ?
+               )`
+            ).bind(currentUser.sub, currentUser.sub).all();
             await Promise.all((recipients.results || []).map(item =>
               sendSirajPush(env, item.friend_id, currentUser.sub,
                 currentUser.username, "لحظة جديدة في SPARK", { category: "statuses" })
@@ -1818,11 +1823,16 @@ export default {
         // Status persistence is authoritative; push failures must not undo it.
         try {
           const recipients = await env.DB.prepare(
-            "SELECT friend_id FROM friendships WHERE user_id = ?"
-          ).bind(currentUser.sub).all();
+            `SELECT f.friend_id FROM friendships f
+             WHERE f.user_id = ?
+               AND EXISTS (
+                 SELECT 1 FROM friendships reciprocal
+                 WHERE reciprocal.user_id = f.friend_id AND reciprocal.friend_id = ?
+               )`
+          ).bind(currentUser.sub, currentUser.sub).all();
           await Promise.all((recipients.results || []).map(item =>
             sendSirajPush(env, item.friend_id, currentUser.sub,
-              currentUser.username, "شارك حالة جديدة", { category: "statuses" })
+              currentUser.username, "شارك لحظة جديدة في SPARK", { category: "statuses" })
           ));
         } catch (notificationError) {
           console.error("Status notification dispatch failed:", notificationError);
@@ -1858,11 +1868,15 @@ export default {
                OR EXISTS (
                  SELECT 1 FROM friendships f
                  WHERE f.user_id = ? AND f.friend_id = s.user_id
+                   AND EXISTS (
+                     SELECT 1 FROM friendships reciprocal
+                     WHERE reciprocal.user_id = s.user_id AND reciprocal.friend_id = ?
+                   )
                )
              )
            ORDER BY s.created_at DESC
            LIMIT 100`
-        ).bind(currentUser.sub, currentUser.sub).all();
+        ).bind(currentUser.sub, currentUser.sub, currentUser.sub).all();
 
         const statuses = result.results || [];
         if (statuses.length) {
@@ -1911,8 +1925,13 @@ export default {
         const isOwner = status.user_id === currentUser.sub;
         if (!isOwner) {
           const friendship = await env.DB.prepare(
-            "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
-          ).bind(currentUser.sub, status.user_id).first();
+            `SELECT 1 FROM friendships f
+             WHERE f.user_id = ? AND f.friend_id = ?
+               AND EXISTS (
+                 SELECT 1 FROM friendships reciprocal
+                 WHERE reciprocal.user_id = ? AND reciprocal.friend_id = ?
+               )`
+          ).bind(currentUser.sub, status.user_id, status.user_id, currentUser.sub).first();
           if (!friendship) return json({ error: "SPARK status access denied" }, 403);
         }
         await env.DB.prepare(`
@@ -3287,8 +3306,13 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           permitted = sparkMedia.ownerId === currentUser.sub;
           if (!permitted && Date.parse(sparkMedia.expiresAt) > Date.now()) {
             const friendship = await env.DB.prepare(
-              "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
-            ).bind(currentUser.sub, sparkMedia.ownerId).first();
+              `SELECT 1 FROM friendships f
+               WHERE f.user_id = ? AND f.friend_id = ?
+                 AND EXISTS (
+                   SELECT 1 FROM friendships reciprocal
+                   WHERE reciprocal.user_id = ? AND reciprocal.friend_id = ?
+                 )`
+            ).bind(currentUser.sub, sparkMedia.ownerId, sparkMedia.ownerId, currentUser.sub).first();
             permitted = !!friendship;
           }
           if (!permitted) return json({ error: "SPARK media access denied" }, 403);
