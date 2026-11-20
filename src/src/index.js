@@ -571,6 +571,14 @@ async function cleanupExpiredEphemeralMessages(env, now = Date.now()) {
   return { deleted: Number(result?.meta?.changes || 0), cutoff };
 }
 
+async function cleanupExpiredRevokedSessions(env, now = Date.now()) {
+  const cutoff = Math.floor(now / 1000);
+  const result = await env.DB.prepare(
+    "DELETE FROM revoked_sessions WHERE expires_at <= ?"
+  ).bind(cutoff).run();
+  return { deleted: Number(result?.meta?.changes || 0), cutoff };
+}
+
 async function cleanupExpiredRateLimits(env, now = Date.now()) {
   const cutoff = Math.floor(now / 1000) - 24 * 60 * 60;
   const results = {};
@@ -589,10 +597,16 @@ async function cleanupExpiredRateLimits(env, now = Date.now()) {
   return results;
 }
 
-export { phoneVariants, safeFileName, cleanupExpiredMedia, cleanupExpiredRateLimits, cleanupExpiredEphemeralMessages };
+export { phoneVariants, safeFileName, cleanupExpiredMedia, cleanupExpiredRateLimits, cleanupExpiredEphemeralMessages, cleanupExpiredRevokedSessions };
 
 export default {
   async scheduled(_controller, env) {
+    try {
+      const result = await cleanupExpiredRevokedSessions(env);
+      console.log("Revoked session cleanup:", result);
+    } catch (error) {
+      console.error("Revoked session cleanup failed:", error);
+    }
     try {
       const result = await cleanupExpiredRateLimits(env);
       console.log("Rate limit cleanup:", result);
