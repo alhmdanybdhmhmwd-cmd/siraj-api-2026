@@ -1787,6 +1787,31 @@ export default {
         });
       }
 
+      // Preview-safe message interaction tables; production is never migrated here.
+      if (path === "/api/messages" || path.startsWith("/api/messages/") || path.startsWith("/api/groups/")) {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS message_reactions (
+            scope_type TEXT NOT NULL CHECK (scope_type IN ('private', 'group')),
+            scope_id TEXT NOT NULL,
+            message_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            emoji TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (scope_type, scope_id, message_id, user_id, emoji)
+          )
+        `).run();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS pinned_messages (
+            scope_type TEXT NOT NULL CHECK (scope_type IN ('private', 'group')),
+            scope_id TEXT NOT NULL,
+            message_id TEXT NOT NULL,
+            pinned_by TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (scope_type, scope_id, message_id, pinned_by)
+          )
+        `).run();
+      }
+
       // Group chat tables and membership helpers.
       if (path === "/api/groups" || path.startsWith("/api/groups/")) {
         await env.DB.prepare(`
@@ -1901,7 +1926,54 @@ export default {
         return json({ message: "Member added" }, 201);
       }
 
-            // Group members may delete only messages they authored.
+            // Group reactions and personal pins are available only to current group members.
+      const groupInteractionMatch = path.match(/^\\/api\\/groups\\/([^/]+)\\/messages\\/([^/]+)\\/(reactions|pin)$/);
+      if (groupInteractionMatch && (method === "POST" || method === "DELETE")) {
+        const groupId = groupInteractionMatch[1];
+        const messageId = groupInteractionMatch[2];
+        const action = groupInteractionMatch[3];
+        const member = await env.DB.prepare(
+          "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
+        ).bind(groupId, currentUser.sub).first();
+        if (!member) return json({ error: "Group not found" }, 404);
+        const target = await env.DB.prepare(
+          "SELECT id FROM group_messages WHERE id = ? AND group_id = ?"
+        ).bind(messageId, groupId).first();
+        if (!target) return json({ error: "Message not found" }, 404);
+        if (action === "reactions") {
+          const allowed = ["👍", "❤️", "😂", "😮", "😢", "😡", "🎉", "🔥"];
+          let emoji = "";
+          if (method === "POST") {
+            const body = await request.json();
+            emoji = String(body.emoji || "");
+          } else {
+            emoji = url.searchParams.get("emoji") || "";
+          }
+          if (!allowed.includes(emoji)) return json({ error: "Unsupported reaction" }, 400);
+          if (method === "POST") {
+            await env.DB.prepare(
+              "INSERT OR IGNORE INTO message_reactions (scope_type, scope_id, message_id, user_id, emoji) VALUES ('group', ?, ?, ?, ?)"
+            ).bind(groupId, messageId, currentUser.sub, emoji).run();
+          } else {
+            await env.DB.prepare(
+              "DELETE FROM message_reactions WHERE scope_type = 'group' AND scope_id = ? AND message_id = ? AND user_id = ? AND emoji = ?"
+            ).bind(groupId, messageId, currentUser.sub, emoji).run();
+          }
+          return json({ message: "Reaction updated", messageId, emoji, active: method === "POST" });
+        }
+        if (method === "POST") {
+          await env.DB.prepare(
+            "INSERT OR IGNORE INTO pinned_messages (scope_type, scope_id, message_id, pinned_by) VALUES ('group', ?, ?, ?)"
+          ).bind(groupId, messageId, currentUser.sub).run();
+        } else {
+          await env.DB.prepare(
+            "DELETE FROM pinned_messages WHERE scope_type = 'group' AND scope_id = ? AND message_id = ? AND pinned_by = ?"
+          ).bind(groupId, messageId, currentUser.sub).run();
+        }
+        return json({ message: method === "POST" ? "Message pinned" : "Pin removed", messageId, pinned: method === "POST" });
+      }
+
+      // Group members may delete only messages they authored.
       const groupMessageActionMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/([^/]+)$/);
       if ((method === "DELETE" || method === "PATCH") && groupMessageActionMatch) {
         const groupId = groupMessageActionMatch[1];
@@ -1968,6 +2040,28 @@ const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
           const rows = result.results || [];
           const hasMore = rows.length > limit;
           const messages = hasMore ? rows.slice(1) : rows;
+          if (messages.length) {
+            const ids = messages.map(item => item.id);
+            const placeholders = ids.map(() => "?").join(",");
+            const [reactionRows, pinRows] = await Promise.all([
+              env.DB.prepare(`SELECT message_id, emoji, user_id FROM message_reactions
+                WHERE scope_type = 'group' AND scope_id = ? AND message_id IN (${placeholders})`)
+                .bind(groupId, ...ids).all(),
+              env.DB.prepare(`SELECT message_id FROM pinned_messages
+                WHERE scope_type = 'group' AND scope_id = ? AND pinned_by = ? AND message_id IN (${placeholders})`)
+                .bind(groupId, currentUser.sub, ...ids).all()
+            ]);
+            const reactionMap = new Map();
+            for (const reaction of reactionRows.results || []) {
+              if (!reactionMap.has(reaction.message_id)) reactionMap.set(reaction.message_id, []);
+              reactionMap.get(reaction.message_id).push({ emoji: reaction.emoji, user_id: reaction.user_id });
+            }
+            const pinnedIds = new Set((pinRows.results || []).map(item => item.message_id));
+            for (const item of messages) {
+              item.reactions = reactionMap.get(item.id) || [];
+              item.is_pinned = pinnedIds.has(item.id);
+            }
+          }
           const oldest = messages[0];
           return json({
             messages,
@@ -2113,6 +2207,44 @@ const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
         }, 201);
       }
 
+      // Private reactions and pins are scoped to the two participants only.
+      const privateInteractionMatch = path.match(/^\\/api\\/messages\\/([^/]+)\\/(reactions|pin)$/);
+      if (privateInteractionMatch && (method === "POST" || method === "DELETE")) {
+        const messageId = privateInteractionMatch[1];
+        const action = privateInteractionMatch[2];
+        const target = await env.DB.prepare(
+          "SELECT sender_id, receiver_id FROM messages WHERE id = ? AND (sender_id = ? OR receiver_id = ?)"
+        ).bind(messageId, currentUser.sub, currentUser.sub).first();
+        if (!target) return json({ error: "Message not found" }, 404);
+        const scopeId = [target.sender_id, target.receiver_id].sort().join(":");
+        if (action === "reactions") {
+          const allowed = ["👍", "❤️", "😂", "😮", "😢", "😡", "🎉", "🔥"];
+          const body = method === "POST" ? await request.json() : null;
+          const emoji = method === "POST" ? String(body.emoji || "") : (url.searchParams.get("emoji") || "");
+          if (!allowed.includes(emoji)) return json({ error: "Unsupported reaction" }, 400);
+          if (method === "POST") {
+            await env.DB.prepare(
+              "INSERT OR IGNORE INTO message_reactions (scope_type, scope_id, message_id, user_id, emoji) VALUES ('private', ?, ?, ?, ?)"
+            ).bind(scopeId, messageId, currentUser.sub, emoji).run();
+          } else {
+            await env.DB.prepare(
+              "DELETE FROM message_reactions WHERE scope_type = 'private' AND scope_id = ? AND message_id = ? AND user_id = ? AND emoji = ?"
+            ).bind(scopeId, messageId, currentUser.sub, emoji).run();
+          }
+          return json({ message: "Reaction updated", messageId, emoji, active: method === "POST" });
+        }
+        if (method === "POST") {
+          await env.DB.prepare(
+            "INSERT OR IGNORE INTO pinned_messages (scope_type, scope_id, message_id, pinned_by) VALUES ('private', ?, ?, ?)"
+          ).bind(scopeId, messageId, currentUser.sub).run();
+        } else {
+          await env.DB.prepare(
+            "DELETE FROM pinned_messages WHERE scope_type = 'private' AND scope_id = ? AND message_id = ? AND pinned_by = ?"
+          ).bind(scopeId, messageId, currentUser.sub).run();
+        }
+        return json({ message: method === "POST" ? "Message pinned" : "Pin removed", messageId, pinned: method === "POST" });
+      }
+
       // A sender may delete only their own private message.
       const privateMessageActionMatch = path.match(/^\/api\/messages\/([^/]+)$/);
       if ((method === "DELETE" || method === "PATCH") && privateMessageActionMatch) {
@@ -2220,6 +2352,29 @@ const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
           }
         }
 
+        if (messages.length) {
+          const ids = messages.map(item => item.id);
+          const placeholders = ids.map(() => "?").join(",");
+          const scopeId = [currentUser.sub, friendId].sort().join(":");
+          const [reactionRows, pinRows] = await Promise.all([
+            env.DB.prepare(`SELECT message_id, emoji, user_id FROM message_reactions
+              WHERE scope_type = 'private' AND scope_id = ? AND message_id IN (${placeholders})`)
+              .bind(scopeId, ...ids).all(),
+            env.DB.prepare(`SELECT message_id FROM pinned_messages
+              WHERE scope_type = 'private' AND scope_id = ? AND pinned_by = ? AND message_id IN (${placeholders})`)
+              .bind(scopeId, currentUser.sub, ...ids).all()
+          ]);
+          const reactionMap = new Map();
+          for (const reaction of reactionRows.results || []) {
+            if (!reactionMap.has(reaction.message_id)) reactionMap.set(reaction.message_id, []);
+            reactionMap.get(reaction.message_id).push({ emoji: reaction.emoji, user_id: reaction.user_id });
+          }
+          const pinnedIds = new Set((pinRows.results || []).map(item => item.message_id));
+          for (const item of messages) {
+            item.reactions = reactionMap.get(item.id) || [];
+            item.is_pinned = pinnedIds.has(item.id);
+          }
+        }
         const oldest = messages[0];
         return json({
           messages,
