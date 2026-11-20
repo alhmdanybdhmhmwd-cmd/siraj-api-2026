@@ -668,11 +668,11 @@ class Api {
   }
 
   static Future<Map<String, dynamic>> summarizePrivateConversation(String friendId) {
-    return request('POST', '/api/messages/' + Uri.encodeComponent(friendId) + '/summary');
+    return request('POST', '/api/messages/${Uri.encodeComponent(friendId)}/summary');
   }
 
   static Future<Map<String, dynamic>> summarizeGroupConversation(String groupId) {
-    return request('POST', '/api/groups/' + Uri.encodeComponent(groupId) + '/summary');
+    return request('POST', '/api/groups/${Uri.encodeComponent(groupId)}/summary');
   }
 
   static Future<void> uploadAttachment({
@@ -3667,7 +3667,7 @@ class _BarqConversationSummaryDialogState extends State<BarqConversationSummaryD
                       children: [
                         Text(summary, style: const TextStyle(color: Colors.white, height: 1.55)),
                         const SizedBox(height: 12),
-                        Text('اعتمد الملخص على ' + field(data, ['messageCount'], '0') + ' رسالة نصية حديثة.',
+                        Text('اعتمد الملخص على ${field(data, ['messageCount'], '0')} رسالة نصية حديثة.',
                           style: const TextStyle(color: Colors.white54, fontSize: 11)),
                         Align(
                           alignment: Alignment.centerLeft,
