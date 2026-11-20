@@ -477,3 +477,17 @@ test("SPARK view tracking is unique per viewer and only the owner can inspect vi
   assert.ok(flutterApp.includes("مشاهدو SPARK"));
   assert.ok(flutterApp.includes("viewCount"));
 });
+
+
+test("SPARK media uploads validate file signatures and enforce the ten-item server limit", () => {
+  assert.ok(worker.includes("function detectSparkMediaType(bytes)"));
+  assert.ok(worker.includes("detectSparkMediaType(bytes) !== contentType"));
+  assert.ok(worker.includes('ascii(4, 8) === "ftyp"'));
+  assert.ok(worker.includes('ascii(0, 6) === "GIF87a"'));
+  const uploadStart = worker.indexOf('if (method === "POST" && path === "/api/statuses/media")');
+  const uploadEnd = worker.indexOf("// Publish a 24-hour text status", uploadStart);
+  const uploadRoute = worker.slice(uploadStart, uploadEnd);
+  assert.ok(uploadRoute.includes("SELECT COUNT(*) AS count FROM status_media WHERE status_id = ?"));
+  assert.ok(uploadRoute.includes("existingMediaCount?.count || 0) >= 10"));
+  assert.ok(uploadRoute.includes("at most 10 media files"));
+});
