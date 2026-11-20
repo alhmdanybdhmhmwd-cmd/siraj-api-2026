@@ -2258,3 +2258,114 @@ test("transcription route rejects oversized chunked audio before inference", asy
   assert.equal(response.status, 413);
   assert.equal(inferenceCalls, 0);
 });
+
+
+class MediaAccessTestDB extends FakeDB {
+  constructor(accessRow, options = {}) {
+    super();
+    this.mediaAccessRow = accessRow;
+    this.friendshipAllowed = options.friendshipAllowed !== false;
+    this.groupMemberAllowed = options.groupMemberAllowed !== false;
+  }
+  prepare(sql) {
+    const statement = super.prepare(sql);
+    const first = statement.first.bind(statement);
+    statement.first = async () => {
+      if (sql.includes("FROM media_access WHERE object_key = ?")) {
+        return this.mediaAccessRow ? { ...this.mediaAccessRow } : null;
+      }
+      if (sql.includes("SELECT 1 FROM friendships")) {
+        return this.friendshipAllowed ? { 1: 1 } : null;
+      }
+      if (sql.includes("SELECT 1 FROM group_members")) {
+        return this.groupMemberAllowed ? { 1: 1 } : null;
+      }
+      return first();
+    };
+    return statement;
+  }
+}
+
+test("new media downloads authorize owner, private recipient, and group member before storage lookup", async () => {
+  const token = await worker.signToken(user, secret, 0);
+  const cases = [
+    {
+      name: "owner",
+      row: { owner_id: user.id, recipient_id: "friend-1", group_id: null, file_name: "photo.jpg", content_type: "image/jpeg", expires_at: "2099-01-01T00:00:00.000Z" },
+      options: {},
+      expected: 200
+    },
+    {
+      name: "private recipient",
+      row: { owner_id: "sender-1", recipient_id: user.id, group_id: null, file_name: "photo.jpg", content_type: "image/jpeg", expires_at: "2099-01-01T00:00:00.000Z" },
+      options: { friendshipAllowed: true },
+      expected: 200
+    },
+    {
+      name: "group member",
+      row: { owner_id: "sender-1", recipient_id: null, group_id: "group-1", file_name: "photo.jpg", content_type: "image/jpeg", expires_at: "2099-01-01T00:00:00.000Z" },
+      options: { groupMemberAllowed: true },
+      expected: 200
+    }
+  ];
+
+  for (const item of cases) {
+    const db = new MediaAccessTestDB(item.row, item.options);
+    const methods = [];
+    globalThis.__fakeTigrisHandler = async (_url, options) => {
+      methods.push(options.method);
+      if (options.method === "HEAD") {
+        return new Response(null, { status: 200, headers: {
+          "content-type": "image/jpeg",
+          "x-amz-meta-filename": "photo.jpg"
+        }});
+      }
+      return new Response("image-bytes", { status: 200 });
+    };
+    try {
+      const response = await worker.default.fetch(new Request(
+        "https://api.example.test/api/media/sender-1/object-1",
+        { headers: { Authorization: "Bearer " + token } }
+      ), {
+        DB: db, JWT_SECRET: secret,
+        TIGRIS_ACCESS_KEY_ID: "test-access",
+        TIGRIS_SECRET_ACCESS_KEY: "test-secret"
+      });
+      assert.equal(response.status, item.expected, item.name);
+      assert.deepEqual(methods, ["HEAD", "GET"], item.name);
+    } finally {
+      delete globalThis.__fakeTigrisHandler;
+    }
+  }
+});
+
+test("new media download denies outsiders before making any storage request", async () => {
+  const db = new MediaAccessTestDB({
+    owner_id: "owner-2",
+    recipient_id: "recipient-2",
+    group_id: "group-2",
+    file_name: "private.pdf",
+    content_type: "application/pdf",
+    expires_at: "2099-01-01T00:00:00.000Z"
+  }, { friendshipAllowed: false, groupMemberAllowed: false });
+  const token = await worker.signToken(user, secret, 0);
+  const methods = [];
+  globalThis.__fakeTigrisHandler = async (_url, options) => {
+    methods.push(options.method);
+    return new Response(null, { status: 200 });
+  };
+  try {
+    const response = await worker.default.fetch(new Request(
+      "https://api.example.test/api/media/owner-2/private-object",
+      { headers: { Authorization: "Bearer " + token } }
+    ), {
+      DB: db, JWT_SECRET: secret,
+      TIGRIS_ACCESS_KEY_ID: "test-access",
+      TIGRIS_SECRET_ACCESS_KEY: "test-secret"
+    });
+    assert.equal(response.status, 403);
+    assert.deepEqual(methods, []);
+  } finally {
+    delete globalThis.__fakeTigrisHandler;
+  }
+});
