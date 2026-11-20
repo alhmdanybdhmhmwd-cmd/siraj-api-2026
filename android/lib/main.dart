@@ -1997,7 +1997,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                         title: Text(field(person, ['displayName', 'display_name'], uname)),
                         subtitle: Text('@$uname'),
                         onTap: () => Navigator.push(this.context, MaterialPageRoute(
-                          builder: (_) => PublicProfilePage(person: person, currentUserId: myId),
+                          builder: (_) => PublicProfilePage(person: person, currentUserId: myId, canMessage: true),
                         )),
                         trailing: IconButton(
                           icon: const Icon(Icons.person_add_alt_1, color: gold),
@@ -2237,7 +2237,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 title: Text(_personName(person)),
                 subtitle: Text(field(person, ['phone'], '@${_personUsername(person)}')),
                 onTap: () => Navigator.push(context, MaterialPageRoute(
-                  builder: (_) => PublicProfilePage(person: person, currentUserId: myId),
+                  builder: (_) => PublicProfilePage(person: person, currentUserId: myId, canMessage: true),
                 )),
                 trailing: IconButton(
                   icon: const Icon(Icons.person_add_alt_1, color: gold),
