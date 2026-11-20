@@ -11,8 +11,18 @@ class AwsClient {
   }
 }
 `);
-workerSource += "\nexport { signToken, verifyToken, authenticate, hashPassword, sendSirajPush };";
+workerSource += "\nexport { signToken, verifyToken, authenticate, hashPassword, sendSirajPush, detectProfileImageType };";
 const worker = await import("data:text/javascript;base64," + Buffer.from(workerSource).toString("base64"));
+
+test("profile image validation accepts JPEG, PNG, and WebP signatures", () => {
+  assert.equal(worker.detectProfileImageType(Uint8Array.from([0xff, 0xd8, 0xff, 0x00])), "image/jpeg");
+  assert.equal(worker.detectProfileImageType(Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), "image/png");
+  assert.equal(worker.detectProfileImageType(Uint8Array.from([
+    0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50
+  ])), "image/webp");
+  assert.equal(worker.detectProfileImageType(Uint8Array.from([0x3c, 0x73, 0x76, 0x67])), null);
+  assert.equal(worker.detectProfileImageType(new Uint8Array()), null);
+});
 
 const secret = "unit-test-secret-that-is-long-enough";
 const user = {
