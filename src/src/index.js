@@ -1597,6 +1597,127 @@ export default {
         return json({ user: cleanUser(user) });
       }
 
+      // Publish a 24-hour SPARK image/video status using private Tigris storage.
+      if (method === "POST" && path === "/api/statuses/media") {
+        if (!env.TIGRIS_ACCESS_KEY_ID || !env.TIGRIS_SECRET_ACCESS_KEY) {
+          return json({ error: "Media storage credentials are not configured" }, 503);
+        }
+        const statusAllowed = await consumeLoginAttempt(env, "status", currentUser.sub, 10);
+        if (!statusAllowed) {
+          return new Response(JSON.stringify({ error: "Too many status posts. Please try again in 15 minutes." }), {
+            status: 429, headers: { ...corsHeaders, "Retry-After": "900" }
+          });
+        }
+        const contentType = (request.headers.get("Content-Type") || "").split(";")[0].toLowerCase();
+        if (!/^(image\/(jpeg|png|webp|gif)|video\/(mp4|webm|quicktime))$/.test(contentType)) {
+          return json({ error: "SPARK supports image and video media only" }, 415);
+        }
+        const declaredLength = Number(request.headers.get("Content-Length"));
+        const maxStatusMediaBytes = 60 * 1024 * 1024;
+        if (Number.isFinite(declaredLength) && declaredLength > maxStatusMediaBytes) {
+          return json({ error: "SPARK media must not exceed 60 MB" }, 413);
+        }
+        const bytes = await readRequestBodyLimited(request, maxStatusMediaBytes);
+        if (!bytes?.byteLength) return json({ error: "SPARK media is empty or too large" }, 413);
+        const caption = String(request.headers.get("X-Status-Caption") || "").trim();
+        if (caption.length > 1000) return json({ error: "SPARK caption must not exceed 1000 characters" }, 400);
+
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_posts (
+            id TEXT PRIMARY KEY, user_id TEXT NOT NULL, content TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, expires_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_media (
+            status_id TEXT PRIMARY KEY, object_key TEXT NOT NULL UNIQUE,
+            file_name TEXT NOT NULL, content_type TEXT NOT NULL,
+            size INTEGER NOT NULL, caption TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE
+          )
+        `).run();
+        await env.DB.prepare("CREATE TABLE IF NOT EXISTS media_expirations (object_key TEXT PRIMARY KEY, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS media_access (
+            object_key TEXT PRIMARY KEY, owner_id TEXT NOT NULL, recipient_id TEXT,
+            group_id TEXT, file_name TEXT NOT NULL, content_type TEXT NOT NULL, expires_at TEXT NOT NULL
+          )
+        `).run();
+
+        const id = crypto.randomUUID();
+        const objectKey = currentUser.sub + "/" + crypto.randomUUID();
+        const suppliedName = safeFileName(request.headers.get("X-File-Name") || "spark-media");
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+        const bucket = env.TIGRIS_BUCKET || "siraj-media";
+        const objectPath = objectKey.split("/").map(encodeURIComponent).join("/");
+        const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
+        const storage = new AwsClient({
+          accessKeyId: env.TIGRIS_ACCESS_KEY_ID, secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY,
+          service: "s3", region: "auto", retries: 2
+        });
+        const putResponse = await storage.fetch(storageUrl, {
+          method: "PUT",
+          headers: {
+            "Content-Type": contentType,
+            "x-amz-meta-ownerid": currentUser.sub,
+            "x-amz-meta-filename": encodeURIComponent(suppliedName),
+            "x-amz-meta-contenttype": contentType,
+            "x-amz-meta-expiresat": expiresAt,
+            "x-amz-meta-category": "spark"
+          },
+          body: bytes
+        });
+        if (!putResponse.ok) {
+          return json({ error: "SPARK media upload failed", storageStatus: putResponse.status }, 502);
+        }
+        try {
+          await env.DB.batch([
+            env.DB.prepare(
+              "INSERT INTO status_posts (id, user_id, content, expires_at) VALUES (?, ?, ?, ?)"
+            ).bind(id, currentUser.sub, caption, expiresAt),
+            env.DB.prepare(
+              "INSERT INTO status_media (status_id, object_key, file_name, content_type, size, caption) VALUES (?, ?, ?, ?, ?, ?)"
+            ).bind(id, objectKey, suppliedName, contentType, bytes.byteLength, caption),
+            env.DB.prepare(
+              "INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?)"
+            ).bind(objectKey, expiresAt),
+            env.DB.prepare(
+              "INSERT INTO media_access (object_key, owner_id, recipient_id, group_id, file_name, content_type, expires_at) VALUES (?, ?, NULL, NULL, ?, ?, ?)"
+            ).bind(objectKey, currentUser.sub, suppliedName, contentType, expiresAt)
+          ]);
+        } catch (error) {
+          let deleted = false;
+          try {
+            const deletion = await storage.fetch(storageUrl, { method: "DELETE" });
+            deleted = deletion.ok || deletion.status === 404;
+          } catch (_) {}
+          if (deleted) {
+            try { await env.DB.prepare("DELETE FROM media_expirations WHERE object_key = ?").bind(objectKey).run(); } catch (_) {}
+          }
+          throw error;
+        }
+        try {
+          const recipients = await env.DB.prepare(
+            "SELECT friend_id FROM friendships WHERE user_id = ?"
+          ).bind(currentUser.sub).all();
+          await Promise.all((recipients.results || []).map(item =>
+            sendSirajPush(env, item.friend_id, currentUser.sub,
+              currentUser.username, "لحظة جديدة في SPARK", { category: "statuses" })
+          ));
+        } catch (notificationError) {
+          console.error("SPARK media notification dispatch failed:", notificationError);
+        }
+        return json({
+          status: {
+            id, userId: currentUser.sub, content: caption,
+            createdAt: new Date().toISOString(), expiresAt,
+            media: { attachmentId: objectKey, fileName: suppliedName, contentType, size: bytes.byteLength, caption }
+          }
+        }, 201);
+      }
+
       // Publish a 24-hour text status
       if (method === "POST" && path === "/api/statuses") {
         // Prevent authenticated accounts from flooding friends with statuses.
@@ -1680,7 +1801,36 @@ export default {
            LIMIT 100`
         ).bind(currentUser.sub, currentUser.sub).all();
 
-        return json({ statuses: result.results || [] });
+        const statuses = result.results || [];
+        if (statuses.length) {
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS status_media (
+              status_id TEXT PRIMARY KEY, object_key TEXT NOT NULL UNIQUE,
+              file_name TEXT NOT NULL, content_type TEXT NOT NULL,
+              size INTEGER NOT NULL, caption TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE
+            )
+          `).run();
+          const ids = statuses.map(item => item.id);
+          const placeholders = ids.map(() => "?").join(",");
+          const mediaResult = await env.DB.prepare(
+            `SELECT status_id AS statusId, object_key AS attachmentId,
+                    file_name AS fileName, content_type AS contentType,
+                    size, caption, created_at AS createdAt
+             FROM status_media WHERE status_id IN (${placeholders})`
+          ).bind(...ids).all();
+          const mediaByStatus = new Map();
+          for (const media of mediaResult.results || []) {
+            const list = mediaByStatus.get(media.statusId) || [];
+            list.push(media);
+            mediaByStatus.set(media.statusId, list);
+          }
+          for (const item of statuses) item.media = mediaByStatus.get(item.id) || [];
+        } else {
+          for (const item of statuses) item.media = [];
+        }
+        return json({ statuses });
       }
 
       // Ensure privacy preferences table exists for all authenticated accounts.
