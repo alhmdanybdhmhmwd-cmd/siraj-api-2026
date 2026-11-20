@@ -59,7 +59,7 @@ test("speech transcription requires authentication, validates audio, rate-limits
   const end = worker.indexOf("// A single private invite code", start);
   const route = worker.slice(start, end);
   assert.ok(route.includes('env.AI.run("@cf/openai/whisper"'));
-  assert.ok(route.includes("maxTranscriptionBytes = 10 * 1024 * 1024"));
+  assert.ok(route.includes("maxTranscriptionBytes = 2 * 1024 * 1024"));
   assert.ok(route.includes("transcription_rate_limits"));
   assert.ok(route.includes("attempts") && route.includes("> 10"));
   assert.ok(!route.includes("INSERT INTO messages"));
