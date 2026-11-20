@@ -51,3 +51,11 @@ test("ephemeral messages stay private and start a ten-second expiry on first rec
   assert.ok(route.includes("INSERT INTO ephemeral_messages"));
   assert.ok(!route.includes("sendSirajPush"), "ephemeral content must not trigger Firebase push");
 });
+
+test("private invite codes are stable per account and do not add reward mechanics", () => {
+  assert.ok(worker.includes('path === "/api/referrals"'));
+  assert.ok(worker.includes("CREATE TABLE IF NOT EXISTS user_invite_codes"));
+  assert.ok(worker.includes("SELECT invite_code FROM user_invite_codes WHERE user_id = ?"));
+  assert.ok(!worker.includes("referral_count"));
+  assert.ok(!worker.includes("invite_threshold"));
+});
