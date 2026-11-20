@@ -3971,6 +3971,20 @@ class _ChatPageState extends State<ChatPage> {
                                           Text('رسالة مؤقتة', style: TextStyle(color: gold, fontSize: 10)),
                                         ]),
                                       ),
+                                    if (field(m, ['reply_to_id']).isNotEmpty)
+                                      Container(
+                                        width: double.infinity,
+                                        margin: const EdgeInsets.only(bottom: 7),
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8),
+                                          border: const Border(right: BorderSide(color: gold, width: 3))),
+                                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                          Text(field(m, ['reply_to_sender_id']) == widget.currentUserId ? 'رد على رسالتك' : 'رد على رسالة',
+                                            style: const TextStyle(color: gold, fontSize: 10, fontWeight: FontWeight.bold)),
+                                          Text(messageReplyPreview(m), maxLines: 2, overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                                        ]),
+                                      ),
                                     if (_attachmentData(m) case final attachment?) ...[
                                       _attachmentTile(attachment, () async {
                                         try {
@@ -4047,7 +4061,7 @@ class _ChatPageState extends State<ChatPage> {
                 child: Row(
                   children: [
                     IconButton(
-                      onPressed: sending ? null : () => setState(() => ephemeralMode = !ephemeralMode),
+                      onPressed: sending ? null : () => setState(() { ephemeralMode = !ephemeralMode; replyToMessage = null; }),
                       icon: Icon(Icons.timer_outlined, color: ephemeralMode ? gold : Colors.white54),
                       tooltip: ephemeralMode ? 'إيقاف الرسائل المؤقتة' : 'إرسال رسالة تختفي بعد قراءتها',
                     ),
@@ -4065,11 +4079,17 @@ class _ChatPageState extends State<ChatPage> {
                         decoration: inputDecoration(
                           ephemeralMode ? 'رسالة مؤقتة — تختفي بعد القراءة' : 'اكتب رسالتك...',
                           ephemeralMode ? Icons.timer_outlined : Icons.message,
+                        ).copyWith(
+                          helperText: replyToMessage == null ? null : 'الرد على: ' + messageReplyPreview(replyToMessage!),
+                          helperStyle: const TextStyle(color: gold, fontSize: 10),
                         ),
                         onSubmitted: (_) => send(),
                       ),
                     ),
                     const SizedBox(width: 8),
+                    if (replyToMessage != null)
+                      IconButton(onPressed: sending ? null : () => setState(() => replyToMessage = null),
+                        icon: const Icon(Icons.close, color: Colors.white70), tooltip: 'إلغاء الرد'),
                     IconButton.filled(
                       style: IconButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
                       onPressed: sending ? null : send,
@@ -4367,6 +4387,20 @@ class _GroupChatPageState extends State<GroupChatPage> {
                         decoration: BoxDecoration(color: mine ? const Color(0xFF46391F) : panel,
                           borderRadius: BorderRadius.circular(15)),
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          if (field(m, ['reply_to_id']).isNotEmpty)
+                            Container(
+                              width: double.infinity,
+                              margin: const EdgeInsets.only(bottom: 7),
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8),
+                                border: const Border(right: BorderSide(color: gold, width: 3))),
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                Text(field(m, ['reply_to_sender_id']) == widget.currentUserId ? 'رد على رسالتك' : 'رد على رسالة',
+                                  style: const TextStyle(color: gold, fontSize: 10, fontWeight: FontWeight.bold)),
+                                Text(messageReplyPreview(m), maxLines: 2, overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                              ]),
+                            ),
                           if (!mine)
                             InkWell(
                               borderRadius: BorderRadius.circular(8),
@@ -4451,8 +4485,14 @@ class _GroupChatPageState extends State<GroupChatPage> {
                 IconButton(onPressed: sending ? null : pickAndSendFile,
                   icon: const Icon(Icons.attach_file, color: gold), tooltip: 'إرسال ملف أو صورة أو فيديو'),
               Expanded(child: TextField(controller: controller, minLines: 1, maxLines: 4,
-                decoration: inputDecoration('اكتب رسالة للمجموعة...', Icons.message), onSubmitted: (_) => send())),
+                decoration: inputDecoration('اكتب رسالة للمجموعة...', Icons.message).copyWith(
+                  helperText: replyToMessage == null ? null : 'الرد على: ' + messageReplyPreview(replyToMessage!),
+                  helperStyle: const TextStyle(color: gold, fontSize: 10),
+                ), onSubmitted: (_) => send())),
               const SizedBox(width: 8),
+              if (replyToMessage != null)
+                IconButton(onPressed: sending ? null : () => setState(() => replyToMessage = null),
+                  icon: const Icon(Icons.close, color: Colors.white70), tooltip: 'إلغاء الرد'),
               IconButton.filled(
                 style: IconButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
                 onPressed: sending ? null : send,
