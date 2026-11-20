@@ -5414,7 +5414,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
     try {
       await Api.uploadAttachment(
         bytes: bytes,
-        fileName: 'barq_voice_' + DateTime.now().millisecondsSinceEpoch.toString() + '.m4a',
+        fileName: 'barq_voice_${DateTime.now().millisecondsSinceEpoch}.m4a',
         contentType: 'audio/mp4',
         groupId: groupId,
       );
