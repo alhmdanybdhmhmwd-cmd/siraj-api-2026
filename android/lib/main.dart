@@ -730,6 +730,9 @@ class Api {
         await request('DELETE', '/api/devices/token', body: {'fcmToken': fcmToken});
       }
     } catch (_) {}
+    if (token != null) {
+      try { await request('POST', '/api/logout'); } catch (_) {}
+    }
     await SirajRealtime.instance.stop();
     await BarqNearbyService.instance.stop();
     token = null;
