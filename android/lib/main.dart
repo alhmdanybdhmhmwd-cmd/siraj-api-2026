@@ -1115,11 +1115,21 @@ Future<void> showMessageActions(
 }
 
 String messageReplyPreview(Map<String, dynamic> message) {
-  final value = field(message, ['reply_to_body']).trim();
+  final raw = message['reply_to_body'];
+  if (raw == null) return 'رسالة';
+  if (raw is Map) return 'مرفق';
+  final value = raw.toString().trim();
   if (value.isEmpty) return 'رسالة';
   try {
     final decoded = jsonDecode(value);
-    if (decoded is Map && decoded['type'] == 'attachment') return 'مرفق';
+    if (decoded is Map &&
+        (decoded['type'] == 'attachment' ||
+         decoded.containsKey('attachmentId') ||
+         decoded.containsKey('attachment_id') ||
+         decoded.containsKey('fileName') ||
+         decoded.containsKey('file_name'))) {
+      return 'مرفق';
+    }
   } catch (_) {}
   return value.length > 120 ? '${value.substring(0, 120)}…' : value;
 }
