@@ -26,8 +26,9 @@ The dedicated Cloudflare D1 test database has been created and verified.
 - No migration was applied to production.
 
 ## Remaining phase-2 checks
-- Runtime HTTP health probes against a deployed test Worker.
-- Flutter/Dart analysis and build validation; the current build environment does not have Flutter/Dart installed.
+- Local Worker runtime HTTP probes (`/health/live` and `/health/ready`) using Wrangler and isolated local D1 state: passed in GitHub Actions run 44645892897.
+- Runtime HTTP probes against a deployed test Worker: not run; no Worker deployment was performed.
+- Flutter/Dart analysis and build validation: pending because Flutter/Dart are not installed in the current build environment.
 - Do not deploy or merge to production as part of these checks.
 
 Required GitHub Actions settings:
