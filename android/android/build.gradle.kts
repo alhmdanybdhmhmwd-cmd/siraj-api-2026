@@ -19,14 +19,12 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
-// Keep Android library plugins aligned with the app's compile SDK.
-// Some Flutter plugins otherwise retain an older default (for example API 34),
-// which fails AAR metadata checks for dependencies that require API 36+.
+// Align every Android library module with the app compile SDK.
+// Apply after each plugin project has been evaluated because some Flutter
+// plugins overwrite their compileSdk during their own Gradle configuration.
 subprojects {
-    plugins.withId("com.android.library") {
-        extensions.configure<com.android.build.api.dsl.LibraryExtension> {
-            compileSdk = 37
-        }
+    afterEvaluate {
+        extensions.findByType<com.android.build.api.dsl.LibraryExtension>()?.compileSdk = 37
     }
 }
 
