@@ -2797,25 +2797,32 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> publishSparkMediaDialog() async {
     final pageContext = context;
     final picked = await FilePicker.platform.pickFiles(
-      type: FileType.media, allowMultiple: false, withData: true,
+      type: FileType.media, allowMultiple: true, withData: true,
     );
-    if (picked == null || picked.files.isEmpty) return;
-    final file = picked.files.single;
-    final extension = (file.extension ?? '').toLowerCase();
+    if (picked == null || picked.files.isEmpty || !pageContext.mounted) return;
+    if (picked.files.length > 10) {
+      showMsg(pageContext, 'يمكن نشر 10 وسائط كحد أقصى في اللحظة الواحدة.');
+      return;
+    }
     const mimeTypes = <String, String>{
       'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
       'webp': 'image/webp', 'gif': 'image/gif',
       'mp4': 'video/mp4', 'webm': 'video/webm', 'mov': 'video/quicktime',
     };
-    final contentType = mimeTypes[extension];
-    if (contentType == null) {
-      if (mounted) showMsg(context, 'اختر صورة أو فيديو بصيغة مدعومة.');
-      return;
-    }
-    final bytes = file.bytes ?? (file.path == null ? null : await File(file.path!).readAsBytes());
-    if (bytes == null || bytes.isEmpty) {
-      if (mounted) showMsg(context, 'تعذر قراءة الملف المحدد.');
-      return;
+    final prepared = <Map<String, dynamic>>[];
+    for (final file in picked.files) {
+      final extension = (file.extension ?? '').toLowerCase();
+      final contentType = mimeTypes[extension];
+      if (contentType == null) {
+        showMsg(pageContext, 'الملف ${file.name} ليس بصيغة صورة أو فيديو مدعومة.');
+        return;
+      }
+      final bytes = file.bytes ?? (file.path == null ? null : await File(file.path!).readAsBytes());
+      if (bytes == null || bytes.isEmpty || bytes.length > maxAttachmentBytes) {
+        showMsg(pageContext, 'تعذر قراءة ${file.name} أو تجاوز حجمه 60 ميجابايت.');
+        return;
+      }
+      prepared.add({'file': file, 'bytes': bytes, 'contentType': contentType});
     }
     if (!pageContext.mounted) return;
     final captionController = TextEditingController();
@@ -2826,13 +2833,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         return StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
             backgroundColor: panel,
-            title: Text(contentType.startsWith('video/') ? 'نشر فيديو في SPARK' : 'نشر صورة في SPARK'),
+            title: Text('نشر ${prepared.length} وسائط في SPARK'),
             content: Column(mainAxisSize: MainAxisSize.min, children: [
-              Text(file.name, maxLines: 2, overflow: TextOverflow.ellipsis),
+              Text(prepared.map((item) => (item['file'] as PlatformFile).name).join('، '),
+                maxLines: 3, overflow: TextOverflow.ellipsis),
               const SizedBox(height: 12),
               TextField(
                 controller: captionController, maxLength: 1000, maxLines: 3,
-                decoration: inputDecoration('أضف تعليقًا (اختياري)', Icons.edit_note),
+                decoration: inputDecoration('أضف تعليقًا للّحظة (اختياري)', Icons.edit_note),
               ),
               if (uploading) const LinearProgressIndicator(color: gold),
             ]),
@@ -2845,19 +2853,36 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
                 onPressed: uploading ? null : () async {
                   setDialogState(() => uploading = true);
+                  String? statusId;
+                  var uploaded = 0;
                   try {
-                    await Api.publishSparkMedia(
-                      bytes: bytes, fileName: file.name, contentType: contentType,
-                      caption: captionController.text,
-                    );
+                    for (final item in prepared) {
+                      final file = item['file'] as PlatformFile;
+                      statusId = await Api.publishSparkMedia(
+                        bytes: item['bytes'] as List<int>,
+                        fileName: file.name,
+                        contentType: item['contentType'] as String,
+                        caption: captionController.text,
+                        statusId: statusId,
+                      );
+                      uploaded++;
+                    }
                     if (dialogContext.mounted) Navigator.pop(dialogContext);
                     await refreshAll();
                     if (pageContext.mounted) {
-                      showMsg(pageContext, 'نُشرت اللحظة في SPARK لمدة 24 ساعة.');
+                      showMsg(pageContext, 'نُشرت ${uploaded} وسائط في لحظة SPARK واحدة لمدة 24 ساعة.');
                     }
                   } catch (e) {
-                    if (dialogContext.mounted) setDialogState(() => uploading = false);
-                    if (pageContext.mounted) showMsg(pageContext, cleanError(e));
+                    if (uploaded > 0) {
+                      if (dialogContext.mounted) Navigator.pop(dialogContext);
+                      await refreshAll();
+                      if (pageContext.mounted) {
+                        showMsg(pageContext, 'نُشر ${uploaded} من ${prepared.length} وسائط. تعذر إكمال البقية: ${cleanError(e)}');
+                      }
+                    } else {
+                      if (dialogContext.mounted) setDialogState(() => uploading = false);
+                      if (pageContext.mounted) showMsg(pageContext, cleanError(e));
+                    }
                   }
                 },
                 child: const Text('نشر في SPARK'),
