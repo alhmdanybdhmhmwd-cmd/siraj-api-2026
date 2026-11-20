@@ -1017,6 +1017,25 @@ List<Map<String, dynamic>> mergeMessages(
   return result;
 }
 
+int? _ephemeralDeleteAt(Map<String, dynamic> message) {
+  if (message['is_ephemeral'] != true) return null;
+  final value = message['delete_at'];
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value);
+  return null;
+}
+
+List<Map<String, dynamic>> filterExpiredEphemeralMessages(
+  Iterable<Map<String, dynamic>> items, {
+  DateTime? now,
+}) {
+  final nowSeconds = (now ?? DateTime.now()).millisecondsSinceEpoch ~/ 1000;
+  return items.where((message) {
+    final deleteAt = _ephemeralDeleteAt(message);
+    return deleteAt == null || deleteAt > nowSeconds;
+  }).toList();
+}
+
 DateTime _messageSortTime(String raw) {
   if (raw.isEmpty) return DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
   final normalized = raw.contains(' ') && !raw.contains('T') ? '${raw.replaceFirst(' ', 'T')}Z' : raw;
@@ -2876,6 +2895,7 @@ class _ChatPageState extends State<ChatPage> {
   bool loadingOlderMessages = false;
   Map<String, dynamic>? olderMessageCursor;
   Timer? refreshTimer;
+  Timer? _ephemeralExpiryTimer;
   StreamSubscription<Map<String, dynamic>>? realtimeSubscription;
   StreamSubscription<Map<String, dynamic>>? nearbySubscription;
 
@@ -2912,10 +2932,35 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void dispose() {
     refreshTimer?.cancel();
+    _ephemeralExpiryTimer?.cancel();
     realtimeSubscription?.cancel();
     nearbySubscription?.cancel();
     controller.dispose();
     super.dispose();
+  }
+
+  void _scheduleEphemeralExpiry() {
+    _ephemeralExpiryTimer?.cancel();
+    final nowMillis = DateTime.now().millisecondsSinceEpoch;
+    final deadlines = messages
+        .map(_ephemeralDeleteAt)
+        .where((value) => value != null)
+        .map((value) => value! * 1000)
+        .where((deadline) => deadline > nowMillis)
+        .toList();
+    if (deadlines.isEmpty) return;
+    deadlines.sort();
+    _ephemeralExpiryTimer = Timer(
+      Duration(milliseconds: deadlines.first - nowMillis),
+      () {
+        if (!mounted) return;
+        final visible = filterExpiredEphemeralMessages(messages);
+        if (visible.length != messages.length) {
+          setState(() => messages = visible);
+        }
+        _scheduleEphemeralExpiry();
+      },
+    );
   }
 
   Future<void> _transcribeVoiceMessage(
@@ -2987,7 +3032,9 @@ class _ChatPageState extends State<ChatPage> {
         final existingRegular = messages.where((item) => item['is_ephemeral'] != true).toList();
         final regular = silent && existingRegular.isNotEmpty
             ? mergeMessages(existingRegular, data) : data;
-        messages = mergeMessages(mergeMessages(regular, temporary), localPending);
+        messages = filterExpiredEphemeralMessages(
+          mergeMessages(mergeMessages(regular, temporary), localPending),
+        );
         if (!silent || olderMessageCursor == null) {
           olderMessageCursor = page['nextCursor'] is Map
               ? Map<String, dynamic>.from(page['nextCursor']) : null;
@@ -2995,26 +3042,18 @@ class _ChatPageState extends State<ChatPage> {
         hasOlderMessages = page['hasMore'] == true || (silent && hasOlderMessages);
         loading = false;
       });
+        _scheduleEphemeralExpiry();
         if (BarqFeatures.autoTranslate) _translateMessages(data);
       }
     } catch (e) {
       if (mounted) {
-        final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-        final stillVisible = messages.where((item) {
-          if (item['is_ephemeral'] != true) return true;
-          final deleteAt = item['delete_at'];
-          if (deleteAt is num) return deleteAt.toInt() > nowSeconds;
-          if (deleteAt is String) {
-            final parsed = int.tryParse(deleteAt);
-            if (parsed != null) return parsed > nowSeconds;
-          }
-          return true;
-        }).toList();
+        final stillVisible = filterExpiredEphemeralMessages(messages);
         final localPending = await BarqOfflineQueue.conversation(friendId, widget.currentUserId);
         setState(() {
           messages = mergeMessages(stillVisible, localPending);
           loading = false;
         });
+        _scheduleEphemeralExpiry();
         if (!silent && localPending.isEmpty && mounted) showMsg(context, cleanError(e));
       }
     } finally {
