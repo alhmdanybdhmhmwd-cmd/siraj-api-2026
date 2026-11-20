@@ -489,5 +489,7 @@ test("SPARK media uploads validate file signatures and enforce the ten-item serv
   const uploadRoute = worker.slice(uploadStart, uploadEnd);
   assert.ok(uploadRoute.includes("SELECT COUNT(*) AS count FROM status_media WHERE status_id = ?"));
   assert.ok(uploadRoute.includes("existingMediaCount?.count || 0) >= 10"));
+  assert.ok(uploadRoute.includes("WHERE (SELECT COUNT(*) FROM status_media WHERE status_id = ?) < 10"));
+  assert.ok(uploadRoute.includes("savedRows?.[mediaInsertIndex]?.meta?.changes || 0) !== 1"));
   assert.ok(uploadRoute.includes("at most 10 media files"));
 });
