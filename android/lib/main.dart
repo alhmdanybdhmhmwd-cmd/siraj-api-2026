@@ -5790,6 +5790,117 @@ class _ChatPageState extends State<ChatPage> {
 }
 
 
+class SparkMediaViewer extends StatelessWidget {
+  final List<Map<String, dynamic>> media;
+  final String author;
+  final String caption;
+  const SparkMediaViewer({super.key, required this.media, required this.author, required this.caption});
+
+  @override
+  Widget build(BuildContext context) {
+    final headers = <String, String>{if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'};
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(backgroundColor: Colors.black, title: Text(author), foregroundColor: Colors.white),
+      body: PageView.builder(
+        itemCount: media.length,
+        itemBuilder: (context, index) {
+          final item = media[index];
+          final attachmentId = (item['attachmentId'] ?? '').toString();
+          final contentType = (item['contentType'] ?? '').toString();
+          if (attachmentId.isEmpty) return const Center(child: Text('الوسائط غير متاحة', style: TextStyle(color: Colors.white)));
+          final uri = Api.sparkMediaUri(attachmentId);
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              if (contentType.startsWith('video/'))
+                _SparkVideoPage(uri: uri, headers: headers)
+              else
+                Center(
+                  child: InteractiveViewer(
+                    minScale: 0.8, maxScale: 4,
+                    child: Image.network(
+                      uri.toString(), headers: headers, fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined, color: Colors.white70, size: 52),
+                      loadingBuilder: (context, child, progress) => progress == null
+                          ? child
+                          : const Center(child: CircularProgressIndicator(color: gold)),
+                    ),
+                  ),
+                ),
+              if (caption.trim().isNotEmpty)
+                Positioned(
+                  left: 16, right: 16, bottom: 28,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(12)),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(caption, style: const TextStyle(color: Colors.white, fontSize: 16)),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _SparkVideoPage extends StatefulWidget {
+  final Uri uri;
+  final Map<String, String> headers;
+  const _SparkVideoPage({required this.uri, required this.headers});
+  @override
+  State<_SparkVideoPage> createState() => _SparkVideoPageState();
+}
+
+class _SparkVideoPageState extends State<_SparkVideoPage> {
+  late final VideoPlayerController _controller;
+  Object? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.networkUrl(widget.uri, httpHeaders: widget.headers);
+    _controller.initialize().then((_) {
+      if (!mounted) return;
+      _controller.setLooping(true);
+      _controller.play();
+      setState(() {});
+    }).catchError((Object error) {
+      if (mounted) setState(() => _error = error);
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_error != null) return const Center(child: Text('تعذر تشغيل الفيديو', style: TextStyle(color: Colors.white70)));
+    if (!_controller.value.isInitialized) return const Center(child: CircularProgressIndicator(color: gold));
+    return Center(
+      child: GestureDetector(
+        onTap: () => setState(() {
+          _controller.value.isPlaying ? _controller.pause() : _controller.play();
+        }),
+        child: AspectRatio(
+          aspectRatio: _controller.value.aspectRatio,
+          child: Stack(alignment: Alignment.center, children: [
+            VideoPlayer(_controller),
+            if (!_controller.value.isPlaying)
+              const Icon(Icons.play_circle_fill, color: Colors.white, size: 64),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
 class GroupChatPage extends StatefulWidget {
   final Map<String, dynamic> group;
   final String currentUserId;
