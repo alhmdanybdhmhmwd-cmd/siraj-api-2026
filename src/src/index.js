@@ -518,6 +518,28 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
   return { checked: (expired.results || []).length, deleted };
 }
 
+async function cleanupExpiredEphemeralMessages(env, now = Date.now()) {
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS ephemeral_messages (
+      id TEXT PRIMARY KEY,
+      sender_id TEXT NOT NULL,
+      receiver_id TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      read_at INTEGER,
+      delete_at INTEGER
+    )
+  `).run();
+  await env.DB.prepare(
+    "CREATE INDEX IF NOT EXISTS idx_ephemeral_expiration ON ephemeral_messages(delete_at)"
+  ).run();
+  const cutoff = Math.floor(now / 1000);
+  const result = await env.DB.prepare(
+    "DELETE FROM ephemeral_messages WHERE delete_at IS NOT NULL AND delete_at <= ?"
+  ).bind(cutoff).run();
+  return { deleted: Number(result?.meta?.changes || 0), cutoff };
+}
+
 async function cleanupExpiredRateLimits(env, now = Date.now()) {
   const cutoff = Math.floor(now / 1000) - 24 * 60 * 60;
   const results = {};
@@ -536,7 +558,7 @@ async function cleanupExpiredRateLimits(env, now = Date.now()) {
   return results;
 }
 
-export { phoneVariants, safeFileName, cleanupExpiredMedia, cleanupExpiredRateLimits };
+export { phoneVariants, safeFileName, cleanupExpiredMedia, cleanupExpiredRateLimits, cleanupExpiredEphemeralMessages };
 
 export default {
   async scheduled(_controller, env) {
@@ -551,6 +573,12 @@ export default {
       console.log("Media expiration cleanup:", result);
     } catch (error) {
       console.error("Media expiration cleanup failed:", error);
+    }
+    try {
+      const result = await cleanupExpiredEphemeralMessages(env);
+      console.log("Ephemeral message cleanup:", result);
+    } catch (error) {
+      console.error("Ephemeral message cleanup failed:", error);
     }
   },
   async fetch(request, env) {
