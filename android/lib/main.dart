@@ -3811,11 +3811,6 @@ class _ChatPageState extends State<ChatPage> {
               icon: const Icon(Icons.search, color: gold),
               tooltip: 'البحث في المحادثة',
             ),
-            IconButton(
-              onPressed: () => showConversationSearch(context, messages),
-              icon: const Icon(Icons.search, color: gold),
-              tooltip: 'البحث في المحادثة',
-            ),
             IconButton(onPressed: loadMessages, icon: const Icon(Icons.refresh, color: gold)),
           ],
         ),
@@ -4215,6 +4210,11 @@ class _GroupChatPageState extends State<GroupChatPage> {
             ],
           ]),
           actions: [
+            IconButton(
+              onPressed: () => showConversationSearch(context, messages),
+              icon: const Icon(Icons.search, color: gold),
+              tooltip: 'البحث في المحادثة',
+            ),
             IconButton(onPressed: showGroupMembers, icon: const Icon(Icons.people_alt_outlined, color: gold), tooltip: 'أعضاء المجموعة'),
             IconButton(onPressed: widget.onAddMember, icon: const Icon(Icons.person_add_alt_1, color: gold), tooltip: 'إضافة عضو'),
             IconButton(onPressed: loadMessages, icon: const Icon(Icons.refresh, color: gold)),
