@@ -369,4 +369,34 @@ void main() {
     ]);
   });
 
+  testWidgets('conversation summary waits for explicit consent before sending messages', (tester) async {
+    var requests = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(builder: (context) => Scaffold(
+        body: TextButton(
+          onPressed: () => showDialog<void>(
+            context: context,
+            builder: (_) => BarqConversationSummaryDialog(
+              loadSummary: () async {
+                requests += 1;
+                return {'summary': 'ملخص اختباري', 'messageCount': 3};
+              },
+            ),
+          ),
+          child: const Text('فتح الملخص'),
+        ),
+      )),
+    ));
+
+    await tester.tap(find.text('فتح الملخص'));
+    await tester.pumpAndSettle();
+    expect(requests, 0);
+    expect(find.text('إنشاء الملخص'), findsOneWidget);
+
+    await tester.tap(find.text('إنشاء الملخص'));
+    await tester.pumpAndSettle();
+    expect(requests, 1);
+    expect(find.text('ملخص اختباري'), findsOneWidget);
+  });
+
 }
