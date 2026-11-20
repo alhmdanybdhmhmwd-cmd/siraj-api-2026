@@ -45,6 +45,7 @@ async function ensureAccountSecurity(env) {
     CREATE TABLE IF NOT EXISTS revoked_sessions (
       token_hash TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
       revoked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
@@ -184,7 +185,7 @@ async function authenticate(request, env) {
     }
     const tokenHash = await sha256Hex(token);
     const revoked = await env.DB.prepare(
-      "SELECT 1 FROM revoked_sessions WHERE token_hash = ? AND user_id = ?"
+      "SELECT 1 FROM revoked_sessions WHERE token_hash = ? AND user_id = ? AND expires_at > unixepoch()"
     ).bind(tokenHash, payload.sub).first();
     if (revoked) return null;
   } catch (error) {
@@ -960,8 +961,8 @@ export default {
         if (!bearerToken) return json({ error: "Unauthorized" }, 401);
         await ensureAccountSecurity(env);
         await env.DB.prepare(
-          "INSERT OR IGNORE INTO revoked_sessions (token_hash, user_id) VALUES (?, ?)"
-        ).bind(await sha256Hex(bearerToken), currentUser.sub).run();
+          "INSERT OR IGNORE INTO revoked_sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)"
+        ).bind(await sha256Hex(bearerToken), currentUser.sub, currentUser.exp).run();
         return json({ message: "تم تسجيل الخروج من هذا الجهاز." });
       }
 
