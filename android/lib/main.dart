@@ -3262,7 +3262,8 @@ class PublicProfilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = profile;
-    final id = field(user, ['id', 'user_id', 'friend_id', 'sender_id']);
+    final id = field(user, ['id', 'user_id', 'friend_id', 'sender_id']).trim();
+    final canOpenChat = id.isNotEmpty && id != currentUserId.trim();
     final name = field(user, ['displayName', 'display_name', 'name', 'username'], 'مستخدم برق');
     final username = field(user, ['username'], 'user');
     final phone = field(user, ['phone']);
@@ -3351,19 +3352,21 @@ class PublicProfilePage extends StatelessWidget {
                 icon: const Icon(Icons.person_add_alt_1),
                 label: const Text('حفظ الرقم في جهات الاتصال'),
               ),
-            if (canMessage && id.isNotEmpty && id != currentUserId)
+            if (canMessage)
               FilledButton.icon(
                 style: FilledButton.styleFrom(
                   backgroundColor: electricBlue,
                   foregroundColor: Colors.white,
                   minimumSize: const Size.fromHeight(50),
                 ),
-                onPressed: () => Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ChatPage(friend: person, currentUserId: currentUserId),
-                  ),
-                ),
+                onPressed: canOpenChat
+                    ? () => Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ChatPage(friend: person, currentUserId: currentUserId),
+                          ),
+                        )
+                    : null,
                 icon: const Icon(Icons.chat_bubble_outline),
                 label: const Text('إرسال رسالة'),
               ),
