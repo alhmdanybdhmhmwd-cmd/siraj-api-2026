@@ -24,6 +24,21 @@ void main() {
     expect(field({}, ['username'], 'مستخدم'), 'مستخدم');
   });
 
+  test('profile photo path is resolved for group payloads with snake_case fields', () {
+    expect(
+      profilePhotoPath({
+        'sender_id': 'user/with space',
+        'photo_updated_at': '2026-11-20 12:00:00',
+      }),
+      '/api/profile/photo/user%2Fwith%20space',
+    );
+    expect(profilePhotoPath({'id': 'without-photo'}), isEmpty);
+    expect(
+      profilePhotoPath({'id': 'friend-1', 'photo_url': '/api/profile/photo/friend-1'}),
+      '/api/profile/photo/friend-1',
+    );
+  });
+
   testWidgets('public profile page shows the selected contact details', (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: PublicProfilePage(
