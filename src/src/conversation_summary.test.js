@@ -31,11 +31,10 @@ test("summary transcript truncates an oversized newest message to stay within bu
     { display_name: "ب", body: "هذه أحدث رسالة طويلة جدًا يجب قصها" }
   ], 30);
 
-  expect(transcript).toHaveLength(1);
-  expect(transcript[0].sender).toBe("ب");
-  expect(transcript[0].text).toBe("هذه أحدث رس");
-  expect(transcript[0].sender.length + transcript[0].time.length + transcript[0].text.length + 16)
-    .toBeLessThanOrEqual(30);
+  assert.equal(transcript.length, 1);
+  assert.equal(transcript[0].sender, "ب");
+  assert.equal(transcript[0].text, "جدًا يجب قصها");
+  assert.ok(transcript[0].sender.length + transcript[0].time.length + transcript[0].text.length + 16 <= 30);
 });
 
 test("summary transcript returns empty when budget cannot fit message metadata", () => {
@@ -43,7 +42,7 @@ test("summary transcript returns empty when budget cannot fit message metadata",
     { display_name: "مشارك", body: "رسالة حديثة" }
   ], 10);
 
-  expect(transcript).toEqual([]);
+  assert.deepEqual(transcript, []);
 });
 
 test("summary prompt treats chat content as untrusted and requests Arabic", () => {
