@@ -1669,6 +1669,7 @@ export default {
         const requestedStatusId = (request.headers.get("X-Status-Id") || "").trim();
         if (requestedStatusId.length > 128) return json({ error: "Invalid SPARK status identifier" }, 400);
         const id = requestedStatusId || crypto.randomUUID();
+        let existingStatusExpiry = null;
         if (requestedStatusId) {
           const existingStatus = await env.DB.prepare(
             "SELECT user_id, expires_at FROM status_posts WHERE id = ?"
@@ -1677,11 +1678,12 @@ export default {
               Date.parse(existingStatus.expires_at) <= Date.now()) {
             return json({ error: "SPARK status not found or expired" }, 404);
           }
+          existingStatusExpiry = existingStatus.expires_at;
         }
         const mediaId = crypto.randomUUID();
         const objectKey = currentUser.sub + "/" + crypto.randomUUID();
         const suppliedName = safeFileName(request.headers.get("X-File-Name") || "spark-media");
-        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+        const expiresAt = existingStatusExpiry || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
         const bucket = env.TIGRIS_BUCKET || "siraj-media";
         const objectPath = objectKey.split("/").map(encodeURIComponent).join("/");
         const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
@@ -1856,7 +1858,7 @@ export default {
             `SELECT status_id AS statusId, object_key AS attachmentId,
                     file_name AS fileName, content_type AS contentType,
                     size, caption, created_at AS createdAt
-             FROM status_media WHERE status_id IN (${placeholders})`
+             FROM status_media WHERE status_id IN (${placeholders}) ORDER BY created_at ASC`
           ).bind(...ids).all();
           const mediaByStatus = new Map();
           for (const media of mediaResult.results || []) {
