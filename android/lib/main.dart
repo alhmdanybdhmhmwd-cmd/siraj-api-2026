@@ -2292,13 +2292,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               leading: InkWell(
                 customBorder: const CircleBorder(),
                 onTap: () => Navigator.push(context, MaterialPageRoute(
-                  builder: (_) => PublicProfilePage(person: person, currentUserId: myId),
+                  builder: (_) => PublicProfilePage(person: person, currentUserId: myId, canMessage: true),
                 )),
                 child: personAvatar(person),
               ),
               title: InkWell(
                 onTap: () => Navigator.push(context, MaterialPageRoute(
-                  builder: (_) => PublicProfilePage(person: person, currentUserId: myId),
+                  builder: (_) => PublicProfilePage(person: person, currentUserId: myId, canMessage: true),
                 )),
                 child: Text(_personName(person)),
               ),
