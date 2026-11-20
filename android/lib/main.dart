@@ -2861,6 +2861,34 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     captionController.dispose();
   }
 
+  void _openSparkStatus(Map<String, dynamic> status) {
+    final rawMedia = status['media'];
+    final media = rawMedia is List
+        ? rawMedia.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList()
+        : <Map<String, dynamic>>[];
+    if (media.isEmpty) {
+      showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: panel,
+          title: Text(field(status, ['displayName', 'display_name', 'username'], 'مستخدم برق')),
+          content: Text(field(status, ['content'])),
+        ),
+      );
+      return;
+    }
+    Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SparkMediaViewer(
+          media: media,
+          author: field(status, ['displayName', 'display_name', 'username'], 'مستخدم برق'),
+          caption: field(status, ['content']),
+        ),
+      ),
+    );
+  }
+
   Widget _statusesPage() {
     return RefreshIndicator(
       color: gold,
@@ -2896,13 +2924,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             Card(
               color: panel,
               child: ListTile(
+                onTap: () => _openSparkStatus(status),
                 leading: const CircleAvatar(backgroundColor: Color(0xFF46391F), child: Icon(Icons.person, color: gold)),
                 title: Text(field(status, ['displayName', 'display_name', 'username'], 'مستخدم برق')),
                 subtitle: Padding(
                   padding: const EdgeInsets.only(top: 6),
-                  child: Text(field(status, ['content']), maxLines: 4, overflow: TextOverflow.ellipsis),
+                  child: Text(
+                    field(status, ['content']).isNotEmpty
+                        ? field(status, ['content'])
+                        : ((status['media'] is List && (status['media'] as List).isNotEmpty)
+                            ? 'اضغط لمشاهدة وسائط SPARK'
+                            : 'لحظة جديدة في SPARK'),
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                trailing: const Icon(Icons.circle, color: gold, size: 10),
+                trailing: const Icon(Icons.play_circle_outline, color: gold, size: 24),
               ),
             ),
         ],
