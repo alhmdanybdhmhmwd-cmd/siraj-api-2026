@@ -3119,10 +3119,10 @@ class PublicProfilePage extends StatelessWidget {
                       subtitle: Text(phone, textDirection: TextDirection.ltr),
                     ),
                   const Divider(height: 1, indent: 16, endIndent: 16),
-                  ListTile(
-                    leading: const Icon(Icons.flash_on_rounded, color: gold),
-                    title: const Text('على برق'),
-                    subtitle: const Text('التواصل بنبض الضوء'),
+                  const ListTile(
+                    leading: Icon(Icons.flash_on_rounded, color: gold),
+                    title: Text('على برق'),
+                    subtitle: Text('التواصل بنبض الضوء'),
                   ),
                 ],
               ),
