@@ -1781,18 +1781,32 @@ export default {
               "INSERT INTO status_posts (id, user_id, content, expires_at) VALUES (?, ?, ?, ?)"
             ).bind(id, currentUser.sub, caption, expiresAt));
           }
+          const mediaInsertIndex = statements.length;
           statements.push(
+            // Enforce the 10-file ceiling atomically in D1 as well as with the
+            // early count check above, so concurrent uploads cannot exceed it.
             env.DB.prepare(
-              "INSERT INTO status_media (id, status_id, object_key, file_name, content_type, size, caption, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-            ).bind(mediaId, id, objectKey, suppliedName, contentType, bytes.byteLength, caption, new Date().toISOString()),
+              "INSERT INTO status_media (id, status_id, object_key, file_name, content_type, size, caption, created_at) SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM status_media WHERE status_id = ?) < 10"
+            ).bind(mediaId, id, objectKey, suppliedName, contentType, bytes.byteLength, caption, new Date().toISOString(), id),
             env.DB.prepare(
-              "INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?)"
-            ).bind(objectKey, expiresAt),
+              "INSERT INTO media_expirations (object_key, expires_at) SELECT ?, ? WHERE EXISTS (SELECT 1 FROM status_media WHERE object_key = ?)"
+            ).bind(objectKey, expiresAt, objectKey),
             env.DB.prepare(
-              "INSERT INTO media_access (object_key, owner_id, recipient_id, group_id, file_name, content_type, expires_at) VALUES (?, ?, NULL, NULL, ?, ?, ?)"
-            ).bind(objectKey, currentUser.sub, suppliedName, contentType, expiresAt)
+              "INSERT INTO media_access (object_key, owner_id, recipient_id, group_id, file_name, content_type, expires_at) SELECT ?, ?, NULL, NULL, ?, ?, ? WHERE EXISTS (SELECT 1 FROM status_media WHERE object_key = ?)"
+            ).bind(objectKey, currentUser.sub, suppliedName, contentType, expiresAt, objectKey)
           );
-          await env.DB.batch(statements);
+          const savedRows = await env.DB.batch(statements);
+          if (Number(savedRows?.[mediaInsertIndex]?.meta?.changes || 0) !== 1) {
+            let deleted = false;
+            try {
+              const deletion = await storage.fetch(storageUrl, { method: "DELETE" });
+              deleted = deletion.ok || deletion.status === 404;
+            } catch (_) {}
+            if (deleted) {
+              try { await env.DB.prepare("DELETE FROM media_expirations WHERE object_key = ?").bind(objectKey).run(); } catch (_) {}
+            }
+            return json({ error: "A SPARK status can contain at most 10 media files" }, 409);
+          }
         } catch (error) {
           let deleted = false;
           try {
