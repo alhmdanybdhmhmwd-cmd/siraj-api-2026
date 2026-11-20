@@ -66,6 +66,13 @@ bool barqCanRemoveGroupMember(
 bool barqCanLeaveGroup({required bool isSelf, required bool isOwner}) =>
     isSelf && !isOwner;
 
+bool barqCanTransferGroupOwnership(
+  String actorRole, {
+  required bool targetIsOwner,
+  required bool targetIsSelf,
+}) =>
+    actorRole == 'owner' && !targetIsOwner && !targetIsSelf;
+
 const int proxyMediaThresholdBytes = 4 * 1024 * 1024;
 
 const storage = FlutterSecureStorage();
@@ -5874,7 +5881,11 @@ class _GroupChatPageState extends State<GroupChatPage> {
                         isSelf: isSelf,
                         isOwner: isOwner,
                       );
-                      final canTransferOwnership = actorRole == 'owner' && !isOwner && !isSelf;
+                      final canTransferOwnership = barqCanTransferGroupOwnership(
+                        actorRole,
+                        targetIsOwner: isOwner,
+                        targetIsSelf: isSelf,
+                      );
                       return ListTile(
                         leading: personAvatar(member),
                         title: Text(field(member, ['display_name', 'displayName', 'username'], 'عضو')),
