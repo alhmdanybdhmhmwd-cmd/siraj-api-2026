@@ -15,7 +15,7 @@ The dedicated Cloudflare D1 test database has been created and verified.
 - The migration workflow runs only on the dedicated branch, checks the isolated config, and uses `--config wrangler.test.toml` with the test database name.
 - It does not deploy a Worker or use the production `wrangler.toml`.
 - `wrangler.test.toml` binds only the isolated test database. It deliberately has no production media bucket, production routes, or production variables.
-- CI checks that the test config uses the dedicated D1 ID and differs from production.
+- CI checks that the test config uses the dedicated D1 ID and differs from production.\n- Added `test/barq_phase2_contract.test.mjs` to guard core API route presence, health probes, and test-vs-production D1 separation; it runs as part of `npm test`.
 - The production `wrangler.toml` remains unchanged.
 
 ## Validation status
