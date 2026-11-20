@@ -23,5 +23,7 @@ jobs:
         run: python3 test/d1_schema_inspection.test.py
       - name: Verify test Wrangler config cannot target production
         run: python3 test/barq_wrangler_config.test.py
+      - name: Verify Android Firebase package and signing-key safety
+        run: python3 test/android_release_safety.test.py
       - name: Check Worker JavaScript syntax
         run: node --check src/src/index.js
