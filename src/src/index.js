@@ -2374,7 +2374,7 @@ const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
           const reactionMap = new Map();
           for (const reaction of reactionRows.results || []) {
             if (!reactionMap.has(reaction.message_id)) reactionMap.set(reaction.message_id, []);
-            reactionMap.get(reaction.message_id).push({ emoji: reaction.emoji, user_id: reaction.user_id });
+            reactionMap.get(reaction.message_id).push({ emoji: reaction.emoji, user_id: reaction.user_id, display_name: reaction.display_name });
           }
           const pinnedIds = new Set((pinRows.results || []).map(item => item.message_id));
           for (const item of messages) {
