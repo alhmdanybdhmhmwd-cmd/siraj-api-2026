@@ -12,6 +12,11 @@ on:
 permissions:
   contents: write
 
+# Serialize lockfile resolution/pushes; only the newest branch run should proceed.
+concurrency:
+  group: barq-android-quality-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   android-quality:
     runs-on: ubuntu-latest
