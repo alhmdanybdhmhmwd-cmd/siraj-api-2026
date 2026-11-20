@@ -3895,7 +3895,15 @@ class _ChatPageState extends State<ChatPage> {
                                           child: Text(voiceTranscripts[field(m, ['id', 'message_id'])]!),
                                         ),
                                     ] else ...[
-                                      Text(field(m, ['body', 'content', 'message'])),
+                                      GestureDetector(
+                                        onLongPress: () async {
+                                          final text = field(m, ['body', 'content', 'message']);
+                                          if (text.isEmpty) return;
+                                          await Clipboard.setData(ClipboardData(text: text));
+                                          if (context.mounted) showMsg(context, 'تم نسخ الرسالة');
+                                        },
+                                        child: Text(field(m, ['body', 'content', 'message'])),
+                                      ),
                                       if (BarqFeatures.autoTranslate && translatedMessages[field(m, ['id', 'message_id'])] != null) ...[
                                         const SizedBox(height: 6),
                                         const Divider(height: 1, color: Colors.white24),
@@ -4294,7 +4302,15 @@ class _GroupChatPageState extends State<GroupChatPage> {
                                 child: Text(voiceTranscripts[field(m, ['id', 'message_id'])]!),
                               ),
                           ] else ...[
-                            Text(field(m, ['body'])),
+                            GestureDetector(
+                              onLongPress: () async {
+                                final text = field(m, ['body', 'content', 'message']);
+                                if (text.isEmpty) return;
+                                await Clipboard.setData(ClipboardData(text: text));
+                                if (context.mounted) showMsg(context, 'تم نسخ الرسالة');
+                              },
+                              child: Text(field(m, ['body'])),
+                            ),
                             if (BarqFeatures.autoTranslate && translatedMessages[field(m, ['id', 'message_id'])] != null) ...[
                               const SizedBox(height: 6),
                               const Divider(height: 1, color: Colors.white24),
