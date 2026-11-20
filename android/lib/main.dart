@@ -1203,6 +1203,15 @@ String normalizeBarqInternationalPhone(String raw) {
   if (!value.startsWith('+')) value = ['+', value].join();
   return value;
 }
+
+String normalizeBarqRegistrationPhone(String raw, String countryCode) {
+  final value = normalizeBarqPhoneDigits(raw);
+  if (value.startsWith('+') || value.startsWith('00')) {
+    return normalizeBarqInternationalPhone(value);
+  }
+  final nationalNumber = value.replaceFirst(RegExp(r'^0+'), '');
+  return normalizeBarqInternationalPhone(countryCode + nationalNumber);
+}
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -1258,15 +1267,8 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  String _normalizedInternationalPhone(String raw) {
-    final value = normalizeBarqPhoneDigits(raw);
-    if (value.startsWith('+') || value.startsWith('00')) {
-      return normalizeBarqInternationalPhone(value);
-    }
-    // Remove the common national trunk prefix before applying the selected country code.
-    final nationalNumber = value.replaceFirst(RegExp(r'^0+'), '');
-    return normalizeBarqInternationalPhone(selectedCountryCode + nationalNumber);
-  }
+  String _normalizedInternationalPhone(String raw) =>
+      normalizeBarqRegistrationPhone(raw, selectedCountryCode);
 
   Widget _countryCodePicker() => DropdownButtonFormField<String>(
     initialValue: selectedCountryCode,
