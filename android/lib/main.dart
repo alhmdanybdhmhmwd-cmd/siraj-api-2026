@@ -1214,6 +1214,11 @@ String normalizeBarqRegistrationPhone(String raw, String countryCode) {
   final nationalNumber = value.replaceFirst(RegExp(r'^0+'), '');
   return normalizeBarqInternationalPhone(countryCode + nationalNumber);
 }
+/// Canonical digit-only form for comparing saved contact numbers.
+/// Converts Arabic-Indic digits before stripping punctuation.
+String normalizeBarqContactPhoneDigits(String raw) =>
+    normalizeBarqPhoneDigits(raw).replaceAll(RegExp(r'[^0-9]'), '');
+
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -3262,10 +3267,10 @@ class PublicProfilePage extends StatelessWidget {
         return;
       }
       final existing = await FlutterContacts.getContacts(withProperties: true, withPhoto: false);
-      String digits(String value) => value.replaceAll(RegExp(r'\D'), '');
-      final target = digits(phone);
-      final alreadySaved = existing.any((contact) =>
-          contact.phones.any((entry) => digits(entry.number) == target));
+      final target = normalizeBarqContactPhoneDigits(phone);
+      final alreadySaved = target.isNotEmpty && existing.any((contact) =>
+          contact.phones.any((entry) =>
+              normalizeBarqContactPhoneDigits(entry.number) == target));
       if (alreadySaved) {
         if (context.mounted) showMsg(context, 'هذا الرقم محفوظ بالفعل في جهات الاتصال.');
         return;
