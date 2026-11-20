@@ -257,3 +257,46 @@ test("recorded AAC voice messages remain eligible for explicit transcription", (
   assert.match(flutterApp, /contentType: 'audio\/mp4'/);
   assert.match(flutterApp, /isBarqTranscriptionSizeAllowed\(audioBytes\.length\)/);
 });
+
+
+test("AI summary routes authorize conversation membership before inference and cap source messages", () => {
+  const groupStart = worker.indexOf("// On-demand group summary.");
+  const groupEnd = worker.indexOf("const groupMessagesMatch", groupStart);
+  const groupRoute = worker.slice(groupStart, groupEnd);
+  const privateStart = worker.indexOf("// On-demand private conversation summary.");
+  const privateEnd = worker.indexOf("// Private reactions and pins", privateStart);
+  const privateRoute = worker.slice(privateStart, privateEnd);
+
+  assert.ok(groupStart >= 0 && privateStart >= 0);
+  assert.ok(groupRoute.indexOf("group_members") < groupRoute.indexOf("createConversationSummary"));
+  assert.ok(groupRoute.includes("if (!member)"));
+  assert.ok(groupRoute.includes('consumeLoginAttempt(env, "conversation-summary", currentUser.sub, 5)'));
+  assert.ok(groupRoute.includes("LIMIT 60"));
+
+  assert.ok(privateRoute.includes("FROM friendships WHERE user_id = ? AND friend_id = ?"));
+  assert.ok(privateRoute.indexOf("friendships") < privateRoute.indexOf("createConversationSummary"));
+  assert.ok(privateRoute.includes("Conversation access denied"));
+  assert.ok(privateRoute.includes('consumeLoginAttempt(env, "conversation-summary", currentUser.sub, 5)'));
+  assert.ok(privateRoute.includes("LIMIT 60"));
+
+  assert.ok(worker.includes('@cf/qwen/qwen3.8-27b'));
+  assert.ok(worker.includes("prepareConversationSummaryTranscript"));
+  assert.ok(flutterApp.includes("لن يبدأ إرسال الرسائل قبل ضغطك على"));
+  assert.ok(flutterApp.includes("لا تُرسل المرفقات"));
+  assert.ok(flutterApp.includes("لا يُحفظ الملخص كرسالة"));
+});
+
+test("speech transcription route is behind bearer authentication and never persists audio or transcript", () => {
+  const authIndex = worker.indexOf("const currentUser = await authenticate(request, env)");
+  const unauthorizedIndex = worker.indexOf("if (!currentUser)", authIndex);
+  const routeIndex = worker.indexOf('path === "/api/transcribe"');
+  const routeEnd = worker.indexOf("// A single private invite code", routeIndex);
+  const route = worker.slice(routeIndex, routeEnd);
+  assert.ok(authIndex >= 0 && unauthorizedIndex > authIndex && routeIndex > unauthorizedIndex);
+  assert.ok(route.includes("audio/mp4"));
+  assert.ok(route.includes("maxTranscriptionBytes = 2 * 1024 * 1024"));
+  assert.ok(route.includes('env.AI.run("@cf/openai/whisper"'));
+  assert.ok(!route.includes("INSERT INTO messages"));
+  assert.ok(!route.includes("INSERT INTO group_messages"));
+  assert.ok(!route.includes("sendSirajPush"));
+});
