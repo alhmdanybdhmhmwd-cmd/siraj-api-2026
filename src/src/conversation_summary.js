@@ -21,12 +21,24 @@ export function prepareConversationSummaryTranscript(messages, maxChars = MAX_TR
     time: String(item?.created_at || "").slice(0, 40),
     text: safeMessageText(item?.body)
   })).filter((item) => item.text);
+  const budget = Number.isFinite(Number(maxChars))
+    ? Math.max(0, Math.floor(Number(maxChars)))
+    : MAX_TRANSCRIPT_CHARS;
   const selected = [];
   let total = 0;
   for (let index = normalized.length - 1; index >= 0; index -= 1) {
     const item = normalized[index];
     const size = item.sender.length + item.time.length + item.text.length + 16;
-    if (selected.length && total + size > maxChars) break;
+    if (total + size > budget) {
+      if (!selected.length) {
+        // Keep the newest message, but never let one oversized message bypass the transcript budget.
+        const availableText = budget - item.sender.length - item.time.length - 16;
+        if (availableText > 0) {
+          selected.unshift({ ...item, text: item.text.slice(-availableText) });
+        }
+      }
+      break;
+    }
     selected.unshift(item);
     total += size;
   }
