@@ -14,6 +14,23 @@ void main() {
     expect(normalizeBarqRegistrationPhone(' ٠٧٧٠٠٠٠٠٠٠ ', '+967'), '+967770000000');
   });
 
+  test('registration country codes cover 206 geographic calling codes without duplicates', () {
+    expect(barqCountryCodes.length, 206);
+    final codes = barqCountryCodes.map((country) => country.$2).toSet();
+    expect(codes.length, 206);
+    for (final code in [
+      '+222', '+223', '+228', '+246', '+247', '+269', '+297', '+298', '+299',
+      '+350', '+378', '+383', '+389', '+423', '+501', '+590', '+594', '+596',
+      '+672', '+681', '+850', '+972', '+995',
+    ]) {
+      expect(codes, contains(code));
+    }
+    // These are regional prefixes within the shared +1 plan, not country codes.
+    expect(codes, isNot(contains('+1684')));
+    expect(codes, isNot(contains('+1340')));
+    expect(codes, isNot(contains('+1787')));
+  });
+
   test('saved contact comparison normalizes Arabic digits and phone punctuation', () {
     expect(
       normalizeBarqContactPhoneDigits('+٩٦٧ (٧٧) ٠٠٠-٠٠٠١'),
