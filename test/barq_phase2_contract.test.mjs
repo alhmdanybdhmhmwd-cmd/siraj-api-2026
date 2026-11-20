@@ -239,3 +239,14 @@ test("private and group message pagination uses stable compound cursors and merg
   assert.ok(flutterApp.includes("Api.groupMessagesPage(groupId, before: olderMessageCursor)"));
   assert.ok(flutterApp.includes("final unique = <String, Map<String, dynamic>>{}"));
 });
+
+test("on-demand AI conversation summaries are membership-checked, rate-limited, and opt-in", () => {
+  assert.match(worker, /privateSummaryMatch/);
+  assert.match(worker, /groupSummaryMatch/);
+  assert.match(worker, /consumeLoginAttempt\(env, "conversation-summary"/);
+  assert.match(worker, /FROM group_members WHERE group_id = \? AND user_id = \?/);
+  assert.match(worker, /@cf\/qwen\/qwen3\.8-27b/);
+  assert.match(worker, /LIMIT 60/);
+  assert.ok(flutterApp.includes("لن يبدأ إرسال الرسائل قبل ضغطك على"));
+  assert.ok(flutterApp.includes("لا تُرسل المرفقات"));
+});
