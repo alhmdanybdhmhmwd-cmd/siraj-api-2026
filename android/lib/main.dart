@@ -3581,7 +3581,9 @@ class _BarqConversationSummaryDialogState extends State<BarqConversationSummaryD
 
   void _startSummary() {
     final future = widget.loadSummary();
-    setState(() => _summaryFuture = future);
+    setState(() {
+      _summaryFuture = future;
+    });
   }
 
   @override
