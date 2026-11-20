@@ -2985,12 +2985,25 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: OutlinedButton.icon(
-              onPressed: publishSparkMediaDialog,
-              icon: const Icon(Icons.add_photo_alternate_outlined),
-              label: const Text('نشر صورة أو فيديو'),
-              style: OutlinedButton.styleFrom(foregroundColor: gold, side: const BorderSide(color: gold)),
-            ),
+            child: Row(children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: publishStatusDialog,
+                  icon: const Icon(Icons.edit_note_rounded),
+                  label: const Text('نشر نص'),
+                  style: OutlinedButton.styleFrom(foregroundColor: gold, side: const BorderSide(color: gold)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: publishSparkMediaDialog,
+                  icon: const Icon(Icons.add_photo_alternate_outlined),
+                  label: const Text('صورة أو فيديو'),
+                  style: OutlinedButton.styleFrom(foregroundColor: gold, side: const BorderSide(color: gold)),
+                ),
+              ),
+            ]),
           ),
           if (statuses.isEmpty)
             const Padding(
@@ -3008,7 +3021,29 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               color: panel,
               child: ListTile(
                 onTap: () => _openSparkStatus(status),
-                leading: const CircleAvatar(backgroundColor: Color(0xFF46391F), child: Icon(Icons.person, color: gold)),
+                leading: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(colors: [electricBlue, gold]),
+                  ),
+                  child: CircleAvatar(
+                    radius: 22,
+                    backgroundColor: const Color(0xFF46391F),
+                    child: ClipOval(
+                      child: field(status, ['photoUrl', 'photo_url']).isEmpty
+                          ? const Icon(Icons.person, color: gold)
+                          : Image.network(
+                              '$apiBase${field(status, ['photoUrl', 'photo_url'])}?v=${Uri.encodeComponent(field(status, ['photoUpdatedAt', 'photo_updated_at']))}',
+                              width: 44,
+                              height: 44,
+                              fit: BoxFit.cover,
+                              headers: {'Authorization': 'Bearer ${Api.token}'},
+                              errorBuilder: (_, __, ___) => const Icon(Icons.person, color: gold),
+                            ),
+                    ),
+                  ),
+                ),
                 title: Text(field(status, ['displayName', 'display_name', 'username'], 'مستخدم برق')),
                 subtitle: Padding(
                   padding: const EdgeInsets.only(top: 6),
