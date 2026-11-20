@@ -1117,13 +1117,16 @@ export default {
       }
 
       // Private profile photos use their own namespace and never enter chat-media expiry.
-      const profilePhotoMatch = path.match(/^\\/api\\/profile\\/photo\\/([^/]+)$/);
-      if (profilePhotoMatch && (method === "GET" || method === "POST")) {
+      const profilePhotoPrefix = "/api/profile/photo/";
+      if (path.startsWith(profilePhotoPrefix) && (method === "GET" || method === "POST")) {
         if (!env.TIGRIS_ACCESS_KEY_ID || !env.TIGRIS_SECRET_ACCESS_KEY) {
           return json({ error: "Profile photo storage is not configured" }, 503);
         }
         let targetUserId;
-        try { targetUserId = decodeURIComponent(profilePhotoMatch[1]); } catch (_) {
+        try {
+          targetUserId = decodeURIComponent(path.slice(profilePhotoPrefix.length));
+          if (targetUserId === "me") targetUserId = currentUser.sub;
+        } catch (_) {
           return json({ error: "Invalid profile identifier" }, 400);
         }
         if (!targetUserId || targetUserId.length > 128) {
