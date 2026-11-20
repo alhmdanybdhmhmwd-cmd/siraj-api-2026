@@ -54,6 +54,10 @@ class FakeDB {
       params: [],
       bind(...params) { this.params = params; return this; },
       async first() {
+        if (sql.includes("SELECT 1 AS ok")) {
+          if (db.readinessProbeThrows) throw new Error("simulated D1 outage");
+          return db.readinessProbeResult === undefined ? { ok: 1 } : db.readinessProbeResult;
+        }
         if (sql.includes("SELECT session_version FROM account_security")) {
           return { session_version: db.sessionVersion };
         }
@@ -2039,4 +2043,26 @@ test("login identifier rate limit normalizes local and international phone forma
   }
   // A different IP and +967 formatting must not bypass the same account bucket.
   assert.equal((await attempt("+967 771 234 567", "203.0.113.51")).status, 429);
+});
+test("liveness probe stays available without database or secrets", async () => {
+  const response = await worker.default.fetch(new Request("https://api.example.test/health/live"), {});
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { status: "alive", service: "barq-api" });
+});
+
+test("readiness probe fails closed when configuration or D1 is unavailable", async () => {
+  const missingConfig = await worker.default.fetch(new Request("https://api.example.test/health/ready"), {});
+  assert.equal(missingConfig.status, 503);
+  const unavailableDb = new FakeDB();
+  unavailableDb.readinessProbeThrows = true;
+  const dbFailure = await worker.default.fetch(new Request("https://api.example.test/health/ready"), { DB: unavailableDb, JWT_SECRET: secret });
+  assert.equal(dbFailure.status, 503);
+  const badProbe = new FakeDB();
+  badProbe.readinessProbeResult = { ok: 0 };
+  const invalidResult = await worker.default.fetch(new Request("https://api.example.test/health/ready"), { DB: badProbe, JWT_SECRET: secret });
+  assert.equal(invalidResult.status, 503);
+  const readyDb = new FakeDB();
+  const ready = await worker.default.fetch(new Request("https://api.example.test/health/ready"), { DB: readyDb, JWT_SECRET: secret });
+  assert.equal(ready.status, 200);
+  assert.deepEqual(await ready.json(), { status: "ready", service: "barq-api" });
 });
