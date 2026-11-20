@@ -3054,7 +3054,7 @@ class PublicProfilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = profile;
-    final id = field(user, ['id', 'user_id', 'friend_id']);
+    final id = field(user, ['id', 'user_id', 'friend_id', 'sender_id']);
     final name = field(user, ['displayName', 'display_name', 'name', 'username'], 'مستخدم برق');
     final username = field(user, ['username'], 'user');
     final phone = field(user, ['phone']);
@@ -3825,9 +3825,18 @@ class _GroupChatPageState extends State<GroupChatPage> {
                       final member = members[index];
                       final isOwner = member['is_owner'] == 1 || member['is_owner'] == true;
                       return ListTile(
-                        leading: CircleAvatar(child: Icon(isOwner ? Icons.shield : Icons.person, color: gold)),
+                        leading: personAvatar(member),
                         title: Text(field(member, ['display_name', 'displayName', 'username'], 'عضو')),
                         subtitle: Text(isOwner ? 'مالك المجموعة' : '@${field(member, ['username'])}'),
+                        onTap: () {
+                          Navigator.pop(dialogContext);
+                          Navigator.push(context, MaterialPageRoute(
+                            builder: (_) => PublicProfilePage(
+                              person: member,
+                              currentUserId: widget.currentUserId,
+                            ),
+                          ));
+                        },
                       );
                     },
                   ),
@@ -3887,8 +3896,26 @@ class _GroupChatPageState extends State<GroupChatPage> {
                         decoration: BoxDecoration(color: mine ? const Color(0xFF46391F) : panel,
                           borderRadius: BorderRadius.circular(15)),
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          if (!mine) Text(field(m, ['display_name', 'username'], 'عضو'),
-                            style: const TextStyle(color: gold, fontSize: 11)),
+                          if (!mine)
+                            InkWell(
+                              borderRadius: BorderRadius.circular(8),
+                              onTap: () => Navigator.push(context, MaterialPageRoute(
+                                builder: (_) => PublicProfilePage(
+                                  person: {
+                                    'id': field(m, ['sender_id']),
+                                    'username': field(m, ['username']),
+                                    'display_name': field(m, ['display_name']),
+                                    'photo_updated_at': field(m, ['photo_updated_at']),
+                                  },
+                                  currentUserId: widget.currentUserId,
+                                ),
+                              )),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 3),
+                                child: Text(field(m, ['display_name', 'username'], 'عضو'),
+                                  style: const TextStyle(color: gold, fontSize: 11)),
+                              ),
+                            ),
                           if (_attachmentData(m) case final attachment?) ...[
                             _attachmentTile(attachment, () async {
                               try {
