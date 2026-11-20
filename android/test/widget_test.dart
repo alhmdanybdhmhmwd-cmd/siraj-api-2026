@@ -6,6 +6,9 @@ void main() {
   test('international phone normalization supports Arabic digits and 00 prefix', () {
     expect(normalizeBarqInternationalPhone(' +٩٦٧ ٧٧٠٠٠٠٠٠٠ '), '+967770000000');
     expect(normalizeBarqInternationalPhone('00447911123456'), '+447911123456');
+    expect(normalizeBarqRegistrationPhone('٠٧٧٠٠٠٠٠٠٠', '+967'), '+967770000000');
+    expect(normalizeBarqRegistrationPhone('0770000000', '+967'), '+967770000000');
+    expect(normalizeBarqRegistrationPhone('+447911123456', '+967'), '+447911123456');
   });
 
   test('message merge deduplicates by id and keeps chronological order', () {
