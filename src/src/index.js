@@ -41,6 +41,14 @@ async function ensureAccountSecurity(env) {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `).run();
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS revoked_sessions (
+      token_hash TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      revoked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `).run();
 }
 
 async function getSessionVersion(env, userId) {
@@ -174,6 +182,11 @@ async function authenticate(request, env) {
         payload.sv !== Number(row.session_version)) {
       return null;
     }
+    const tokenHash = await sha256Hex(token);
+    const revoked = await env.DB.prepare(
+      "SELECT 1 FROM revoked_sessions WHERE token_hash = ? AND user_id = ?"
+    ).bind(tokenHash, payload.sub).first();
+    if (revoked) return null;
   } catch (error) {
     // Never accept a session when its revocation state cannot be verified.
     console.error("Session security check failed:", error);
@@ -938,6 +951,18 @@ export default {
 
       if (!currentUser) {
         return json({ error: "Unauthorized" }, 401);
+      }
+
+      // Revoke only this bearer token; other device sessions remain valid.
+      if (method === "POST" && path === "/api/logout") {
+        const authHeader = request.headers.get("Authorization") || "";
+        const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+        if (!bearerToken) return json({ error: "Unauthorized" }, 401);
+        await ensureAccountSecurity(env);
+        await env.DB.prepare(
+          "INSERT OR IGNORE INTO revoked_sessions (token_hash, user_id) VALUES (?, ?)"
+        ).bind(await sha256Hex(bearerToken), currentUser.sub).run();
+        return json({ message: "تم تسجيل الخروج من هذا الجهاز." });
       }
 
       // Explicitly requested speech transcription. Audio and transcript are never persisted.
