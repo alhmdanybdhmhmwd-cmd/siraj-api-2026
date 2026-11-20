@@ -3596,8 +3596,7 @@ class _BarqVoiceRecordButtonState extends State<BarqVoiceRecordButton> {
       if (!await _recorder.isEncoderSupported(AudioEncoder.aacLc)) {
         throw Exception('تسجيل الصوت بهذا التنسيق غير مدعوم على هذا الجهاز.');
       }
-      final path = Directory.systemTemp.path + Platform.pathSeparator +
-          'barq_voice_' + DateTime.now().microsecondsSinceEpoch.toString() + '.m4a';
+      final path = '${Directory.systemTemp.path}${Platform.pathSeparator}barq_voice_${DateTime.now().microsecondsSinceEpoch}.m4a';
       await _recorder.start(
         const RecordConfig(
           encoder: AudioEncoder.aacLc,
@@ -4941,12 +4940,12 @@ class _ChatPageState extends State<ChatPage> {
     try {
       await Api.uploadAttachment(
         bytes: bytes,
-        fileName: 'barq_voice_' + DateTime.now().millisecondsSinceEpoch.toString() + '.m4a',
+        fileName: 'barq_voice_${DateTime.now().millisecondsSinceEpoch}.m4a',
         contentType: 'audio/mp4',
         recipientId: friendId,
       );
       await loadMessages();
-      if (mounted) showMsg(context, 'تم إرسال التسجيل الصوتي (' + formatBarqMediaDuration(duration) + ').');
+      if (mounted) showMsg(context, 'تم إرسال التسجيل الصوتي (${formatBarqMediaDuration(duration)}).');
     } catch (error) {
       if (mounted) showMsg(context, cleanError(error));
     } finally {
@@ -5420,7 +5419,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
         groupId: groupId,
       );
       await loadMessages();
-      if (mounted) showMsg(context, 'تم إرسال التسجيل الصوتي (' + formatBarqMediaDuration(duration) + ') للمجموعة.');
+      if (mounted) showMsg(context, 'تم إرسال التسجيل الصوتي (${formatBarqMediaDuration(duration)}) للمجموعة.');
     } catch (error) {
       if (mounted) showMsg(context, cleanError(error));
     } finally {
