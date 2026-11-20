@@ -178,6 +178,10 @@ class FakeDB {
           db.ephemeralCleanupCutoff = this.params[0];
           return { meta: { changes: db.expiredEphemeralCount || 0 } };
         }
+        if (sql.includes("DELETE FROM revoked_sessions WHERE expires_at <= ?")) {
+          db.revokedSessionCleanupCutoff = this.params[0];
+          return { meta: { changes: db.expiredRevokedSessionsCount || 0 } };
+        }
         if (sql.includes("INSERT INTO status_posts")) {
           db.statusPosts ??= [];
           db.statusPosts.push(this.params);
@@ -1766,6 +1770,29 @@ test("rate limit cleanup removes only buckets older than 24 hours", async () => 
   assert.equal(statements.length, 2);
   assert.ok(statements.every(item => item.sql.includes("window_started < ?")));
   assert.ok(statements.every(item => item.params[0] === cutoff));
+});
+
+test("revoked session cleanup removes only expired token hashes", async () => {
+  const statements = [];
+  const db = {
+    prepare(sql) {
+      return {
+        params: [],
+        bind(...params) { this.params = params; return this; },
+        async run() {
+          statements.push({ sql, params: this.params });
+          return { meta: { changes: 4 } };
+        }
+      };
+    }
+  };
+  const now = Date.parse("2026-11-20T12:00:00.000Z");
+  const result = await worker.cleanupExpiredRevokedSessions({ DB: db }, now);
+  const cutoff = Math.floor(now / 1000);
+  assert.deepEqual(result, { deleted: 4, cutoff });
+  assert.equal(statements.length, 1);
+  assert.equal(statements[0].sql, "DELETE FROM revoked_sessions WHERE expires_at <= ?");
+  assert.deepEqual(statements[0].params, [cutoff]);
 });
 
 test("media expiration cleanup continues after one storage deletion fails", async () => {
