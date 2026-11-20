@@ -1120,6 +1120,7 @@ List<Map<String, dynamic>> normalizeMessageReactions(dynamic raw) {
 }
 
 Widget messageReactionBar({
+  required BuildContext context,
   required Map<String, dynamic> message,
   required String currentUserId,
   required Future<void> Function(String emoji, bool remove) onReaction,
@@ -4310,6 +4311,7 @@ class _ChatPageState extends State<ChatPage> {
                                       ),
                                     if (m['is_ephemeral'] != true && m['is_offline_pending'] != true)
                                       messageReactionBar(
+                                        context: context,
                                         message: m,
                                         currentUserId: widget.currentUserId,
                                         onReaction: (emoji, remove) async {
@@ -4776,6 +4778,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
                               ]),
                             ),
                           messageReactionBar(
+                            context: context,
                             message: m,
                             currentUserId: widget.currentUserId,
                             onReaction: (emoji, remove) async {
