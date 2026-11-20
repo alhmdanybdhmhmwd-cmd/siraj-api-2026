@@ -1877,13 +1877,18 @@ export default {
           )
         `).run();
 
+        await ensureProfilePhotos(env);
         const result = await env.DB.prepare(
           `SELECT s.id, s.user_id AS userId, u.username,
                   u.display_name AS displayName, s.content,
                   s.created_at AS createdAt, s.expires_at AS expiresAt,
+                  CASE WHEN pp.user_id IS NOT NULL
+                    THEN '/api/profile/photo/' || u.id ELSE NULL END AS photoUrl,
+                  pp.updated_at AS photoUpdatedAt,
                   (SELECT COUNT(*) FROM status_views sv WHERE sv.status_id = s.id) AS viewCount
            FROM status_posts s
            JOIN users u ON u.id = s.user_id
+           LEFT JOIN profile_photos pp ON pp.user_id = u.id
            WHERE s.expires_at > CURRENT_TIMESTAMP
              AND (
                s.user_id = ?
