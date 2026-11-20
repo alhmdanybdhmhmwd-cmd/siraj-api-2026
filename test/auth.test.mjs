@@ -1736,6 +1736,38 @@ test("malformed JSON request bodies return 400 instead of 500", async () => {
 
 
 
+test("declared oversized JSON bodies are rejected before authentication work", async () => {
+  const db = new FakeDB();
+  let bodyCancelled = false;
+  const request = new Request("https://api.example.test/api/login", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Content-Length": String(256 * 1024 + 1)
+    },
+    body: new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(JSON.stringify({
+          username: "tester",
+          password: "not-used"
+        })));
+      },
+      cancel() { bodyCancelled = true; }
+    }),
+    duplex: "half"
+  });
+  const response = await worker.default.fetch(request, {
+    DB: db,
+    JWT_SECRET: secret
+  });
+  assert.equal(response.status, 413);
+  assert.deepEqual(await response.json(), {
+    error: "JSON request body is too large"
+  });
+  assert.equal(db.lastLoginQuery, undefined);
+  assert.equal(bodyCancelled, false, "declared oversized bodies are rejected without consuming the stream");
+});
+
 test("chunked oversized JSON requests are rejected before route processing", async () => {
   const db = new FakeDB();
   const token = await worker.signToken(user, secret, 0);
