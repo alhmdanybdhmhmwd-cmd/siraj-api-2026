@@ -496,12 +496,12 @@ class Api {
   static Future<List<Map<String, dynamic>>> messages(String friendId) async =>
       _list((await messagesPage(friendId))['messages']);
 
-  static Future<void> sendMessage(String receiverId, String body, {String? clientMessageId}) async {
+  static Future<void> sendMessage(String receiverId, String body, {String? clientMessageId, String? replyToId}) async {
     await request('POST', '/api/messages', body: {
       'receiverId': receiverId,
       'body': body,
-      if (clientMessageId != null && clientMessageId.isNotEmpty)
-        'clientMessageId': clientMessageId,
+      if (clientMessageId != null && clientMessageId.isNotEmpty) 'clientMessageId': clientMessageId,
+      if (replyToId != null && replyToId.isNotEmpty) 'replyToId': replyToId,
     });
   }
 
@@ -581,8 +581,11 @@ class Api {
   static Future<List<Map<String, dynamic>>> groupMessages(String groupId) async =>
       _list((await groupMessagesPage(groupId))['messages']);
 
-  static Future<void> sendGroupMessage(String groupId, String body) async {
-    await request('POST', '/api/groups/$groupId/messages', body: {'body': body});
+  static Future<void> sendGroupMessage(String groupId, String body, {String? replyToId}) async {
+    await request('POST', '/api/groups/$groupId/messages', body: {
+      'body': body,
+      if (replyToId != null && replyToId.isNotEmpty) 'replyToId': replyToId,
+    });
   }
 
   static Future<void> deletePrivateMessage(String messageId) async {
@@ -842,6 +845,7 @@ class BarqOfflineQueue {
             field(item, ['receiver_id']),
             field(item, ['body']),
             clientMessageId: field(item, ['id']),
+            replyToId: field(item, ['reply_to_id']).isEmpty ? null : field(item, ['reply_to_id']),
           );
           final remaining = await _read(_outboxKey);
           await _write(_outboxKey, remaining.where((entry) => entry['id'] != item['id']).toList());
@@ -1045,6 +1049,7 @@ Future<void> showMessageActions(
   required Map<String, dynamic> message,
   required bool canDelete,
   required Future<void> Function() onDelete,
+  Future<void> Function(Map<String, dynamic> message)? onReply,
 }) async {
   final action = await showModalBottomSheet<String>(
     context: context,
@@ -1058,6 +1063,12 @@ Future<void> showMessageActions(
             title: const Text('نسخ الرسالة'),
             onTap: () => Navigator.pop(sheetContext, 'copy'),
           ),
+          if (onReply != null)
+            ListTile(
+              leading: const Icon(Icons.reply_rounded, color: gold),
+              title: const Text('الرد على الرسالة'),
+              onTap: () => Navigator.pop(sheetContext, 'reply'),
+            ),
           if (canDelete)
             ListTile(
               leading: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
@@ -1068,7 +1079,9 @@ Future<void> showMessageActions(
       ),
     ),
   );
-  if (action == 'copy') {
+  if (action == 'reply' && onReply != null) {
+    await onReply(message);
+  } else if (action == 'copy') {
     final text = field(message, ['body', 'content', 'message']);
     if (text.isNotEmpty) {
       await Clipboard.setData(ClipboardData(text: text));
@@ -1099,6 +1112,16 @@ Future<void> showMessageActions(
       }
     }
   }
+}
+
+String messageReplyPreview(Map<String, dynamic> message) {
+  final value = field(message, ['reply_to_body']).trim();
+  if (value.isEmpty) return 'رسالة';
+  try {
+    final decoded = jsonDecode(value);
+    if (decoded is Map && decoded['attachmentId'] != null) return 'مرفق';
+  } catch (_) {}
+  return value.length > 120 ? value.substring(0, 120) + '…' : value;
 }
 
 List<Map<String, dynamic>> searchConversationMessages(
@@ -3587,6 +3610,7 @@ class _ChatPageState extends State<ChatPage> {
   bool hasOlderMessages = false;
   bool loadingOlderMessages = false;
   Map<String, dynamic>? olderMessageCursor;
+  Map<String, dynamic>? replyToMessage;
   Timer? refreshTimer;
   Timer? _ephemeralExpiryTimer;
   StreamSubscription<Map<String, dynamic>>? realtimeSubscription;
@@ -4081,6 +4105,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
   bool hasOlderMessages = false;
   bool loadingOlderMessages = false;
   Map<String, dynamic>? olderMessageCursor;
+  Map<String, dynamic>? replyToMessage;
   Timer? refreshTimer;
   String get groupId => field(widget.group, ['id']);
 
