@@ -1976,13 +1976,26 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           Card(
             color: panel,
             child: ListTile(
-              leading: const CircleAvatar(child: Icon(Icons.person, color: gold)),
-              title: Text(_personName(friend)),
+              leading: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => PublicProfilePage(person: friend, currentUserId: myId),
+                )),
+                child: const CircleAvatar(child: Icon(Icons.person, color: gold)),
+              ),
+              title: InkWell(
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => PublicProfilePage(person: friend, currentUserId: myId),
+                )),
+                child: Text(_personName(friend)),
+              ),
               subtitle: Text('@${_personUsername(friend)}'),
-              trailing: const Icon(Icons.chevron_left),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => ChatPage(friend: friend, currentUserId: myId)),
+              trailing: IconButton(
+                tooltip: 'فتح المحادثة',
+                icon: const Icon(Icons.chat_bubble_outline, color: gold),
+                onPressed: () => Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => ChatPage(friend: friend, currentUserId: myId),
+                )),
               ),
             ),
           ),
@@ -2059,8 +2072,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           Card(
             color: panel,
             child: ListTile(
-              leading: const CircleAvatar(child: Icon(Icons.person, color: gold)),
-              title: Text(_personName(person)),
+              leading: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => PublicProfilePage(person: person, currentUserId: myId),
+                )),
+                child: const CircleAvatar(child: Icon(Icons.person, color: gold)),
+              ),
+              title: InkWell(
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => PublicProfilePage(person: person, currentUserId: myId),
+                )),
+                child: Text(_personName(person)),
+              ),
               subtitle: Text('@${_personUsername(person)}'),
               trailing: IconButton(
                 icon: const Icon(Icons.chat, color: gold),
@@ -2991,6 +3015,120 @@ class _NearbyDevicesPageState extends State<NearbyDevicesPage> {
   }
 }
 
+class PublicProfilePage extends StatelessWidget {
+  final Map<String, dynamic> person;
+  final String currentUserId;
+
+  const PublicProfilePage({
+    super.key,
+    required this.person,
+    required this.currentUserId,
+  });
+
+  Map<String, dynamic> get profile => person['user'] is Map
+      ? Map<String, dynamic>.from(person['user'])
+      : person;
+
+  @override
+  Widget build(BuildContext context) {
+    final user = profile;
+    final id = field(user, ['id', 'user_id', 'friend_id']);
+    final name = field(user, ['displayName', 'display_name', 'name', 'username'], 'مستخدم برق');
+    final username = field(user, ['username'], 'user');
+    final phone = field(user, ['phone']);
+    final photoUrl = field(user, ['photoUrl', 'photo_url']);
+    final photoUpdatedAt = field(user, ['photoUpdatedAt', 'photo_updated_at']);
+    final imageUrl = photoUrl.isEmpty
+        ? ''
+        : '$apiBase$photoUrl?v=${Uri.encodeComponent(photoUpdatedAt)}';
+
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(title: const Text('الملف الشخصي')),
+        body: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            const SizedBox(height: 18),
+            Center(
+              child: Container(
+                width: 132,
+                height: 132,
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: electricBlue.withValues(alpha: 0.75), width: 2),
+                  boxShadow: [
+                    BoxShadow(color: electricBlue.withValues(alpha: 0.18), blurRadius: 24),
+                  ],
+                ),
+                child: CircleAvatar(
+                  backgroundColor: const Color(0xFF46391F),
+                  backgroundImage: imageUrl.isNotEmpty
+                      ? NetworkImage(imageUrl, headers: {'Authorization': 'Bearer ${Api.token}'})
+                      : null,
+                  child: imageUrl.isEmpty
+                      ? Text(name.characters.first, style: const TextStyle(color: gold, fontSize: 48))
+                      : null,
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(name, textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 25, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 5),
+            Text('@$username', textAlign: TextAlign.center,
+                style: const TextStyle(color: gold, fontSize: 16)),
+            const SizedBox(height: 26),
+            Card(
+              color: panel,
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.badge_outlined, color: gold),
+                    title: const Text('اسم المستخدم'),
+                    subtitle: Text('@$username'),
+                  ),
+                  if (phone.isNotEmpty) const Divider(height: 1, indent: 16, endIndent: 16),
+                  if (phone.isNotEmpty)
+                    ListTile(
+                      leading: const Icon(Icons.phone_outlined, color: gold),
+                      title: const Text('رقم الهاتف'),
+                      subtitle: Text(phone, textDirection: TextDirection.ltr),
+                    ),
+                  const Divider(height: 1, indent: 16, endIndent: 16),
+                  ListTile(
+                    leading: const Icon(Icons.flash_on_rounded, color: gold),
+                    title: const Text('على برق'),
+                    subtitle: const Text('التواصل بنبض الضوء'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            if (id.isNotEmpty && id != currentUserId)
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: electricBlue,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(50),
+                ),
+                onPressed: () => Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ChatPage(friend: person, currentUserId: currentUserId),
+                  ),
+                ),
+                icon: const Icon(Icons.chat_bubble_outline),
+                label: const Text('إرسال رسالة'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class ChatPage extends StatefulWidget {
   final Map<String, dynamic> friend;
   final String currentUserId;
@@ -3290,13 +3428,25 @@ class _ChatPageState extends State<ChatPage> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         appBar: AppBar(
-          title: Row(mainAxisSize: MainAxisSize.min, children: [
-            Flexible(child: Text(name, overflow: TextOverflow.ellipsis)),
-            if (BarqFeatures.lightningMode) ...[
-              const SizedBox(width: 6),
-              const Icon(Icons.flash_on_rounded, color: gold, size: 18),
-            ],
-          ]),
+          title: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => PublicProfilePage(person: widget.friend, currentUserId: widget.currentUserId),
+            )),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              CircleAvatar(
+                radius: 17,
+                backgroundColor: const Color(0xFF46391F),
+                child: Text(name.characters.first, style: const TextStyle(color: gold, fontSize: 14)),
+              ),
+              const SizedBox(width: 9),
+              Flexible(child: Text(name, overflow: TextOverflow.ellipsis)),
+              if (BarqFeatures.lightningMode) ...[
+                const SizedBox(width: 6),
+                const Icon(Icons.flash_on_rounded, color: gold, size: 18),
+              ],
+            ]),
+          ),
           actions: [IconButton(onPressed: loadMessages, icon: const Icon(Icons.refresh, color: gold))],
         ),
         body: Column(
