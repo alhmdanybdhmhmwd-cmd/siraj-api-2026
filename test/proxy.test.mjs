@@ -45,6 +45,62 @@ test("media proxy rejects oversized declared Content-Length before reading or fo
   }
 });
 
+test("profile photo proxy rejects uploads above 5 MB before reading or forwarding", async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalled = false;
+  globalThis.fetch = async () => { fetchCalled = true; throw new Error("unexpected upstream request"); };
+  try {
+    const res = makeResponse();
+    let streamRead = false;
+    const req = {
+      url: "/api/profile/photo/me", method: "POST",
+      headers: { "content-length": String(5 * 1024 * 1024 + 1) },
+      async *[Symbol.asyncIterator]() { streamRead = true; }
+    };
+    await handler(req, res);
+    assert.equal(res.statusCode, 413);
+    assert.equal(streamRead, false);
+    assert.equal(fetchCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("profile photo proxy forwards authenticated binary image uploads", async () => {
+  const originalFetch = globalThis.fetch;
+  let forwarded = null;
+  const bytes = Buffer.from([0xff, 0xd8, 0xff, 0x00]);
+  globalThis.fetch = async (url, options) => {
+    forwarded = { url, method: options.method, headers: options.headers, body: Buffer.from(options.body) };
+    return new Response(JSON.stringify({ photoUrl: "/api/profile/photo/user-1" }), {
+      status: 201, headers: { "content-type": "application/json" }
+    });
+  };
+  try {
+    const res = makeResponse();
+    const req = makeRequest({
+      url: "/api/profile/photo/me",
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-token",
+        "content-type": "image/jpeg",
+        "content-length": String(bytes.length)
+      },
+      chunks: [bytes]
+    });
+    await handler(req, res);
+    assert.equal(res.statusCode, 201);
+    assert.equal(forwarded.url, "https://siraj-api.alhmdanybdhmhmwd.workers.dev/api/profile/photo/me");
+    assert.equal(forwarded.method, "POST");
+    assert.equal(forwarded.headers.Authorization, "Bearer test-token");
+    assert.equal(forwarded.headers["Content-Type"], "image/jpeg");
+    assert.deepEqual(forwarded.body, bytes);
+    assert.deepEqual(JSON.parse(res.body.toString()), { photoUrl: "/api/profile/photo/user-1" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("media proxy rejects streamed bodies over 60 MB when Content-Length is absent", async () => {
   const originalFetch = globalThis.fetch;
   let fetchCalled = false;
