@@ -1067,12 +1067,23 @@ String field(Map<String, dynamic> data, List<String> keys, [String fallback = ''
   return fallback;
 }
 
+/// بعض استجابات المجموعات تعيد photo_updated_at دون photoUrl؛ نبني المسار
+/// من معرّف صاحب الصورة فقط عند وجود توقيت تحديث صالح.
+String profilePhotoPath(Map<String, dynamic> user) {
+  final existing = field(user, ['photoUrl', 'photo_url']);
+  if (existing.isNotEmpty) return existing;
+  final id = field(user, ['id', 'user_id', 'friend_id', 'sender_id']);
+  final updatedAt = field(user, ['photoUpdatedAt', 'photo_updated_at']);
+  if (id.isEmpty || updatedAt.isEmpty) return '';
+  return '/api/profile/photo/${Uri.encodeComponent(id)}';
+}
+
 Widget personAvatar(Map<String, dynamic> person, {double radius = 22}) {
   final user = person['user'] is Map
       ? Map<String, dynamic>.from(person['user'])
       : person;
   final name = field(user, ['displayName', 'display_name', 'name', 'username'], '؟');
-  final photoUrl = field(user, ['photoUrl', 'photo_url']);
+  final photoUrl = profilePhotoPath(user);
   final photoUpdatedAt = field(user, ['photoUpdatedAt', 'photo_updated_at']);
   final imageUrl = photoUrl.isEmpty
       ? ''
@@ -3067,7 +3078,7 @@ class PublicProfilePage extends StatelessWidget {
     final name = field(user, ['displayName', 'display_name', 'name', 'username'], 'مستخدم برق');
     final username = field(user, ['username'], 'user');
     final phone = field(user, ['phone']);
-    final photoUrl = field(user, ['photoUrl', 'photo_url']);
+    final photoUrl = profilePhotoPath(user);
     final photoUpdatedAt = field(user, ['photoUpdatedAt', 'photo_updated_at']);
     final imageUrl = photoUrl.isEmpty
         ? ''
