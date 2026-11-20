@@ -588,6 +588,34 @@ class Api {
     });
   }
 
+  static Future<void> reactPrivateMessage(String messageId, String emoji, {bool remove = false}) async {
+    final path = '/api/messages/${Uri.encodeComponent(messageId)}/reactions';
+    if (remove) {
+      await request('DELETE', '$path?emoji=${Uri.encodeQueryComponent(emoji)}');
+    } else {
+      await request('POST', path, body: {'emoji': emoji});
+    }
+  }
+
+  static Future<void> pinPrivateMessage(String messageId, {bool pinned = true}) async {
+    await request(pinned ? 'POST' : 'DELETE',
+      '/api/messages/${Uri.encodeComponent(messageId)}/pin');
+  }
+
+  static Future<void> reactGroupMessage(String groupId, String messageId, String emoji, {bool remove = false}) async {
+    final path = '/api/groups/${Uri.encodeComponent(groupId)}/messages/${Uri.encodeComponent(messageId)}/reactions';
+    if (remove) {
+      await request('DELETE', '$path?emoji=${Uri.encodeQueryComponent(emoji)}');
+    } else {
+      await request('POST', path, body: {'emoji': emoji});
+    }
+  }
+
+  static Future<void> pinGroupMessage(String groupId, String messageId, {bool pinned = true}) async {
+    await request(pinned ? 'POST' : 'DELETE',
+      '/api/groups/${Uri.encodeComponent(groupId)}/messages/${Uri.encodeComponent(messageId)}/pin');
+  }
+
   static Future<void> editPrivateMessage(String messageId, String body) async {
     await request('PATCH', '/api/messages/${Uri.encodeComponent(messageId)}', body: {'body': body});
   }
@@ -1056,6 +1084,88 @@ class BarqNearbyService {
   }
 }
 
+const List<String> barqReactionEmojis = ["👍", "❤️", "😂", "😮", "😢", "😡", "🎉", "🔥"];
+
+Future<String?> showMessageReactionPicker(BuildContext context) {
+  return showModalBottomSheet<String>(
+    context: context,
+    backgroundColor: panel,
+    builder: (sheetContext) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Wrap(
+          alignment: WrapAlignment.spaceEvenly,
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (final emoji in barqReactionEmojis)
+              InkWell(
+                borderRadius: BorderRadius.circular(24),
+                onTap: () => Navigator.pop(sheetContext, emoji),
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Text(emoji, style: const TextStyle(fontSize: 30)),
+                ),
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+List<Map<String, dynamic>> normalizeMessageReactions(dynamic raw) {
+  if (raw is! List) return [];
+  return raw.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+}
+
+Widget messageReactionBar({
+  required Map<String, dynamic> message,
+  required String currentUserId,
+  required Future<void> Function(String emoji, bool remove) onReaction,
+}) {
+  final reactions = normalizeMessageReactions(message['reactions']);
+  final grouped = <String, List<Map<String, dynamic>>>{};
+  for (final reaction in reactions) {
+    final emoji = field(reaction, ['emoji']);
+    if (barqReactionEmojis.contains(emoji)) {
+      grouped.putIfAbsent(emoji, () => []).add(reaction);
+    }
+  }
+  return Padding(
+    padding: const EdgeInsets.only(top: 5),
+    child: Wrap(
+      spacing: 5,
+      runSpacing: 4,
+      children: [
+        for (final entry in grouped.entries)
+          ActionChip(
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            backgroundColor: entry.value.any((item) => field(item, ['user_id']) == currentUserId)
+                ? const Color(0x554A8DFF) : Colors.black26,
+            label: Text('${entry.key} ${entry.value.length}', style: const TextStyle(fontSize: 11)),
+            onPressed: () => onReaction(
+              entry.key,
+              entry.value.any((item) => field(item, ['user_id']) == currentUserId),
+            ),
+          ),
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+          padding: EdgeInsets.zero,
+          tooltip: 'إضافة تفاعل',
+          icon: const Icon(Icons.add_reaction_outlined, size: 18, color: Colors.white60),
+          onPressed: () async {
+            final emoji = await showMessageReactionPicker(context);
+            if (emoji != null) await onReaction(emoji, false);
+          },
+        ),
+      ],
+    ),
+  );
+}
+
 Future<void> showMessageActions(
   BuildContext context, {
   required Map<String, dynamic> message,
@@ -1063,6 +1173,9 @@ Future<void> showMessageActions(
   required Future<void> Function() onDelete,
   Future<void> Function(Map<String, dynamic> message)? onReply,
   Future<void> Function(String body)? onEdit,
+  Future<void> Function(String emoji)? onReact,
+  Future<void> Function()? onPin,
+  bool isPinned = false,
 }) async {
   final action = await showModalBottomSheet<String>(
     context: context,
@@ -1076,6 +1189,18 @@ Future<void> showMessageActions(
             title: const Text('نسخ الرسالة'),
             onTap: () => Navigator.pop(sheetContext, 'copy'),
           ),
+          if (onReact != null)
+            ListTile(
+              leading: const Icon(Icons.add_reaction_outlined, color: gold),
+              title: const Text('إضافة تفاعل'),
+              onTap: () => Navigator.pop(sheetContext, 'react'),
+            ),
+          if (onPin != null)
+            ListTile(
+              leading: Icon(isPinned ? Icons.push_pin : Icons.push_pin_outlined, color: gold),
+              title: Text(isPinned ? 'إلغاء تثبيت الرسالة' : 'تثبيت الرسالة'),
+              onTap: () => Navigator.pop(sheetContext, 'pin'),
+            ),
           if (onReply != null)
             ListTile(
               leading: const Icon(Icons.reply_rounded, color: gold),
@@ -1098,7 +1223,12 @@ Future<void> showMessageActions(
       ),
     ),
   );
-  if (action == 'reply' && onReply != null) {
+  if (action == 'react' && onReact != null && context.mounted) {
+    final emoji = await showMessageReactionPicker(context);
+    if (emoji != null) await onReact(emoji);
+  } else if (action == 'pin' && onPin != null) {
+    await onPin();
+  } else if (action == 'reply' && onReply != null) {
     await onReply(message);
   } else if (action == 'edit' && onEdit != null && context.mounted) {
     final initial = field(message, ['body', 'content', 'message']);
@@ -4130,6 +4260,19 @@ class _ChatPageState extends State<ChatPage> {
                                                   if (mounted) await loadMessages();
                                                 }
                                               : null,
+                                          onReact: m['is_ephemeral'] != true && m['is_offline_pending'] != true
+                                              ? (emoji) async {
+                                                  await Api.reactPrivateMessage(field(m, ['id', 'message_id']), emoji);
+                                                  if (mounted) await loadMessages(silent: true);
+                                                }
+                                              : null,
+                                          onPin: m['is_ephemeral'] != true && m['is_offline_pending'] != true
+                                              ? () async {
+                                                  await Api.pinPrivateMessage(field(m, ['id', 'message_id']), pinned: m['is_pinned'] != true);
+                                                  if (mounted) await loadMessages(silent: true);
+                                                }
+                                              : null,
+                                          isPinned: m['is_pinned'] == true,
                                         ),
                                         child: Text(field(m, ['body', 'content', 'message'])),
                                       ),
@@ -4156,6 +4299,24 @@ class _ChatPageState extends State<ChatPage> {
                                         ],
                                       ],
                                     ),
+                                    if (m['is_pinned'] == true)
+                                      const Padding(
+                                        padding: EdgeInsets.only(top: 4),
+                                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                          Icon(Icons.push_pin, size: 12, color: gold),
+                                          SizedBox(width: 3),
+                                          Text('مثبتة', style: TextStyle(color: gold, fontSize: 10)),
+                                        ]),
+                                      ),
+                                    if (m['is_ephemeral'] != true && m['is_offline_pending'] != true)
+                                      messageReactionBar(
+                                        message: m,
+                                        currentUserId: widget.currentUserId,
+                                        onReaction: (emoji, remove) async {
+                                          await Api.reactPrivateMessage(field(m, ['id', 'message_id']), emoji, remove: remove);
+                                          if (mounted) await loadMessages(silent: true);
+                                        },
+                                      ),
                                   ],
                                 ),
                               ),
@@ -4574,6 +4735,15 @@ class _GroupChatPageState extends State<GroupChatPage> {
                                         if (mounted) await loadMessages();
                                       }
                                     : null,
+                                onReact: (emoji) async {
+                                  await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), emoji);
+                                  if (mounted) await loadMessages(silent: true);
+                                },
+                                onPin: () async {
+                                  await Api.pinGroupMessage(groupId, field(m, ['id', 'message_id']), pinned: m['is_pinned'] != true);
+                                  if (mounted) await loadMessages(silent: true);
+                                },
+                                isPinned: m['is_pinned'] == true,
                               ),
                               child: Text(field(m, ['body'])),
                             ),
@@ -4596,6 +4766,23 @@ class _GroupChatPageState extends State<GroupChatPage> {
                               ],
                             ],
                           )),
+                          if (m['is_pinned'] == true)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 4),
+                              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                Icon(Icons.push_pin, size: 12, color: gold),
+                                SizedBox(width: 3),
+                                Text('مثبتة', style: TextStyle(color: gold, fontSize: 10)),
+                              ]),
+                            ),
+                          messageReactionBar(
+                            message: m,
+                            currentUserId: widget.currentUserId,
+                            onReaction: (emoji, remove) async {
+                              await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), emoji, remove: remove);
+                              if (mounted) await loadMessages(silent: true);
+                            },
+                          ),
                         ]),
                       ),
                     );
