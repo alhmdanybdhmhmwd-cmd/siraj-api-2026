@@ -429,6 +429,40 @@ test("SPARK stories can group multiple media objects under one owner-controlled 
   assert.ok(flutterApp.includes("for (final item in prepared)"));
 });
 
+test("SPARK voice replies are private, limited, tied to status expiry, and cleaned from Tigris", () => {
+  const start = worker.indexOf("const sparkAudioReplyMatch");
+  const end = worker.indexOf("// SPARK replies and reactions", start);
+  const route = worker.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  assert.ok(route.includes('method === "POST"'));
+  assert.ok(route.includes('method === "GET"'));
+  assert.ok(route.includes('expires_at > CURRENT_TIMESTAMP'));
+  assert.ok(route.includes("FROM friendships reciprocal"));
+  assert.ok(route.includes('consumeLoginAttempt(env, "spark_audio_reply"'));
+  assert.ok(route.includes("durationMs > 60000"));
+  assert.ok(route.includes("5 * 1024 * 1024"));
+  assert.ok(route.includes('audioSignature !== "ftyp"'));
+  assert.ok(route.includes("INSERT INTO status_audio_replies"));
+  assert.ok(route.includes("INSERT INTO media_expirations"));
+  assert.ok(route.includes("Cache-Control: \"private, no-store\""));
+  const cleanupStart = worker.indexOf("async function cleanupExpiredMedia");
+  const cleanupEnd = worker.indexOf("async function cleanupExpiredEphemeralMessages", cleanupStart);
+  const cleanup = worker.slice(cleanupStart, cleanupEnd);
+  assert.ok(cleanup.includes("DELETE FROM status_audio_replies WHERE object_key = ?"));
+  assert.ok(cleanup.includes("DELETE FROM status_audio_replies WHERE status_id IN (SELECT id FROM status_posts WHERE expires_at <= ?)"));
+});
+
+test("Android SPARK viewer records up to 60-second AAC voice replies and plays authorized audio", () => {
+  assert.ok(flutterApp.includes("AudioRecorder"));
+  assert.ok(flutterApp.includes("AudioEncoder.aacLc"));
+  assert.ok(flutterApp.includes("_finishAudioReplyRecording"));
+  assert.ok(flutterApp.includes("uploadSparkAudioReply"));
+  assert.ok(flutterApp.includes("fetchSparkAudioReplyBytes"));
+  assert.ok(flutterApp.includes("_SparkAudioReplyTile"));
+  assert.ok(flutterApp.includes("X-Audio-Duration-Ms"));
+  assert.ok(flutterApp.includes("RECORD_AUDIO"));
+});
+
 test("SPARK reactions and replies require an active status visible to the requesting contact", () => {
   const start = worker.indexOf("const sparkInteractionMatch");
   const end = worker.indexOf("// Ensure privacy preferences table exists", start);

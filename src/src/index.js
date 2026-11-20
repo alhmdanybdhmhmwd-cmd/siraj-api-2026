@@ -5,7 +5,7 @@ import { prepareConversationSummaryTranscript, buildConversationSummaryMessages,
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-File-Name, X-Recipient-Id, X-Group-Id, X-Status-Caption, X-Status-Id",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-File-Name, X-Recipient-Id, X-Group-Id, X-Status-Caption, X-Status-Id, X-Audio-Duration-Ms",
   "Content-Type": "application/json; charset=utf-8"
 };
 
@@ -598,6 +598,16 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
     )
   `).run();
   await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS status_audio_replies (
+      id TEXT PRIMARY KEY, status_id TEXT NOT NULL, user_id TEXT NOT NULL,
+      object_key TEXT NOT NULL UNIQUE, content_type TEXT NOT NULL,
+      size INTEGER NOT NULL, duration_ms INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `).run();
+  await env.DB.prepare(`
     CREATE TABLE IF NOT EXISTS status_views (
       status_id TEXT NOT NULL, viewer_id TEXT NOT NULL,
       viewed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -648,6 +658,7 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
       const response = await storage.fetch(storageUrl, { method: "DELETE" });
       if (response.ok || response.status === 404) {
         await env.DB.prepare("DELETE FROM status_media WHERE object_key = ?").bind(key).run();
+        await env.DB.prepare("DELETE FROM status_audio_replies WHERE object_key = ?").bind(key).run();
         await env.DB.prepare("DELETE FROM media_access WHERE object_key = ?").bind(key).run();
         await env.DB.prepare(
           "DELETE FROM media_expirations WHERE object_key = ? AND expires_at <= ?"
@@ -672,6 +683,9 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
   ).bind(cutoff).run();
   await env.DB.prepare(
     "DELETE FROM status_media WHERE status_id IN (SELECT id FROM status_posts WHERE expires_at <= ?)"
+  ).bind(cutoff).run();
+  await env.DB.prepare(
+    "DELETE FROM status_audio_replies WHERE status_id IN (SELECT id FROM status_posts WHERE expires_at <= ?)"
   ).bind(cutoff).run();
   await env.DB.prepare("DELETE FROM status_posts WHERE expires_at <= ?").bind(cutoff).run();
   return { checked: (expired.results || []).length, deleted };
@@ -2040,6 +2054,170 @@ export default {
         return json({ error: "Method not allowed" }, 405);
       }
 
+
+      // Private voice replies for SPARK. Audio objects inherit the parent status expiry.
+      const sparkAudioReplyMatch = path.match(/^\\/api\\/statuses\\/([^/]+)\\/audio-replies(?:\\/([^/]+))?$/);
+      if (sparkAudioReplyMatch) {
+        let statusId, audioReplyId = null;
+        try {
+          statusId = decodeURIComponent(sparkAudioReplyMatch[1]);
+          audioReplyId = sparkAudioReplyMatch[2] ? decodeURIComponent(sparkAudioReplyMatch[2]) : null;
+        } catch (_) {
+          return json({ error: "Invalid SPARK audio reply identifier" }, 400);
+        }
+        const status = await env.DB.prepare(
+          "SELECT user_id, expires_at FROM status_posts WHERE id = ? AND expires_at > CURRENT_TIMESTAMP"
+        ).bind(statusId).first();
+        if (!status) return json({ error: "SPARK status not found or expired" }, 404);
+        const isOwner = status.user_id === currentUser.sub;
+        if (!isOwner) {
+          const friendship = await env.DB.prepare(
+            `SELECT 1 FROM friendships f
+             WHERE f.user_id = ? AND f.friend_id = ?
+               AND EXISTS (
+                 SELECT 1 FROM friendships reciprocal
+                 WHERE reciprocal.user_id = ? AND reciprocal.friend_id = ?
+               )`
+          ).bind(currentUser.sub, status.user_id, status.user_id, currentUser.sub).first();
+          if (!friendship) return json({ error: "SPARK status access denied" }, 403);
+        }
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_audio_replies (
+            id TEXT PRIMARY KEY, status_id TEXT NOT NULL, user_id TEXT NOT NULL,
+            object_key TEXT NOT NULL UNIQUE, content_type TEXT NOT NULL,
+            size INTEGER NOT NULL, duration_ms INTEGER NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        if (method === "POST" && !audioReplyId) {
+          if (!env.TIGRIS_ACCESS_KEY_ID || !env.TIGRIS_SECRET_ACCESS_KEY) {
+            return json({ error: "Media storage credentials are not configured" }, 503);
+          }
+          if (!(await consumeLoginAttempt(env, "spark_audio_reply", currentUser.sub, 10))) {
+            return new Response(JSON.stringify({ error: "Too many SPARK voice replies. Try again later." }), {
+              status: 429, headers: { ...corsHeaders, "Retry-After": "900" }
+            });
+          }
+          const contentType = (request.headers.get("Content-Type") || "").split(";")[0].trim().toLowerCase();
+          if (contentType !== "audio/mp4") return json({ error: "SPARK voice replies must use AAC audio in an MP4 container" }, 415);
+          const durationMs = Number(request.headers.get("X-Audio-Duration-Ms"));
+          if (!Number.isInteger(durationMs) || durationMs < 1000 || durationMs > 60000) {
+            return json({ error: "SPARK voice replies must be between 1 and 60 seconds" }, 400);
+          }
+          const maxAudioReplyBytes = 5 * 1024 * 1024;
+          const declaredLength = Number(request.headers.get("Content-Length"));
+          if (Number.isFinite(declaredLength) && declaredLength > maxAudioReplyBytes) {
+            return json({ error: "SPARK voice replies must not exceed 5 MB" }, 413);
+          }
+          const bytes = await readRequestBodyLimited(request, maxAudioReplyBytes);
+          if (!bytes?.byteLength) return json({ error: "SPARK audio is empty or exceeds 5 MB" }, 413);
+          const audioSignature = bytes.length >= 12
+            ? String.fromCharCode(...bytes.slice(4, 8))
+            : "";
+          if (audioSignature !== "ftyp") return json({ error: "Invalid AAC audio file" }, 415);
+
+          const audioReplyId = crypto.randomUUID();
+          const objectKey = currentUser.sub + "/spark-audio/" + crypto.randomUUID();
+          const expiresAt = status.expires_at;
+          const bucket = env.TIGRIS_BUCKET || "siraj-media";
+          const objectPath = objectKey.split("/").map(encodeURIComponent).join("/");
+          const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
+          const storage = new AwsClient({
+            accessKeyId: env.TIGRIS_ACCESS_KEY_ID,
+            secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY,
+            service: "s3",
+            region: "auto",
+            retries: 2
+          });
+          const putResponse = await storage.fetch(storageUrl, {
+            method: "PUT",
+            headers: {
+              "Content-Type": contentType,
+              "x-amz-meta-ownerid": currentUser.sub,
+              "x-amz-meta-statusid": statusId,
+              "x-amz-meta-expiresat": expiresAt,
+              "x-amz-meta-category": "spark-audio-reply"
+            },
+            body: bytes
+          });
+          if (!putResponse.ok) return json({ error: "SPARK voice reply upload failed" }, 502);
+          try {
+            await env.DB.batch([
+              env.DB.prepare(
+                "INSERT INTO status_audio_replies (id, status_id, user_id, object_key, content_type, size, duration_ms, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+              ).bind(audioReplyId, statusId, currentUser.sub, objectKey, contentType, bytes.byteLength, durationMs, new Date().toISOString()),
+              env.DB.prepare(
+                "INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?)"
+              ).bind(objectKey, expiresAt)
+            ]);
+          } catch (error) {
+            try { await storage.fetch(storageUrl, { method: "DELETE" }); } catch (_) {}
+            throw error;
+          }
+          if (!isOwner) {
+            try {
+              const sender = await env.DB.prepare("SELECT display_name FROM users WHERE id = ?").bind(currentUser.sub).first();
+              await sendSirajPush(env, status.user_id, currentUser.sub,
+                sender?.display_name || currentUser.username || "مستخدم برق",
+                "رد صوتي جديد على SPARK", { category: "statuses" });
+            } catch (notificationError) {
+              console.error("SPARK audio reply notification failed:", notificationError);
+            }
+          }
+          return json({ audioReply: {
+            id: audioReplyId, statusId, userId: currentUser.sub,
+            contentType, size: bytes.byteLength, durationMs,
+            createdAt: new Date().toISOString()
+          } }, 201);
+        }
+        if (method === "GET" && !audioReplyId) {
+          const rows = await env.DB.prepare(
+            `SELECT r.id, r.user_id AS userId, r.content_type AS contentType,
+                    r.duration_ms AS durationMs, r.created_at AS createdAt,
+                    u.display_name AS displayName, u.username
+             FROM status_audio_replies r JOIN users u ON u.id = r.user_id
+             WHERE r.status_id = ? ORDER BY r.created_at ASC LIMIT 100`
+          ).bind(statusId).all();
+          return json({ audioReplies: rows.results || [] });
+        }
+        if (method === "GET" && audioReplyId) {
+          if (!env.TIGRIS_ACCESS_KEY_ID || !env.TIGRIS_SECRET_ACCESS_KEY) {
+            return json({ error: "Media storage credentials are not configured" }, 503);
+          }
+          const row = await env.DB.prepare(
+            `SELECT object_key AS objectKey, content_type AS contentType, expires_at AS expiresAt
+             FROM status_audio_replies r JOIN status_posts s ON s.id = r.status_id
+             WHERE r.id = ? AND r.status_id = ? AND s.expires_at > CURRENT_TIMESTAMP LIMIT 1`
+          ).bind(audioReplyId, statusId).first();
+          if (!row) return json({ error: "SPARK audio reply not found or expired" }, 404);
+          const bucket = env.TIGRIS_BUCKET || "siraj-media";
+          const objectPath = row.objectKey.split("/").map(encodeURIComponent).join("/");
+          const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
+          const storage = new AwsClient({
+            accessKeyId: env.TIGRIS_ACCESS_KEY_ID,
+            secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY,
+            service: "s3",
+            region: "auto",
+            retries: 2
+          });
+          const media = await storage.fetch(storageUrl);
+          if (!media.ok) return json({ error: "SPARK audio reply media unavailable" }, media.status === 404 ? 404 : 502);
+          return new Response(media.body, {
+            status: 200,
+            headers: {
+              ...corsHeaders,
+              "Content-Type": row.contentType,
+              "Cache-Control": "private, no-store",
+              "X-Content-Type-Options": "nosniff",
+              "Content-Disposition": "inline"
+            }
+          });
+        }
+        return json({ error: "Method not allowed" }, 405);
+      }
+
       // SPARK replies and reactions are available only while the status is active and visible.
       const sparkInteractionMatch = path.match(/^\/api\/statuses\/([^/]+)\/(reactions|replies)$/);
       if (sparkInteractionMatch) {
@@ -2070,6 +2248,16 @@ export default {
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (status_id, user_id, emoji),
             FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE
+          )
+        `).run();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_audio_replies (
+            id TEXT PRIMARY KEY, status_id TEXT NOT NULL, user_id TEXT NOT NULL,
+            object_key TEXT NOT NULL UNIQUE, content_type TEXT NOT NULL,
+            size INTEGER NOT NULL, duration_ms INTEGER NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
           )
         `).run();
         await env.DB.prepare(`
@@ -2104,7 +2292,14 @@ export default {
              FROM status_replies r JOIN users u ON u.id = r.user_id
              WHERE r.status_id = ? ORDER BY r.created_at ASC LIMIT 100`
           ).bind(statusId).all();
-          return json({ replies: replies.results || [] });
+          const audioReplies = await env.DB.prepare(
+            `SELECT r.id, r.user_id AS userId, r.content_type AS contentType,
+                    r.duration_ms AS durationMs, r.created_at AS createdAt,
+                    u.display_name AS displayName, u.username
+             FROM status_audio_replies r JOIN users u ON u.id = r.user_id
+             WHERE r.status_id = ? ORDER BY r.created_at ASC LIMIT 100`
+          ).bind(statusId).all();
+          return json({ replies: replies.results || [], audioReplies: audioReplies.results || [] });
         }
         if (method === "POST") {
           const replyAllowed = await consumeLoginAttempt(env, "spark_reply", currentUser.sub, 20);

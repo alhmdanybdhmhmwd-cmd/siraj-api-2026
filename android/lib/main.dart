@@ -660,11 +660,58 @@ class Api {
     }
   }
 
-  static Future<List<Map<String, dynamic>>> sparkReplies(String statusId) async =>
-      _list((await request('GET', '/api/statuses/${Uri.encodeComponent(statusId)}/replies'))['replies']);
+  static Future<List<Map<String, dynamic>>> sparkReplies(String statusId) async {
+    final data = await request('GET', '/api/statuses/${Uri.encodeComponent(statusId)}/replies');
+    final textReplies = _list(data['replies']).map((item) => {...item, 'kind': 'text'});
+    final audioReplies = _list(data['audioReplies']).map((item) => {...item, 'kind': 'audio'});
+    final combined = <Map<String, dynamic>>[...textReplies, ...audioReplies];
+    combined.sort((a, b) => (a['createdAt'] ?? '').toString().compareTo((b['createdAt'] ?? '').toString()));
+    return combined;
+  }
 
   static Future<void> replyToSpark(String statusId, String body) async {
     await request('POST', '/api/statuses/${Uri.encodeComponent(statusId)}/replies', body: {'body': body});
+  }
+
+  static Future<void> uploadSparkAudioReply({
+    required String statusId,
+    required List<int> bytes,
+    required int durationMs,
+  }) async {
+    if (BarqFeatures.lightningMode) {
+      throw Exception('وضع البرق مفعّل: إرسال الردود الصوتية متوقف مؤقتًا.');
+    }
+    if (bytes.isEmpty || bytes.length > 5 * 1024 * 1024) {
+      throw Exception('حجم الرد الصوتي يجب ألا يتجاوز 5 ميجابايت.');
+    }
+    if (durationMs < 1000 || durationMs > 60000) {
+      throw Exception('مدة الرد الصوتي يجب أن تكون بين ثانية و60 ثانية.');
+    }
+    final uri = Uri.parse('$mediaWorkerBase/api/statuses/${Uri.encodeComponent(statusId)}/audio-replies');
+    final response = await http.post(uri, headers: {
+      if (token != null) 'Authorization': 'Bearer $token',
+      'Content-Type': 'audio/mp4',
+      'X-Audio-Duration-Ms': durationMs.toString(),
+    }, body: bytes).timeout(const Duration(minutes: 2));
+    Map<String, dynamic> data = {};
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) data = decoded;
+    } catch (_) {}
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception((data['error'] ?? 'تعذر إرسال الرد الصوتي (${response.statusCode}).').toString());
+    }
+  }
+
+  static Future<Uint8List> fetchSparkAudioReplyBytes(String statusId, String replyId) async {
+    final uri = Uri.parse('$mediaWorkerBase/api/statuses/${Uri.encodeComponent(statusId)}/audio-replies/${Uri.encodeComponent(replyId)}');
+    final response = await http.get(uri, headers: {
+      if (token != null) 'Authorization': 'Bearer $token',
+    }).timeout(const Duration(minutes: 2));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('تعذر تشغيل الرد الصوتي (${response.statusCode}).');
+    }
+    return response.bodyBytes;
   }
 
   static Uri sparkMediaUri(String attachmentId) => Uri.parse(
@@ -5933,6 +5980,13 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
   List<Map<String, dynamic>> _replies = [];
   bool _loadingReplies = true;
   bool _sendingReply = false;
+  final AudioRecorder _audioRecorder = AudioRecorder();
+  Timer? _audioRecordingTimer;
+  Stopwatch? _audioRecordingWatch;
+  bool _recordingAudioReply = false;
+  bool _uploadingAudioReply = false;
+  int _recordingSeconds = 0;
+  String? _recordingPath;
 
   @override
   void initState() {
@@ -5973,8 +6027,80 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
     }
   }
 
+  Future<void> _toggleAudioReplyRecording() async {
+    if (_uploadingAudioReply) return;
+    if (_recordingAudioReply) {
+      await _finishAudioReplyRecording();
+      return;
+    }
+    if (BarqFeatures.lightningMode) {
+      showMsg(context, 'وضع البرق مفعّل: الردود الصوتية متوقفة.');
+      return;
+    }
+    try {
+      final allowed = await _audioRecorder.hasPermission();
+      if (!allowed) {
+        if (mounted) showMsg(context, 'اسمح لبرق باستخدام الميكروفون لإرسال رد صوتي.');
+        return;
+      }
+      final path = '${Directory.systemTemp.path}/barq_spark_${DateTime.now().microsecondsSinceEpoch}.m4a';
+      await _audioRecorder.start(
+        const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000, sampleRate: 44100),
+        path: path,
+      );
+      _recordingPath = path;
+      _audioRecordingWatch = Stopwatch()..start();
+      if (mounted) setState(() { _recordingAudioReply = true; _recordingSeconds = 0; });
+      _audioRecordingTimer?.cancel();
+      _audioRecordingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        final seconds = _audioRecordingWatch?.elapsed.inSeconds ?? 0;
+        if (mounted) setState(() => _recordingSeconds = seconds.clamp(0, 60));
+        if (seconds >= 60) _finishAudioReplyRecording();
+      });
+    } catch (error) {
+      if (mounted) showMsg(context, cleanError(error));
+    }
+  }
+
+  Future<void> _finishAudioReplyRecording() async {
+    if (!_recordingAudioReply || _uploadingAudioReply) return;
+    _audioRecordingTimer?.cancel();
+    _audioRecordingTimer = null;
+    _audioRecordingWatch?.stop();
+    final durationMs = (_audioRecordingWatch?.elapsedMilliseconds ?? 0).clamp(0, 60000);
+    String? path;
+    try {
+      path = await _audioRecorder.stop();
+    } catch (error) {
+      if (mounted) showMsg(context, cleanError(error));
+    }
+    if (mounted) setState(() { _recordingAudioReply = false; _uploadingAudioReply = true; });
+    try {
+      if (path == null || path.isEmpty) throw Exception('تعذر حفظ التسجيل الصوتي.');
+      if (durationMs < 1000) throw Exception('سجّل ثانية واحدة على الأقل.');
+      final file = File(path);
+      final bytes = await file.readAsBytes();
+      await Api.uploadSparkAudioReply(statusId: widget.statusId, bytes: bytes, durationMs: durationMs);
+      await _loadReplies();
+      if (mounted) showMsg(context, 'تم إرسال الرد الصوتي.');
+    } catch (error) {
+      if (mounted) showMsg(context, cleanError(error));
+    } finally {
+      final filePath = path ?? _recordingPath;
+      if (filePath != null) {
+        try { await File(filePath).delete(); } catch (_) {}
+      }
+      _recordingPath = null;
+      _audioRecordingWatch = null;
+      if (mounted) setState(() { _uploadingAudioReply = false; _recordingSeconds = 0; });
+    }
+  }
+
   @override
   void dispose() {
+    _audioRecordingTimer?.cancel();
+    if (_recordingAudioReply) _audioRecorder.stop();
+    _audioRecorder.dispose();
     _replyController.dispose();
     super.dispose();
   }
@@ -6042,16 +6168,26 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
                             itemCount: _replies.length,
                             itemBuilder: (context, index) {
                               final reply = _replies[index];
+                              final author = (reply['displayName'] ?? reply['username'] ?? 'مستخدم').toString();
+                              if (reply['kind'] == 'audio') {
+                                return _SparkAudioReplyTile(statusId: widget.statusId, reply: reply, author: author);
+                              }
                               return Padding(
                                 padding: const EdgeInsets.symmetric(vertical: 3),
                                 child: Text(
-                                  '${reply['displayName'] ?? reply['username'] ?? 'مستخدم'}: ${reply['body'] ?? ''}',
+                                  '$author: ${reply['body'] ?? ''}',
                                   style: const TextStyle(color: Colors.white70),
                                 ),
                               );
                             },
                           ),
               ),
+              if (_recordingAudioReply)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text('جارٍ التسجيل 00:${_recordingSeconds.toString().padLeft(2, '0')} / 01:00',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                ),
               Row(children: [
                 Expanded(child: TextField(
                   controller: _replyController, maxLength: 1000,
@@ -6064,6 +6200,14 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
                   onSubmitted: (_) => _sendReply(),
                 )),
                 IconButton(
+                  tooltip: _recordingAudioReply ? 'إيقاف وإرسال الرد الصوتي' : 'تسجيل رد صوتي',
+                  onPressed: _uploadingAudioReply ? null : _toggleAudioReplyRecording,
+                  icon: _uploadingAudioReply
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: gold))
+                      : Icon(_recordingAudioReply ? Icons.stop_circle_rounded : Icons.mic_rounded,
+                          color: _recordingAudioReply ? Colors.redAccent : gold),
+                ),
+                IconButton(
                   onPressed: _sendingReply ? null : _sendReply,
                   icon: _sendingReply
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: gold))
@@ -6074,6 +6218,107 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
           ),
         ]),
       ),
+    );
+  }
+}
+
+class _SparkAudioReplyTile extends StatefulWidget {
+  final String statusId;
+  final Map<String, dynamic> reply;
+  final String author;
+  const _SparkAudioReplyTile({required this.statusId, required this.reply, required this.author});
+
+  @override
+  State<_SparkAudioReplyTile> createState() => _SparkAudioReplyTileState();
+}
+
+class _SparkAudioReplyTileState extends State<_SparkAudioReplyTile> {
+  final AudioPlayer _player = AudioPlayer();
+  StreamSubscription<PlayerState>? _stateSubscription;
+  StreamSubscription<Duration>? _positionSubscription;
+  StreamSubscription<Duration>? _durationSubscription;
+  bool _playing = false;
+  bool _loading = false;
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _stateSubscription = _player.onPlayerStateChanged.listen((state) {
+      if (mounted) setState(() => _playing = state == PlayerState.playing);
+    });
+    _positionSubscription = _player.onPositionChanged.listen((value) {
+      if (mounted) setState(() => _position = value);
+    });
+    _durationSubscription = _player.onDurationChanged.listen((value) {
+      if (mounted) setState(() => _duration = value);
+    });
+  }
+
+  Future<void> _toggle() async {
+    if (_loading) return;
+    try {
+      if (_playing) {
+        await _player.pause();
+        return;
+      }
+      if (_position > Duration.zero && _position < _duration) {
+        await _player.resume();
+        return;
+      }
+      setState(() => _loading = true);
+      final id = (widget.reply['id'] ?? '').toString();
+      final bytes = await Api.fetchSparkAudioReplyBytes(widget.statusId, id);
+      await _player.play(BytesSource(bytes));
+    } catch (error) {
+      if (mounted) showMsg(context, cleanError(error));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _stateSubscription?.cancel();
+    _positionSubscription?.cancel();
+    _durationSubscription?.cancel();
+    _player.dispose();
+    super.dispose();
+  }
+
+  String _clock(Duration value) {
+    final seconds = value.inSeconds;
+    return '${(seconds ~/ 60).toString().padLeft(2, '0')}:${(seconds % 60).toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final declaredMs = int.tryParse((widget.reply['durationMs'] ?? 0).toString()) ?? 0;
+    final total = _duration > Duration.zero ? _duration : Duration(milliseconds: declaredMs);
+    final maximum = total.inMilliseconds > 0 ? total.inMilliseconds.toDouble() : 1.0;
+    final current = _position.inMilliseconds.clamp(0, maximum.toInt()).toDouble();
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.07), borderRadius: BorderRadius.circular(10)),
+      child: Row(children: [
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          onPressed: _toggle,
+          icon: _loading
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: gold))
+              : Icon(_playing ? Icons.pause_circle_filled : Icons.play_circle_fill, color: gold),
+        ),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          Text(widget.author, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+          Slider(
+            value: current, min: 0, max: maximum,
+            onChanged: _duration > Duration.zero ? (value) => _player.seek(Duration(milliseconds: value.round())) : null,
+          ),
+        ])),
+        Text('${_clock(_position)} / ${_clock(total)}', style: const TextStyle(color: Colors.white54, fontSize: 10)),
+      ]),
     );
   }
 }
