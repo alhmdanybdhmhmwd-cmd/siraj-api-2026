@@ -40,7 +40,7 @@ void main() {
 
     expect(find.text('الملف الشخصي'), findsOneWidget);
     expect(find.text('صديق برق'), findsOneWidget);
-    expect(find.text('@barq_friend'), findsOneWidget);
+    expect(find.text('@barq_friend'), findsNWidgets(2));
     expect(find.text('+967700000001'), findsOneWidget);
     expect(find.text('إرسال رسالة'), findsOneWidget);
   });
