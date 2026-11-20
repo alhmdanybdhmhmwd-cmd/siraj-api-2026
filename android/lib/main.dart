@@ -1465,8 +1465,7 @@ Future<void> showConversationSearch(
                                         dense: true,
                                         title: Text(field(message, ['body', 'content', 'message']),
                                             maxLines: 3, overflow: TextOverflow.ellipsis),
-                                        subtitle: Text(field(message, ['display_name', 'username']) +
-                                            ' · ' + _messageTime(field(message, ['created_at', 'createdAt']))),
+                                        subtitle: Text('${field(message, ['display_name', 'username'])} · ${_messageTime(field(message, ['created_at', 'createdAt']))}'),
                                       );
                                     },
                                   ),
