@@ -217,15 +217,18 @@ test("server-side message search is scoped, authenticated, bounded, and rate-lim
   assert.ok(privateSearch.includes("instr(lower(m.body), lower(?))"));
   assert.ok(privateSearch.includes("message-search-private"));
   assert.ok(privateSearch.includes("Math.min(50"));
+  assert.ok(privateSearch.includes("nextCursor: hasMore && oldest"));
   assert.ok(groupSearch.includes("group_members"));
   assert.ok(groupSearch.includes("instr(lower(gm.body), lower(?))"));
   assert.ok(groupSearch.includes("message-search-group"));
   assert.ok(groupSearch.includes("Math.min(50"));
+  assert.ok(groupSearch.includes("nextCursor: hasMore && oldest"));
   assert.ok(flutterApp.includes("searchPrivateMessages"));
   assert.ok(flutterApp.includes("searchGroupMessages"));
   assert.ok(flutterApp.includes("جميع رسائل المحادثة"));
-  assert.ok(flutterApp.includes("Api.searchPrivateMessages(friendId, query)"));
-  assert.ok(flutterApp.includes("Api.searchGroupMessages(groupId, query)"));
+  assert.ok(flutterApp.includes("Api.searchPrivateMessages(friendId, query, before: before)"));
+  assert.ok(flutterApp.includes("Api.searchGroupMessages(groupId, query, before: before)"));
+  assert.ok(flutterApp.includes("نتائج أقدم"));
 });
 
 test("private and group message pagination uses stable compound cursors and merges without duplicates", () => {
