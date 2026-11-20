@@ -444,7 +444,7 @@ test("SPARK voice replies are private, limited, tied to status expiry, and clean
   assert.ok(route.includes('audioSignature !== "ftyp"'));
   assert.ok(route.includes("INSERT INTO status_audio_replies"));
   assert.ok(route.includes("INSERT INTO media_expirations"));
-  assert.ok(route.includes("Cache-Control: \"private, no-store\""));
+  assert.ok(route.includes(""Cache-Control": \"private, no-store\""));
   const cleanupStart = worker.indexOf("async function cleanupExpiredMedia");
   const cleanupEnd = worker.indexOf("async function cleanupExpiredEphemeralMessages", cleanupStart);
   const cleanup = worker.slice(cleanupStart, cleanupEnd);
@@ -460,7 +460,7 @@ test("Android SPARK viewer records up to 60-second AAC voice replies and plays a
   assert.ok(flutterApp.includes("fetchSparkAudioReplyBytes"));
   assert.ok(flutterApp.includes("_SparkAudioReplyTile"));
   assert.ok(flutterApp.includes("X-Audio-Duration-Ms"));
-  assert.ok(flutterApp.includes("RECORD_AUDIO"));
+  assert.ok(flutterApp.includes("_audioRecorder.hasPermission()"));
 });
 
 test("SPARK reactions and replies require an active status visible to the requesting contact", () => {

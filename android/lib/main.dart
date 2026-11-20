@@ -6054,7 +6054,7 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
       _audioRecordingTimer?.cancel();
       _audioRecordingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
         final seconds = _audioRecordingWatch?.elapsed.inSeconds ?? 0;
-        if (mounted) setState(() => _recordingSeconds = seconds.clamp(0, 60));
+        if (mounted) setState(() => _recordingSeconds = seconds.clamp(0, 60).toInt());
         if (seconds >= 60) _finishAudioReplyRecording();
       });
     } catch (error) {
