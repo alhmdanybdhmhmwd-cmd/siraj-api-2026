@@ -273,8 +273,10 @@ function cleanUser(user) {
     username: user.username,
     displayName: user.display_name,
     phone: user.phone || null,
-    photoUrl: user.photo_updated_at ? "/api/profile/photo/" + encodeURIComponent(user.id) : null,
-    photoUpdatedAt: user.photo_updated_at || null
+    ...(user.photo_updated_at ? {
+      photoUrl: "/api/profile/photo/" + encodeURIComponent(user.id),
+      photoUpdatedAt: user.photo_updated_at
+    } : {})
   };
 }
 
