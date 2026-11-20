@@ -355,3 +355,52 @@ test("group ownership transfer is conditional, owner-only, and limited to existi
   assert.ok(flutterApp.includes("barqCanTransferGroupOwnership"));
   assert.ok(flutterApp.includes("نقل ملكية المجموعة"));
 });
+
+
+test("SPARK media publishing stores private image/video objects with a 24-hour lifetime", () => {
+  const uploadStart = worker.indexOf('path === "/api/statuses/media"');
+  const uploadEnd = worker.indexOf("// Publish a 24-hour text status", uploadStart);
+  const uploadRoute = worker.slice(uploadStart, uploadEnd);
+  assert.ok(uploadStart >= 0 && uploadEnd > uploadStart);
+  assert.ok(uploadRoute.includes('method === "POST"'));
+  assert.ok(uploadRoute.includes("image/(jpeg|png|webp|gif)|video/(mp4|webm|quicktime)"));
+  assert.ok(uploadRoute.includes("60 * 1024 * 1024"));
+  assert.ok(uploadRoute.includes("Date.now() + 24 * 60 * 60 * 1000"));
+  assert.ok(uploadRoute.includes("CREATE TABLE IF NOT EXISTS status_media"));
+  assert.ok(uploadRoute.includes("INSERT INTO media_access"));
+  assert.ok(uploadRoute.includes("INSERT INTO media_expirations"));
+  assert.ok(uploadRoute.includes('category: "statuses"'));
+  assert.ok(uploadRoute.includes("env.DB.batch"));
+  assert.ok(uploadRoute.includes("storage.fetch(storageUrl, { method: \"DELETE\" })"));
+});
+
+test("SPARK media reads enforce active friend visibility and expire with their status", () => {
+  const mediaStart = worker.indexOf('path === "/api/media/"');
+  const mediaEnd = worker.indexOf("return json({ error: \"Route not found\" }, 404)", mediaStart);
+  const mediaRoute = worker.slice(mediaStart, mediaEnd);
+  assert.ok(mediaStart >= 0);
+  assert.ok(mediaRoute.includes("FROM status_media sm JOIN status_posts sp"));
+  assert.ok(mediaRoute.includes("sparkMedia.ownerId === currentUser.sub"));
+  assert.ok(mediaRoute.includes("FROM friendships WHERE user_id = ? AND friend_id = ?"));
+  assert.ok(mediaRoute.includes("sparkMedia.expiresAt"));
+  assert.ok(mediaRoute.includes("if (!accessRow && !sparkMedia)"));
+  assert.ok(mediaRoute.includes("SPARK media access denied"));
+
+  const cleanupStart = worker.indexOf("async function cleanupExpiredMedia");
+  const cleanupEnd = worker.indexOf("async function cleanupExpiredEphemeralMessages", cleanupStart);
+  const cleanup = worker.slice(cleanupStart, cleanupEnd);
+  assert.ok(cleanup.includes("SELECT status_id FROM status_media WHERE object_key = ?"));
+  assert.ok(cleanup.includes("DELETE FROM status_media WHERE status_id = ?"));
+  assert.ok(cleanup.includes("DELETE FROM status_posts WHERE id = ?"));
+});
+
+test("Android SPARK media flow supports authenticated upload, caption, image/video viewing and paging", () => {
+  assert.ok(flutterApp.includes("publishSparkMedia"));
+  assert.ok(flutterApp.includes("X-Status-Caption"));
+  assert.ok(flutterApp.includes("FileType.media"));
+  assert.ok(flutterApp.includes("publishSparkMediaDialog"));
+  assert.ok(flutterApp.includes("SparkMediaViewer"));
+  assert.ok(flutterApp.includes("PageView.builder"));
+  assert.ok(flutterApp.includes("VideoPlayerController.networkUrl"));
+  assert.ok(flutterApp.includes("Api.sparkMediaUri"));
+});
