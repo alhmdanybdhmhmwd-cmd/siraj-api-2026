@@ -5,7 +5,7 @@ import { prepareConversationSummaryTranscript, buildConversationSummaryMessages,
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-File-Name, X-Recipient-Id, X-Group-Id",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-File-Name, X-Recipient-Id, X-Group-Id, X-Status-Caption, X-Status-Id",
   "Content-Type": "application/json; charset=utf-8"
 };
 
