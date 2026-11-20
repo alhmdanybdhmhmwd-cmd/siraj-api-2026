@@ -333,6 +333,19 @@ async function readRequestBodyLimited(request, maxBytes) {
   return result;
 }
 
+function detectSparkMediaType(bytes) {
+  const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const ascii = (start, end) => String.fromCharCode(...b.slice(start, end));
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b.length >= 8 && b[0] === 0x89 && ascii(1, 4) === "PNG" &&
+      b[4] === 0x0d && b[5] === 0x0a && b[6] === 0x1a && b[7] === 0x0a) return "image/png";
+  if (b.length >= 12 && ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP") return "image/webp";
+  if (b.length >= 6 && (ascii(0, 6) === "GIF87a" || ascii(0, 6) === "GIF89a")) return "image/gif";
+  if (b.length >= 12 && ascii(4, 8) === "ftyp") return "video/mp4";
+  if (b.length >= 4 && b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) return "video/webm";
+  return null;
+}
+
 function detectProfileImageType(bytes) {
   const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
@@ -1674,6 +1687,11 @@ export default {
         }
         const bytes = await readRequestBodyLimited(request, maxStatusMediaBytes);
         if (!bytes?.byteLength) return json({ error: "SPARK media is empty or too large" }, 413);
+        // Never trust a client-supplied MIME type: validate the actual file signature
+        // before storing it or serving it back to other accounts.
+        if (detectSparkMediaType(bytes) !== contentType) {
+          return json({ error: "SPARK file content does not match its declared media type" }, 415);
+        }
         const caption = String(request.headers.get("X-Status-Caption") || "").trim();
         if (caption.length > 1000) return json({ error: "SPARK caption must not exceed 1000 characters" }, 400);
 
@@ -1723,6 +1741,12 @@ export default {
             return json({ error: "SPARK status not found or expired" }, 404);
           }
           existingStatusExpiry = existingStatus.expires_at;
+          const existingMediaCount = await env.DB.prepare(
+            "SELECT COUNT(*) AS count FROM status_media WHERE status_id = ?"
+          ).bind(requestedStatusId).first();
+          if (Number(existingMediaCount?.count || 0) >= 10) {
+            return json({ error: "A SPARK status can contain at most 10 media files" }, 409);
+          }
         }
         const mediaId = crypto.randomUUID();
         const objectKey = currentUser.sub + "/" + crypto.randomUUID();
