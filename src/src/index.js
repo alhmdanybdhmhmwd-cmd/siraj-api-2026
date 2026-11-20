@@ -1,4 +1,5 @@
 import { AwsClient } from "aws4fetch";
+import { prepareConversationSummaryTranscript, buildConversationSummaryMessages, extractConversationSummaryText } from "./conversation_summary.js";
 
 
 const corsHeaders = {
@@ -598,6 +599,35 @@ async function cleanupExpiredRateLimits(env, now = Date.now()) {
 }
 
 export { phoneVariants, safeFileName, cleanupExpiredMedia, cleanupExpiredRateLimits, cleanupExpiredEphemeralMessages, cleanupExpiredRevokedSessions };
+
+
+async function createConversationSummary(env, messages, conversationType) {
+  if (!env.AI || typeof env.AI.run !== "function") {
+    return json({ error: "Conversation summaries are not configured" }, 503);
+  }
+  const transcript = prepareConversationSummaryTranscript(messages);
+  if (!transcript.length) {
+    return json({ error: "لا توجد رسائل نصية كافية لتلخيصها." }, 422);
+  }
+  try {
+    const result = await env.AI.run("@cf/qwen/qwen3.8-27b", {
+      messages: buildConversationSummaryMessages(transcript, conversationType),
+      max_tokens: 380,
+      temperature: 0.2
+    });
+    const summary = extractConversationSummaryText(result);
+    if (!summary) return json({ error: "تعذر إنشاء ملخص واضح. حاول مرة أخرى." }, 502);
+    return json({
+      summary,
+      messageCount: transcript.length,
+      generatedAt: new Date().toISOString(),
+      scope: "latest_available_messages"
+    });
+  } catch (error) {
+    console.error("Conversation summary inference failed:", error?.name || "Error");
+    return json({ error: "تعذر إنشاء ملخص المحادثة حاليًا. حاول مرة أخرى." }, 502);
+  }
+}
 
 export default {
   async scheduled(_controller, env) {
@@ -2049,6 +2079,29 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         });
       }
 
+
+      // On-demand group summary. Membership is checked before reading any message.
+      const groupSummaryMatch = path.match(/^\/api\/groups\/([^/]+)\/summary$/);
+      if (method === "POST" && groupSummaryMatch) {
+        const groupId = groupSummaryMatch[1];
+        const member = await env.DB.prepare(
+          "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
+        ).bind(groupId, currentUser.sub).first();
+        if (!member) return json({ error: "Group not found" }, 404);
+        if (!(await consumeLoginAttempt(env, "conversation-summary", currentUser.sub, 5))) {
+          return json({ error: "تم بلوغ حد الملخصات؛ حاول بعد 15 دقيقة." }, 429);
+        }
+        const result = await env.DB.prepare(`
+          SELECT gm.sender_id, u.display_name, gm.body, gm.created_at
+          FROM group_messages gm
+          JOIN users u ON u.id = gm.sender_id
+          WHERE gm.group_id = ?
+          ORDER BY gm.created_at DESC, gm.id DESC
+          LIMIT 60
+        `).bind(groupId).all();
+        return createConversationSummary(env, result.results || [], "محادثة جماعية");
+      }
+
       const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
       if (groupMessagesMatch) {
         const groupId = groupMessagesMatch[1];
@@ -2254,6 +2307,36 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           message: "Message sent",
           id
         }, 201);
+      }
+
+
+      // On-demand private conversation summary. Only the two current contacts may request it.
+      const privateSummaryMatch = path.match(/^\/api\/messages\/([^/]+)\/summary$/);
+      if (method === "POST" && privateSummaryMatch) {
+        let friendId;
+        try { friendId = decodeURIComponent(privateSummaryMatch[1]); } catch (_) {
+          return json({ error: "Invalid conversation identifier" }, 400);
+        }
+        if (!friendId || friendId.length > 128 || friendId === currentUser.sub) {
+          return json({ error: "Invalid conversation identifier" }, 400);
+        }
+        const friendship = await env.DB.prepare(
+          "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
+        ).bind(currentUser.sub, friendId).first();
+        if (!friendship) return json({ error: "Conversation access denied" }, 403);
+        if (!(await consumeLoginAttempt(env, "conversation-summary", currentUser.sub, 5))) {
+          return json({ error: "تم بلوغ حد الملخصات؛ حاول بعد 15 دقيقة." }, 429);
+        }
+        const result = await env.DB.prepare(`
+          SELECT m.sender_id, u.display_name, m.body, m.created_at
+          FROM messages m
+          JOIN users u ON u.id = m.sender_id
+          WHERE (m.sender_id = ? AND m.receiver_id = ?)
+             OR (m.sender_id = ? AND m.receiver_id = ?)
+          ORDER BY m.created_at DESC, m.id DESC
+          LIMIT 60
+        `).bind(currentUser.sub, friendId, friendId, currentUser.sub).all();
+        return createConversationSummary(env, result.results || [], "محادثة فردية");
       }
 
       // Private reactions and pins are scoped to the two participants only.
