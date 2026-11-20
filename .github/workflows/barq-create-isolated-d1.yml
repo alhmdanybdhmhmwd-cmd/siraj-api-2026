@@ -25,6 +25,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Validate account and isolate production
+        id: validate
         shell: bash
         run: |
           set -euo pipefail
@@ -40,10 +41,19 @@ jobs:
           const list = Array.isArray(rows) ? rows : (rows.result ?? rows.databases ?? []);
           const prod = list.find(x => x.uuid === process.env.PRODUCTION_DB_ID);
           if (!prod || prod.name !== 'siraj-db') throw new Error('Production DB identity check failed; refusing to create anything.');
-          if (list.some(x => x.name === process.env.DB_NAME)) throw new Error('Target test DB already exists; refusing duplicate creation.');
-          console.log('Safety check passed: production DB identified and target name unused.');
+          const existing = list.find(x => x.name === process.env.DB_NAME);
+          if (existing) {
+            if (!existing.uuid || existing.uuid === process.env.PRODUCTION_DB_ID) throw new Error('Existing test DB identity is unsafe; refusing to continue.');
+            fs.writeFileSync('created-db-id.txt', existing.uuid);
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, 'exists=true\\n');
+            console.log('Verified existing isolated test DB; no duplicate will be created:', existing.uuid);
+          } else {
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, 'exists=false\\n');
+            console.log('Safety check passed: production DB identified and target name unused.');
+          }
           NODE
       - name: Create dedicated test database
+        if: steps.validate.outputs.exists != 'true'
         shell: bash
         run: |
           set -euo pipefail
