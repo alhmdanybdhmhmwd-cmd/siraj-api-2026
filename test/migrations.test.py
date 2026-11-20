@@ -102,7 +102,7 @@ class RecoveryMigrationTests(unittest.TestCase):
                    VALUES ('missing', 'hash', 'salt', 9999999999, 1)"""
             )
 
-        self.db.execute("INSERT INTO users (id) VALUES ('user-1')")
+        self.db.execute("INSERT INTO users (id, username, display_name, password_hash, password_salt, phone) VALUES ('user-1', 'user1', 'User One', 'hash', 'salt', NULL)")
         self.db.execute(
             """INSERT INTO recovery_codes
                (user_id, code_hash, code_salt, expires_at, created_at)
@@ -157,7 +157,7 @@ class RecoveryMigrationTests(unittest.TestCase):
         self.assertIn("revoked_sessions", tables)
         self.assertIn("idx_revoked_sessions_expiry", indexes)
 
-        self.db.execute("INSERT INTO users (id) VALUES ('user-1')")
+        self.db.execute("INSERT INTO users (id, username, display_name, password_hash, password_salt, phone) VALUES ('user-1', 'user1', 'User One', 'hash', 'salt', NULL)")
         self.db.execute(
             """INSERT INTO revoked_sessions (token_hash, user_id, expires_at)
                VALUES ('sha256-digest-only', 'user-1', 2000)"""
