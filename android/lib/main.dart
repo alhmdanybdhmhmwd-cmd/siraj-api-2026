@@ -2005,13 +2005,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               leading: InkWell(
                 customBorder: const CircleBorder(),
                 onTap: () => Navigator.push(context, MaterialPageRoute(
-                  builder: (_) => PublicProfilePage(person: friend, currentUserId: myId),
+                  builder: (_) => PublicProfilePage(person: friend, currentUserId: myId, canMessage: true),
                 )),
                 child: personAvatar(friend),
               ),
               title: InkWell(
                 onTap: () => Navigator.push(context, MaterialPageRoute(
-                  builder: (_) => PublicProfilePage(person: friend, currentUserId: myId),
+                  builder: (_) => PublicProfilePage(person: friend, currentUserId: myId, canMessage: true),
                 )),
                 child: Text(_personName(friend)),
               ),
@@ -3462,7 +3462,7 @@ class _ChatPageState extends State<ChatPage> {
           title: InkWell(
             borderRadius: BorderRadius.circular(18),
             onTap: () => Navigator.push(context, MaterialPageRoute(
-              builder: (_) => PublicProfilePage(person: widget.friend, currentUserId: widget.currentUserId),
+              builder: (_) => PublicProfilePage(person: widget.friend, currentUserId: widget.currentUserId, canMessage: true),
             )),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               personAvatar(widget.friend, radius: 17),
