@@ -1,12 +1,6 @@
 name: BARQ isolated Preview Worker deploy
 
 on:
-  push:
-    branches:
-      - barq/phase-2-android-ci-2026-11-20
-    paths:
-      - ".github/workflows/barq-preview-deploy.yml"
-      - "wrangler.test.toml"
   workflow_dispatch:
     inputs:
       deploy_preview:
@@ -20,7 +14,7 @@ permissions:
 
 jobs:
   deploy-preview:
-    if: github.event_name == 'push' || inputs.deploy_preview == true
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_preview == true
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
