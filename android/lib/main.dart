@@ -593,6 +593,20 @@ class Api {
     await request('POST', '/api/groups/$groupId/members', body: {'userId': userId});
   }
 
+  static Future<void> setGroupMemberRole(
+    String groupId, String userId, String role,
+  ) async {
+    await request(
+      'POST',
+      '/api/groups/$groupId/members/$userId/role',
+      body: {'role': role},
+    );
+  }
+
+  static Future<void> removeGroupMember(String groupId, String userId) async {
+    await request('DELETE', '/api/groups/$groupId/members/$userId');
+  }
+
   static Future<List<Map<String, dynamic>>> groupMembers(String groupId) async =>
       _list((await request('GET', '/api/groups/$groupId/members'))['members']);
 
@@ -5806,10 +5820,67 @@ class _GroupChatPageState extends State<GroupChatPage> {
                     itemBuilder: (context, index) {
                       final member = members[index];
                       final isOwner = member['is_owner'] == 1 || member['is_owner'] == true;
+                      final memberRole = isOwner ? 'owner' : field(member, ['role'], 'member');
+                      final actorRole = field(widget.group, ['current_role'], 'member');
+                      final memberId = field(member, ['id', 'user_id']);
+                      final isSelf = memberId == widget.currentUserId;
+                      final canManageRoles = actorRole == 'owner' && !isOwner;
+                      final canRemove = !isOwner && !isSelf &&
+                          (actorRole == 'owner' || (actorRole == 'admin' && memberRole == 'member'));
+                      final canLeave = isSelf && !isOwner;
                       return ListTile(
                         leading: personAvatar(member),
                         title: Text(field(member, ['display_name', 'displayName', 'username'], 'عضو')),
-                        subtitle: Text(isOwner ? 'مالك المجموعة' : '@${field(member, ['username'])}'),
+                        subtitle: Text(isOwner ? 'مالك المجموعة' : '${memberRole == 'admin' ? 'مشرف' : '@${field(member, ['username'])}'}'),
+                        trailing: (canManageRoles || canRemove || canLeave)
+                            ? PopupMenuButton<String>(
+                                onSelected: (action) async {
+                                  final actionLabel = action == 'remove' ? 'إزالة هذا العضو من المجموعة؟'
+                                      : action == 'leave' ? 'هل تريد مغادرة المجموعة؟'
+                                      : action == 'admin' ? 'تعيين هذا العضو مشرفًا؟'
+                                      : 'إلغاء صلاحية الإشراف عن هذا العضو؟';
+                                  final confirmed = await showDialog<bool>(
+                                    context: context,
+                                    builder: (confirmContext) => AlertDialog(
+                                      backgroundColor: panel,
+                                      title: const Text('تأكيد الإجراء'),
+                                      content: Text(actionLabel),
+                                      actions: [
+                                        TextButton(onPressed: () => Navigator.pop(confirmContext, false), child: const Text('إلغاء')),
+                                        FilledButton(
+                                          onPressed: () => Navigator.pop(confirmContext, true),
+                                          child: const Text('تأكيد'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                  if (confirmed != true || !mounted) return;
+                                  try {
+                                    if (action == 'admin' || action == 'member') {
+                                      await Api.setGroupMemberRole(groupId, memberId, action);
+                                    } else {
+                                      await Api.removeGroupMember(groupId, memberId);
+                                    }
+                                    if (!mounted) return;
+                                    Navigator.pop(dialogContext);
+                                    showMsg(this.context, action == 'leave' ? 'غادرت المجموعة.' : 'تم تحديث عضوية المجموعة.');
+                                    await showGroupMembers();
+                                  } catch (e) {
+                                    if (mounted) showMsg(this.context, cleanError(e));
+                                  }
+                                },
+                                itemBuilder: (_) => [
+                                  if (canManageRoles && memberRole != 'admin')
+                                    const PopupMenuItem(value: 'admin', child: Text('تعيين مشرف')),
+                                  if (canManageRoles && memberRole == 'admin')
+                                    const PopupMenuItem(value: 'member', child: Text('إلغاء الإشراف')),
+                                  if (canRemove)
+                                    const PopupMenuItem(value: 'remove', child: Text('إزالة من المجموعة')),
+                                  if (canLeave)
+                                    const PopupMenuItem(value: 'leave', child: Text('مغادرة المجموعة')),
+                                ],
+                              )
+                            : null,
                         onTap: () {
                           Navigator.pop(dialogContext);
                           Navigator.push(context, MaterialPageRoute(
@@ -5883,7 +5954,9 @@ class _GroupChatPageState extends State<GroupChatPage> {
               tooltip: 'أدوات المحادثة',
             ),
             IconButton(onPressed: showGroupMembers, icon: const Icon(Icons.people_alt_outlined, color: gold), tooltip: 'أعضاء المجموعة'),
-            IconButton(onPressed: widget.onAddMember, icon: const Icon(Icons.person_add_alt_1, color: gold), tooltip: 'إضافة عضو'),
+            if (const ['owner', 'admin'].contains('owner') &&
+                ['owner', 'admin'].contains(field(widget.group, ['current_role'], 'member')))
+              IconButton(onPressed: widget.onAddMember, icon: const Icon(Icons.person_add_alt_1, color: gold), tooltip: 'إضافة عضو'),
             IconButton(onPressed: loadMessages, icon: const Icon(Icons.refresh, color: gold)),
           ],
         ),
