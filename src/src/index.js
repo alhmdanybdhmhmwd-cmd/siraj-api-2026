@@ -1778,12 +1778,15 @@ export default {
           "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
         ).bind(groupId, currentUser.sub).first();
         if (!member) return json({ error: "Group not found" }, 404);
+        await ensureProfilePhotos(env);
         const result = await env.DB.prepare(`
           SELECT u.id, u.username, u.display_name, u.phone, m.joined_at,
+                 p.updated_at AS photo_updated_at,
                  CASE WHEN g.owner_id = u.id THEN 1 ELSE 0 END AS is_owner
           FROM group_members m
           JOIN users u ON u.id = m.user_id
           JOIN chat_groups g ON g.id = m.group_id
+          LEFT JOIN profile_photos p ON p.user_id = u.id
           WHERE m.group_id = ?
           ORDER BY is_owner DESC, u.display_name ASC
         `).bind(groupId).all();
@@ -1829,12 +1832,14 @@ export default {
             return json({ error: "Invalid message cursor" }, 400);
           }
           const cursorClause = before ? "AND (gm.created_at < ? OR (gm.created_at = ? AND gm.id < ?))" : "";
+          await ensureProfilePhotos(env);
           const statement = env.DB.prepare(`
             SELECT * FROM (
               SELECT gm.id, gm.group_id, gm.sender_id, gm.body, gm.created_at,
-                     u.username, u.display_name
+                     u.username, u.display_name, p.updated_at AS photo_updated_at
               FROM group_messages gm
               JOIN users u ON u.id = gm.sender_id
+              LEFT JOIN profile_photos p ON p.user_id = u.id
               WHERE gm.group_id = ? ${cursorClause}
               ORDER BY gm.created_at DESC, gm.id DESC
               LIMIT ?
