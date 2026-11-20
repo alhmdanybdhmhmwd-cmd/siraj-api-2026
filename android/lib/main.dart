@@ -1090,7 +1090,14 @@ Future<void> showMessageActions(
         ],
       ),
     );
-    if (confirmed == true) await onDelete();
+    if (confirmed == true) {
+      try {
+        await onDelete();
+        if (context.mounted) showMsg(context, 'تم حذف الرسالة');
+      } catch (error) {
+        if (context.mounted) showMsg(context, cleanError(error));
+      }
+    }
   }
 }
 
@@ -3964,7 +3971,7 @@ class _ChatPageState extends State<ChatPage> {
                                         onLongPress: () => showMessageActions(
                                           context,
                                           message: m,
-                                          canDelete: mine,
+                                          canDelete: mine && m['is_ephemeral'] != true && m['is_offline_pending'] != true,
                                           onDelete: () async {
                                             await Api.deletePrivateMessage(field(m, ['id', 'message_id']));
                                             if (mounted) await loadMessages();
