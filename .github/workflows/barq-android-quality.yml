@@ -41,6 +41,13 @@ jobs:
       - name: Install dependencies
         working-directory: android
         run: flutter pub get
+      - name: Upload resolved dependency lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: barq-resolved-pubspec-lock
+          path: android/pubspec.lock
+          if-no-files-found: error
+          retention-days: 3
       - name: Analyze Dart source
         working-directory: android
         run: flutter analyze
