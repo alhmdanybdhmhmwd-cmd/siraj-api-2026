@@ -286,6 +286,36 @@ function cleanUser(user) {
   };
 }
 
+async function readRequestBodyLimited(request, maxBytes) {
+  const stream = request.body;
+  if (!stream) return new Uint8Array();
+  const reader = stream.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = value instanceof Uint8Array ? value : new Uint8Array(value);
+      total += chunk.byteLength;
+      if (total > maxBytes) {
+        try { await reader.cancel(); } catch (_) {}
+        return null;
+      }
+      chunks.push(chunk);
+    }
+  } finally {
+    try { reader.releaseLock(); } catch (_) {}
+  }
+  const result = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return result;
+}
+
 function detectProfileImageType(bytes) {
   const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
@@ -598,7 +628,7 @@ async function cleanupExpiredRateLimits(env, now = Date.now()) {
   return results;
 }
 
-export { phoneVariants, safeFileName, cleanupExpiredMedia, cleanupExpiredRateLimits, cleanupExpiredEphemeralMessages, cleanupExpiredRevokedSessions };
+export { phoneVariants, safeFileName, cleanupExpiredMedia, cleanupExpiredRateLimits, cleanupExpiredEphemeralMessages, cleanupExpiredRevokedSessions , readRequestBodyLimited };
 
 
 async function createConversationSummary(env, messages, conversationType) {
@@ -1023,8 +1053,11 @@ export default {
         if (Number.isFinite(declaredLength) && declaredLength > maxTranscriptionBytes) {
           return json({ error: "Audio must not exceed 2 MB for transcription" }, 413);
         }
-        const audio = await request.arrayBuffer();
-        if (!audio.byteLength || audio.byteLength > maxTranscriptionBytes) {
+        const audio = await readRequestBodyLimited(request, maxTranscriptionBytes);
+        if (!audio) {
+          return json({ error: "Audio must not exceed 2 MB for transcription" }, 413);
+        }
+        if (!audio.byteLength) {
           return json({ error: "Audio must be between 1 byte and 2 MB" }, 413);
         }
 
