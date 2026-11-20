@@ -2789,6 +2789,78 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     controller.dispose();
   }
 
+  Future<void> publishSparkMediaDialog() async {
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.media, allowMultiple: false, withData: true,
+    );
+    if (picked == null || picked.files.isEmpty) return;
+    final file = picked.files.single;
+    final extension = (file.extension ?? '').toLowerCase();
+    const mimeTypes = <String, String>{
+      'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+      'webp': 'image/webp', 'gif': 'image/gif',
+      'mp4': 'video/mp4', 'webm': 'video/webm', 'mov': 'video/quicktime',
+    };
+    final contentType = mimeTypes[extension];
+    if (contentType == null) {
+      if (mounted) showMsg(context, 'اختر صورة أو فيديو بصيغة مدعومة.');
+      return;
+    }
+    final bytes = file.bytes ?? (file.path == null ? null : await File(file.path!).readAsBytes());
+    if (bytes == null || bytes.isEmpty) {
+      if (mounted) showMsg(context, 'تعذر قراءة الملف المحدد.');
+      return;
+    }
+    final captionController = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        var uploading = false;
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            backgroundColor: panel,
+            title: Text(contentType.startsWith('video/') ? 'نشر فيديو في SPARK' : 'نشر صورة في SPARK'),
+            content: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text(file.name, maxLines: 2, overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 12),
+              TextField(
+                controller: captionController, maxLength: 1000, maxLines: 3,
+                decoration: inputDecoration('أضف تعليقًا (اختياري)', Icons.edit_note),
+              ),
+              if (uploading) const LinearProgressIndicator(color: gold),
+            ]),
+            actions: [
+              TextButton(
+                onPressed: uploading ? null : () => Navigator.pop(dialogContext),
+                child: const Text('إلغاء'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+                onPressed: uploading ? null : () async {
+                  setDialogState(() => uploading = true);
+                  try {
+                    await Api.publishSparkMedia(
+                      bytes: bytes, fileName: file.name, contentType: contentType,
+                      caption: captionController.text,
+                    );
+                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                    await refreshAll();
+                    if (mounted) showMsg(context, 'نُشرت اللحظة في SPARK لمدة 24 ساعة.');
+                  } catch (e) {
+                    if (dialogContext.mounted) setDialogState(() => uploading = false);
+                    if (mounted) showMsg(context, cleanError(e));
+                  }
+                },
+                child: const Text('نشر في SPARK'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    captionController.dispose();
+  }
+
   Widget _statusesPage() {
     return RefreshIndicator(
       color: gold,
@@ -2799,6 +2871,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           const Padding(
             padding: EdgeInsets.all(8),
             child: Text('SPARK', style: TextStyle(color: gold, fontSize: 21, fontWeight: FontWeight.bold)),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: OutlinedButton.icon(
+              onPressed: publishSparkMediaDialog,
+              icon: const Icon(Icons.add_photo_alternate_outlined),
+              label: const Text('نشر صورة أو فيديو'),
+              style: OutlinedButton.styleFrom(foregroundColor: gold, side: const BorderSide(color: gold)),
+            ),
           ),
           if (statuses.isEmpty)
             const Padding(
