@@ -288,6 +288,18 @@ function detectProfileImageType(bytes) {
   return null;
 }
 
+async function ensureProfilePhotos(env) {
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS profile_photos (
+      user_id TEXT PRIMARY KEY,
+      object_key TEXT NOT NULL UNIQUE,
+      content_type TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `).run();
+}
+
 function safeFileName(value) {
   let decoded = String(value || "attachment");
   try { decoded = decodeURIComponent(decoded); } catch (_) {}
@@ -1117,15 +1129,7 @@ export default {
         if (!targetUserId || targetUserId.length > 128) {
           return json({ error: "Invalid profile identifier" }, 400);
         }
-        await env.DB.prepare(`
-          CREATE TABLE IF NOT EXISTS profile_photos (
-            user_id TEXT PRIMARY KEY,
-            object_key TEXT NOT NULL UNIQUE,
-            content_type TEXT NOT NULL,
-            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-          )
-        `).run();
+        await ensureProfilePhotos(env);
 
         if (method === "POST") {
           if (targetUserId !== currentUser.sub) return json({ error: "You can only update your own photo" }, 403);
@@ -1240,6 +1244,7 @@ export default {
 
       // Update current user's editable profile fields
       if (method === "POST" && path === "/api/profile") {
+        await ensureProfilePhotos(env);
         const body = await request.json();
         const displayName = String(body.displayName || "").trim();
         const phone = String(body.phone || "").trim();
@@ -1396,6 +1401,7 @@ export default {
       }
       // Current user
       if (method === "GET" && path === "/api/me") {
+        await ensureProfilePhotos(env);
         const user = await env.DB.prepare(
           `SELECT u.id, u.username, u.display_name, u.phone,
                   p.updated_at AS photo_updated_at
@@ -1677,6 +1683,7 @@ export default {
 
       // Get friends
       if (method === "GET" && path === "/api/friends") {
+        await ensureProfilePhotos(env);
         const friends = await env.DB.prepare(
           `SELECT u.id, u.username, u.display_name, u.phone,
                   p.updated_at AS photo_updated_at
