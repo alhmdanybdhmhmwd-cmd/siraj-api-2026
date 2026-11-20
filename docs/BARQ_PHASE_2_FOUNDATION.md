@@ -2,7 +2,7 @@
 
 Status: IN PROGRESS — source/CI foundation verified; isolated live integration remains open.  
 Working branch: `barq/phase-2-android-ci-2026-11-20`  
-Latest verified source commit before this documentation update: `ffbff4dac3e9a4ec7dddb98dfd3dbbe6dac82dba`
+Latest verified source commit before this documentation update: `f6ff468ce7a1614b3861fa448c8c9476f059e98a`
 
 > This status supersedes older statements in this file that Android source was outside the repository or that Flutter CI had not yet run.
 
@@ -23,12 +23,12 @@ Latest verified source commit before this documentation update: `ffbff4dac3e9a4e
 
 - Android quality gate run `44779226464`: fully successful — dependency install, Dart analysis, Flutter tests, ARM64 debug build/upload, optimized ARM64 release test build/upload.
 - ARM64 release test APK artifact: **16,545,069 bytes** (about 15.77 MiB); debug diagnostic artifact: **82,173,540 bytes**. These are CI test artifacts, not a signed production release.
-- Latest Backend CI run `44781774768` on commit `ffbff4dac3e9a4ec7dddb98dfd3dbbe6dac82dba`: **98/98 Node tests passed**, **4/4 SQLite migration tests passed**, D1 schema inspection passed, test-vs-production target guard passed, Worker syntax check passed, and Android Firebase/signing-safety check passed.
+- Latest Backend CI run `44782123958` on commit `f6ff468ce7a1614b3861fa448c8c9476f059e98a`: **98/98 Node tests passed**, **4/4 SQLite migration tests passed**, D1 schema inspection passed, test-vs-production target guard passed, Worker syntax check passed, and Android Firebase/signing-safety check passed.
 - The Android Firebase config package, Gradle namespace, and application ID all match `com.barq.app`. No JKS/keystore/P12/PFX signing file is tracked in the repository. Current Gradle release build uses the debug signing config for test builds; a final production signing key must remain user-controlled and must not be committed.
 - Isolated D1 provisioning verification run `44781345825`: passed; it recognized the existing test database, skipped duplicate creation, and verified the database ID differs from production.
-- Remote test-only migration run `44781701391`: passed; Wrangler applied `0002_revoked_sessions.sql` to D1 `5bfada32-4f9b-4edb-85dd-3b3b30ab73b0`. The production database was not targeted.
+- Remote test-only migration run `44781701391`: passed; Wrangler applied `0002_revoked_sessions.sql` to D1 `5bfada32-4f9b-4edb-85dd-3b3b30ab73b0`. A later verification run `44782008447` also successfully executed a read-only `SELECT ... LIMIT 0` against all four revocation columns on that remote test database. The production database was not targeted.
 - Local Worker HTTP health probe run `44781710942`: passed for both `/health/live` and `/health/ready`, using local isolated D1 state.
-- Scheduled cleanup now deletes expired revoked-session token hashes; a unit test verifies the expiry cutoff and the cron schedule remains every 15 minutes in both production and isolated test Wrangler configs.
+- Scheduled cleanup now deletes expired revoked-session token hashes; a unit test verifies the expiry cutoff. Logout authentication tests also assert expiry-aware revocation lookup and that raw bearer tokens are never stored. The cron schedule remains every 15 minutes in both production and isolated test Wrangler configs.
 
 ## Still required to close Phase 2
 
