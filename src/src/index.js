@@ -450,7 +450,7 @@ async function sendSirajPush(env, recipientId, senderId, senderName, messageText
                   : category === "statuses"
                     ? "حالة جديدة من " + String(senderName || "مستخدم برق").slice(0, 80)
                     : "رسالة من " + String(senderName || "مستخدم برق").slice(0, 80),
-                body: category === "statuses" ? "شارك حالة جديدة" : preview || "لديك رسالة جديدة"
+                body: category === "statuses" ? "شارك لحظة جديدة في SPARK" : preview || "لديك رسالة جديدة"
               },
               data: {
                 type: pushType,
