@@ -3648,7 +3648,7 @@ class _BarqMessageBodyState extends State<BarqMessageBody> {
                       Text(uri.host, maxLines: 1, overflow: TextOverflow.ellipsis,
                         style: const TextStyle(color: gold, fontWeight: FontWeight.bold, fontSize: 12)),
                       const SizedBox(height: 3),
-                      Text(uri.path.isEmpty ? uri.toString() : '\${uri.path}\${uri.hasQuery ? '?…' : ''}',
+                      Text(uri.path.isEmpty ? uri.toString() : '${uri.path}${uri.hasQuery ? '?…' : ''}',
                         maxLines: 1, overflow: TextOverflow.ellipsis,
                         style: const TextStyle(color: Colors.white70, fontSize: 11)),
                       const SizedBox(height: 2),
@@ -3743,7 +3743,7 @@ class _AttachmentTileState extends State<_AttachmentTile> {
             ),
             const Divider(height: 1),
             Expanded(
-              child: _isPdf ? PdfViewer.data(bytes) : SingleChildScrollView(
+              child: _isPdf ? PdfViewer.data(bytes, sourceName: name) : SingleChildScrollView(
                 padding: const EdgeInsets.all(14),
                 child: SelectableText(utf8.decode(bytes, allowMalformed: true),
                   style: const TextStyle(color: Colors.white)),
