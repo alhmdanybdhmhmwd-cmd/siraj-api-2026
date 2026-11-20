@@ -2081,7 +2081,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 title: Text(_personName(person)),
                 subtitle: Text(field(person, ['phone'], '@${_personUsername(person)}')),
                 onTap: () => Navigator.push(context, MaterialPageRoute(
-                  builder: (_) => PublicProfilePage(person: person, currentUserId: myId, canMessage: true),
+                  builder: (_) => PublicProfilePage(person: person, currentUserId: myId),
                 )),
                 trailing: IconButton(
                   icon: const Icon(Icons.person_add_alt_1, color: gold),
