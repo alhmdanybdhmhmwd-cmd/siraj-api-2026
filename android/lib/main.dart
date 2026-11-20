@@ -1263,7 +1263,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Widget _countryCodePicker() => DropdownButtonFormField<String>(
-    value: selectedCountryCode,
+    initialValue: selectedCountryCode,
     isExpanded: true,
     dropdownColor: panel,
     style: const TextStyle(color: Colors.white, fontSize: 14),
