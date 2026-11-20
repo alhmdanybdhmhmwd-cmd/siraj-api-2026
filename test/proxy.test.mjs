@@ -96,3 +96,38 @@ test("proxy forwards authenticated DELETE requests for device token revocation",
     globalThis.fetch = originalFetch;
   }
 });
+
+test("proxy forwards explicitly requested binary audio to the transcription Worker route", async () => {
+  const originalFetch = globalThis.fetch;
+  let forwarded = null;
+  const audio = Buffer.from([1, 2, 3, 4, 5]);
+  globalThis.fetch = async (url, options) => {
+    forwarded = { url, method: options.method, headers: options.headers, body: Buffer.from(options.body) };
+    return new Response(JSON.stringify({ text: "مرحبا" }), {
+      status: 200, headers: { "content-type": "application/json" }
+    });
+  };
+  try {
+    const res = makeResponse();
+    const req = makeRequest({
+      url: "/api/transcribe",
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-token",
+        "content-type": "audio/wav",
+        "content-length": String(audio.length)
+      },
+      chunks: [audio]
+    });
+    await handler(req, res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(forwarded.url, "https://siraj-api.alhmdanybdhmhmwd.workers.dev/api/transcribe");
+    assert.equal(forwarded.method, "POST");
+    assert.equal(forwarded.headers.Authorization, "Bearer test-token");
+    assert.equal(forwarded.headers["Content-Type"], "audio/wav");
+    assert.deepEqual(forwarded.body, audio);
+    assert.deepEqual(JSON.parse(res.body.toString()), { text: "مرحبا" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
