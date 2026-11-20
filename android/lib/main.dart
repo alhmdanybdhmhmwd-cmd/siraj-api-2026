@@ -361,7 +361,6 @@ class Api {
 
   static Future<Map<String, dynamic>> register({
     required String displayName,
-    required String username,
     required String password,
     required String phone,
     String? inviteCode,
@@ -369,7 +368,6 @@ class Api {
     lastRecoveryCode = null;
     final data = await request('POST', '/api/register', body: {
       'displayName': displayName,
-      'username': username,
       'password': password,
       'phone': phone,
       if (inviteCode != null && inviteCode.trim().isNotEmpty)
@@ -1211,7 +1209,6 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final name = TextEditingController();
   final username = TextEditingController(); // login identifier: phone or username
-  final optionalUsername = TextEditingController();
   final phone = TextEditingController();
   final password = TextEditingController();
   final inviteCode = TextEditingController();
@@ -1237,18 +1234,12 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void dispose() {
     BarqInviteLinks.pendingCode.removeListener(_applyPendingInvite);
-    name.dispose(); username.dispose(); optionalUsername.dispose();
+    name.dispose(); username.dispose();
     phone.dispose(); password.dispose(); inviteCode.dispose();
     super.dispose();
   }
 
   String _normalizedInternationalPhone(String raw) => normalizeBarqInternationalPhone(raw);
-
-  String _generatedUsername() {
-    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    final random = math.Random.secure();
-    return 'barq${List.generate(10, (_) => chars[random.nextInt(chars.length)]).join()}';
-  }
 
   Future<void> submit() async {
     if (password.text.isEmpty ||
@@ -1272,9 +1263,6 @@ class _LoginPageState extends State<LoginPage> {
       final user = registering
           ? await Api.register(
               displayName: name.text.trim(),
-              username: optionalUsername.text.trim().replaceAll('@', '').isEmpty
-                  ? _generatedUsername()
-                  : optionalUsername.text.trim().replaceAll('@', ''),
               password: password.text,
               phone: _normalizedInternationalPhone(phone.text),
               inviteCode: inviteCode.text.trim().isEmpty ? null : inviteCode.text.trim(),
@@ -1398,8 +1386,6 @@ class _LoginPageState extends State<LoginPage> {
                                 _input(name, 'الاسم الظاهر', Icons.person_outline),
                                 const SizedBox(height: 13),
                                 _input(phone, 'رقم الهاتف', Icons.phone_android, isPhone: true),
-                                const SizedBox(height: 13),
-                                _input(optionalUsername, 'اسم المستخدم', Icons.alternate_email, optional: true),
                                 const SizedBox(height: 13),
                                 _input(inviteCode, 'رمز دعوة صديق', Icons.bolt_outlined, optional: true),
                               ] else ...[
