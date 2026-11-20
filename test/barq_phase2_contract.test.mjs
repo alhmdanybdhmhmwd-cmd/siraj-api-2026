@@ -375,7 +375,7 @@ test("SPARK media publishing stores private image/video objects with a 24-hour l
 });
 
 test("SPARK media reads enforce active friend visibility and expire with their status", () => {
-  const mediaStart = worker.indexOf('path === "/api/media/"');
+  const mediaStart = worker.indexOf("const mediaMatch = path.match(/^\\/api\\/media\\/(.+)$/)");
   const mediaEnd = worker.indexOf("return json({ error: \"Route not found\" }, 404)", mediaStart);
   const mediaRoute = worker.slice(mediaStart, mediaEnd);
   assert.ok(mediaStart >= 0);
