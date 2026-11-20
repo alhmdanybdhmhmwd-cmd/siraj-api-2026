@@ -241,6 +241,38 @@ class FakeDB {
 }
 
 
+test("profile photo upload rejects mismatched image bytes before contacting storage", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  let storageCalled = false;
+  globalThis.__fakeTigrisHandler = async () => {
+    storageCalled = true;
+    return new Response(null, { status: 200 });
+  };
+  try {
+    const response = await worker.default.fetch(new Request(
+      "https://api.example.test/api/profile/photo/me",
+      {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + token,
+          "Content-Type": "image/png"
+        },
+        body: Uint8Array.from([0x3c, 0x73, 0x76, 0x67])
+      }
+    ), {
+      DB: db,
+      JWT_SECRET: secret,
+      TIGRIS_ACCESS_KEY_ID: "test-access",
+      TIGRIS_SECRET_ACCESS_KEY: "test-secret"
+    });
+    assert.equal(response.status, 415);
+    assert.equal(storageCalled, false);
+  } finally {
+    delete globalThis.__fakeTigrisHandler;
+  }
+});
+
 test("scheduled ephemeral cleanup removes rows at or before the expiry cutoff", async () => {
   const db = new FakeDB();
   db.expiredEphemeralCount = 3;
