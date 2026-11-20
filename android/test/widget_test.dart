@@ -111,6 +111,47 @@ void main() {
     );
   });
 
+
+  test('group roles limit promotion to owners and preserve the owner account', () {
+    expect(barqCanManageGroupRoles('owner', targetIsOwner: false), isTrue);
+    expect(barqCanManageGroupRoles('owner', targetIsOwner: true), isFalse);
+    expect(barqCanManageGroupRoles('admin', targetIsOwner: false), isFalse);
+    expect(barqCanManageGroupRoles('member', targetIsOwner: false), isFalse);
+  });
+
+  test('group removal permissions prevent admins removing peers or owners', () {
+    expect(
+      barqCanRemoveGroupMember('owner', 'admin', targetIsOwner: false, targetIsSelf: false),
+      isTrue,
+    );
+    expect(
+      barqCanRemoveGroupMember('admin', 'member', targetIsOwner: false, targetIsSelf: false),
+      isTrue,
+    );
+    expect(
+      barqCanRemoveGroupMember('admin', 'admin', targetIsOwner: false, targetIsSelf: false),
+      isFalse,
+    );
+    expect(
+      barqCanRemoveGroupMember('member', 'member', targetIsOwner: false, targetIsSelf: false),
+      isFalse,
+    );
+    expect(
+      barqCanRemoveGroupMember('owner', 'member', targetIsOwner: true, targetIsSelf: false),
+      isFalse,
+    );
+    expect(
+      barqCanRemoveGroupMember('owner', 'member', targetIsOwner: false, targetIsSelf: true),
+      isFalse,
+    );
+  });
+
+  test('group members can leave themselves but the owner cannot leave without transfer', () {
+    expect(barqCanLeaveGroup(isSelf: true, isOwner: false), isTrue);
+    expect(barqCanLeaveGroup(isSelf: true, isOwner: true), isFalse);
+    expect(barqCanLeaveGroup(isSelf: false, isOwner: false), isFalse);
+  });
+
   testWidgets('public profile page shows the selected contact details', (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: PublicProfilePage(
