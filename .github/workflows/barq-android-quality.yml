@@ -13,11 +13,17 @@ permissions:
 
 jobs:
   android-quality:
-    if: ${{ hashFiles('android/pubspec.yaml') != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - name: Verify Android source is present
+        shell: bash
+        run: |
+          if [ ! -f android/pubspec.yaml ]; then
+            echo "::error::Android source is not committed. Extract the validated project into the repository's android/ directory first."
+            exit 1
+          fi
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
