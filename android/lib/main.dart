@@ -406,7 +406,7 @@ class Api {
       }))['user']);
 
   static Future<void> uploadProfilePhoto(List<int> bytes, String contentType) async {
-    final response = await http.put(
+    final response = await http.post(
       Uri.parse('$apiBase/api/profile/photo/me'),
       headers: {
         if (token != null) 'Authorization': 'Bearer $token',
