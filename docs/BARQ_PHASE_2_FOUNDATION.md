@@ -2,7 +2,7 @@
 
 Status: IN PROGRESS — source/CI foundation verified; isolated live integration remains open.  
 Working branch: `barq/phase-2-android-ci-2026-11-20`  
-Current baseline before this documentation update: `9211c3eb2e95e1dd37175d7d582ab53c24bcd119`
+Latest verified source commit before this documentation update: `ffbff4dac3e9a4ec7dddb98dfd3dbbe6dac82dba`
 
 > This status supersedes older statements in this file that Android source was outside the repository or that Flutter CI had not yet run.
 
@@ -14,25 +14,21 @@ Current baseline before this documentation update: `9211c3eb2e95e1dd37175d7d582a
 - Flutter stores the bearer token with `flutter_secure_storage` and validates saved sessions through `GET /api/me` at startup.
 - Worker validates JWT signature/expiry and session version; recovery rotates the session version.
 - Worker has read-only liveness/readiness probes: `GET /health/live`, `GET /health/ready`; readiness uses `SELECT 1 AS ok`.
-- Test Wrangler config points to D1 `barq-phase2-test-2026-11-20`, ID `5bfada32-4f9b-4edb-85dd-3b3b30ab73b0`, distinct from production ID `0db93afd-4bf5-4423-9e25-7a2f4f4bdbe0`.
+- Test Wrangler config points to the verified isolated D1 `barq-phase2-test-2026-11-20`, ID `5bfada32-4f9b-4edb-85dd-3b3b30ab73b0`, distinct from production ID `0db93afd-4bf5-4423-9e25-7a2f4f4bdbe0`. Provisioning workflow re-verified this existing database without creating a duplicate.
 - Worker source contains `POST /api/contacts/match`; a route-not-found error from an older deployed origin does not prove the current source lacks the route. Verify it against Preview before considering deployment.
 - Worker source contains the current ephemeral-message, private-invite-code, transcription, and profile-photo routes. Presence in source is not equivalent to live Preview verification.
 - Android logout unregisters the current installation's FCM token, calls `POST /api/logout` while the bearer token is still available, stops realtime/Nearby services, then clears local session and offline queues. Server revocation stores only a SHA-256 token hash in the versioned D1 migration `migrations/0002_revoked_sessions.sql`, records the token expiry, and is scoped to that exact bearer token; it does not invalidate another device's token. If the network is unavailable, local logout still completes but server-side revocation is best-effort.
 
 ## CI verification on the current branch
 
-Commit `9211c3eb2e95e1dd37175d7d582ab53c24bcd119`:
-- Android quality gate run `44770127390`: success.
-  - Dart analysis: success.
-  - Flutter tests: success.
-  - ARM64 debug diagnostic APK: built and uploaded.
-  - Optimized ARM64 release test APK: built and uploaded.
-- Backend tests run `44770144648`: success.
-- Optimized ARM64 test APK artifact size: 16,545,026 bytes (about 15.77 MiB).
-- Diagnostic APK artifact size: 82,173,796 bytes.
-- The artifacts are CI test artifacts, not a signed production release.
-
-A contract assertion now verifies that the three Android origin selectors remain available. Backend CI on commit `1aee039df3300ad928046df49db41c329640027e` passed all 97 Node tests, all 4 SQLite migration tests, schema inspection, production-target guard, and Worker syntax checks. Coverage includes device-scoped logout and Vercel proxy forwarding for `/api/logout`. Android quality gate on commit `ab6f35d60521e6333d90db3e0e607f36ad443bf9` has passed Dart analysis and Flutter tests; APK build/upload steps were still running at the time of this update.
+- Android quality gate run `44779226464`: fully successful — dependency install, Dart analysis, Flutter tests, ARM64 debug build/upload, optimized ARM64 release test build/upload.
+- ARM64 release test APK artifact: **16,545,069 bytes** (about 15.77 MiB); debug diagnostic artifact: **82,173,540 bytes**. These are CI test artifacts, not a signed production release.
+- Latest Backend CI run `44781774768` on commit `ffbff4dac3e9a4ec7dddb98dfd3dbbe6dac82dba`: **98/98 Node tests passed**, **4/4 SQLite migration tests passed**, D1 schema inspection passed, test-vs-production target guard passed, Worker syntax check passed, and Android Firebase/signing-safety check passed.
+- The Android Firebase config package, Gradle namespace, and application ID all match `com.barq.app`. No JKS/keystore/P12/PFX signing file is tracked in the repository. Current Gradle release build uses the debug signing config for test builds; a final production signing key must remain user-controlled and must not be committed.
+- Isolated D1 provisioning verification run `44781345825`: passed; it recognized the existing test database, skipped duplicate creation, and verified the database ID differs from production.
+- Remote test-only migration run `44781701391`: passed; Wrangler applied `0002_revoked_sessions.sql` to D1 `5bfada32-4f9b-4edb-85dd-3b3b30ab73b0`. The production database was not targeted.
+- Local Worker HTTP health probe run `44781710942`: passed for both `/health/live` and `/health/ready`, using local isolated D1 state.
+- Scheduled cleanup now deletes expired revoked-session token hashes; a unit test verifies the expiry cutoff and the cron schedule remains every 15 minutes in both production and isolated test Wrangler configs.
 
 ## Still required to close Phase 2
 
