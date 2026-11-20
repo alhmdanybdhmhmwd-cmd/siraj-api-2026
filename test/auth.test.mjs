@@ -76,6 +76,9 @@ class FakeDB {
           return db.profilePhoto ? { ...db.profilePhoto } : null;
         }
         if (sql.includes("SELECT 1 FROM group_members")) return { 1: 1 };
+        if (sql.includes("SELECT searchable FROM user_privacy WHERE user_id = ?")) {
+          return db.targetPrivacy ? { ...db.targetPrivacy } : null;
+        }
         if (sql.includes("SELECT searchable, read_receipts FROM user_privacy")) {
           return db.privacySettings ? { ...db.privacySettings } : null;
         }
@@ -351,9 +354,10 @@ test("profile photo upload enforces the 4 MiB limit before storage", async () =>
   }
 });
 
-test("profile photo reads deny non-friends before contacting private object storage", async () => {
+test("profile photo reads deny non-friends when the target profile is private", async () => {
   const db = new FakeDB();
   db.friendshipAllowed = false;
+  db.targetPrivacy = { searchable: 0 };
   let storageCalled = false;
   globalThis.__fakeTigrisHandler = async () => {
     storageCalled = true;
@@ -371,6 +375,34 @@ test("profile photo reads deny non-friends before contacting private object stor
     });
     assert.equal(response.status, 403);
     assert.equal(storageCalled, false);
+  } finally {
+    delete globalThis.__fakeTigrisHandler;
+  }
+});
+
+test("discoverable public profiles can show photos without a friendship", async () => {
+  const db = new FakeDB();
+  db.friendshipAllowed = false;
+  db.targetPrivacy = { searchable: 1 };
+  db.profilePhoto = {
+    object_key: "profiles/public-user/photo-object",
+    content_type: "image/jpeg",
+    updated_at: "2026-11-20 12:00:00"
+  };
+  const image = Uint8Array.from([0xff, 0xd8, 0xff, 0x01]);
+  globalThis.__fakeTigrisHandler = async () => new Response(image, { status: 200 });
+  try {
+    const token = await worker.signToken(user, secret, 0);
+    const response = await worker.default.fetch(new Request(
+      "https://api.example.test/api/profile/photo/public-user",
+      { headers: { Authorization: "Bearer " + token } }
+    ), {
+      DB: db, JWT_SECRET: secret,
+      TIGRIS_ACCESS_KEY_ID: "test-access",
+      TIGRIS_SECRET_ACCESS_KEY: "test-secret"
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(new Uint8Array(await response.arrayBuffer()), image);
   } finally {
     delete globalThis.__fakeTigrisHandler;
   }
