@@ -57,7 +57,12 @@ class FakeDB {
         if (sql.includes("SELECT session_version FROM account_security")) {
           return { session_version: db.sessionVersion };
         }
-        if (sql.includes("SELECT 1 FROM friendships")) return { 1: 1 };
+        if (sql.includes("SELECT 1 FROM friendships")) {
+          return db.friendshipAllowed === false ? null : { 1: 1 };
+        }
+        if (sql.includes("SELECT object_key, content_type, updated_at FROM profile_photos")) {
+          return db.profilePhoto ? { ...db.profilePhoto } : null;
+        }
         if (sql.includes("SELECT 1 FROM group_members")) return { 1: 1 };
         if (sql.includes("SELECT searchable, read_receipts FROM user_privacy")) {
           return db.privacySettings ? { ...db.privacySettings } : null;
@@ -268,6 +273,68 @@ test("profile photo upload rejects mismatched image bytes before contacting stor
     });
     assert.equal(response.status, 415);
     assert.equal(storageCalled, false);
+  } finally {
+    delete globalThis.__fakeTigrisHandler;
+  }
+});
+
+
+test("profile photo reads deny non-friends before contacting private object storage", async () => {
+  const db = new FakeDB();
+  db.friendshipAllowed = false;
+  let storageCalled = false;
+  globalThis.__fakeTigrisHandler = async () => {
+    storageCalled = true;
+    return new Response(Uint8Array.from([0xff, 0xd8, 0xff]));
+  };
+  try {
+    const token = await worker.signToken(user, secret, 0);
+    const response = await worker.default.fetch(new Request(
+      "https://api.example.test/api/profile/photo/friend-2",
+      { headers: { Authorization: "Bearer " + token } }
+    ), {
+      DB: db, JWT_SECRET: secret,
+      TIGRIS_ACCESS_KEY_ID: "test-access",
+      TIGRIS_SECRET_ACCESS_KEY: "test-secret"
+    });
+    assert.equal(response.status, 403);
+    assert.equal(storageCalled, false);
+  } finally {
+    delete globalThis.__fakeTigrisHandler;
+  }
+});
+
+test("authorized friends receive private profile photo bytes with safe cache headers", async () => {
+  const db = new FakeDB();
+  db.profilePhoto = {
+    object_key: "profiles/friend-2/photo-object",
+    content_type: "image/jpeg",
+    updated_at: "2026-11-20 12:00:00"
+  };
+  const image = Uint8Array.from([0xff, 0xd8, 0xff, 0x01]);
+  let requestedUrl = "";
+  globalThis.__fakeTigrisHandler = async (url, options) => {
+    requestedUrl = url;
+    assert.equal(options.method, "GET");
+    return new Response(image, { status: 200 });
+  };
+  try {
+    const token = await worker.signToken(user, secret, 0);
+    const response = await worker.default.fetch(new Request(
+      "https://api.example.test/api/profile/photo/friend-2",
+      { headers: { Authorization: "Bearer " + token } }
+    ), {
+      DB: db, JWT_SECRET: secret,
+      TIGRIS_ACCESS_KEY_ID: "test-access",
+      TIGRIS_SECRET_ACCESS_KEY: "test-secret"
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "image/jpeg");
+    assert.equal(response.headers.get("cache-control"), "private, max-age=300");
+    assert.equal(response.headers.get("vary"), "Authorization");
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+    assert.ok(requestedUrl.includes("profiles/friend-2/photo-object"));
+    assert.deepEqual(new Uint8Array(await response.arrayBuffer()), image);
   } finally {
     delete globalThis.__fakeTigrisHandler;
   }
