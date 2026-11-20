@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/services.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:video_player/video_player.dart';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -3581,8 +3583,21 @@ class _AttachmentTile extends StatefulWidget {
 
 class _AttachmentTileState extends State<_AttachmentTile> {
   Future<Uint8List>? _previewFuture;
+  AudioPlayer? _audioPlayer;
+  StreamSubscription<PlayerState>? _audioStateSubscription;
+  StreamSubscription<Duration>? _audioPositionSubscription;
+  StreamSubscription<Duration>? _audioDurationSubscription;
+  StreamSubscription<void>? _audioCompleteSubscription;
+  Duration _audioPosition = Duration.zero;
+  Duration _audioDuration = Duration.zero;
+  bool _audioLoading = false;
+  bool _audioPlaying = false;
+  String? _audioError;
 
-  bool get _isImage => field(widget.attachment, ['contentType']).toLowerCase().startsWith('image/');
+  String get _contentType => field(widget.attachment, ['contentType']).toLowerCase();
+  bool get _isImage => _contentType.startsWith('image/');
+  bool get _isAudio => _contentType.startsWith('audio/');
+  bool get _isVideo => _contentType.startsWith('video/');
 
   @override
   void initState() {
@@ -3630,54 +3645,331 @@ class _AttachmentTileState extends State<_AttachmentTile> {
     );
   }
 
+  Future<void> _toggleAudio() async {
+    final id = field(widget.attachment, ['attachmentId']);
+    if (id.isEmpty || _audioLoading) return;
+    final player = _audioPlayer ??= AudioPlayer();
+    if (_audioStateSubscription == null) {
+      _audioStateSubscription = player.onPlayerStateChanged.listen((state) {
+        if (mounted) setState(() => _audioPlaying = state == PlayerState.playing);
+      });
+      _audioPositionSubscription = player.onPositionChanged.listen((position) {
+        if (mounted) setState(() => _audioPosition = position);
+      });
+      _audioDurationSubscription = player.onDurationChanged.listen((duration) {
+        if (mounted) setState(() => _audioDuration = duration);
+      });
+      _audioCompleteSubscription = player.onPlayerComplete.listen((_) {
+        if (mounted) setState(() {
+          _audioPlaying = false;
+          _audioPosition = _audioDuration;
+        });
+      });
+    }
+    try {
+      if (_audioPlaying) {
+        await player.pause();
+        return;
+      }
+      if (_audioPosition > Duration.zero && _audioPosition < _audioDuration) {
+        await player.resume();
+        return;
+      }
+      setState(() {
+        _audioLoading = true;
+        _audioError = null;
+      });
+      final bytes = await Api.fetchAttachmentBytes(id);
+      if (!mounted) return;
+      await player.play(BytesSource(bytes));
+    } catch (error) {
+      if (mounted) setState(() => _audioError = cleanError(error));
+    } finally {
+      if (mounted) setState(() => _audioLoading = false);
+    }
+  }
+
+  Future<void> _seekAudio(double milliseconds) async {
+    final player = _audioPlayer;
+    if (player == null) return;
+    await player.seek(Duration(milliseconds: milliseconds.round()));
+  }
+
+  void _openVideo() {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _VideoAttachmentDialog(attachment: widget.attachment),
+    );
+  }
+
+  @override
+  void dispose() {
+    _audioStateSubscription?.cancel();
+    _audioPositionSubscription?.cancel();
+    _audioDurationSubscription?.cancel();
+    _audioCompleteSubscription?.cancel();
+    _audioPlayer?.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final name = field(widget.attachment, ['fileName'], 'ملف مرفق');
-    final type = field(widget.attachment, ['contentType']).toLowerCase();
-    final icon = type.startsWith('image/') ? Icons.image_outlined
-        : type.startsWith('video/') ? Icons.video_file_outlined
-        : type.startsWith('audio/') ? Icons.audio_file_outlined
+    final icon = _isImage ? Icons.image_outlined
+        : _isVideo ? Icons.video_file_outlined
+        : _isAudio ? Icons.audio_file_outlined
         : Icons.insert_drive_file_outlined;
+
+    Widget leading;
+    if (_isImage && _previewFuture != null) {
+      leading = FutureBuilder<Uint8List>(
+        future: _previewFuture,
+        builder: (context, snapshot) {
+          if (snapshot.hasData) {
+            return GestureDetector(
+              onTap: () => _openImage(snapshot.data!),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.memory(snapshot.data!, width: 76, height: 76, fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox(width: 76, height: 76, child: Icon(Icons.broken_image_outlined, color: gold))),
+              ),
+            );
+          }
+          if (snapshot.hasError) {
+            return IconButton(
+              tooltip: 'إعادة تحميل المعاينة',
+              onPressed: () => setState(() => _loadPreview()),
+              icon: const Icon(Icons.refresh, color: gold),
+            );
+          }
+          return const SizedBox(width: 76, height: 76,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: gold)));
+        },
+      );
+    } else if (_isAudio) {
+      leading = IconButton(
+        tooltip: _audioPlaying ? 'إيقاف مؤقت' : 'تشغيل التسجيل الصوتي',
+        onPressed: _audioLoading ? null : _toggleAudio,
+        icon: _audioLoading
+            ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: gold))
+            : Icon(_audioPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill, color: gold, size: 34),
+      );
+    } else if (_isVideo) {
+      leading = IconButton(
+        tooltip: 'تشغيل الفيديو',
+        onPressed: _openVideo,
+        icon: const Icon(Icons.play_circle_fill, color: gold, size: 34),
+      );
+    } else {
+      leading = Icon(icon, color: gold, size: 28);
+    }
 
     return Container(
       constraints: const BoxConstraints(maxWidth: 290),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(10)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        if (_isImage && _previewFuture != null)
-          FutureBuilder<Uint8List>(
-            future: _previewFuture,
-            builder: (context, snapshot) {
-              if (snapshot.hasData) {
-                return GestureDetector(
-                  onTap: () => _openImage(snapshot.data!),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.memory(snapshot.data!, width: 76, height: 76, fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const SizedBox(width: 76, height: 76, child: Icon(Icons.broken_image_outlined, color: gold))),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            leading,
+            const SizedBox(width: 9),
+            Flexible(child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 150),
+              child: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
+            )),
+            IconButton(onPressed: widget.onDownload, icon: const Icon(Icons.download, color: gold), tooltip: 'تنزيل الملف'),
+          ]),
+          if (_isAudio) ...[
+            Row(children: [
+              Text(formatBarqMediaDuration(_audioPosition),
+                style: const TextStyle(color: Colors.white70, fontSize: 10)),
+              Expanded(
+                child: Slider(
+                  min: 0,
+                  max: (_audioDuration.inMilliseconds > 0 ? _audioDuration.inMilliseconds : 1).toDouble(),
+                  value: _audioPosition.inMilliseconds.clamp(
+                    0, _audioDuration.inMilliseconds > 0 ? _audioDuration.inMilliseconds : 1,
+                  ).toDouble(),
+                  onChanged: _audioDuration > Duration.zero ? _seekAudio : null,
+                  activeColor: gold,
+                  inactiveColor: Colors.white24,
+                ),
+              ),
+              Text(formatBarqMediaDuration(_audioDuration),
+                style: const TextStyle(color: Colors.white70, fontSize: 10)),
+            ]),
+            if (_audioError != null)
+              Text(_audioError!, style: const TextStyle(color: Colors.redAccent, fontSize: 11)),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+String formatBarqMediaDuration(Duration duration) {
+  final totalSeconds = duration.inSeconds;
+  final minutes = (totalSeconds ~/ 60).toString().padLeft(2, '0');
+  final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
+  final hours = totalSeconds ~/ 3600;
+  if (hours > 0) {
+    final remainingMinutes = ((totalSeconds % 3600) ~/ 60).toString().padLeft(2, '0');
+    return '$hours:$remainingMinutes:$seconds';
+  }
+  return '$minutes:$seconds';
+}
+
+class _VideoAttachmentDialog extends StatefulWidget {
+  final Map<String, dynamic> attachment;
+  const _VideoAttachmentDialog({required this.attachment});
+
+  @override
+  State<_VideoAttachmentDialog> createState() => _VideoAttachmentDialogState();
+}
+
+class _VideoAttachmentDialogState extends State<_VideoAttachmentDialog> {
+  VideoPlayerController? _controller;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeVideo();
+  }
+
+  Future<void> _initializeVideo() async {
+    final id = field(widget.attachment, ['attachmentId']);
+    if (id.isEmpty) {
+      if (mounted) setState(() {
+        _loading = false;
+        _error = 'معرّف الفيديو غير متوفر.';
+      });
+      return;
+    }
+    final headers = {if (Api.token != null) 'Authorization': 'Bearer \${Api.token}'};
+    final bases = <String>[mediaWorkerBase, if (apiBase != mediaWorkerBase) apiBase];
+    Object? lastError;
+    for (final base in bases) {
+      VideoPlayerController? candidate;
+      try {
+        candidate = VideoPlayerController.networkUrl(
+          Uri.parse('$base/api/media/\${Uri.encodeComponent(id)}'),
+          httpHeaders: headers,
+        );
+        await candidate.initialize().timeout(const Duration(minutes: 2));
+        if (!mounted) {
+          await candidate.dispose();
+          return;
+        }
+        await candidate.setLooping(false);
+        setState(() {
+          _controller = candidate;
+          _loading = false;
+          _error = null;
+        });
+        return;
+      } catch (error) {
+        lastError = error;
+        await candidate?.dispose();
+      }
+    }
+    if (mounted) setState(() {
+      _loading = false;
+      _error = cleanError(lastError ?? 'تعذر تشغيل الفيديو.');
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    return Dialog(
+      backgroundColor: Colors.black,
+      insetPadding: const EdgeInsets.all(12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(children: [
+              const Expanded(child: Text('مشغّل الفيديو', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+              IconButton(
+                tooltip: 'إغلاق',
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close, color: Colors.white),
+              ),
+            ]),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.all(32),
+                child: CircularProgressIndicator(color: gold),
+              )
+            else if (_error != null)
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(children: [
+                  const Icon(Icons.error_outline, color: Colors.redAccent, size: 36),
+                  const SizedBox(height: 8),
+                  Text(_error!, style: const TextStyle(color: Colors.white70), textAlign: TextAlign.center),
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _loading = true;
+                        _error = null;
+                      });
+                      _initializeVideo();
+                    },
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('إعادة المحاولة'),
                   ),
-                );
-              }
-              if (snapshot.hasError) {
-                return IconButton(
-                  tooltip: 'إعادة تحميل المعاينة',
-                  onPressed: () => setState(() => _loadPreview()),
-                  icon: const Icon(Icons.refresh, color: gold),
-                );
-              }
-              return const SizedBox(width: 76, height: 76,
-                child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: gold)));
-            },
-          )
-        else
-          Icon(icon, color: gold, size: 28),
-        const SizedBox(width: 9),
-        Flexible(child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 150),
-          child: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
-        )),
-        IconButton(onPressed: widget.onDownload, icon: const Icon(Icons.download, color: gold), tooltip: 'تنزيل الملف'),
-      ]),
+                ]),
+              )
+            else if (controller != null)
+              AspectRatio(
+                aspectRatio: controller.value.aspectRatio > 0 ? controller.value.aspectRatio : 16 / 9,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    VideoPlayer(controller),
+                    IconButton.filled(
+                      onPressed: () async {
+                        if (controller.value.isPlaying) {
+                          await controller.pause();
+                        } else {
+                          await controller.play();
+                        }
+                        if (mounted) setState(() {});
+                      },
+                      iconSize: 36,
+                      icon: Icon(controller.value.isPlaying ? Icons.pause : Icons.play_arrow),
+                    ),
+                    Positioned(
+                      left: 8, right: 8, bottom: 4,
+                      child: VideoProgressIndicator(
+                        controller,
+                        allowScrubbing: true,
+                        colors: const VideoProgressColors(
+                          playedColor: gold,
+                          bufferedColor: Colors.white54,
+                          backgroundColor: Colors.white24,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
