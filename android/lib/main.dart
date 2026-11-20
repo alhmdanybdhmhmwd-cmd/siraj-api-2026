@@ -1104,7 +1104,12 @@ Future<void> showMessageActions(
     final initial = field(message, ['body', 'content', 'message']);
     final edited = await showEditMessageDialog(context, initial);
     if (edited != null && edited.trim() != initial.trim()) {
-      await onEdit(edited.trim());
+      try {
+        await onEdit(edited.trim());
+        if (context.mounted) showMsg(context, 'تم تعديل الرسالة');
+      } catch (error) {
+        if (context.mounted) showMsg(context, cleanError(error));
+      }
     }
   } else if (action == 'copy') {
     final text = field(message, ['body', 'content', 'message']);
