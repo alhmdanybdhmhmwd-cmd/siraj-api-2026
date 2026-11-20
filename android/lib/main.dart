@@ -1197,8 +1197,8 @@ String normalizeBarqInternationalPhone(String raw) {
         ? c - 0x06f0 + 48 : c - 0x0660 + 48);
   });
   value = value.replaceAll(RegExp(r'[\s().-]'), '');
-  if (value.startsWith('00')) value = '+' + value.substring(2);
-  if (!value.startsWith('+')) value = '+' + value;
+  if (value.startsWith('00')) value = '+${value.substring(2)}';
+  if (!value.startsWith('+')) value = '+$value';
   return value;
 }
 class LoginPage extends StatefulWidget {
