@@ -1421,7 +1421,7 @@ Future<void> showConversationSearch(
     refresh(() { searching = true; searchError = null; });
     try {
       final result = await search(query, older ? nextCursor : null);
-      final found = _list(result['messages']);
+      final found = Api._list(result['messages']);
       refresh(() {
         matches = older ? mergeMessages(matches, found) : found;
         nextCursor = result['nextCursor'] is Map
