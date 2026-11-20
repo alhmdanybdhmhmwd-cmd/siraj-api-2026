@@ -1707,6 +1707,64 @@ test("each uploaded attachment receives its own 72-hour expiration timestamp", a
 });
 
 
+
+test("group attachment upload persists group-scoped access without a private recipient", async () => {
+  const db = new FakeDB();
+  const originalPrepare = db.prepare.bind(db);
+  let savedAccess = null;
+  db.prepare = sql => {
+    const statement = originalPrepare(sql);
+    const run = statement.run.bind(statement);
+    statement.run = async () => {
+      if (sql.includes("INSERT INTO media_access")) {
+        savedAccess = [...statement.params];
+      }
+      return run();
+    };
+    return statement;
+  };
+  const token = await worker.signToken(user, secret, 0);
+  const storageCalls = [];
+  globalThis.__fakeTigrisHandler = async (_url, options) => {
+    storageCalls.push({ method: options.method, headers: options.headers });
+    return new Response(null, { status: 200 });
+  };
+  try {
+    const response = await worker.default.fetch(new Request("https://api.example.test/api/media", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + token,
+        "Content-Type": "application/pdf",
+        "X-Group-Id": "group-42",
+        "X-File-Name": "report.pdf"
+      },
+      body: new Uint8Array([1, 2, 3])
+    }), {
+      DB: db,
+      JWT_SECRET: secret,
+      TIGRIS_ACCESS_KEY_ID: "test-access",
+      TIGRIS_SECRET_ACCESS_KEY: "test-secret"
+    });
+    assert.equal(response.status, 201);
+    const result = await response.json();
+    assert.ok(savedAccess, "group upload must persist a D1 authorization row");
+    assert.deepEqual(savedAccess.slice(0, 6), [
+      result.attachment.id,
+      user.id,
+      null,
+      "group-42",
+      "report.pdf",
+      "application/pdf"
+    ]);
+    assert.equal(storageCalls.length, 1);
+    assert.equal(storageCalls[0].method, "PUT");
+    assert.equal(storageCalls[0].headers["x-amz-meta-groupid"], "group-42");
+  } finally {
+    delete globalThis.__fakeTigrisHandler;
+  }
+});
+
+
 test("expired attachment is denied and deleted before any media bytes are downloaded", async () => {
   const db = new FakeDB();
   const token = await worker.signToken(user, secret, 0);
