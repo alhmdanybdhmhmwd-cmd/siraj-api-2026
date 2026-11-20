@@ -17,4 +17,5 @@ assert test_db["database_id"] != prod_db["database_id"]
 assert prod_db["database_name"] == "siraj-db"
 assert "vars" not in test_config, "Test config must not inherit production variables."
 assert "routes" not in test_config, "Test config must not target production routes."
+assert test_config["triggers"]["crons"] == ["*/15 * * * *"]
 print("BARQ test Wrangler config is isolated from production.")
