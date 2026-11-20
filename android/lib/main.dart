@@ -1144,11 +1144,39 @@ Future<void> showMessageActions(
   }
 }
 
-Future<String?> showEditMessageDialog(BuildContext context, String initialText) async {
-  final controller = TextEditingController(text: initialText);
-  final result = await showDialog<String>(
+Future<String?> showEditMessageDialog(BuildContext context, String initialText) {
+  return showDialog<String>(
     context: context,
-    builder: (dialogContext) => AlertDialog(
+    builder: (_) => _EditMessageDialog(initialText: initialText),
+  );
+}
+
+class _EditMessageDialog extends StatefulWidget {
+  final String initialText;
+  const _EditMessageDialog({required this.initialText});
+
+  @override
+  State<_EditMessageDialog> createState() => _EditMessageDialogState();
+}
+
+class _EditMessageDialogState extends State<_EditMessageDialog> {
+  late final TextEditingController controller;
+
+  @override
+  void initState() {
+    super.initState();
+    controller = TextEditingController(text: widget.initialText);
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
       backgroundColor: panel,
       title: const Text('تعديل الرسالة'),
       content: TextField(
@@ -1160,21 +1188,19 @@ Future<String?> showEditMessageDialog(BuildContext context, String initialText) 
         decoration: const InputDecoration(hintText: 'اكتب نص الرسالة'),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
         TextButton(
           onPressed: () {
             final value = controller.text.trim();
             if (value.isNotEmpty && value.length <= 5000) {
-              Navigator.pop(dialogContext, value);
+              Navigator.pop(context, value);
             }
           },
           child: const Text('حفظ'),
         ),
       ],
-    ),
-  );
-  controller.dispose();
-  return result;
+    );
+  }
 }
 
 String messageReplyPreview(Map<String, dynamic> message) {
