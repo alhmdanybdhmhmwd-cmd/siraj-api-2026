@@ -734,7 +734,7 @@ export default {
         // Registration uses an international E.164 phone as the primary account
         // identifier. National/local formatting must be normalized by the client
         // using the selected country code before reaching this endpoint.
-        if (!/^\\+[1-9][0-9]{7,14}$/.test(phone)) {
+        if (!/^\+[1-9][0-9]{7,14}$/.test(phone)) {
           return json({ error: "Enter a valid international phone number including its country code" }, 400);
         }
         if (await phoneAlreadyInUse(env, phone)) {
