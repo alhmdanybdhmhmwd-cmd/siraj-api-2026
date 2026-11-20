@@ -2085,12 +2085,12 @@ test("logout revokes only the current bearer token and leaves another device ses
     headers: { Authorization: "Bearer " + firstToken }
   }), env);
   assert.equal(logout.status, 200);
-  const firstSession = await worker.default.fetch(new Request("https://api.example.test/api/me", {
+  const firstSession = await worker.authenticate(new Request("https://api.example.test/api/me", {
     headers: { Authorization: "Bearer " + firstToken }
   }), env);
-  const secondSession = await worker.default.fetch(new Request("https://api.example.test/api/me", {
+  const secondSession = await worker.authenticate(new Request("https://api.example.test/api/me", {
     headers: { Authorization: "Bearer " + secondToken }
   }), env);
-  assert.equal(firstSession.status, 401);
-  assert.equal(secondSession.status, 200);
+  assert.equal(firstSession, null);
+  assert.equal(secondSession.sub, user.id);
 });
