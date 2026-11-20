@@ -893,6 +893,7 @@ export default {
         }
         const contentType = (request.headers.get("Content-Type") || "").split(";")[0].trim().toLowerCase();
         const allowedAudioTypes = new Set(["audio/mpeg", "audio/mp4", "audio/aac", "audio/wav", "audio/ogg", "audio/webm", "audio/x-wav", "audio/3gpp", "audio/amr"]);
+        if (!allowedAudioTypes.has(contentType)) {
           return json({ error: "Unsupported audio format" }, 415);
         }
         const declaredLength = Number(request.headers.get("Content-Length"));
