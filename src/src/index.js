@@ -1926,6 +1926,19 @@ export default {
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
           )
         `).run();
+        // Optional admin assignments are stored separately so existing member
+        // rows remain valid and default to the least-privileged "member" role.
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS group_member_roles (
+            group_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            role TEXT NOT NULL CHECK (role IN ('admin', 'member')),
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (group_id, user_id),
+            FOREIGN KEY (group_id, user_id)
+              REFERENCES group_members(group_id, user_id) ON DELETE CASCADE
+          )
+        `).run();
         await env.DB.prepare(`
           CREATE TABLE IF NOT EXISTS group_messages (
             id TEXT PRIMARY KEY,
@@ -1947,12 +1960,16 @@ export default {
         const result = await env.DB.prepare(`
           SELECT g.id, g.name, g.description, g.owner_id,
                  g.created_at,
-                 (SELECT COUNT(*) FROM group_members m WHERE m.group_id = g.id) AS member_count
+                 (SELECT COUNT(*) FROM group_members m WHERE m.group_id = g.id) AS member_count,
+                 CASE WHEN g.owner_id = ? THEN 'owner'
+                      ELSE COALESCE(my_role.role, 'member') END AS current_role
           FROM chat_groups g
           JOIN group_members mine ON mine.group_id = g.id
+          LEFT JOIN group_member_roles my_role
+            ON my_role.group_id = g.id AND my_role.user_id = mine.user_id
           WHERE mine.user_id = ?
           ORDER BY g.created_at DESC
-        `).bind(currentUser.sub).all();
+        `).bind(currentUser.sub, currentUser.sub).all();
         return json({ groups: result.results || [] });
       }
 
@@ -1986,13 +2003,17 @@ export default {
         const result = await env.DB.prepare(`
           SELECT u.id, u.username, u.display_name, u.phone, m.joined_at,
                  p.updated_at AS photo_updated_at,
-                 CASE WHEN g.owner_id = u.id THEN 1 ELSE 0 END AS is_owner
+                 CASE WHEN g.owner_id = u.id THEN 1 ELSE 0 END AS is_owner,
+                 CASE WHEN g.owner_id = u.id THEN 'owner'
+                      ELSE COALESCE(r.role, 'member') END AS role
           FROM group_members m
           JOIN users u ON u.id = m.user_id
           JOIN chat_groups g ON g.id = m.group_id
           LEFT JOIN profile_photos p ON p.user_id = u.id
+          LEFT JOIN group_member_roles r
+            ON r.group_id = m.group_id AND r.user_id = m.user_id
           WHERE m.group_id = ?
-          ORDER BY is_owner DESC, u.display_name ASC
+          ORDER BY is_owner DESC, role ASC, u.display_name ASC
         `).bind(groupId).all();
         return json({ members: result.results || [] });
       }
@@ -2001,21 +2022,106 @@ export default {
         const groupId = groupMemberMatch[1];
         const body = await readJsonRequestLimited(request);
         const userId = String(body.userId || "").trim();
-        // Only the group owner may add members. Membership alone must not
-        // grant an account the ability to invite arbitrary users.
+        // Owners and explicitly assigned admins may invite members. Ordinary
+        // members cannot expand group access or invite arbitrary accounts.
         const group = await env.DB.prepare(
           "SELECT owner_id FROM chat_groups WHERE id = ?"
         ).bind(groupId).first();
         if (!group) return json({ error: "Group not found" }, 404);
-        if (group.owner_id !== currentUser.sub) {
-          return json({ error: "Only the group owner can add members" }, 403);
+        const actorRole = group.owner_id === currentUser.sub ? "owner" :
+          (await env.DB.prepare(
+            "SELECT role FROM group_member_roles WHERE group_id = ? AND user_id = ?"
+          ).bind(groupId, currentUser.sub).first())?.role || "member";
+        if (actorRole !== "owner" && actorRole !== "admin") {
+          return json({ error: "Only group owners and admins can add members" }, 403);
         }
+        if (!userId || userId.length > 128) return json({ error: "Invalid user id" }, 400);
         const target = await env.DB.prepare("SELECT id FROM users WHERE id = ?").bind(userId).first();
         if (!target) return json({ error: "User not found" }, 404);
         await env.DB.prepare(
           "INSERT OR IGNORE INTO group_members (group_id, user_id) VALUES (?, ?)"
         ).bind(groupId, userId).run();
-        return json({ message: "Member added" }, 201);
+        return json({ message: "Member added", role: "member" }, 201);
+      }
+
+      // Only the owner can promote/demote admins. The owner role is implicit
+      // and cannot be assigned or removed through this endpoint.
+      const groupRoleMatch = path.match(/^\\/api\\/groups\\/([^/]+)\\/members\\/([^/]+)\\/role$/);
+      if (method === "POST" && groupRoleMatch) {
+        const groupId = groupRoleMatch[1];
+        const targetUserId = groupRoleMatch[2];
+        const body = await readJsonRequestLimited(request);
+        const role = String(body.role || "").trim().toLowerCase();
+        if (role !== "admin" && role !== "member") {
+          return json({ error: "Role must be admin or member" }, 400);
+        }
+        const group = await env.DB.prepare(
+          "SELECT owner_id FROM chat_groups WHERE id = ?"
+        ).bind(groupId).first();
+        if (!group) return json({ error: "Group not found" }, 404);
+        if (group.owner_id !== currentUser.sub) {
+          return json({ error: "Only the group owner can manage admin roles" }, 403);
+        }
+        if (targetUserId === group.owner_id) {
+          return json({ error: "The group owner role cannot be changed" }, 400);
+        }
+        const targetMember = await env.DB.prepare(
+          "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
+        ).bind(groupId, targetUserId).first();
+        if (!targetMember) return json({ error: "Group member not found" }, 404);
+        if (role === "admin") {
+          await env.DB.prepare(`
+            INSERT INTO group_member_roles (group_id, user_id, role, updated_at)
+            VALUES (?, ?, 'admin', CURRENT_TIMESTAMP)
+            ON CONFLICT(group_id, user_id)
+            DO UPDATE SET role = 'admin', updated_at = CURRENT_TIMESTAMP
+          `).bind(groupId, targetUserId).run();
+        } else {
+          await env.DB.prepare(
+            "DELETE FROM group_member_roles WHERE group_id = ? AND user_id = ?"
+          ).bind(groupId, targetUserId).run();
+        }
+        return json({ message: "Member role updated", userId: targetUserId, role });
+      }
+
+      // Members may leave themselves; owners can remove any non-owner member,
+      // while admins can remove ordinary members but not fellow admins.
+      const groupMemberActionMatch = path.match(/^\\/api\\/groups\\/([^/]+)\\/members\\/([^/]+)$/);
+      if (method === "DELETE" && groupMemberActionMatch) {
+        const groupId = groupMemberActionMatch[1];
+        const targetUserId = groupMemberActionMatch[2];
+        const group = await env.DB.prepare(
+          "SELECT owner_id FROM chat_groups WHERE id = ?"
+        ).bind(groupId).first();
+        if (!group) return json({ error: "Group not found" }, 404);
+        if (targetUserId === group.owner_id) {
+          return json({ error: "The group owner cannot leave or be removed before ownership is transferred" }, 403);
+        }
+        const target = await env.DB.prepare(
+          "SELECT role FROM group_member_roles WHERE group_id = ? AND user_id = ?"
+        ).bind(groupId, targetUserId).first();
+        const targetExists = await env.DB.prepare(
+          "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
+        ).bind(groupId, targetUserId).first();
+        if (!targetExists) return json({ error: "Group member not found" }, 404);
+        const actorRole = group.owner_id === currentUser.sub ? "owner" :
+          (await env.DB.prepare(
+            "SELECT role FROM group_member_roles WHERE group_id = ? AND user_id = ?"
+          ).bind(groupId, currentUser.sub).first())?.role || "member";
+        const selfLeave = targetUserId === currentUser.sub;
+        if (!selfLeave && actorRole !== "owner" &&
+            !(actorRole === "admin" && (target?.role || "member") === "member")) {
+          return json({ error: "You do not have permission to remove this member" }, 403);
+        }
+        await env.DB.batch([
+          env.DB.prepare(
+            "DELETE FROM group_member_roles WHERE group_id = ? AND user_id = ?"
+          ).bind(groupId, targetUserId),
+          env.DB.prepare(
+            "DELETE FROM group_members WHERE group_id = ? AND user_id = ?"
+          ).bind(groupId, targetUserId)
+        ]);
+        return json({ message: selfLeave ? "You left the group" : "Member removed", userId: targetUserId });
       }
 
             // Group reactions and personal pins are available only to current group members.
