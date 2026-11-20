@@ -272,7 +272,9 @@ function cleanUser(user) {
     id: user.id,
     username: user.username,
     displayName: user.display_name,
-    phone: user.phone || null
+    phone: user.phone || null,
+    photoUrl: user.photo_updated_at ? "/api/profile/photo/" + encodeURIComponent(user.id) : null,
+    photoUpdatedAt: user.photo_updated_at || null
   };
 }
 
@@ -1260,7 +1262,10 @@ export default {
         ).bind(displayName, phone || null, currentUser.sub, currentUser.sub,
           ...phoneConflict.bindings).run();
         const user = await env.DB.prepare(
-          "SELECT id, username, display_name, phone FROM users WHERE id = ?"
+          `SELECT u.id, u.username, u.display_name, u.phone,
+                  p.updated_at AS photo_updated_at
+           FROM users u LEFT JOIN profile_photos p ON p.user_id = u.id
+           WHERE u.id = ?`
         ).bind(currentUser.sub).first();
         if (!user) return json({ error: "User not found" }, 404);
         if (Number(updateResult?.meta?.changes || 0) !== 1) {
@@ -1392,8 +1397,11 @@ export default {
       // Current user
       if (method === "GET" && path === "/api/me") {
         const user = await env.DB.prepare(
-          `SELECT id, username, display_name, phone
-           FROM users WHERE id = ?`
+          `SELECT u.id, u.username, u.display_name, u.phone,
+                  p.updated_at AS photo_updated_at
+           FROM users u
+           LEFT JOIN profile_photos p ON p.user_id = u.id
+           WHERE u.id = ?`
         ).bind(currentUser.sub).first();
 
         if (!user) {
@@ -1670,9 +1678,11 @@ export default {
       // Get friends
       if (method === "GET" && path === "/api/friends") {
         const friends = await env.DB.prepare(
-          `SELECT u.id, u.username, u.display_name, u.phone
+          `SELECT u.id, u.username, u.display_name, u.phone,
+                  p.updated_at AS photo_updated_at
            FROM friendships f
            JOIN users u ON u.id = f.friend_id
+           LEFT JOIN profile_photos p ON p.user_id = u.id
            WHERE f.user_id = ?
            ORDER BY u.display_name`
         ).bind(currentUser.sub).all();
