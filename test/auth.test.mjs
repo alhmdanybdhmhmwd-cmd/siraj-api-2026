@@ -62,6 +62,8 @@ class FakeDB {
           return { session_version: db.sessionVersion };
         }
         if (sql.includes("SELECT 1 FROM revoked_sessions")) {
+          db.lastRevocationQuery = sql;
+          db.lastRevocationParams = this.params;
           return db.revokedSessions?.has(this.params[0]) ? { 1: 1 } : null;
         }
         if (sql.includes("SELECT 1 FROM friendships")) {
@@ -2120,4 +2122,8 @@ test("logout revokes only the current bearer token and leaves another device ses
   }), env);
   assert.equal(firstSession, null);
   assert.equal(secondSession.sub, user.id);
+  assert.match(db.lastRevocationQuery, /expires_at > unixepoch\(\)/);
+  assert.equal(db.lastRevocationParams[1], user.id);
+  assert.equal(db.revokedSessions.has(firstToken), false, "raw bearer token must never be stored");
+  assert.equal(db.revokedSessions.size, 1);
 });
