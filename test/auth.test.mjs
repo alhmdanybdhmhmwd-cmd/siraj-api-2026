@@ -116,6 +116,9 @@ class FakeDB {
         return null;
       },
       async all() {
+        if (sql.includes("FROM ephemeral_messages")) {
+          return { results: db.ephemeralRows || [] };
+        }
         if (sql.includes("LIKE ?") && sql.includes("FROM users") && sql.includes("user_privacy")) {
           db.userSearchQueries = (db.userSearchQueries || 0) + 1;
           db.lastUserSearchSql = sql;
@@ -149,6 +152,22 @@ class FakeDB {
         return { results: [] };
       },
       async run() {
+        if (sql.includes("UPDATE ephemeral_messages") && sql.includes("SET read_at")) {
+          const now = Math.floor(Date.now() / 1000);
+          db.ephemeralRows = (db.ephemeralRows || []).map(row =>
+            row.sender_id === this.params[0] && row.receiver_id === this.params[1] && row.read_at == null
+              ? { ...row, read_at: now, delete_at: now + 10 }
+              : row
+          );
+          return { meta: { changes: 1 } };
+        }
+        if (sql.includes("DELETE FROM ephemeral_messages WHERE id = ?")) {
+          const before = (db.ephemeralRows || []).length;
+          db.ephemeralRows = (db.ephemeralRows || []).filter(row =>
+            !(row.id === this.params[0] && row.delete_at != null && row.delete_at <= Math.floor(Date.now() / 1000))
+          );
+          return { meta: { changes: before - db.ephemeralRows.length } };
+        }
         if (sql.includes("DELETE FROM ephemeral_messages WHERE delete_at IS NOT NULL")) {
           db.ephemeralCleanupCutoff = this.params[0];
           return { meta: { changes: db.expiredEphemeralCount || 0 } };
@@ -403,6 +422,47 @@ test("authorized friends receive private profile photo bytes with safe cache hea
     assert.deepEqual(new Uint8Array(await response.arrayBuffer()), image);
   } finally {
     delete globalThis.__fakeTigrisHandler;
+  }
+});
+
+test("recipient read schedules physical ephemeral deletion after the ten-second TTL", async () => {
+  const db = new FakeDB();
+  db.ephemeralRows = [{
+    id: "ephemeral-1",
+    sender_id: "friend-1",
+    receiver_id: user.id,
+    body: "temporary",
+    created_at: Math.floor(Date.now() / 1000),
+    read_at: null,
+    delete_at: null
+  }];
+  const token = await worker.signToken(user, secret, 0);
+  const pending = [];
+  const originalSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = callback => {
+    callback();
+    return 0;
+  };
+  try {
+    const response = await worker.default.fetch(new Request(
+      "https://api.example.test/api/ephemeral-messages?with=friend-1",
+      { headers: { Authorization: "Bearer " + token } }
+    ), {
+      DB: db,
+      JWT_SECRET: secret
+    }, {
+      waitUntil(promise) { pending.push(promise); }
+    });
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.equal(data.messages.length, 1);
+    assert.ok(data.messages[0].read_at);
+    assert.equal(data.messages[0].delete_at, data.messages[0].read_at + 10);
+    assert.equal(pending.length, 1);
+    await Promise.all(pending);
+    assert.equal(db.ephemeralRows.length, 0);
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
   }
 });
 
