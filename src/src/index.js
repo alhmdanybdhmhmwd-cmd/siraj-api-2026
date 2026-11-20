@@ -584,6 +584,22 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
       FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE
     )
   `).run();
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS status_reactions (
+      status_id TEXT NOT NULL, user_id TEXT NOT NULL, emoji TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (status_id, user_id, emoji),
+      FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE
+    )
+  `).run();
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS status_replies (
+      id TEXT PRIMARY KEY, status_id TEXT NOT NULL, user_id TEXT NOT NULL,
+      body TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `).run();
   const cutoff = new Date(now).toISOString();
   const expired = await env.DB.prepare(
     "SELECT object_key FROM media_expirations WHERE expires_at <= ? ORDER BY expires_at ASC LIMIT 100"
@@ -609,9 +625,6 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
     try {
       const response = await storage.fetch(storageUrl, { method: "DELETE" });
       if (response.ok || response.status === 404) {
-        await env.DB.prepare(
-          "DELETE FROM status_posts WHERE id IN (SELECT status_id FROM status_media WHERE object_key = ?)"
-        ).bind(key).run();
         await env.DB.prepare("DELETE FROM status_media WHERE object_key = ?").bind(key).run();
         await env.DB.prepare("DELETE FROM media_access WHERE object_key = ?").bind(key).run();
         await env.DB.prepare(
@@ -626,6 +639,16 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
       console.error("Expired media cleanup item failed:", error);
     }
   }
+  await env.DB.prepare(
+    "DELETE FROM status_reactions WHERE status_id IN (SELECT id FROM status_posts WHERE expires_at <= ?)"
+  ).bind(cutoff).run();
+  await env.DB.prepare(
+    "DELETE FROM status_replies WHERE status_id IN (SELECT id FROM status_posts WHERE expires_at <= ?)"
+  ).bind(cutoff).run();
+  await env.DB.prepare(
+    "DELETE FROM status_media WHERE status_id IN (SELECT id FROM status_posts WHERE expires_at <= ?)"
+  ).bind(cutoff).run();
+  await env.DB.prepare("DELETE FROM status_posts WHERE expires_at <= ?").bind(cutoff).run();
   return { checked: (expired.results || []).length, deleted };
 }
 
