@@ -5938,8 +5938,9 @@ class _GroupChatPageState extends State<GroupChatPage> {
                                               : 'تم تحديث عضوية المجموعة.',
                                     );
                                     if (action == 'owner') {
+                                      final onGroupChanged = widget.onGroupChanged;
                                       Navigator.pop(context);
-                                      await widget.onGroupChanged();
+                                      await onGroupChanged();
                                       return;
                                     }
                                     await showGroupMembers();
