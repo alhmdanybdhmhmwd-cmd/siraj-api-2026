@@ -162,10 +162,9 @@ class FakeDB {
           return { meta: { changes: 1 } };
         }
         if (sql.includes("DELETE FROM ephemeral_messages WHERE id = ?")) {
+          assert.ok(sql.includes("delete_at <= unixepoch()"));
           const before = (db.ephemeralRows || []).length;
-          db.ephemeralRows = (db.ephemeralRows || []).filter(row =>
-            !(row.id === this.params[0] && row.delete_at != null && row.delete_at <= Math.floor(Date.now() / 1000))
-          );
+          db.ephemeralRows = (db.ephemeralRows || []).filter(row => row.id !== this.params[0]);
           return { meta: { changes: before - db.ephemeralRows.length } };
         }
         if (sql.includes("DELETE FROM ephemeral_messages WHERE delete_at IS NOT NULL")) {
