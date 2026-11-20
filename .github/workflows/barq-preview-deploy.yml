@@ -95,3 +95,8 @@ jobs:
           console.log('Isolated Preview Worker is live and its test D1 is ready.');
           NODE
           echo "Preview Worker URL: $BARQ_PREVIEW_URL" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Exercise deployed Preview account, profile, privacy, and contacts APIs
+        env:
+          BARQ_PREVIEW_URL: ${{ env.BARQ_PREVIEW_URL }}
+        run: node test/barq_preview_integration.mjs
