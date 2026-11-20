@@ -2070,7 +2070,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 title: Text(_personName(person)),
                 subtitle: Text(field(person, ['phone'], '@${_personUsername(person)}')),
                 onTap: () => Navigator.push(context, MaterialPageRoute(
-                  builder: (_) => PublicProfilePage(person: person, currentUserId: myId),
+                  builder: (_) => PublicProfilePage(person: person, currentUserId: myId, canMessage: true),
                 )),
                 trailing: IconButton(
                   icon: const Icon(Icons.person_add_alt_1, color: gold),
@@ -3047,11 +3047,13 @@ class _NearbyDevicesPageState extends State<NearbyDevicesPage> {
 class PublicProfilePage extends StatelessWidget {
   final Map<String, dynamic> person;
   final String currentUserId;
+  final bool canMessage;
 
   const PublicProfilePage({
     super.key,
     required this.person,
     required this.currentUserId,
+    this.canMessage = false,
   });
 
   Map<String, dynamic> get profile => person['user'] is Map
@@ -3135,7 +3137,7 @@ class PublicProfilePage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            if (id.isNotEmpty && id != currentUserId)
+            if (canMessage && id.isNotEmpty && id != currentUserId)
               FilledButton.icon(
                 style: FilledButton.styleFrom(
                   backgroundColor: electricBlue,
