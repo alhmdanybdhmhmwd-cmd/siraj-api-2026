@@ -644,6 +644,13 @@ class Api {
     throw Exception('لم يُرجع الخادم معرّف لحظة SPARK.');
   }
 
+  static Future<void> markSparkViewed(String statusId) async {
+    await request('POST', '/api/statuses/${Uri.encodeComponent(statusId)}/view');
+  }
+
+  static Future<List<Map<String, dynamic>>> sparkViewers(String statusId) async =>
+      _list((await request('GET', '/api/statuses/${Uri.encodeComponent(statusId)}/viewers'))['viewers']);
+
   static Future<void> reactSparkStatus(String statusId, String emoji, {bool remove = false}) async {
     final path = '/api/statuses/${Uri.encodeComponent(statusId)}/reactions';
     if (remove) {
@@ -2916,7 +2923,38 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     captionController.dispose();
   }
 
+  Future<void> _showSparkViewers(String statusId) async {
+    try {
+      final viewers = await Api.sparkViewers(statusId);
+      if (!mounted) return;
+      await showModalBottomSheet<void>(
+        context: context,
+        backgroundColor: panel,
+        builder: (context) => SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              const ListTile(title: Text('مشاهدو SPARK', style: TextStyle(color: gold))),
+              if (viewers.isEmpty)
+                const ListTile(title: Text('لم يشاهدها أحد بعد', textColor: Colors.white60)),
+              for (final viewer in viewers)
+                ListTile(
+                  leading: const CircleAvatar(child: Icon(Icons.person)),
+                  title: Text(field(viewer, ['displayName', 'username'], 'مستخدم برق')),
+                  subtitle: Text(field(viewer, ['viewedAt'])),
+                ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    }
+  }
+
   void _openSparkStatus(Map<String, dynamic> status) {
+    final statusId = field(status, ['id']);
+    Api.markSparkViewed(statusId).catchError((_) {});
     final rawMedia = status['media'];
     final media = rawMedia is List
         ? rawMedia.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList()
@@ -2984,7 +3022,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                trailing: const Icon(Icons.play_circle_outline, color: gold, size: 24),
+                trailing: status['userId']?.toString() == myId
+                    ? Row(mainAxisSize: MainAxisSize.min, children: [
+                        IconButton(
+                          tooltip: 'المشاهدون',
+                          onPressed: () => _showSparkViewers(field(status, ['id'])),
+                          icon: const Icon(Icons.visibility_outlined, color: gold),
+                        ),
+                        Text((status['viewCount'] ?? 0).toString(), style: const TextStyle(color: Colors.white70)),
+                      ])
+                    : const Icon(Icons.play_circle_outline, color: gold, size: 24),
               ),
             ),
         ],
