@@ -65,6 +65,8 @@ void main() {
     expect(find.text('صديق برق'), findsOneWidget);
     expect(find.text('@barq_friend'), findsNWidgets(2));
     expect(find.text('+967700000001'), findsOneWidget);
+    await tester.ensureVisible(find.text('إرسال رسالة'));
+    await tester.pumpAndSettle();
     expect(find.text('حفظ الرقم في جهات الاتصال'), findsOneWidget);
     expect(find.text('إرسال رسالة'), findsOneWidget);
   });
