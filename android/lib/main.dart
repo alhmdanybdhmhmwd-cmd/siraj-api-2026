@@ -5831,7 +5831,11 @@ class _GroupChatPageState extends State<GroupChatPage> {
                       return ListTile(
                         leading: personAvatar(member),
                         title: Text(field(member, ['display_name', 'displayName', 'username'], 'عضو')),
-                        subtitle: Text(isOwner ? 'مالك المجموعة' : '${memberRole == 'admin' ? 'مشرف' : '@${field(member, ['username'])}'}'),
+                        subtitle: Text(isOwner
+                            ? 'مالك المجموعة'
+                            : memberRole == 'admin'
+                                ? 'مشرف'
+                                : '@${field(member, ['username'])}'),
                         trailing: (canManageRoles || canRemove || canLeave)
                             ? PopupMenuButton<String>(
                                 onSelected: (action) async {
@@ -5861,9 +5865,10 @@ class _GroupChatPageState extends State<GroupChatPage> {
                                     } else {
                                       await Api.removeGroupMember(groupId, memberId);
                                     }
-                                    if (!mounted) return;
+                                    if (!dialogContext.mounted) return;
                                     Navigator.pop(dialogContext);
-                                    showMsg(this.context, action == 'leave' ? 'غادرت المجموعة.' : 'تم تحديث عضوية المجموعة.');
+                                    if (!mounted) return;
+                                    showMsg(context, action == 'leave' ? 'غادرت المجموعة.' : 'تم تحديث عضوية المجموعة.');
                                     await showGroupMembers();
                                   } catch (e) {
                                     if (mounted) showMsg(this.context, cleanError(e));
