@@ -5874,6 +5874,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
                         isSelf: isSelf,
                         isOwner: isOwner,
                       );
+                      final canTransferOwnership = actorRole == 'owner' && !isOwner && !isSelf;
                       return ListTile(
                         leading: personAvatar(member),
                         title: Text(field(member, ['display_name', 'displayName', 'username'], 'عضو')),
@@ -5882,12 +5883,13 @@ class _GroupChatPageState extends State<GroupChatPage> {
                             : memberRole == 'admin'
                                 ? 'مشرف'
                                 : '@${field(member, ['username'])}'),
-                        trailing: (canManageRoles || canRemove || canLeave)
+                        trailing: (canManageRoles || canRemove || canLeave || canTransferOwnership)
                             ? PopupMenuButton<String>(
                                 onSelected: (action) async {
                                   final actionLabel = action == 'remove' ? 'إزالة هذا العضو من المجموعة؟'
                                       : action == 'leave' ? 'هل تريد مغادرة المجموعة؟'
                                       : action == 'admin' ? 'تعيين هذا العضو مشرفًا؟'
+                                      : action == 'owner' ? 'نقل ملكية المجموعة إلى هذا العضو؟ لن تعود مالكًا للمجموعة.'
                                       : 'إلغاء صلاحية الإشراف عن هذا العضو؟';
                                   final confirmed = await showDialog<bool>(
                                     context: context,
@@ -5906,7 +5908,9 @@ class _GroupChatPageState extends State<GroupChatPage> {
                                   );
                                   if (confirmed != true || !mounted) return;
                                   try {
-                                    if (action == 'admin' || action == 'member') {
+                                    if (action == 'owner') {
+                                      await Api.transferGroupOwnership(groupId, memberId);
+                                    } else if (action == 'admin' || action == 'member') {
                                       await Api.setGroupMemberRole(groupId, memberId, action);
                                     } else {
                                       await Api.removeGroupMember(groupId, memberId);
@@ -5914,13 +5918,27 @@ class _GroupChatPageState extends State<GroupChatPage> {
                                     if (!dialogContext.mounted) return;
                                     Navigator.pop(dialogContext);
                                     if (!mounted) return;
-                                    showMsg(context, action == 'leave' ? 'غادرت المجموعة.' : 'تم تحديث عضوية المجموعة.');
+                                    showMsg(
+                                      context,
+                                      action == 'leave'
+                                          ? 'غادرت المجموعة.'
+                                          : action == 'owner'
+                                              ? 'تم نقل ملكية المجموعة.'
+                                              : 'تم تحديث عضوية المجموعة.',
+                                    );
+                                    if (action == 'owner') {
+                                      Navigator.pop(context);
+                                      await widget.onGroupChanged();
+                                      return;
+                                    }
                                     await showGroupMembers();
                                   } catch (e) {
                                     if (mounted) showMsg(this.context, cleanError(e));
                                   }
                                 },
                                 itemBuilder: (_) => [
+                                  if (canTransferOwnership)
+                                    const PopupMenuItem(value: 'owner', child: Text('نقل الملكية')),
                                   if (canManageRoles && memberRole != 'admin')
                                     const PopupMenuItem(value: 'admin', child: Text('تعيين مشرف')),
                                   if (canManageRoles && memberRole == 'admin')
