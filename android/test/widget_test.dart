@@ -283,8 +283,6 @@ void main() {
     expect(selected?['id'], 'reply-1');
   });
 
-}
-
 
   test('message reaction normalization preserves emoji and reacting user IDs', () {
     final normalized = normalizeMessageReactions([
@@ -348,3 +346,5 @@ void main() {
     expect(find.text('إضافة تفاعل'), findsOneWidget);
     expect(find.text('تثبيت الرسالة'), findsOneWidget);
   });
+
+}
