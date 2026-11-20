@@ -2379,7 +2379,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           ? await env.DB.prepare(
               `SELECT * FROM (
                  SELECT id, sender_id, receiver_id, body, created_at, read_at,
-                        reply_to_id, reply_to_body, reply_to_sender_id, edited_at, edited_at
+                        reply_to_id, reply_to_body, reply_to_sender_id, edited_at
                  FROM messages
                  WHERE ((sender_id = ? AND receiver_id = ?)
                     OR (sender_id = ? AND receiver_id = ?))
@@ -2393,7 +2393,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           : await env.DB.prepare(
               `SELECT * FROM (
                  SELECT id, sender_id, receiver_id, body, created_at, read_at,
-                        reply_to_id, reply_to_body, reply_to_sender_id
+                        reply_to_id, reply_to_body, reply_to_sender_id, edited_at
                  FROM messages
                  WHERE (sender_id = ? AND receiver_id = ?)
                     OR (sender_id = ? AND receiver_id = ?)
