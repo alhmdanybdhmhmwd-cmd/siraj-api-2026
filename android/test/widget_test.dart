@@ -394,7 +394,9 @@ void main() {
     expect(find.text('إنشاء الملخص'), findsOneWidget);
 
     await tester.tap(find.text('إنشاء الملخص'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
     expect(requests, 1);
     expect(find.text('ملخص اختباري'), findsOneWidget);
   });
