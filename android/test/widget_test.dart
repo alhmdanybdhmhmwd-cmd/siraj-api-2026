@@ -60,6 +60,25 @@ void main() {
     expect(find.text('إرسال رسالة'), findsOneWidget);
   });
 
+  testWidgets('public profile accepts nested API user and hides message action by default', (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: PublicProfilePage(
+        person: {
+          'user': {
+            'id': 'friend-2',
+            'display_name': 'عضو المجموعة',
+            'username': 'group_member',
+          },
+        },
+        currentUserId: 'current-user',
+      ),
+    ));
+
+    expect(find.text('عضو المجموعة'), findsOneWidget);
+    expect(find.text('@group_member'), findsNWidgets(2));
+    expect(find.text('إرسال رسالة'), findsNothing);
+  });
+
   test('ephemeral messages disappear at their first-read expiry deadline', () {
     final now = DateTime.utc(2026, 11, 20, 12);
     final nowSeconds = now.millisecondsSinceEpoch ~/ 1000;
