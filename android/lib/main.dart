@@ -3567,6 +3567,132 @@ String _mimeForExtension(String extension) {
   }
 }
 
+class BarqConversationTool {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const BarqConversationTool({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+}
+
+Future<void> showBarqConversationTools(
+  BuildContext context,
+  List<BarqConversationTool> tools,
+) async {
+  await showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: panel,
+    isScrollControlled: true,
+    builder: (sheetContext) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(children: [
+              const Icon(Icons.build_circle_outlined, color: gold),
+              const SizedBox(width: 9),
+              const Expanded(child: Text('أدوات المحادثة',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold))),
+              IconButton(
+                tooltip: 'إغلاق',
+                onPressed: () => Navigator.pop(sheetContext),
+                icon: const Icon(Icons.close, color: Colors.white70),
+              ),
+            ]),
+            const Divider(color: Colors.white24),
+            for (final tool in tools)
+              ListTile(
+                leading: Icon(tool.icon, color: gold),
+                title: Text(tool.title),
+                subtitle: Text(tool.subtitle, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  tool.onTap();
+                },
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+Future<void> showBarqMessageCollectionDialog(
+  BuildContext context, {
+  required String title,
+  required List<Map<String, dynamic>> messages,
+  required bool attachmentsOnly,
+}) async {
+  final selected = messages.where((message) {
+    final attachment = _attachmentData(message);
+    return attachmentsOnly ? attachment != null : message['is_pinned'] == true;
+  }).toList().reversed.toList();
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => Dialog(
+      backgroundColor: panel,
+      insetPadding: const EdgeInsets.all(14),
+      child: SizedBox(
+        width: 480,
+        height: MediaQuery.of(context).size.height * 0.62,
+        child: Column(children: [
+          ListTile(
+            title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: const Text('من الرسائل المحمّلة حاليًا',
+              style: TextStyle(color: Colors.white54, fontSize: 11)),
+            trailing: IconButton(
+              tooltip: 'إغلاق',
+              onPressed: () => Navigator.pop(dialogContext),
+              icon: const Icon(Icons.close),
+            ),
+          ),
+          const Divider(height: 1, color: Colors.white24),
+          if (selected.isEmpty)
+            Expanded(child: Center(
+              child: Text(
+                attachmentsOnly ? 'لا توجد مرفقات ضمن الرسائل المحمّلة.' : 'لا توجد رسائل مثبتة ضمن الرسائل المحمّلة.',
+                style: const TextStyle(color: Colors.white60),
+              ),
+            ))
+          else
+            Expanded(
+              child: ListView.separated(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                itemCount: selected.length,
+                separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white12),
+                itemBuilder: (context, index) {
+                  final message = selected[index];
+                  final attachment = _attachmentData(message);
+                  final preview = attachment != null
+                      ? field(attachment, ['fileName'], 'مرفق')
+                      : field(message, ['body', 'content', 'message'], 'رسالة');
+                  return ListTile(
+                    leading: Icon(
+                      attachmentsOnly ? Icons.attach_file : Icons.push_pin_outlined,
+                      color: gold,
+                    ),
+                    title: Text(preview, maxLines: 2, overflow: TextOverflow.ellipsis),
+                    subtitle: Text(field(message, ['display_name', 'username'], 'مستخدم'),
+                      style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                    trailing: Text(_messageTime(field(message, ['created_at', 'createdAt'])),
+                      style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                  );
+                },
+              ),
+            ),
+        ]),
+      ),
+    ),
+  );
+}
+
 class BarqConversationSummaryDialog extends StatefulWidget {
   final Future<Map<String, dynamic>> Function() loadSummary;
 
@@ -5137,19 +5263,41 @@ class _ChatPageState extends State<ChatPage> {
           ),
           actions: [
             IconButton(
-              onPressed: () => showConversationSearch(context, (query, before) => Api.searchPrivateMessages(friendId, query, before: before)),
-              icon: const Icon(Icons.search, color: gold),
-              tooltip: 'البحث في المحادثة',
-            ),
-            IconButton(
-              onPressed: () => showDialog<void>(
-                context: context,
-                builder: (_) => BarqConversationSummaryDialog(
-                  loadSummary: () => Api.summarizePrivateConversation(friendId),
+              onPressed: () => showBarqConversationTools(context, [
+                BarqConversationTool(
+                  icon: Icons.search,
+                  title: 'البحث في المحادثة',
+                  subtitle: 'ابحث داخل الرسائل المحمّلة',
+                  onTap: () => showConversationSearch(context, (query, before) => Api.searchPrivateMessages(friendId, query, before: before)),
                 ),
-              ),
-              icon: const Icon(Icons.auto_awesome_outlined, color: gold),
-              tooltip: 'ملخص المحادثة',
+                BarqConversationTool(
+                  icon: Icons.auto_awesome_outlined,
+                  title: 'ملخص المحادثة',
+                  subtitle: 'إنشاء ملخص ذكي بعد موافقتك',
+                  onTap: () => showDialog<void>(
+                    context: context,
+                    builder: (_) => BarqConversationSummaryDialog(
+                      loadSummary: () => Api.summarizePrivateConversation(friendId),
+                    ),
+                  ),
+                ),
+                BarqConversationTool(
+                  icon: Icons.push_pin_outlined,
+                  title: 'الرسائل المثبتة (' + messages.where((message) => message['is_pinned'] == true).length.toString() + ')',
+                  subtitle: 'عرض المثبتة ضمن الرسائل المحمّلة',
+                  onTap: () => showBarqMessageCollectionDialog(context,
+                    title: 'الرسائل المثبتة', messages: messages, attachmentsOnly: false),
+                ),
+                BarqConversationTool(
+                  icon: Icons.perm_media_outlined,
+                  title: 'الوسائط والملفات (' + messages.where((message) => _attachmentData(message) != null).length.toString() + ')',
+                  subtitle: 'عرض المرفقات ضمن الرسائل المحمّلة',
+                  onTap: () => showBarqMessageCollectionDialog(context,
+                    title: 'الوسائط والملفات', messages: messages, attachmentsOnly: true),
+                ),
+              ]),
+              icon: const Icon(Icons.build_circle_outlined, color: gold),
+              tooltip: 'أدوات المحادثة',
             ),
             IconButton(onPressed: loadMessages, icon: const Icon(Icons.refresh, color: gold)),
           ],
@@ -5656,19 +5804,41 @@ class _GroupChatPageState extends State<GroupChatPage> {
           ]),
           actions: [
             IconButton(
-              onPressed: () => showConversationSearch(context, (query, before) => Api.searchGroupMessages(groupId, query, before: before)),
-              icon: const Icon(Icons.search, color: gold),
-              tooltip: 'البحث في المحادثة',
-            ),
-            IconButton(
-              onPressed: () => showDialog<void>(
-                context: context,
-                builder: (_) => BarqConversationSummaryDialog(
-                  loadSummary: () => Api.summarizeGroupConversation(groupId),
+              onPressed: () => showBarqConversationTools(context, [
+                BarqConversationTool(
+                  icon: Icons.search,
+                  title: 'البحث في المحادثة',
+                  subtitle: 'ابحث داخل رسائل المجموعة المحمّلة',
+                  onTap: () => showConversationSearch(context, (query, before) => Api.searchGroupMessages(groupId, query, before: before)),
                 ),
-              ),
-              icon: const Icon(Icons.auto_awesome_outlined, color: gold),
-              tooltip: 'ملخص المحادثة',
+                BarqConversationTool(
+                  icon: Icons.auto_awesome_outlined,
+                  title: 'ملخص المحادثة',
+                  subtitle: 'إنشاء ملخص ذكي بعد موافقتك',
+                  onTap: () => showDialog<void>(
+                    context: context,
+                    builder: (_) => BarqConversationSummaryDialog(
+                      loadSummary: () => Api.summarizeGroupConversation(groupId),
+                    ),
+                  ),
+                ),
+                BarqConversationTool(
+                  icon: Icons.push_pin_outlined,
+                  title: 'الرسائل المثبتة (' + messages.where((message) => message['is_pinned'] == true).length.toString() + ')',
+                  subtitle: 'عرض المثبتة ضمن الرسائل المحمّلة',
+                  onTap: () => showBarqMessageCollectionDialog(context,
+                    title: 'الرسائل المثبتة', messages: messages, attachmentsOnly: false),
+                ),
+                BarqConversationTool(
+                  icon: Icons.perm_media_outlined,
+                  title: 'الوسائط والملفات (' + messages.where((message) => _attachmentData(message) != null).length.toString() + ')',
+                  subtitle: 'عرض المرفقات ضمن الرسائل المحمّلة',
+                  onTap: () => showBarqMessageCollectionDialog(context,
+                    title: 'الوسائط والملفات', messages: messages, attachmentsOnly: true),
+                ),
+              ]),
+              icon: const Icon(Icons.build_circle_outlined, color: gold),
+              tooltip: 'أدوات المحادثة',
             ),
             IconButton(onPressed: showGroupMembers, icon: const Icon(Icons.people_alt_outlined, color: gold), tooltip: 'أعضاء المجموعة'),
             IconButton(onPressed: widget.onAddMember, icon: const Icon(Icons.person_add_alt_1, color: gold), tooltip: 'إضافة عضو'),
