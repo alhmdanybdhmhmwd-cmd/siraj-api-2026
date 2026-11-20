@@ -1765,7 +1765,7 @@ test("declared oversized JSON bodies are rejected before authentication work", a
     error: "JSON request body is too large"
   });
   assert.equal(db.lastLoginQuery, undefined);
-  assert.equal(bodyCancelled, false, "declared oversized bodies are rejected without consuming the stream");
+  assert.equal(bodyCancelled, true, "declared oversized bodies cancel the unread stream");
 });
 
 test("chunked oversized JSON requests are rejected before route processing", async () => {
