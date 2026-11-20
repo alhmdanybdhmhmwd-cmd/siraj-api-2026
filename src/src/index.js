@@ -2084,6 +2084,40 @@ export default {
         return json({ message: "Member role updated", userId: targetUserId, role });
       }
 
+      // Only the current owner can transfer ownership to an existing group member.
+      const groupOwnershipMatch = path.match(/^\\/api\\/groups\\/([^/]+)\\/owner$/);
+      if (method === "POST" && groupOwnershipMatch) {
+        const groupId = groupOwnershipMatch[1];
+        const body = await readJsonRequestLimited(request);
+        const targetUserId = String(body.userId || "").trim();
+        if (!targetUserId || targetUserId.length > 128 || targetUserId === currentUser.sub) {
+          return json({ error: "Choose another valid group member as the new owner" }, 400);
+        }
+        const results = await env.DB.batch([
+          env.DB.prepare(
+            `UPDATE chat_groups
+             SET owner_id = ?
+             WHERE id = ? AND owner_id = ?
+               AND EXISTS (
+                 SELECT 1 FROM group_members
+                 WHERE group_id = ? AND user_id = ?
+               )`
+          ).bind(targetUserId, groupId, currentUser.sub, groupId, targetUserId),
+          env.DB.prepare(
+            `DELETE FROM group_member_roles
+             WHERE group_id = ? AND user_id IN (?, ?)
+               AND EXISTS (
+                 SELECT 1 FROM chat_groups
+                 WHERE id = ? AND owner_id = ?
+               )`
+          ).bind(groupId, currentUser.sub, targetUserId, groupId, targetUserId)
+        ]);
+        if (Number(results?.[0]?.meta?.changes || 0) !== 1) {
+          return json({ error: "Group not found, ownership changed, or target is not a member" }, 409);
+        }
+        return json({ message: "Group ownership transferred", ownerId: targetUserId });
+      }
+
       // Members may leave themselves; owners can remove any non-owner member,
       // while admins can remove ordinary members but not fellow admins.
       const groupMemberActionMatch = path.match(/^\/api\/groups\/([^/]+)\/members\/([^/]+)$/);
