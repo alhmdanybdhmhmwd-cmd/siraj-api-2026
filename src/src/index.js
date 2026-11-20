@@ -3110,8 +3110,32 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         const accessRow = await env.DB.prepare(
           "SELECT owner_id, recipient_id, group_id, file_name, content_type, expires_at FROM media_access WHERE object_key = ?"
         ).bind(key).first();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_media (
+            status_id TEXT PRIMARY KEY, object_key TEXT NOT NULL UNIQUE,
+            file_name TEXT NOT NULL, content_type TEXT NOT NULL,
+            size INTEGER NOT NULL, caption TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE
+          )
+        `).run();
+        const sparkMedia = await env.DB.prepare(
+          `SELECT sm.status_id AS statusId, sp.user_id AS ownerId, sp.expires_at AS expiresAt
+           FROM status_media sm JOIN status_posts sp ON sp.id = sm.status_id
+           WHERE sm.object_key = ? LIMIT 1`
+        ).bind(key).first();
         let permitted = false;
-        if (accessRow) {
+        if (sparkMedia) {
+          permitted = sparkMedia.ownerId === currentUser.sub;
+          if (!permitted && Date.parse(sparkMedia.expiresAt) > Date.now()) {
+            const friendship = await env.DB.prepare(
+              "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
+            ).bind(currentUser.sub, sparkMedia.ownerId).first();
+            permitted = !!friendship;
+          }
+          if (!permitted) return json({ error: "SPARK media access denied" }, 403);
+        }
+        if (accessRow && !sparkMedia) {
           permitted = accessRow.owner_id === currentUser.sub;
           if (!permitted && accessRow.recipient_id === currentUser.sub && accessRow.owner_id) {
             const friendship = await env.DB.prepare(
