@@ -49,6 +49,23 @@ bool isBarqTranscriptionSizeAllowed(int byteLength) =>
 
 bool isBarqMessageTextAllowed(String value) =>
     value.trim().isNotEmpty && value.trim().length <= 5000;
+
+bool barqCanManageGroupRoles(String actorRole, {required bool targetIsOwner}) =>
+    actorRole == 'owner' && !targetIsOwner;
+
+bool barqCanRemoveGroupMember(
+  String actorRole,
+  String targetRole, {
+  required bool targetIsOwner,
+  required bool targetIsSelf,
+}) =>
+    !targetIsOwner &&
+    !targetIsSelf &&
+    (actorRole == 'owner' || (actorRole == 'admin' && targetRole == 'member'));
+
+bool barqCanLeaveGroup({required bool isSelf, required bool isOwner}) =>
+    isSelf && !isOwner;
+
 const int proxyMediaThresholdBytes = 4 * 1024 * 1024;
 
 const storage = FlutterSecureStorage();
@@ -5824,10 +5841,20 @@ class _GroupChatPageState extends State<GroupChatPage> {
                       final actorRole = field(widget.group, ['current_role'], 'member');
                       final memberId = field(member, ['id', 'user_id']);
                       final isSelf = memberId == widget.currentUserId;
-                      final canManageRoles = actorRole == 'owner' && !isOwner;
-                      final canRemove = !isOwner && !isSelf &&
-                          (actorRole == 'owner' || (actorRole == 'admin' && memberRole == 'member'));
-                      final canLeave = isSelf && !isOwner;
+                      final canManageRoles = barqCanManageGroupRoles(
+                        actorRole,
+                        targetIsOwner: isOwner,
+                      );
+                      final canRemove = barqCanRemoveGroupMember(
+                        actorRole,
+                        memberRole,
+                        targetIsOwner: isOwner,
+                        targetIsSelf: isSelf,
+                      );
+                      final canLeave = barqCanLeaveGroup(
+                        isSelf: isSelf,
+                        isOwner: isOwner,
+                      );
                       return ListTile(
                         leading: personAvatar(member),
                         title: Text(field(member, ['display_name', 'displayName', 'username'], 'عضو')),
