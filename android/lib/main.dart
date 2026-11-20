@@ -588,6 +588,18 @@ class Api {
     });
   }
 
+  static Future<void> editPrivateMessage(String messageId, String body) async {
+    await request('PATCH', '/api/messages/${Uri.encodeComponent(messageId)}', body: {'body': body});
+  }
+
+  static Future<void> editGroupMessage(String groupId, String messageId, String body) async {
+    await request(
+      'PATCH',
+      '/api/groups/${Uri.encodeComponent(groupId)}/messages/${Uri.encodeComponent(messageId)}',
+      body: {'body': body},
+    );
+  }
+
   static Future<void> deletePrivateMessage(String messageId) async {
     await request('DELETE', '/api/messages/${Uri.encodeComponent(messageId)}');
   }
@@ -1050,6 +1062,7 @@ Future<void> showMessageActions(
   required bool canDelete,
   required Future<void> Function() onDelete,
   Future<void> Function(Map<String, dynamic> message)? onReply,
+  Future<void> Function(String body)? onEdit,
 }) async {
   final action = await showModalBottomSheet<String>(
     context: context,
@@ -1069,6 +1082,12 @@ Future<void> showMessageActions(
               title: const Text('الرد على الرسالة'),
               onTap: () => Navigator.pop(sheetContext, 'reply'),
             ),
+          if (onEdit != null)
+            ListTile(
+              leading: const Icon(Icons.edit_rounded, color: gold),
+              title: const Text('تعديل الرسالة'),
+              onTap: () => Navigator.pop(sheetContext, 'edit'),
+            ),
           if (canDelete)
             ListTile(
               leading: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
@@ -1081,6 +1100,12 @@ Future<void> showMessageActions(
   );
   if (action == 'reply' && onReply != null) {
     await onReply(message);
+  } else if (action == 'edit' && onEdit != null && context.mounted) {
+    final initial = field(message, ['body', 'content', 'message']);
+    final edited = await showEditMessageDialog(context, initial);
+    if (edited != null && edited.trim() != initial.trim()) {
+      await onEdit(edited.trim());
+    }
   } else if (action == 'copy') {
     final text = field(message, ['body', 'content', 'message']);
     if (text.isNotEmpty) {
@@ -1112,6 +1137,39 @@ Future<void> showMessageActions(
       }
     }
   }
+}
+
+Future<String?> showEditMessageDialog(BuildContext context, String initialText) async {
+  final controller = TextEditingController(text: initialText);
+  final result = await showDialog<String>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      backgroundColor: panel,
+      title: const Text('تعديل الرسالة'),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        maxLines: 5,
+        minLines: 1,
+        maxLength: 5000,
+        decoration: const InputDecoration(hintText: 'اكتب نص الرسالة'),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
+        TextButton(
+          onPressed: () {
+            final value = controller.text.trim();
+            if (value.isNotEmpty && value.length <= 5000) {
+              Navigator.pop(dialogContext, value);
+            }
+          },
+          child: const Text('حفظ'),
+        ),
+      ],
+    ),
+  );
+  controller.dispose();
+  return result;
 }
 
 String messageReplyPreview(Map<String, dynamic> message) {
