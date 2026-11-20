@@ -45,7 +45,7 @@ test("media proxy rejects oversized declared Content-Length before reading or fo
   }
 });
 
-test("profile photo proxy rejects uploads above 5 MB before reading or forwarding", async () => {
+test("profile photo proxy rejects uploads above 4 MB before reading or forwarding", async () => {
   const originalFetch = globalThis.fetch;
   let fetchCalled = false;
   globalThis.fetch = async () => { fetchCalled = true; throw new Error("unexpected upstream request"); };
