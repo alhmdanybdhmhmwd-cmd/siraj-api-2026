@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATIONS = sorted((ROOT / "migrations").glob("*.sql"))"
+MIGRATIONS = sorted((ROOT / "migrations").glob("*.sql"))
 
 
 class RecoveryMigrationTests(unittest.TestCase):
