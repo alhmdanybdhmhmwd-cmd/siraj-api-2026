@@ -39,3 +39,15 @@ test("isolated test D1 is not the production database", () => {
   assert.ok(!testConfig.includes("[vars]"));
   assert.ok(!testConfig.includes("[[routes]]"));
 });
+
+test("ephemeral messages stay private and start a ten-second expiry on first recipient read", () => {
+  assert.ok(worker.includes('path === "/api/ephemeral-messages"'));
+  assert.ok(worker.includes("CREATE TABLE IF NOT EXISTS ephemeral_messages"));
+  assert.ok(worker.includes("SET read_at = unixepoch(), delete_at = unixepoch() + 10"));
+  assert.ok(worker.includes("delete_at IS NULL OR delete_at > unixepoch()"));
+  const start = worker.indexOf('path === "/api/ephemeral-messages"');
+  const end = worker.indexOf("// Rotate the one-time recovery code", start);
+  const route = worker.slice(start, end);
+  assert.ok(route.includes("INSERT INTO ephemeral_messages"));
+  assert.ok(!route.includes("sendSirajPush"), "ephemeral content must not trigger Firebase push");
+});
