@@ -30,6 +30,29 @@ test("phase 2 core API route paths remain present", () => {
   }
 });
 
+test("message deletion is authenticated and limited to the author in private and group chats", () => {
+  const privateStart = worker.indexOf("privateMessageActionMatch");
+  const privateEnd = worker.indexOf("// Get conversation messages", privateStart);
+  const privateRoute = worker.slice(privateStart, privateEnd);
+  assert.ok(privateRoute.includes('method === "DELETE"'));
+  assert.ok(privateRoute.includes("sender_id = ?"));
+  assert.ok(privateRoute.includes("currentUser.sub"));
+  assert.ok(privateRoute.includes("DELETE FROM messages"));
+
+  const groupStart = worker.indexOf("groupMessageActionMatch");
+  const groupEnd = worker.indexOf("const groupMessagesMatch", groupStart);
+  const groupRoute = worker.slice(groupStart, groupEnd);
+  assert.ok(groupRoute.includes('method === "DELETE"'));
+  assert.ok(groupRoute.includes("group_members"));
+  assert.ok(groupRoute.includes("sender_id = ?"));
+  assert.ok(groupRoute.includes("DELETE FROM group_messages"));
+
+  assert.ok(flutterApp.includes("deletePrivateMessage"));
+  assert.ok(flutterApp.includes("deleteGroupMessage"));
+  assert.ok(flutterApp.includes("حذف الرسالة"));
+  assert.ok(flutterApp.includes("canDelete: mine"));
+});
+
 test("isolated test D1 is not the production database", () => {
   const testId = testConfig.match(/database_id\s*=\s*"([^"]+)"/)?.[1];
   const productionId = productionConfig.match(/database_id\s*=\s*"([^"]+)"/)?.[1];
