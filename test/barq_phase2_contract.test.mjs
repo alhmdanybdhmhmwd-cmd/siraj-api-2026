@@ -300,3 +300,29 @@ test("speech transcription route is behind bearer authentication and never persi
   assert.ok(!route.includes("INSERT INTO group_messages"));
   assert.ok(!route.includes("sendSirajPush"));
 });
+
+
+test("group role management is owner-controlled and member removal respects owner/admin boundaries", () => {
+  const roleStart = worker.indexOf("const groupRoleMatch");
+  const roleEnd = worker.indexOf("const groupMemberActionMatch", roleStart);
+  const roleRoute = worker.slice(roleStart, roleEnd);
+  const removeStart = worker.indexOf("const groupMemberActionMatch");
+  const removeEnd = worker.indexOf("// Group reactions", removeStart);
+  const removeRoute = worker.slice(removeStart, removeEnd);
+
+  assert.ok(roleStart >= 0 && roleRoute.includes('group.owner_id !== currentUser.sub'));
+  assert.ok(roleRoute.includes("Only the group owner can manage admin roles"));
+  assert.ok(roleRoute.includes("targetUserId === group.owner_id"));
+  assert.ok(roleRoute.includes("role !== \"admin\" && role !== \"member\""));
+  assert.ok(removeRoute.includes("selfLeave"));
+  assert.ok(removeRoute.includes("actorRole !== \"owner\""));
+  assert.ok(removeRoute.includes('actorRole === "admin"'));
+  assert.ok(removeRoute.includes('target?.role || "member"'));
+
+  assert.ok(flutterApp.includes("setGroupMemberRole"));
+  assert.ok(flutterApp.includes("removeGroupMember"));
+  assert.ok(flutterApp.includes("تعيين مشرف"));
+  assert.ok(flutterApp.includes("إلغاء الإشراف"));
+  assert.ok(flutterApp.includes("مغادرة المجموعة"));
+  assert.ok(flutterApp.includes("current_role"));
+});
