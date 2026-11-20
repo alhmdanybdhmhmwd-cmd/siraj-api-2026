@@ -460,3 +460,20 @@ test("SPARK status feeds and push notifications are restricted to reciprocal con
   assert.ok(mediaUpload.includes("reciprocal.user_id = f.friend_id AND reciprocal.friend_id = ?"));
   assert.ok(worker.includes("شارك لحظة جديدة في SPARK"));
 });
+
+
+test("SPARK view tracking is unique per viewer and only the owner can inspect viewer identities", () => {
+  const start = worker.indexOf("const sparkViewerMatch");
+  const end = worker.indexOf("// SPARK replies and reactions", start);
+  const route = worker.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  assert.ok(route.includes("INSERT OR IGNORE INTO status_views"));
+  assert.ok(route.includes("SELECT COUNT(*) AS count FROM status_views"));
+  assert.ok(route.includes("status.user_id !== currentUser.sub"));
+  assert.ok(route.includes("Only the status owner can view this list"));
+  assert.ok(route.includes("FROM status_views sv JOIN users u"));
+  assert.ok(flutterApp.includes("markSparkViewed"));
+  assert.ok(flutterApp.includes("sparkViewers"));
+  assert.ok(flutterApp.includes("مشاهدو SPARK"));
+  assert.ok(flutterApp.includes("viewCount"));
+});
