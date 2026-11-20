@@ -1238,8 +1238,8 @@ class _LoginPageState extends State<LoginPage> {
           ? c - 0x06f0 + 48 : c - 0x0660 + 48);
     });
     value = value.replaceAll(RegExp(r'[\s().-]'), '');
-    if (value.startsWith('00')) value = '+${value.substring(2)}';
-    if (!value.startsWith('+')) value = '+$value';
+    if (value.startsWith('00')) value = '+' + value.substring(2);
+    if (!value.startsWith('+')) value = '+' + value;
     return value;
   }
 
@@ -4038,7 +4038,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
   }
 }
 ).hasMatch(_normalizedInternationalPhone(phone.text))) {
-      showMsg(context, 'أدخل رقم الهاتف مع مفتاح الدولة بصيغة دولية صحيحة.');
+      showMsg(context, 'أدخل رقم هاتف يمني صحيحًا مكوّنًا من 9 أرقام بعد +967.');
       return;
     }
     setState(() => busy = true);
@@ -4050,7 +4050,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
                   ? _generatedUsername()
                   : optionalUsername.text.trim().replaceAll('@', ''),
               password: password.text,
-              phone: _normalizedInternationalPhone(phone.text),
+              phone: _normalizedYemenPhone(phone.text),
               inviteCode: inviteCode.text.trim().isEmpty ? null : inviteCode.text.trim(),
             )
           : await Api.login(username.text.trim(), password.text);
@@ -4098,7 +4098,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
     keyboardType: isPhone ? TextInputType.phone : TextInputType.text,
     textDirection: isPhone ? TextDirection.ltr : TextDirection.rtl,
     decoration: _barqDecoration(label, icon,
-      prefix: null).copyWith(
+      prefix: isPhone ? '+967  ' : null).copyWith(
         suffixText: optional ? 'اختياري' : null,
       ),
   );
