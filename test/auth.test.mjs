@@ -16,7 +16,7 @@ class AwsClient {
   }
 }
 `);
-workerSource += "\nexport { signToken, verifyToken, authenticate, hashPassword, sendSirajPush, detectProfileImageType };";
+workerSource += "\nexport { signToken, verifyToken, authenticate, hashPassword, sendSirajPush, detectProfileImageType, readRequestBodyLimited };";
 const worker = await import("data:text/javascript;base64," + Buffer.from(workerSource).toString("base64"));
 
 test("profile image validation accepts JPEG, PNG, and WebP signatures", () => {
@@ -2190,4 +2190,71 @@ test("logout revokes only the current bearer token and leaves another device ses
   assert.equal(db.lastRevocationParams[1], user.id);
   assert.equal(db.revokedSessions.has(firstToken), false, "raw bearer token must never be stored");
   assert.equal(db.revokedSessions.size, 1);
+});
+
+
+test("bounded request reader rejects oversized streaming bodies without Content-Length", async () => {
+  const maxBytes = 2 * 1024 * 1024;
+  let cancelled = false;
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(maxBytes));
+      controller.enqueue(new Uint8Array(1));
+    },
+    cancel() { cancelled = true; }
+  });
+  const request = new Request("https://api.example.test/api/transcribe", {
+    method: "POST",
+    headers: { "Content-Type": "audio/webm" },
+    body,
+    duplex: "half"
+  });
+  assert.equal(request.headers.has("Content-Length"), false);
+  assert.equal(await worker.readRequestBodyLimited(request, maxBytes), null);
+  assert.equal(cancelled, true);
+});
+
+test("bounded request reader accepts a body exactly at the configured limit", async () => {
+  const request = new Request("https://api.example.test/api/transcribe", {
+    method: "POST",
+    body: new ReadableStream({
+      start(controller) {
+        controller.enqueue(Uint8Array.from([1, 2]));
+        controller.enqueue(Uint8Array.from([3, 4]));
+        controller.close();
+      }
+    }),
+    duplex: "half"
+  });
+  assert.deepEqual(
+    Array.from(await worker.readRequestBodyLimited(request, 4)),
+    [1, 2, 3, 4]
+  );
+});
+
+test("transcription route rejects oversized chunked audio before inference", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  let inferenceCalls = 0;
+  const request = new Request("https://api.example.test/api/transcribe", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "audio/webm"
+    },
+    body: new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array(2 * 1024 * 1024));
+        controller.enqueue(new Uint8Array(1));
+      }
+    }),
+    duplex: "half"
+  });
+  const response = await worker.default.fetch(request, {
+    DB: db,
+    JWT_SECRET: secret,
+    AI: { async run() { inferenceCalls++; return { text: "unexpected" }; } }
+  });
+  assert.equal(response.status, 413);
+  assert.equal(inferenceCalls, 0);
 });
