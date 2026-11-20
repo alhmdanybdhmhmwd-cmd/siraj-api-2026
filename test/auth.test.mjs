@@ -1644,6 +1644,7 @@ test("each uploaded attachment receives its own 72-hour expiration timestamp", a
   const db = new FakeDB();
   const originalPrepare = db.prepare.bind(db);
   let savedExpiry = null;
+  let savedAccess = null;
   db.prepare = sql => {
     const statement = originalPrepare(sql);
     const first = statement.first.bind(statement);
@@ -1652,6 +1653,12 @@ test("each uploaded attachment receives its own 72-hour expiration timestamp", a
       ? { 1: 1 } : first();
     statement.run = async () => {
       if (sql.includes("INSERT INTO media_expirations")) savedExpiry = statement.params[1];
+      if (sql.includes("INSERT INTO media_access")) {
+        savedAccess = {
+          sql,
+          params: [...statement.params]
+        };
+      }
       return run();
     };
     return statement;
@@ -1681,6 +1688,17 @@ test("each uploaded attachment receives its own 72-hour expiration timestamp", a
     assert.equal(response.status, 201);
     const expiry = Date.parse(savedExpiry);
     assert.equal(savedExpiry, storageExpiry);
+    assert.ok(savedAccess, "upload must persist a D1 authorization row");
+    assert.match(savedAccess.sql, /INSERT INTO media_access/);
+    assert.deepEqual(savedAccess.params.slice(0, 6), [
+      (await response.json()).attachment.id,
+      user.id,
+      "friend-1",
+      null,
+      "attachment",
+      "image/jpeg"
+    ]);
+    assert.equal(savedAccess.params[6], savedExpiry);
     assert.ok(expiry >= before + 72 * 60 * 60 * 1000 - 1000);
     assert.ok(expiry <= Date.now() + 72 * 60 * 60 * 1000 + 1000);
   } finally {
