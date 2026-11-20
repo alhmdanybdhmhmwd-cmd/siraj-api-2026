@@ -54,6 +54,31 @@ test("message deletion is authenticated and limited to the author in private and
   assert.ok(flutterApp.includes("canDelete: mine"));
 });
 
+test("message editing is PATCH-only for the authenticated author in private and group chats", () => {
+  const privateStart = worker.indexOf("privateMessageActionMatch");
+  const privateEnd = worker.indexOf("// Get conversation messages", privateStart);
+  const privateRoute = worker.slice(privateStart, privateEnd);
+  assert.ok(privateRoute.includes('method === "PATCH"'));
+  assert.ok(privateRoute.includes("UPDATE messages SET body = ?, edited_at = CURRENT_TIMESTAMP"));
+  assert.ok(privateRoute.includes("sender_id = ?"));
+  assert.ok(privateRoute.includes("currentUser.sub"));
+
+  const groupStart = worker.indexOf("groupMessageActionMatch");
+  const groupEnd = worker.indexOf("const groupMessagesMatch", groupStart);
+  const groupRoute = worker.slice(groupStart, groupEnd);
+  assert.ok(groupRoute.includes('method === "PATCH"'));
+  assert.ok(groupRoute.includes("group_members"));
+  assert.ok(groupRoute.includes("UPDATE group_messages SET body = ?, edited_at = CURRENT_TIMESTAMP"));
+  assert.ok(groupRoute.includes("sender_id = ?"));
+  assert.ok(groupRoute.includes("message.length > 5000"));
+
+  assert.ok(flutterApp.includes("editPrivateMessage"));
+  assert.ok(flutterApp.includes("editGroupMessage"));
+  assert.ok(flutterApp.includes("تعديل الرسالة"));
+  assert.ok(flutterApp.includes("تم التعديل"));
+  assert.ok(replyMigration.includes("reply_to_id"));
+});
+
 test("private and group replies are scoped to the same conversation and retain a safe preview", () => {
   assert.ok(worker.includes('body.replyToId'));
   assert.ok(worker.includes("Reply target not found in this conversation"));
