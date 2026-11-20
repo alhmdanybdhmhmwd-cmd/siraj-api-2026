@@ -56,6 +56,12 @@ void main() {
     expect(searchConversationMessages(messages, '   '), isEmpty);
   });
 
+  test('offline sync pauses only for network failures, not one rejected message', () {
+    expect(barqOfflineSyncShouldPause(Exception('NETWORK_DIAGNOSTIC: SocketException')), isTrue);
+    expect(barqOfflineSyncShouldPause(Exception('Reply target not found')), isFalse);
+    expect(barqOfflineSyncShouldPause(Exception('Message is too long')), isFalse);
+  });
+
   test('offline queue reconciliation removes IDs found on any server page only', () {
     final queued = [
       {'id': 'offline-old', 'body': 'وصلت دون إنترنت'},
