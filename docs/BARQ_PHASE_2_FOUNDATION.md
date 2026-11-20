@@ -36,7 +36,7 @@ A contract assertion now verifies that the three Android origin selectors remain
 
 ## Still required to close Phase 2
 
-1. Backend CI recheck completed on `1aee039df3300ad928046df49db41c329640027e` (97/97 Node tests plus 4/4 SQLite migration tests passing). Android quality gate passed Dart analysis and Flutter tests, but its ARM64 debug APK build step remained in progress without a final run result at this update.
+1. Backend CI recheck completed on `1aee039df3300ad928046df49db41c329640027e` (97/97 Node tests plus 4/4 SQLite migration tests passing). Android quality gate run `44779226464` passed Dart analysis, Flutter tests, ARM64 debug APK build, and debug artifact upload (82,173,540 bytes). The optimized split-per-ABI ARM64 release test APK build/upload was still running at this update.
 2. Establish or verify an isolated Preview Worker/API origin and configure its REST, media, and realtime endpoints; do not use production D1 for testing.
 3. Run authenticated Android-to-Preview integration tests for registration/login, session restore, `/api/me`, contacts, messages, groups, media, and realtime.
 4. Server-side bearer-token revocation is implemented through migration `0002_revoked_sessions.sql` and unit-tested as device/token-scoped; apply the migration only to isolated Preview, then confirm it on two actual devices. Offline logout remains locally effective, while server revocation requires network access.
