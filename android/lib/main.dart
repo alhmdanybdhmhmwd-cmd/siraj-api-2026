@@ -1190,6 +1190,17 @@ class _StartupPageState extends State<StartupPage> {
   }
 }
 
+String normalizeBarqInternationalPhone(String raw) {
+  var value = raw.trim().replaceAllMapped(RegExp(r'[٠-٩۰-۹]'), (m) {
+    final c = m.group(0)!.codeUnitAt(0);
+    return String.fromCharCode(c >= 0x06f0 && c <= 0x06f9
+        ? c - 0x06f0 + 48 : c - 0x0660 + 48);
+  });
+  value = value.replaceAll(RegExp(r'[\s().-]'), '');
+  if (value.startsWith('00')) value = '+' + value.substring(2);
+  if (!value.startsWith('+')) value = '+' + value;
+  return value;
+}
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -1231,17 +1242,7 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  String _normalizedInternationalPhone(String raw) {
-    var value = raw.trim().replaceAllMapped(RegExp(r'[٠-٩۰-۹]'), (m) {
-      final c = m.group(0)!.codeUnitAt(0);
-      return String.fromCharCode(c >= 0x06f0 && c <= 0x06f9
-          ? c - 0x06f0 + 48 : c - 0x0660 + 48);
-    });
-    value = value.replaceAll(RegExp(r'[\s().-]'), '');
-    if (value.startsWith('00')) value = '+' + value.substring(2);
-    if (!value.startsWith('+')) value = '+' + value;
-    return value;
-  }
+  String _normalizedInternationalPhone(String raw) => normalizeBarqInternationalPhone(raw);
 
   String _generatedUsername() {
     const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -2402,7 +2403,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 controller: phoneController,
                 keyboardType: TextInputType.phone,
                 maxLength: 25,
-                decoration: inputDecoration('رقم الهاتف (اختياري)', Icons.phone_outlined),
+                decoration: inputDecoration('رقم الهاتف', Icons.phone_outlined),
               ),
               const SizedBox(height: 6),
               const Text('اسم المستخدم لا يتغير من هذه الشاشة.',
@@ -2422,11 +2423,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   showMsg(this.context, 'اكتب الاسم الظاهر أولاً.');
                   return;
                 }
+                final phone = normalizeBarqInternationalPhone(phoneController.text);
+                if (!RegExp(r'^\+[1-9][0-9]{7,14}$').hasMatch(phone)) {
+                  showMsg(this.context, 'أدخل رقم الهاتف مع مفتاح الدولة بصيغة دولية صحيحة.');
+                  return;
+                }
                 setDialog(() => saving = true);
                 try {
                   final updated = await Api.updateProfile(
                     displayName: name,
-                    phone: phoneController.text,
+                    phone: phone,
                   );
                   if (!mounted || !dialogContext.mounted) return;
                   setState(() => me = updated);
