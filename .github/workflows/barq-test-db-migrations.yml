@@ -1,9 +1,11 @@
 name: BARQ test D1 migrations
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - barq/phase-2-d1-isolated-2026-11-20
+      - barq/phase-2-android-ci-2026-11-20
     paths:
       - .github/workflows/barq-test-db-migrations.yml
 
