@@ -286,6 +286,22 @@ function cleanUser(user) {
   };
 }
 
+async function readJsonRequestLimited(request, maxBytes = 256 * 1024) {
+  const declaredLength = Number(request.headers.get("Content-Length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    const error = new Error("JSON request body is too large");
+    error.status = 413;
+    throw error;
+  }
+  const bytes = await readRequestBodyLimited(request, maxBytes);
+  if (!bytes) {
+    const error = new Error("JSON request body is too large");
+    error.status = 413;
+    throw error;
+  }
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+
 async function readRequestBodyLimited(request, maxBytes) {
   const stream = request.body;
   if (!stream) return new Uint8Array();
@@ -746,7 +762,7 @@ export default {
 
       // Register
       if (method === "POST" && path === "/api/register") {
-        const body = await request.json();
+        const body = await readJsonRequestLimited(request);
 
         const displayName = String(body.displayName || "").trim();
         let username = String(body.username || "").trim().toLowerCase();
@@ -890,7 +906,7 @@ export default {
 
       // Recover an account with its one-time recovery code (no SMS/email dependency).
       if (method === "POST" && path === "/api/password/recover") {
-        const body = await request.json();
+        const body = await readJsonRequestLimited(request);
         const identifier = String(body.identifier || body.username || body.phone || "").trim();
         const recoveryCode = String(body.recoveryCode || "").replace(/[\s-]/g, "").toUpperCase();
         const newPassword = String(body.newPassword || "");
@@ -976,7 +992,7 @@ export default {
 
       // Login
       if (method === "POST" && path === "/api/login") {
-        const body = await request.json();
+        const body = await readJsonRequestLimited(request);
 
         const username = String(body.username || "").trim().toLowerCase();
         const password = String(body.password || "");
@@ -1163,7 +1179,7 @@ export default {
         ).run();
 
         if (method === "POST") {
-          const body = await request.json();
+          const body = await readJsonRequestLimited(request);
           const receiverId = String(body.receiverId || "").trim();
           const message = String(body.body || "").trim();
           if (!receiverId || !message) {
@@ -1232,7 +1248,7 @@ export default {
 
       // Rotate the one-time recovery code after verifying the current password.
       if (method === "POST" && path === "/api/recovery-code") {
-        const body = await request.json();
+        const body = await readJsonRequestLimited(request);
         const password = String(body.password || "");
         const user = await env.DB.prepare(
           "SELECT password_hash, password_salt FROM users WHERE id = ?"
@@ -1408,7 +1424,7 @@ export default {
       // Update current user's editable profile fields
       if (method === "POST" && path === "/api/profile") {
         await ensureProfilePhotos(env);
-        const body = await request.json();
+        const body = await readJsonRequestLimited(request);
         const displayName = String(body.displayName || "").trim();
         const phone = String(body.phone || "").trim();
         if (!displayName || displayName.length > 60) {
@@ -1454,7 +1470,7 @@ export default {
           )
         `).run();
         if (method === "POST") {
-          const body = await request.json();
+          const body = await readJsonRequestLimited(request);
           const existing = await env.DB.prepare(
             "SELECT searchable, read_receipts FROM user_privacy WHERE user_id = ?"
           ).bind(currentUser.sub).first();
@@ -1496,7 +1512,7 @@ export default {
           )
         `).run();
         if (method === "POST") {
-          const body = await request.json();
+          const body = await readJsonRequestLimited(request);
           const existing = await env.DB.prepare(
             "SELECT messages, groups, statuses FROM notification_preferences WHERE user_id = ?"
           ).bind(currentUser.sub).first();
@@ -1536,7 +1552,7 @@ export default {
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
           )
         `).run();
-        const body = await request.json();
+        const body = await readJsonRequestLimited(request);
         const fcmToken = String(body.fcmToken || "").trim();
 
         if (!fcmToken || fcmToken.length > 4096) {
@@ -1590,7 +1606,7 @@ export default {
             headers: { ...corsHeaders, "Retry-After": "900" }
           });
         }
-        const body = await request.json();
+        const body = await readJsonRequestLimited(request);
         const content = String(body.content || "").trim();
 
         if (!content || content.length > 1000) {
@@ -1742,7 +1758,7 @@ export default {
       // Match phone contacts only after the client has obtained explicit permission.
       // Submitted phone numbers are processed in memory and are never persisted.
       if (method === "POST" && path === "/api/contacts/match") {
-        const body = await request.json();
+        const body = await readJsonRequestLimited(request);
         if (!Array.isArray(body.phones) || body.phones.length > 500) {
           return json({ error: "قائمة جهات الاتصال غير صالحة" }, 400);
         }
@@ -1797,7 +1813,7 @@ export default {
 
       // Add a contact directly (no friend-request workflow).
       if (method === "POST" && path === "/api/contacts") {
-        const body = await request.json();
+        const body = await readJsonRequestLimited(request);
         const userId = String(body.userId || "").trim();
         if (!userId || userId === currentUser.sub) {
           return json({ error: "Invalid contact" }, 400);
@@ -1940,7 +1956,7 @@ export default {
       }
 
       if (method === "POST" && path === "/api/groups") {
-        const body = await request.json();
+        const body = await readJsonRequestLimited(request);
         const name = String(body.name || "").trim();
         const description = String(body.description || "").trim();
         if (!name || name.length > 80 || description.length > 300) {
@@ -1982,7 +1998,7 @@ export default {
 
       if (method === "POST" && groupMemberMatch) {
         const groupId = groupMemberMatch[1];
-        const body = await request.json();
+        const body = await readJsonRequestLimited(request);
         const userId = String(body.userId || "").trim();
         // Only the group owner may add members. Membership alone must not
         // grant an account the ability to invite arbitrary users.
@@ -2019,7 +2035,7 @@ export default {
           const allowed = ["👍", "❤️", "😂", "😮", "😢", "😡", "🎉", "🔥"];
           let emoji = "";
           if (method === "POST") {
-            const body = await request.json();
+            const body = await readJsonRequestLimited(request);
             emoji = String(body.emoji || "");
           } else {
             emoji = url.searchParams.get("emoji") || "";
@@ -2062,7 +2078,7 @@ export default {
         ).bind(messageId, groupId, currentUser.sub).first();
         if (!owned) return json({ error: "Message not found or cannot be changed" }, 404);
         if (method === "PATCH") {
-          const body = await request.json();
+          const body = await readJsonRequestLimited(request);
           const message = String(body.body || "").trim();
           if (!message || message.length > 5000) return json({ error: "Invalid message" }, 400);
           await env.DB.prepare(
@@ -2218,7 +2234,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           });
         }
         if (method === "POST") {
-          const body = await request.json();
+          const body = await readJsonRequestLimited(request);
           const message = String(body.body || "").trim();
           if (!message || message.length > 5000) return json({ error: "Invalid message" }, 400);
           const replyToId = body.replyToId == null ? "" : String(body.replyToId).trim();
@@ -2260,7 +2276,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
 
       // Send message
       if (method === "POST" && path === "/api/messages") {
-        const body = await request.json();
+        const body = await readJsonRequestLimited(request);
 
         const receiverId = String(body.receiverId || "").trim();
         const message = String(body.body || "").trim();
@@ -2401,7 +2417,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         const scopeId = [target.sender_id, target.receiver_id].sort().join(":");
         if (action === "reactions") {
           const allowed = ["👍", "❤️", "😂", "😮", "😢", "😡", "🎉", "🔥"];
-          const body = method === "POST" ? await request.json() : null;
+          const body = method === "POST" ? await readJsonRequestLimited(request) : null;
           const emoji = method === "POST" ? String(body.emoji || "") : (url.searchParams.get("emoji") || "");
           if (!allowed.includes(emoji)) return json({ error: "Unsupported reaction" }, 400);
           if (method === "POST") {
@@ -2436,7 +2452,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         ).bind(messageId, currentUser.sub).first();
         if (!owned) return json({ error: "Message not found or cannot be changed" }, 404);
         if (method === "PATCH") {
-          const body = await request.json();
+          const body = await readJsonRequestLimited(request);
           const message = String(body.body || "").trim();
           if (!message || message.length > 5000) return json({ error: "Invalid message" }, 400);
           await env.DB.prepare(
@@ -2879,6 +2895,9 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
       return json({ error: "Route not found" }, 404);
 
     } catch (error) {
+      if (error?.status === 413) {
+        return json({ error: "JSON request body is too large" }, 413);
+      }
       // Malformed client JSON is a request error, not an internal server failure.
       if (error instanceof SyntaxError) {
         return json({ error: "Invalid JSON body" }, 400);
