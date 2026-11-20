@@ -1017,6 +1017,9 @@ export default {
           "CREATE INDEX IF NOT EXISTS idx_ephemeral_conversation ON ephemeral_messages(sender_id, receiver_id, created_at)"
         ).run();
         await env.DB.prepare(
+          "CREATE INDEX IF NOT EXISTS idx_ephemeral_expiration ON ephemeral_messages(delete_at)"
+        ).run();
+        await env.DB.prepare(
           "DELETE FROM ephemeral_messages WHERE delete_at IS NOT NULL AND delete_at <= unixepoch()"
         ).run();
 
