@@ -677,7 +677,7 @@ export default {
         const body = await request.json();
 
         const displayName = String(body.displayName || "").trim();
-        const username = String(body.username || "").trim().toLowerCase();
+        let username = String(body.username || "").trim().toLowerCase();
         const password = String(body.password || "");
         const phone = String(body.phone || "").trim();
         const inviteCode = String(body.inviteCode || "").trim().toUpperCase();
@@ -713,13 +713,13 @@ export default {
           `).run();
         }
 
-        if (!displayName || !username || !password) {
+        if (!displayName || !phone || !password) {
           return json({
-            error: "Name, username and password are required"
+            error: "Display name, international phone number and password are required"
           }, 400);
         }
 
-        if (!/^[a-zA-Z0-9_.]{3,30}$/.test(username)) {
+        if (username && !/^[a-zA-Z0-9_.]{3,30}$/.test(username)) {
           return json({
             error: "Username must be 3-30 characters: letters, numbers, _ or ."
           }, 400);
@@ -731,10 +731,13 @@ export default {
           }, 400);
         }
 
-        if (phone.length > 25) {
-          return json({ error: "Invalid phone number" }, 400);
+        // Registration uses an international E.164 phone as the primary account
+        // identifier. National/local formatting must be normalized by the client
+        // using the selected country code before reaching this endpoint.
+        if (!/^\\+[1-9][0-9]{7,14}$/.test(phone)) {
+          return json({ error: "Enter a valid international phone number including its country code" }, 400);
         }
-        if (phone && await phoneAlreadyInUse(env, phone)) {
+        if (await phoneAlreadyInUse(env, phone)) {
           return json({ error: "Phone number is already registered" }, 409);
         }
         // Limit automated account creation before the expensive password hash.
@@ -747,6 +750,10 @@ export default {
             headers: { ...corsHeaders, "Retry-After": "900" }
           });
         }
+
+        // Usernames are optional and secondary. Generate a private handle when
+        // the user chooses not to create one; phone remains the login identifier.
+        if (!username) username = "barq" + randomHex(6).toLowerCase();
 
         const id = crypto.randomUUID();
         const salt = base64url(
