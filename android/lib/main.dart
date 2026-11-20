@@ -4093,6 +4093,12 @@ class _ChatPageState extends State<ChatPage> {
                                           onReply: (message) async {
                                             setState(() => replyToMessage = Map<String, dynamic>.from(message));
                                           },
+                                          onEdit: mine && m['is_ephemeral'] != true && m['is_offline_pending'] != true && _attachmentData(m) == null
+                                              ? (body) async {
+                                                  await Api.editPrivateMessage(field(m, ['id', 'message_id']), body);
+                                                  if (mounted) await loadMessages();
+                                                }
+                                              : null,
                                         ),
                                         child: Text(field(m, ['body', 'content', 'message'])),
                                       ),
@@ -4529,6 +4535,12 @@ class _GroupChatPageState extends State<GroupChatPage> {
                                 onReply: (message) async {
                                   setState(() => replyToMessage = Map<String, dynamic>.from(message));
                                 },
+                                onEdit: mine && _attachmentData(m) == null
+                                    ? (body) async {
+                                        await Api.editGroupMessage(groupId, field(m, ['id', 'message_id']), body);
+                                        if (mounted) await loadMessages();
+                                      }
+                                    : null,
                               ),
                               child: Text(field(m, ['body'])),
                             ),
