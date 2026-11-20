@@ -7,6 +7,7 @@ const flutterApp = await readFile(new URL("../android/lib/main.dart", import.met
 const testConfig = await readFile(new URL("../wrangler.test.toml", import.meta.url), "utf8");
 const productionConfig = await readFile(new URL("../wrangler.toml", import.meta.url), "utf8");
 const replyMigration = await readFile(new URL("../migrations/0004_preview_message_replies.sql", import.meta.url), "utf8");
+const interactionMigration = await readFile(new URL("../migrations/0006_preview_message_reactions_pins.sql", import.meta.url), "utf8");
 
 function hasPath(path) {
   return worker.includes('path === "' + path + '"') ||
@@ -174,4 +175,33 @@ test("Android API, media, and realtime origins are selectable for isolated previ
   assert.ok(flutterApp.includes("defaultValue: 'https://siraj-api-2026.vercel.app'"));
   assert.ok(flutterApp.includes("defaultValue: 'https://siraj-api.alhmdanybdhmhmwd.workers.dev'"));
   assert.ok(flutterApp.includes("defaultValue: 'wss://siraj-api.alhmdanybdhmhmwd.workers.dev/api/realtime'"));
+});
+
+
+test("private and group reactions are authenticated, conversation-scoped, and idempotent", () => {
+  assert.ok(worker.includes("message_reactions"));
+  assert.ok(worker.includes("groupInteractionMatch"));
+  assert.ok(worker.includes("privateInteractionMatch"));
+  assert.ok(worker.includes("INSERT OR IGNORE INTO message_reactions"));
+  assert.ok(worker.includes("DELETE FROM message_reactions"));
+  assert.ok(worker.includes("group_members WHERE group_id = ? AND user_id = ?"));
+  assert.ok(worker.includes("sender_id = ? OR receiver_id = ?"));
+  assert.ok(worker.includes("const allowed = [\"👍\", \"❤️\", \"😂\", \"😮\", \"😢\", \"😡\", \"🎉\", \"🔥\"]"));
+  assert.ok(worker.includes("item.reactions = reactionMap.get(item.id) || []"));
+  assert.ok(flutterApp.includes("reactPrivateMessage"));
+  assert.ok(flutterApp.includes("reactGroupMessage"));
+  assert.ok(flutterApp.includes("messageReactionBar"));
+  assert.ok(interactionMigration.includes("PRIMARY KEY (scope_type, scope_id, message_id, user_id, emoji)"));
+});
+
+test("private and group message pins are per-user, scoped, and removable by the pin owner", () => {
+  assert.ok(worker.includes("pinned_messages"));
+  assert.ok(worker.includes("pinned_by = ?"));
+  assert.ok(worker.includes("DELETE FROM pinned_messages"));
+  assert.ok(worker.includes("item.is_pinned = pinnedIds.has(item.id)"));
+  assert.ok(flutterApp.includes("pinPrivateMessage"));
+  assert.ok(flutterApp.includes("pinGroupMessage"));
+  assert.ok(flutterApp.includes("تثبيت الرسالة"));
+  assert.ok(flutterApp.includes("إلغاء تثبيت الرسالة"));
+  assert.ok(interactionMigration.includes("PRIMARY KEY (scope_type, scope_id, message_id, pinned_by)"));
 });
