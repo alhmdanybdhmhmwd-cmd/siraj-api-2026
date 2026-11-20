@@ -353,4 +353,20 @@ void main() {
     expect(formatBarqMediaDuration(const Duration(hours: 1, minutes: 3, seconds: 5)), '1:03:05');
   });
 
+  test('message links extract only unique safe web URLs and normalize www links', () {
+    final links = extractBarqLinks(
+      'زور https://example.com/path، ثم www.openai.com وبعدها https://example.com/path',
+    );
+    expect(links, [
+      Uri.parse('https://example.com/path'),
+      Uri.parse('https://www.openai.com'),
+    ]);
+  });
+
+  test('message link extraction ignores non-web schemes', () {
+    expect(extractBarqLinks('javascript:alert(1) file:///tmp/a https://safe.example'), [
+      Uri.parse('https://safe.example'),
+    ]);
+  });
+
 }
