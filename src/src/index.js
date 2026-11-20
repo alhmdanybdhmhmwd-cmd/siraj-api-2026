@@ -607,6 +607,38 @@ export default {
         const username = String(body.username || "").trim().toLowerCase();
         const password = String(body.password || "");
         const phone = String(body.phone || "").trim();
+        const inviteCode = String(body.inviteCode || "").trim().toUpperCase();
+
+        if (inviteCode && !/^[A-F0-9]{12}$/.test(inviteCode)) {
+          return json({ error: "Invalid invite code" }, 400);
+        }
+        let inviterUserId = null;
+        if (inviteCode) {
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS user_invite_codes (
+              user_id TEXT PRIMARY KEY,
+              invite_code TEXT NOT NULL UNIQUE,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+          `).run();
+          const inviter = await env.DB.prepare(
+            "SELECT user_id FROM user_invite_codes WHERE invite_code = ?"
+          ).bind(inviteCode).first();
+          if (!inviter?.user_id) {
+            return json({ error: "Invite code was not found" }, 400);
+          }
+          inviterUserId = String(inviter.user_id);
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS user_invites (
+              invitee_user_id TEXT PRIMARY KEY,
+              inviter_user_id TEXT NOT NULL,
+              created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+              FOREIGN KEY (invitee_user_id) REFERENCES users(id) ON DELETE CASCADE,
+              FOREIGN KEY (inviter_user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+          `).run();
+        }
 
         if (!displayName || !username || !password) {
           return json({
@@ -652,7 +684,7 @@ export default {
 
         const recovery = await generateRecoveryCode();
         const createdAt = Math.floor(Date.now() / 1000);
-        const registrationResults = await env.DB.batch([
+        const registrationStatements = [
           (() => {
             const phoneConflict = phone ? phoneConflictCondition("phone", phone) : { sql: "0", bindings: [] };
             return env.DB.prepare(`INSERT INTO users
@@ -668,7 +700,19 @@ export default {
             SELECT ?, ?, ?, ?, NULL, ?
             WHERE EXISTS (SELECT 1 FROM users WHERE id = ?)`)
             .bind(id, recovery.codeHash, recovery.salt, createdAt + RECOVERY_CODE_TTL_SECONDS, createdAt, id)
-        ]);
+        ];
+        if (inviterUserId) {
+          registrationStatements.push(env.DB.prepare(`
+            INSERT INTO user_invites (invitee_user_id, inviter_user_id)
+            SELECT ?, ?
+            WHERE EXISTS (SELECT 1 FROM users WHERE id = ?)
+              AND EXISTS (SELECT 1 FROM users WHERE id = ?)
+          `).bind(id, inviterUserId, id, inviterUserId));
+        }
+        const registrationResults = await env.DB.batch(registrationStatements);
+        if (inviterUserId && Number(registrationResults?.[2]?.meta?.changes || 0) !== 1) {
+          throw new Error("Invite attribution could not be saved");
+        }
         if (Number(registrationResults?.[0]?.meta?.changes || 0) !== 1) {
           return json({ error: phone ? "Phone number is already registered" : "Unable to create account" }, 409);
         }
