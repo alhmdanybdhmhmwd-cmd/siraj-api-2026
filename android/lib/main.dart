@@ -1215,6 +1215,21 @@ class _LoginPageState extends State<LoginPage> {
   bool registering = false;
   bool busy = false;
   bool obscurePassword = true;
+  String selectedCountryCode = '+967';
+  static const List<(String, String)> countryCodes = [
+    ('اليمن', '+967'), ('السعودية', '+966'), ('الإمارات', '+971'),
+    ('عُمان', '+968'), ('الكويت', '+965'), ('قطر', '+974'),
+    ('البحرين', '+973'), ('مصر', '+20'), ('الأردن', '+962'),
+    ('العراق', '+964'), ('فلسطين', '+970'), ('لبنان', '+961'),
+    ('سوريا', '+963'), ('تركيا', '+90'), ('الهند', '+91'),
+    ('باكستان', '+92'), ('بنغلاديش', '+880'), ('إندونيسيا', '+62'),
+    ('ماليزيا', '+60'), ('المملكة المتحدة', '+44'), ('ألمانيا', '+49'),
+    ('فرنسا', '+33'), ('إيطاليا', '+39'), ('إسبانيا', '+34'),
+    ('الولايات المتحدة', '+1'), ('كندا', '+1'), ('أستراليا', '+61'),
+    ('جنوب أفريقيا', '+27'), ('نيجيريا', '+234'), ('المغرب', '+212'),
+    ('الجزائر', '+213'), ('تونس', '+216'), ('السودان', '+249'),
+    ('الصومال', '+252'), ('جيبوتي', '+253'), ('إثيوبيا', '+251'),
+  ];
 
   @override
   void initState() {
@@ -1239,7 +1254,28 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  String _normalizedInternationalPhone(String raw) => normalizeBarqInternationalPhone(raw);
+  String _normalizedInternationalPhone(String raw) {
+    final value = raw.trim();
+    if (value.startsWith('+') || value.startsWith('00')) {
+      return normalizeBarqInternationalPhone(value);
+    }
+    return normalizeBarqInternationalPhone('$selectedCountryCode$value');
+  }
+
+  Widget _countryCodePicker() => DropdownButtonFormField<String>(
+    value: selectedCountryCode,
+    isExpanded: true,
+    dropdownColor: panel,
+    style: const TextStyle(color: Colors.white, fontSize: 14),
+    decoration: _barqDecoration('رمز الدولة', Icons.public),
+    items: countryCodes.map((country) => DropdownMenuItem<String>(
+      value: country.$2,
+      child: Text('${country.$1}  (${country.$2})', overflow: TextOverflow.ellipsis),
+    )).toList(),
+    onChanged: busy ? null : (value) {
+      if (value != null) setState(() => selectedCountryCode = value);
+    },
+  );
 
   Future<void> submit() async {
     if (password.text.isEmpty ||
@@ -1385,6 +1421,8 @@ class _LoginPageState extends State<LoginPage> {
                               if (registering) ...[
                                 _input(name, 'الاسم الظاهر', Icons.person_outline),
                                 const SizedBox(height: 13),
+                                _countryCodePicker(),
+                                const SizedBox(height: 10),
                                 _input(phone, 'رقم الهاتف', Icons.phone_android, isPhone: true),
                                 const SizedBox(height: 13),
                                 _input(inviteCode, 'رمز دعوة صديق', Icons.bolt_outlined, optional: true),
