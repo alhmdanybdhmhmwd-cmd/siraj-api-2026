@@ -6,6 +6,7 @@ const worker = await readFile(new URL("../src/src/index.js", import.meta.url), "
 const flutterApp = await readFile(new URL("../android/lib/main.dart", import.meta.url), "utf8");
 const testConfig = await readFile(new URL("../wrangler.test.toml", import.meta.url), "utf8");
 const productionConfig = await readFile(new URL("../wrangler.toml", import.meta.url), "utf8");
+const replyMigration = await readFile(new URL("../migrations/0004_preview_message_replies.sql", import.meta.url), "utf8");
 
 function hasPath(path) {
   return worker.includes('path === "' + path + '"') ||
@@ -51,6 +52,22 @@ test("message deletion is authenticated and limited to the author in private and
   assert.ok(flutterApp.includes("deleteGroupMessage"));
   assert.ok(flutterApp.includes("حذف الرسالة"));
   assert.ok(flutterApp.includes("canDelete: mine"));
+});
+
+test("private and group replies are scoped to the same conversation and retain a safe preview", () => {
+  assert.ok(worker.includes('body.replyToId'));
+  assert.ok(worker.includes("Reply target not found in this conversation"));
+  assert.ok(worker.includes("Reply target not found in this group"));
+  assert.ok(worker.includes("reply_to_body"));
+  assert.ok(worker.includes("reply_to_sender_id"));
+  assert.ok(worker.includes("WHERE id = ? AND group_id = ?"));
+  assert.ok(worker.includes("(sender_id = ? AND receiver_id = ?)"));
+  assert.ok(flutterApp.includes("الرد على الرسالة"));
+  assert.ok(flutterApp.includes("replyToId:"));
+  assert.ok(flutterApp.includes("messageReplyPreview"));
+  assert.ok(flutterApp.includes("إلغاء الرد"));
+  assert.ok(replyMigration.includes("ALTER TABLE messages ADD COLUMN reply_to_id TEXT"));
+  assert.ok(replyMigration.includes("ALTER TABLE group_messages ADD COLUMN reply_to_id TEXT"));
 });
 
 test("isolated test D1 is not the production database", () => {
