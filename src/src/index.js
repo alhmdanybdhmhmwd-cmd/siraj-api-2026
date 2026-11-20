@@ -886,6 +886,62 @@ export default {
         return json({ error: "Unauthorized" }, 401);
       }
 
+      // Explicitly requested speech transcription. Audio and transcript are never persisted.
+      if (method === "POST" && path === "/api/transcribe") {
+        if (!env.AI || typeof env.AI.run !== "function") {
+          return json({ error: "Speech transcription is not configured" }, 503);
+        }
+        const contentType = (request.headers.get("Content-Type") || "").split(";")[0].trim().toLowerCase();
+        if (!/^audio\\/(mpeg|mp4|aac|wav|ogg|webm|x-wav|3gpp|amr)$/.test(contentType)) {
+          return json({ error: "Unsupported audio format" }, 415);
+        }
+        const declaredLength = Number(request.headers.get("Content-Length"));
+        const maxTranscriptionBytes = 10 * 1024 * 1024;
+        if (Number.isFinite(declaredLength) && declaredLength > maxTranscriptionBytes) {
+          return json({ error: "Audio must not exceed 10 MB for transcription" }, 413);
+        }
+        const audio = await request.arrayBuffer();
+        if (!audio.byteLength || audio.byteLength > maxTranscriptionBytes) {
+          return json({ error: "Audio must be between 1 byte and 10 MB" }, 413);
+        }
+
+        // Limit each account to 10 inference requests per rolling hour to prevent abuse.
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS transcription_rate_limits (
+            user_id TEXT PRIMARY KEY,
+            window_started INTEGER NOT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0
+          )
+        `).run();
+        const now = Math.floor(Date.now() / 1000);
+        const windowStart = now - 3600;
+        await env.DB.prepare(
+          `INSERT INTO transcription_rate_limits (user_id, window_started, attempts)
+           VALUES (?, ?, 1)
+           ON CONFLICT(user_id) DO UPDATE SET
+             window_started = CASE WHEN transcription_rate_limits.window_started <= ? THEN excluded.window_started ELSE transcription_rate_limits.window_started END,
+             attempts = CASE WHEN transcription_rate_limits.window_started <= ? THEN 1 ELSE transcription_rate_limits.attempts + 1 END`
+        ).bind(currentUser.sub, now, windowStart, windowStart).run();
+        const usage = await env.DB.prepare(
+          "SELECT attempts FROM transcription_rate_limits WHERE user_id = ?"
+        ).bind(currentUser.sub).first();
+        if (Number(usage?.attempts || 0) > 10) {
+          return json({ error: "Transcription limit reached. Try again later." }, 429);
+        }
+
+        try {
+          const result = await env.AI.run("@cf/openai/whisper", {
+            audio: Array.from(new Uint8Array(audio))
+          });
+          const text = String(result?.text || "").trim();
+          if (!text) return json({ error: "No clear speech was detected" }, 422);
+          return json({ text });
+        } catch (error) {
+          console.error("Speech transcription inference failed:", error?.name || "Error");
+          return json({ error: "Speech transcription failed. Please try again." }, 502);
+        }
+      }
+
       // A single private invite code per account; no counters, badges, thresholds, or rewards.
       if (method === "GET" && path === "/api/referrals") {
         await env.DB.prepare(`
