@@ -3610,6 +3610,10 @@ class _BarqVoiceRecordButtonState extends State<BarqVoiceRecordButton> {
         ),
         path: path,
       );
+      if (!mounted) {
+        await _recorder.cancel();
+        return;
+      }
       _recordingPath = path;
       _stopwatch = Stopwatch()..start();
       _elapsed = Duration.zero;
@@ -3636,13 +3640,14 @@ class _BarqVoiceRecordButtonState extends State<BarqVoiceRecordButton> {
     _ticker = null;
     final duration = _stopwatch?.elapsed ?? _elapsed;
     _stopwatch?.stop();
+    String? completedPath;
     try {
-      final path = await _recorder.stop() ?? _recordingPath;
+      completedPath = await _recorder.stop() ?? _recordingPath;
       _recordingPath = null;
-      if (path == null || path.isEmpty) {
+      if (completedPath == null || completedPath.isEmpty) {
         throw Exception('تعذر حفظ التسجيل الصوتي.');
       }
-      final file = File(path);
+      final file = File(completedPath);
       if (!await file.exists()) throw Exception('ملف التسجيل الصوتي غير موجود.');
       final bytes = await file.readAsBytes();
       try { await file.delete(); } catch (_) {}
@@ -3652,6 +3657,15 @@ class _BarqVoiceRecordButtonState extends State<BarqVoiceRecordButton> {
       }
       await widget.onSend(bytes, duration);
     } catch (error) {
+      try { await _recorder.cancel(); } catch (_) {}
+      final leftoverPath = completedPath ?? _recordingPath;
+      _recordingPath = null;
+      if (leftoverPath != null) {
+        try {
+          final leftover = File(leftoverPath);
+          if (await leftover.exists()) await leftover.delete();
+        } catch (_) {}
+      }
       if (mounted) showMsg(context, cleanError(error));
     } finally {
       if (mounted) {
@@ -3694,13 +3708,17 @@ class _BarqVoiceRecordButtonState extends State<BarqVoiceRecordButton> {
     }
   }
 
+  Future<void> _disposeRecorder() async {
+    if (_recording) {
+      try { await _recorder.cancel(); } catch (_) {}
+    }
+    try { await _recorder.dispose(); } catch (_) {}
+  }
+
   @override
   void dispose() {
     _ticker?.cancel();
-    if (_recording) {
-      unawaited(_recorder.cancel());
-    }
-    unawaited(_recorder.dispose());
+    unawaited(_disposeRecorder());
     super.dispose();
   }
 
@@ -4918,7 +4936,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _sendVoiceRecording(List<int> bytes, Duration duration) async {
-    if (BarqFeatures.lightningMode || ephemeralMode || sending) return;
+    if (BarqFeatures.lightningMode || sending) return;
     setState(() => sending = true);
     try {
       await Api.uploadAttachment(
