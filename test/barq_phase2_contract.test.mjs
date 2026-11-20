@@ -380,7 +380,8 @@ test("SPARK media reads enforce active friend visibility and expire with their s
   assert.ok(mediaStart >= 0);
   assert.ok(mediaRoute.includes("FROM status_media sm JOIN status_posts sp"));
   assert.ok(mediaRoute.includes("sparkMedia.ownerId === currentUser.sub"));
-  assert.ok(mediaRoute.includes("FROM friendships WHERE user_id = ? AND friend_id = ?"));
+  assert.ok(mediaRoute.includes("FROM friendships reciprocal"));
+  assert.ok(mediaRoute.includes("reciprocal.user_id = ? AND reciprocal.friend_id = ?"));
   assert.ok(mediaRoute.includes("sparkMedia.expiresAt"));
   assert.ok(mediaRoute.includes("if (!accessRow && !sparkMedia)"));
   assert.ok(mediaRoute.includes("SPARK media access denied"));
@@ -428,7 +429,8 @@ test("SPARK reactions and replies require an active status visible to the reques
   const route = worker.slice(start, end);
   assert.ok(start >= 0 && end > start);
   assert.ok(route.includes("expires_at > CURRENT_TIMESTAMP"));
-  assert.ok(route.includes("FROM friendships WHERE user_id = ? AND friend_id = ?"));
+  assert.ok(route.includes("FROM friendships reciprocal"));
+  assert.ok(route.includes("reciprocal.user_id = ? AND reciprocal.friend_id = ?"));
   assert.ok(route.includes("CREATE TABLE IF NOT EXISTS status_reactions"));
   assert.ok(route.includes("CREATE TABLE IF NOT EXISTS status_replies"));
   assert.ok(route.includes("INSERT OR IGNORE INTO status_reactions"));
@@ -438,4 +440,19 @@ test("SPARK reactions and replies require an active status visible to the reques
   assert.ok(flutterApp.includes("reactSparkStatus"));
   assert.ok(flutterApp.includes("replyToSpark"));
   assert.ok(flutterApp.includes("لا توجد ردود بعد"));
+});
+
+
+test("SPARK status feeds and push notifications are restricted to reciprocal contacts", () => {
+  const listStart = worker.indexOf("// List active statuses from the current user and their friends");
+  const listEnd = worker.indexOf("const statuses = result.results || [];", listStart);
+  const listRoute = worker.slice(listStart, listEnd);
+  assert.ok(listRoute.includes("f.user_id = ? AND f.friend_id = s.user_id"));
+  assert.ok(listRoute.includes("FROM friendships reciprocal"));
+  assert.ok(listRoute.includes("reciprocal.user_id = s.user_id AND reciprocal.friend_id = ?"));
+  const mediaUploadStart = worker.indexOf('if (method === "POST" && path === "/api/statuses/media")');
+  const mediaUploadEnd = worker.indexOf("// Publish a 24-hour text status", mediaUploadStart);
+  const mediaUpload = worker.slice(mediaUploadStart, mediaUploadEnd);
+  assert.ok(mediaUpload.includes("reciprocal.user_id = f.friend_id AND reciprocal.friend_id = ?"));
+  assert.ok(worker.includes("شارك لحظة جديدة في SPARK"));
 });
