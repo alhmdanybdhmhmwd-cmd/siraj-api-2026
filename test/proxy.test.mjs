@@ -153,6 +153,39 @@ test("proxy forwards authenticated DELETE requests for device token revocation",
   }
 });
 
+test("profile photo proxy preserves private image response headers and bytes", async () => {
+  const originalFetch = globalThis.fetch;
+  const image = Buffer.from([0xff, 0xd8, 0xff, 0x01, 0x02]);
+  let forwarded = null;
+  globalThis.fetch = async (url, options) => {
+    forwarded = { url, method: options.method, headers: options.headers };
+    return new Response(image, {
+      status: 200,
+      headers: {
+        "content-type": "image/jpeg",
+        "cache-control": "private, max-age=300"
+      }
+    });
+  };
+  try {
+    const res = makeResponse();
+    const req = makeRequest({
+      url: "/api/profile/photo/user-2",
+      method: "GET",
+      headers: { authorization: "Bearer friend-token" }
+    });
+    await handler(req, res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(forwarded.method, "GET");
+    assert.equal(forwarded.headers.Authorization, "Bearer friend-token");
+    assert.equal(res.headers["Content-Type"], "image/jpeg");
+    assert.equal(res.headers["Cache-Control"], "private, max-age=300");
+    assert.deepEqual(res.body, image);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("proxy forwards explicitly requested binary audio to the transcription Worker route", async () => {
   const originalFetch = globalThis.fetch;
   let forwarded = null;
