@@ -1237,7 +1237,7 @@ class _LoginPageState extends State<LoginPage> {
       return String.fromCharCode(c >= 0x06f0 && c <= 0x06f9
           ? c - 0x06f0 + 48 : c - 0x0660 + 48);
     });
-    value = value.replaceAll(RegExp(r'[\\s().-]'), '');
+    value = value.replaceAll(RegExp(r'[\s().-]'), '');
     if (value.startsWith('00')) value = '+${value.substring(2)}';
     if (!value.startsWith('+')) value = '+$value';
     return value;
