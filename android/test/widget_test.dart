@@ -230,6 +230,10 @@ void main() {
     expect(messageReplyPreview({'reply_to_body': 'رسالة مقتبسة'}), 'رسالة مقتبسة');
     expect(messageReplyPreview({'reply_to_body': List.filled(130, 'x').join()}).length, 121);
     expect(messageReplyPreview({'reply_to_body': '{"attachmentId":"a1"}'}), 'مرفق');
+    expect(messageReplyPreview({'reply_to_body': '{"attachment_id":"a2"}'}), 'مرفق');
+    expect(messageReplyPreview({'reply_to_body': '{"fileName":"photo.jpg"}'}), 'مرفق');
+    expect(messageReplyPreview({'reply_to_body': {'attachmentId': 'a3'}}), 'مرفق');
+    expect(messageReplyPreview({'reply_to_body': ''}), 'رسالة');
   });
 
   testWidgets('message action menu invokes the reply callback', (tester) async {
