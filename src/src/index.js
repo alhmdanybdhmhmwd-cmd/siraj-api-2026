@@ -1873,6 +1873,94 @@ export default {
         return json({ statuses });
       }
 
+      // SPARK replies and reactions are available only while the status is active and visible.
+      const sparkInteractionMatch = path.match(/^\/api\/statuses\/([^/]+)\/(reactions|replies)$/);
+      if (sparkInteractionMatch) {
+        let statusId;
+        try { statusId = decodeURIComponent(sparkInteractionMatch[1]); } catch (_) {
+          return json({ error: "Invalid SPARK status identifier" }, 400);
+        }
+        const action = sparkInteractionMatch[2];
+        const status = await env.DB.prepare(
+          "SELECT user_id, expires_at FROM status_posts WHERE id = ? AND expires_at > CURRENT_TIMESTAMP"
+        ).bind(statusId).first();
+        if (!status) return json({ error: "SPARK status not found or expired" }, 404);
+        const isOwner = status.user_id === currentUser.sub;
+        if (!isOwner) {
+          const friendship = await env.DB.prepare(
+            "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
+          ).bind(currentUser.sub, status.user_id).first();
+          if (!friendship) return json({ error: "SPARK status access denied" }, 403);
+        }
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_reactions (
+            status_id TEXT NOT NULL, user_id TEXT NOT NULL, emoji TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (status_id, user_id, emoji),
+            FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE
+          )
+        `).run();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_replies (
+            id TEXT PRIMARY KEY, status_id TEXT NOT NULL, user_id TEXT NOT NULL,
+            body TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        if (action === "reactions") {
+          if (method !== "POST" && method !== "DELETE") return json({ error: "Method not allowed" }, 405);
+          const allowed = ["👍", "❤️", "😂", "😮", "😢", "😡", "🎉", "🔥"];
+          const body = method === "POST" ? await readJsonRequestLimited(request) : null;
+          const emoji = method === "POST" ? String(body.emoji || "") : (url.searchParams.get("emoji") || "");
+          if (!allowed.includes(emoji)) return json({ error: "Unsupported reaction" }, 400);
+          if (method === "POST") {
+            await env.DB.prepare(
+              "INSERT OR IGNORE INTO status_reactions (status_id, user_id, emoji) VALUES (?, ?, ?)"
+            ).bind(statusId, currentUser.sub, emoji).run();
+          } else {
+            await env.DB.prepare(
+              "DELETE FROM status_reactions WHERE status_id = ? AND user_id = ? AND emoji = ?"
+            ).bind(statusId, currentUser.sub, emoji).run();
+          }
+          return json({ message: "SPARK reaction updated", statusId, emoji, active: method === "POST" });
+        }
+        if (method === "GET") {
+          const replies = await env.DB.prepare(
+            `SELECT r.id, r.body, r.created_at AS createdAt, r.user_id AS userId,
+                    u.display_name AS displayName, u.username
+             FROM status_replies r JOIN users u ON u.id = r.user_id
+             WHERE r.status_id = ? ORDER BY r.created_at ASC LIMIT 100`
+          ).bind(statusId).all();
+          return json({ replies: replies.results || [] });
+        }
+        if (method === "POST") {
+          const replyAllowed = await consumeLoginAttempt(env, "spark_reply", currentUser.sub, 20);
+          if (!replyAllowed) return json({ error: "Too many SPARK replies. Try again later." }, 429);
+          const body = await readJsonRequestLimited(request);
+          const reply = String(body.body || "").trim();
+          if (!reply || reply.length > 1000) return json({ error: "SPARK reply must be between 1 and 1000 characters" }, 400);
+          const replyId = crypto.randomUUID();
+          await env.DB.prepare(
+            "INSERT INTO status_replies (id, status_id, user_id, body) VALUES (?, ?, ?, ?)"
+          ).bind(replyId, statusId, currentUser.sub, reply).run();
+          if (!isOwner) {
+            try {
+              const sender = await env.DB.prepare(
+                "SELECT display_name FROM users WHERE id = ?"
+              ).bind(currentUser.sub).first();
+              await sendSirajPush(env, status.user_id, currentUser.sub,
+                sender?.display_name || currentUser.username || "مستخدم برق",
+                "رد جديد على SPARK", { category: "statuses" });
+            } catch (notificationError) {
+              console.error("SPARK reply notification failed:", notificationError);
+            }
+          }
+          return json({ reply: { id: replyId, statusId, userId: currentUser.sub, body: reply } }, 201);
+        }
+        return json({ error: "Method not allowed" }, 405);
+      }
+
       // Ensure privacy preferences table exists for all authenticated accounts.
       if (path === "/api/users/search" || path === "/api/messages") {
         await env.DB.prepare(`
