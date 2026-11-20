@@ -4222,7 +4222,7 @@ class _ChatPageState extends State<ChatPage> {
           ),
           actions: [
             IconButton(
-              onPressed: () => showConversationSearch(context, (query) => (query, before) => Api.searchPrivateMessages(friendId, query, before: before)),
+              onPressed: () => showConversationSearch(context, (query, before) => Api.searchPrivateMessages(friendId, query, before: before)),
               icon: const Icon(Icons.search, color: gold),
               tooltip: 'البحث في المحادثة',
             ),
@@ -4710,7 +4710,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
           ]),
           actions: [
             IconButton(
-              onPressed: () => showConversationSearch(context, (query) => (query, before) => Api.searchGroupMessages(groupId, query, before: before)),
+              onPressed: () => showConversationSearch(context, (query, before) => Api.searchGroupMessages(groupId, query, before: before)),
               icon: const Icon(Icons.search, color: gold),
               tooltip: 'البحث في المحادثة',
             ),
