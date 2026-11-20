@@ -1738,8 +1738,8 @@ export default {
           }
           statements.push(
             env.DB.prepare(
-              "INSERT INTO status_media (id, status_id, object_key, file_name, content_type, size, caption) VALUES (?, ?, ?, ?, ?, ?, ?)"
-            ).bind(mediaId, id, objectKey, suppliedName, contentType, bytes.byteLength, caption),
+              "INSERT INTO status_media (id, status_id, object_key, file_name, content_type, size, caption, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            ).bind(mediaId, id, objectKey, suppliedName, contentType, bytes.byteLength, caption, new Date().toISOString()),
             env.DB.prepare(
               "INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?)"
             ).bind(objectKey, expiresAt),
