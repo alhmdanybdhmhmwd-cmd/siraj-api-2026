@@ -329,6 +329,13 @@ class Api {
             body: jsonEncode(body ?? <String, dynamic>{}),
           ).timeout(const Duration(seconds: 25));
           break;
+        case 'PATCH':
+          response = await http.patch(
+            uri,
+            headers: headers,
+            body: jsonEncode(body ?? <String, dynamic>{}),
+          ).timeout(const Duration(seconds: 25));
+          break;
         default:
           throw UnsupportedError('HTTP method is not supported: $method');
       }
