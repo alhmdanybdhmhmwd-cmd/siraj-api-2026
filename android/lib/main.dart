@@ -4488,7 +4488,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
                   icon: const Icon(Icons.attach_file, color: gold), tooltip: 'إرسال ملف أو صورة أو فيديو'),
               Expanded(child: TextField(controller: controller, minLines: 1, maxLines: 4,
                 decoration: inputDecoration('اكتب رسالة للمجموعة...', Icons.message).copyWith(
-                  helperText: replyToMessage == null ? null : 'الرد على: ' + messageReplyPreview(replyToMessage!),
+                  helperText: replyToMessage == null ? null : 'الرد على: ${messageReplyPreview(replyToMessage!)}',
                   helperStyle: const TextStyle(color: gold, fontSize: 10),
                 ), onSubmitted: (_) => send())),
               const SizedBox(width: 8),
