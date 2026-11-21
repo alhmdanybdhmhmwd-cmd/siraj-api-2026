@@ -1087,6 +1087,18 @@ export default {
         return json({ error: "Unauthorized" }, 401);
       }
 
+      // Media recipient authorization also observes user blocks before upload sessions are created.
+      if (path === "/api/media/uploads" || path.startsWith("/api/media/uploads/")) {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS blocked_users (
+            blocker_id TEXT NOT NULL, blocked_id TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (blocker_id, blocked_id), CHECK (blocker_id <> blocked_id),
+            FOREIGN KEY (blocker_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (blocked_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+      }
       // Resumable chat media uploads are isolated behind authenticated session routes.
       const resumableMediaResponse = await handleResumableMediaUpload(request, env, currentUser, url, path, method);
       if (resumableMediaResponse) return resumableMediaResponse;
