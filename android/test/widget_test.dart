@@ -418,6 +418,7 @@ void main() {
             onDelete: () async {},
             onReact: (emoji) async {},
             onPin: () async {},
+            onSaveMemory: () async {},
           ),
           child: const Text('فتح الإجراءات'),
         ),
@@ -428,6 +429,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('إضافة تفاعل'), findsOneWidget);
     expect(find.text('تثبيت الرسالة'), findsOneWidget);
+    expect(find.text('حفظ في الذكريات الخاصة'), findsOneWidget);
   });
 
   test('media duration formatter supports minute and hour lengths', () {
