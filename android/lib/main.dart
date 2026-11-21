@@ -2195,7 +2195,7 @@ Future<void> showConversationSearch(
               const SizedBox(height: 10),
               Expanded(
                 child: searching && matches.isEmpty
-                    ? const Center(child: CircularProgressIndicator(color: gold))
+                    ? const Center(child: CircularProgressIndicator())
                     : searchError != null
                         ? Center(child: Text(searchError!, textAlign: TextAlign.center))
                         : !searched
@@ -2315,7 +2315,7 @@ Widget personAvatar(Map<String, dynamic> person, {double radius = 22}) {
     radius: radius,
     backgroundColor: const Color(0xFF46391F),
     child: imageUrl.isEmpty
-        ? Text(name.characters.first, style: TextStyle(color: gold, fontSize: radius * 0.85))
+        ? Text(name.characters.first, style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: radius * 0.85))
         : ClipOval(
             child: Image.network(
               imageUrl,
@@ -2325,7 +2325,7 @@ Widget personAvatar(Map<String, dynamic> person, {double radius = 22}) {
               headers: {'Authorization': 'Bearer ${Api.token}'},
               errorBuilder: (_, __, ___) => Center(
                 child: Text(name.characters.first,
-                    style: TextStyle(color: gold, fontSize: radius * 0.85)),
+                    style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: radius * 0.85)),
               ),
             ),
           ),
@@ -2417,7 +2417,7 @@ class PrivateMemoryLoadError extends StatelessWidget {
       children: [
         const Icon(Icons.cloud_off_outlined, size: 48),
         const SizedBox(height: 12),
-        const Text('تعذر تحميل ذكرياتك', style: TextStyle(color: gold, fontSize: 18)),
+        Text('تعذر تحميل ذكرياتك', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 18)),
         const SizedBox(height: 8),
         const Text(
           'تحقق من اتصالك وحاول التحديث. لم نحذف ذكرياتك المحفوظة.',
@@ -2490,7 +2490,7 @@ class _StartupPageState extends State<StartupPage> {
   Widget build(BuildContext context) {
     if (checking) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator(color: gold)),
+        body: Center(child: CircularProgressIndicator()),
       );
     }
     return const LoginPage();
@@ -2703,7 +2703,7 @@ class _LoginPageState extends State<LoginPage> {
                                 return ListTile(
                                   dense: true,
                                   title: Text(country.$1, style: const TextStyle(color: Colors.white)),
-                                  trailing: Text(country.$2, style: const TextStyle(color: gold, fontWeight: FontWeight.bold)),
+                                  trailing: Text(country.$2, style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
                                   onTap: () => Navigator.pop(sheetContext, country.$2),
                                 );
                               },
@@ -2728,7 +2728,7 @@ class _LoginPageState extends State<LoginPage> {
             countryCodes.firstWhere((country) => country.$2 == selectedCountryCode).$1,
             style: const TextStyle(color: Colors.white),
           )),
-          Text(selectedCountryCode, style: const TextStyle(color: gold, fontWeight: FontWeight.bold)),
+          Text(selectedCountryCode, style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
           const SizedBox(width: 8),
           const Icon(Icons.expand_more, color: Colors.white70),
         ],
@@ -2789,7 +2789,7 @@ class _LoginPageState extends State<LoginPage> {
     filled: true,
     fillColor: glass,
     labelStyle: const TextStyle(color: Colors.white70),
-    prefixStyle: const TextStyle(color: gold, fontWeight: FontWeight.bold),
+    prefixStyle: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold),
     contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(20),
@@ -2931,7 +2931,7 @@ class _LoginPageState extends State<LoginPage> {
                         Center(child: TextButton(
                           onPressed: busy ? null : () => setState(() => registering = !registering),
                           child: Text(registering ? 'لديك حساب؟ سجّل الدخول' : 'مستخدم جديد؟ أنشئ حسابًا',
-                            style: const TextStyle(color: gold, fontSize: 15)),
+                            style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 15)),
                         )),
                         const Center(child: Text('لا نحتاج إلى رمز تحقق SMS',
                           style: TextStyle(color: Colors.white38, fontSize: 11))),
@@ -3349,7 +3349,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     child: const Text('بحث'),
                   ),
                 ),
-                if (busy) const CircularProgressIndicator(color: gold),
+                if (busy) const CircularProgressIndicator(),
                 if (!busy && found.isEmpty) const Text('اكتب حرفين على الأقل ثم اضغط بحث.', style: TextStyle(color: Colors.white60)),
                 Flexible(
                   child: ListView(
@@ -3411,7 +3411,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ],
         ),
         body: loading
-            ? const Center(child: CircularProgressIndicator(color: gold))
+            ? const Center(child: CircularProgressIndicator())
             : pages[selectedTab],
         floatingActionButton: selectedTab >= 1 && selectedTab <= 4
             ? FloatingActionButton(
@@ -3621,7 +3621,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 controller: captionController, maxLength: 1000, maxLines: 3,
                 decoration: inputDecoration('أضف تعليقًا للّحظة (اختياري)', Icons.edit_note),
               ),
-              if (uploading) const LinearProgressIndicator(color: gold),
+              if (uploading) const LinearProgressIndicator(),
             ]),
             actions: [
               TextButton(
@@ -3777,7 +3777,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               child: Column(children: [
                 Icon(Icons.circle_outlined, size: 54),
                 SizedBox(height: 12),
-                Text('لا توجد حالات نشطة', style: TextStyle(color: gold, fontSize: 18)),
+                Text('لا توجد حالات نشطة', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 18)),
                 SizedBox(height: 6),
                 Text('انشر أول لحظة في SPARK أو اسحب للأسفل للتحديث.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60)),
               ]),
@@ -3849,7 +3849,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       children: [
         const Padding(
           padding: EdgeInsets.all(12),
-          child: Text('محادثاتك', style: TextStyle(color: gold, fontSize: 21)),
+          child: Text('محادثاتك', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 21)),
         ),
         for (final friend in friends)
           Card(
@@ -4046,7 +4046,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   catch (e) { if (mounted) showMsg(this.context, cleanError(e)); }
                   setDialog(() => busy = false);
                 }, child: const Text('بحث'))),
-              if (busy) const CircularProgressIndicator(color: gold),
+              if (busy) const CircularProgressIndicator(),
               Flexible(child: ListView(shrinkWrap: true, children: found.map((person) {
                 final id = field(person, ['id', 'user_id']);
                 final uname = field(person, ['username'], 'مستخدم');
@@ -4179,7 +4179,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 children: [
                   const Icon(Icons.auto_awesome, size: 54),
                   const SizedBox(height: 12),
-                  const Text('احتفظ بلحظاتك المهمة هنا', style: TextStyle(color: gold, fontSize: 18)),
+                  Text('احتفظ بلحظاتك المهمة هنا', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 18)),
                   const SizedBox(height: 8),
                   const Text('هذه المساحة خاصة بك وحدك. أضف ذكرى أو احفظ نصًا من محادثاتك.',
                     textAlign: TextAlign.center, style: TextStyle(color: Colors.white60)),
@@ -4376,11 +4376,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     ],
                     if (saving) ...[
                       const SizedBox(height: 12),
-                      const LinearProgressIndicator(color: gold),
+                      const LinearProgressIndicator(),
                     ],
                     const Align(
                       alignment: Alignment.centerRight,
-                      child: Text('لا يراها سواك', style: TextStyle(color: gold, fontSize: 12)),
+                      child: Text('لا يراها سواك', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 12)),
                     ),
                   ],
                 ),
@@ -4532,7 +4532,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           children: [
             Icon(icon, size: 56),
             const SizedBox(height: 12),
-            Text(title, style: const TextStyle(color: gold, fontSize: 22)),
+            Text(title, style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 22)),
             Padding(
               padding: const EdgeInsets.all(12),
               child: Text(subtitle, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60)),
@@ -4934,7 +4934,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                           : null,
                       child: field(me, ['photoUrl']).isEmpty
                           ? Text(displayName.isNotEmpty ? displayName.characters.first : 'س',
-                              style: const TextStyle(color: gold, fontSize: 32))
+                              style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 32))
                           : null,
                     ),
                     Positioned(
@@ -5413,7 +5413,7 @@ class _BarqConversationSummaryDialogState extends State<BarqConversationSummaryD
                       return const Padding(
                         padding: EdgeInsets.symmetric(vertical: 28),
                         child: Column(children: [
-                          CircularProgressIndicator(color: gold),
+                          CircularProgressIndicator(),
                           SizedBox(height: 12),
                           Text('جارٍ قراءة الرسائل وإنشاء الملخص...', style: TextStyle(color: Colors.white70)),
                         ]),
@@ -5649,7 +5649,7 @@ class _BarqVoiceRecordButtonState extends State<BarqVoiceRecordButton> {
               ? const SizedBox(width: 20, height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2))
               : Icon(_recording ? Icons.stop_circle_rounded : Icons.mic_none_rounded,
-                  color: _recording ? Colors.redAccent : gold),
+                  color: _recording ? Colors.redAccent : Theme.of(context).colorScheme.primary),
         ),
         if (_recording)
           IconButton(
@@ -5719,7 +5719,7 @@ class _BarqMessageBodyState extends State<BarqMessageBody> {
         final recognizer = TapGestureRecognizer()..onTap = () => _openLink(uri);
         _recognizers.add(recognizer);
         spans.add(TextSpan(text: visible,
-          style: const TextStyle(color: gold, decoration: TextDecoration.underline),
+          style: TextStyle(color: Theme.of(context).colorScheme.primary, decoration: TextDecoration.underline),
           recognizer: recognizer));
       } else {
         spans.add(TextSpan(text: visible));
@@ -5750,7 +5750,7 @@ class _BarqMessageBodyState extends State<BarqMessageBody> {
                     const SizedBox(width: 10),
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(uri.host, maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: gold, fontWeight: FontWeight.bold, fontSize: 12)),
+                        style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 12)),
                       const SizedBox(height: 3),
                       Text(uri.path.isEmpty ? uri.toString() : '${uri.path}${uri.hasQuery ? '?…' : ''}',
                         maxLines: 1, overflow: TextOverflow.ellipsis,
@@ -6057,7 +6057,7 @@ class _AttachmentTileState extends State<_AttachmentTile> {
                     0, _audioDuration.inMilliseconds > 0 ? _audioDuration.inMilliseconds : 1,
                   ).toDouble(),
                   onChanged: _audioDuration > Duration.zero ? _seekAudio : null,
-                  activeColor: gold,
+                  activeColor: Theme.of(context).colorScheme.primary,
                   inactiveColor: Colors.white24,
                 ),
               ),
@@ -6178,7 +6178,7 @@ class _VideoAttachmentDialogState extends State<_VideoAttachmentDialog> {
             if (_loading)
               const Padding(
                 padding: EdgeInsets.all(32),
-                child: CircularProgressIndicator(color: gold),
+                child: CircularProgressIndicator(),
               )
             else if (_error != null)
               Padding(
@@ -6225,7 +6225,7 @@ class _VideoAttachmentDialogState extends State<_VideoAttachmentDialog> {
                         controller,
                         allowScrubbing: true,
                         colors: const VideoProgressColors(
-                          playedColor: gold,
+                          playedColor: Theme.of(context).colorScheme.primary,
                           bufferedColor: Colors.white54,
                           backgroundColor: Colors.white24,
                         ),
@@ -6330,7 +6330,7 @@ class _NearbyDevicesPageState extends State<NearbyDevicesPage> {
           const SizedBox(height: 12),
           const Text('قارن رمز الأمان مع الرمز الظاهر على الهاتف الآخر. لا توافق إذا اختلف الرمزان.'),
           const SizedBox(height: 12),
-          SelectableText(token, style: const TextStyle(color: gold, fontSize: 26, fontWeight: FontWeight.bold, letterSpacing: 3)),
+          SelectableText(token, style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 26, fontWeight: FontWeight.bold, letterSpacing: 3)),
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('رفض')),
@@ -6390,11 +6390,11 @@ class _NearbyDevicesPageState extends State<NearbyDevicesPage> {
             ]),
           ]))),
           const SizedBox(height: 12),
-          Text('الأجهزة المتصلة (${connected.length})', style: const TextStyle(color: gold, fontWeight: FontWeight.bold)),
+          Text('الأجهزة المتصلة (${connected.length})', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
           if (connected.isEmpty) const ListTile(title: Text('لا توجد أجهزة متصلة بعد.')),
           ...connected.map((entry) => ListTile(leading: const Icon(Icons.link), title: Text(_friendName(entry.value)), subtitle: const Text('متصل وجاهز للرسائل النصية'))),
           const SizedBox(height: 12),
-          Text('الأصدقاء القريبون (${discovered.length})', style: const TextStyle(color: gold, fontWeight: FontWeight.bold)),
+          Text('الأصدقاء القريبون (${discovered.length})', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
           if (discovered.isEmpty) const ListTile(title: Text('لا يظهر أصدقاؤك الآن. افتح الشاشة نفسها على هاتف صديقك وتأكد من تشغيل Bluetooth والموقع.'), dense: true),
           ...discovered.entries.map((entry) => Card(color: Theme.of(context).colorScheme.surface, child: ListTile(
             leading: const Icon(Icons.phone_android),
@@ -6493,7 +6493,7 @@ class PublicProfilePage extends StatelessWidget {
                 child: CircleAvatar(
                   backgroundColor: const Color(0xFF46391F),
                   child: imageUrl.isEmpty
-                      ? Text(name.characters.first, style: const TextStyle(color: gold, fontSize: 48))
+                      ? Text(name.characters.first, style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 48))
                       : ClipOval(
                           child: Image.network(
                             imageUrl,
@@ -6503,7 +6503,7 @@ class PublicProfilePage extends StatelessWidget {
                             headers: {'Authorization': 'Bearer ${Api.token}'},
                             errorBuilder: (_, __, ___) => Center(
                               child: Text(name.characters.first,
-                                  style: const TextStyle(color: gold, fontSize: 48)),
+                                  style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 48)),
                             ),
                           ),
                         ),
@@ -6968,7 +6968,7 @@ class _ChatPageState extends State<ChatPage> {
           children: [
             Expanded(
               child: loading
-                  ? const Center(child: CircularProgressIndicator(color: gold))
+                  ? const Center(child: CircularProgressIndicator())
                   : messages.isEmpty
                       ? const Center(child: Text('لا توجد رسائل بعد. ابدأ المحادثة.', style: TextStyle(color: Colors.white60)))
                       : ListView.builder(
@@ -7016,7 +7016,7 @@ class _ChatPageState extends State<ChatPage> {
                                         child: Row(mainAxisSize: MainAxisSize.min, children: [
                                           Icon(Icons.timer_outlined, size: 13),
                                           SizedBox(width: 4),
-                                          Text('رسالة مؤقتة', style: TextStyle(color: gold, fontSize: 10)),
+                                          Text('رسالة مؤقتة', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 10)),
                                         ]),
                                       ),
                                     if (field(m, ['reply_to_id']).isNotEmpty)
@@ -7028,7 +7028,7 @@ class _ChatPageState extends State<ChatPage> {
                                           border: const Border(right: BorderSide(color: gold, width: 3))),
                                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                           Text(field(m, ['reply_to_sender_id']) == widget.currentUserId ? 'رد على رسالتك' : 'رد على رسالة',
-                                            style: const TextStyle(color: gold, fontSize: 10, fontWeight: FontWeight.bold)),
+                                            style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 10, fontWeight: FontWeight.bold)),
                                           Text(messageReplyPreview(m), maxLines: 2, overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(color: Colors.white70, fontSize: 11)),
                                         ]),
@@ -7133,7 +7133,7 @@ class _ChatPageState extends State<ChatPage> {
                                         child: Row(mainAxisSize: MainAxisSize.min, children: [
                                           Icon(Icons.push_pin, size: 12),
                                           SizedBox(width: 3),
-                                          Text('مثبتة', style: TextStyle(color: gold, fontSize: 10)),
+                                          Text('مثبتة', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 10)),
                                         ]),
                                       ),
                                     if (m['is_ephemeral'] != true && m['is_offline_pending'] != true)
@@ -7168,7 +7168,7 @@ class _ChatPageState extends State<ChatPage> {
                   children: [
                     IconButton(
                       onPressed: sending ? null : () => setState(() { ephemeralMode = !ephemeralMode; replyToMessage = null; }),
-                      icon: Icon(Icons.timer_outlined, color: ephemeralMode ? gold : Colors.white54),
+                      icon: Icon(Icons.timer_outlined, color: ephemeralMode ? Theme.of(context).colorScheme.primary : Colors.white54),
                       tooltip: ephemeralMode ? 'إيقاف الرسائل المؤقتة' : 'إرسال رسالة تختفي بعد قراءتها',
                     ),
                     if (!BarqFeatures.lightningMode)
@@ -7189,7 +7189,7 @@ class _ChatPageState extends State<ChatPage> {
                           ephemeralMode ? Icons.timer_outlined : Icons.message,
                         ).copyWith(
                           helperText: replyToMessage == null ? null : 'الرد على: ${messageReplyPreview(replyToMessage!)}',
-                          helperStyle: const TextStyle(color: gold, fontSize: 10),
+                          helperStyle: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 10),
                         ),
                         onSubmitted: (_) => send(),
                       ),
@@ -7428,7 +7428,7 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
                               errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined, color: Colors.white70, size: 52),
                               loadingBuilder: (context, child, progress) => progress == null
                                   ? child
-                                  : const Center(child: CircularProgressIndicator(color: gold)),
+                                  : const Center(child: CircularProgressIndicator()),
                             ),
                           )),
                         if (widget.caption.trim().isNotEmpty)
@@ -7451,7 +7451,7 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
               SizedBox(
                 height: 84,
                 child: _loadingReplies
-                    ? const Center(child: CircularProgressIndicator(color: gold))
+                    ? const Center(child: CircularProgressIndicator())
                     : _replies.isEmpty
                         ? const Center(child: Text('لا توجد ردود بعد', style: TextStyle(color: Colors.white54)))
                         : ListView.builder(
@@ -7495,7 +7495,7 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
                   icon: _uploadingAudioReply
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                       : Icon(_recordingAudioReply ? Icons.stop_circle_rounded : Icons.mic_rounded,
-                          color: _recordingAudioReply ? Colors.redAccent : gold),
+                          color: _recordingAudioReply ? Colors.redAccent : Theme.of(context).colorScheme.primary),
                 ),
                 IconButton(
                   onPressed: _sendingReply ? null : _sendReply,
@@ -7647,7 +7647,7 @@ class _SparkVideoPageState extends State<_SparkVideoPage> {
   @override
   Widget build(BuildContext context) {
     if (_error != null) return const Center(child: Text('تعذر تشغيل الفيديو', style: TextStyle(color: Colors.white70)));
-    if (!_controller.value.isInitialized) return const Center(child: CircularProgressIndicator(color: gold));
+    if (!_controller.value.isInitialized) return const Center(child: CircularProgressIndicator());
     return Center(
       child: GestureDetector(
         onTap: () => setState(() {
@@ -8079,7 +8079,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
         ),
         body: Column(children: [
           Expanded(child: loading
-            ? const Center(child: CircularProgressIndicator(color: gold))
+            ? const Center(child: CircularProgressIndicator())
             : messages.isEmpty
               ? const Center(child: Text('لا توجد رسائل بعد. ابدأ الحديث مع مجموعتك.', style: TextStyle(color: Colors.white60)))
               : ListView.builder(
@@ -8114,7 +8114,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
                                 border: const Border(right: BorderSide(color: gold, width: 3))),
                               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                 Text(field(m, ['reply_to_sender_id']) == widget.currentUserId ? 'رد على رسالتك' : 'رد على رسالة',
-                                  style: const TextStyle(color: gold, fontSize: 10, fontWeight: FontWeight.bold)),
+                                  style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 10, fontWeight: FontWeight.bold)),
                                 Text(messageReplyPreview(m), maxLines: 2, overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(color: Colors.white70, fontSize: 11)),
                               ]),
@@ -8136,7 +8136,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(vertical: 3),
                                 child: Text(field(m, ['display_name', 'username'], 'عضو'),
-                                  style: const TextStyle(color: gold, fontSize: 11)),
+                                  style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 11)),
                               ),
                             ),
                           if (_attachmentData(m) case final attachment?) ...[
@@ -8231,7 +8231,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
                               child: Row(mainAxisSize: MainAxisSize.min, children: [
                                 Icon(Icons.push_pin, size: 12),
                                 SizedBox(width: 3),
-                                Text('مثبتة', style: TextStyle(color: gold, fontSize: 10)),
+                                Text('مثبتة', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 10)),
                               ]),
                             ),
                           messageReactionBar(
@@ -8264,14 +8264,14 @@ class _GroupChatPageState extends State<GroupChatPage> {
               Expanded(child: TextField(controller: controller, minLines: 1, maxLines: 4,
                 decoration: inputDecoration('اكتب رسالة للمجموعة...', Icons.message).copyWith(
                   helperText: replyToMessage == null ? null : 'الرد على: ${messageReplyPreview(replyToMessage!)}',
-                  helperStyle: const TextStyle(color: gold, fontSize: 10),
+                  helperStyle: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 10),
                 ), onSubmitted: (_) => send())),
               const SizedBox(width: 8),
               if (replyToMessage != null)
                 IconButton(onPressed: sending ? null : () => setState(() => replyToMessage = null),
                   icon: const Icon(Icons.close, color: Colors.white70), tooltip: 'إلغاء الرد'),
               IconButton.filled(
-                style: IconButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+                style: IconButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary),
                 onPressed: sending ? null : send,
                 icon: sending ? const SizedBox(width: 18, height: 18,
                   child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)) : const Icon(Icons.send),
