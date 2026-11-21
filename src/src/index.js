@@ -4,7 +4,7 @@ import { prepareConversationSummaryTranscript, buildConversationSummaryMessages,
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-File-Name, X-Recipient-Id, X-Group-Id, X-Status-Caption, X-Status-Id, X-Audio-Duration-Ms",
   "Content-Type": "application/json; charset=utf-8"
 };
@@ -1193,6 +1193,93 @@ export default {
           "INSERT OR IGNORE INTO revoked_sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)"
         ).bind(await sha256Hex(bearerToken), currentUser.sub, currentUser.exp).run();
         return json({ message: "تم تسجيل الخروج من هذا الجهاز." });
+      }
+
+      // Private memories are isolated by owner_id; saved message text is copied
+      // into the private vault and does not depend on the source chat remaining.
+      if (path === "/api/private-memories" || path.startsWith("/api/private-memories/")) {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS private_memories (
+            id TEXT PRIMARY KEY,
+            owner_id TEXT NOT NULL,
+            title TEXT NOT NULL DEFAULT '',
+            content TEXT NOT NULL,
+            source_type TEXT NOT NULL DEFAULT 'text' CHECK (source_type IN ('text', 'message')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        await env.DB.prepare(
+          "CREATE INDEX IF NOT EXISTS idx_private_memories_owner_updated ON private_memories(owner_id, updated_at DESC)"
+        ).run();
+
+        if (method === "GET" && path === "/api/private-memories") {
+          const result = await env.DB.prepare(
+            "SELECT id, title, content, source_type AS sourceType, created_at AS createdAt, updated_at AS updatedAt FROM private_memories WHERE owner_id = ? ORDER BY updated_at DESC, created_at DESC LIMIT 200"
+          ).bind(currentUser.sub).all();
+          return json({ memories: result.results || [] });
+        }
+
+        if (method === "POST" && path === "/api/private-memories") {
+          const body = await readJsonRequestLimited(request);
+          const title = String(body.title || "").trim();
+          const content = String(body.content || "").trim();
+          const sourceType = body.sourceType === undefined ? "text" : String(body.sourceType);
+          if (title.length > 120 || !content || content.length > 10000 ||
+              !["text", "message"].includes(sourceType)) {
+            return json({ error: "Memory title, content, or type is invalid" }, 400);
+          }
+          const id = crypto.randomUUID();
+          await env.DB.prepare(
+            "INSERT INTO private_memories (id, owner_id, title, content, source_type) VALUES (?, ?, ?, ?, ?)"
+          ).bind(id, currentUser.sub, title, content, sourceType).run();
+          const memory = await env.DB.prepare(
+            "SELECT id, title, content, source_type AS sourceType, created_at AS createdAt, updated_at AS updatedAt FROM private_memories WHERE id = ? AND owner_id = ?"
+          ).bind(id, currentUser.sub).first();
+          return json({ memory }, 201);
+        }
+
+        const memoryMatch = path.match(/^\\/api\\/private-memories\\/([^/]+)$/);
+        if (memoryMatch && method === "PATCH") {
+          let memoryId;
+          try { memoryId = decodeURIComponent(memoryMatch[1]); } catch (_) {
+            return json({ error: "Invalid memory identifier" }, 400);
+          }
+          if (!memoryId || memoryId.length > 128) {
+            return json({ error: "Invalid memory identifier" }, 400);
+          }
+          const body = await readJsonRequestLimited(request);
+          const title = String(body.title || "").trim();
+          const content = String(body.content || "").trim();
+          if (title.length > 120 || !content || content.length > 10000) {
+            return json({ error: "Memory title or content is invalid" }, 400);
+          }
+          const updated = await env.DB.prepare(
+            "UPDATE private_memories SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND owner_id = ?"
+          ).bind(title, content, memoryId, currentUser.sub).run();
+          if (Number(updated?.meta?.changes || 0) !== 1) {
+            return json({ error: "Memory not found" }, 404);
+          }
+          const memory = await env.DB.prepare(
+            "SELECT id, title, content, source_type AS sourceType, created_at AS createdAt, updated_at AS updatedAt FROM private_memories WHERE id = ? AND owner_id = ?"
+          ).bind(memoryId, currentUser.sub).first();
+          return json({ memory });
+        }
+
+        if (memoryMatch && method === "DELETE") {
+          let memoryId;
+          try { memoryId = decodeURIComponent(memoryMatch[1]); } catch (_) {
+            return json({ error: "Invalid memory identifier" }, 400);
+          }
+          const deleted = await env.DB.prepare(
+            "DELETE FROM private_memories WHERE id = ? AND owner_id = ?"
+          ).bind(memoryId, currentUser.sub).run();
+          if (Number(deleted?.meta?.changes || 0) !== 1) {
+            return json({ error: "Memory not found" }, 404);
+          }
+          return json({ message: "Memory deleted" });
+        }
       }
 
       // Explicitly requested speech transcription. Audio and transcript are never persisted.
