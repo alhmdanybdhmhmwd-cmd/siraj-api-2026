@@ -137,8 +137,9 @@ export function createLibsqlDatabaseProvider(client) {
  * endpoint, using {bucket} substitution or path-style bucket addressing.
  */
 export function createObjectStorageUrl(env, objectKey, query = {}) {
-  if (typeof objectKey !== "string" || !objectKey || objectKey.startsWith("/")) {
-    throw new TypeError("A relative object key is required");
+  if (typeof objectKey !== "string" || !objectKey || objectKey.startsWith("/") ||
+      objectKey.includes("\\\\") || objectKey.split("/").some(part => !part || part === "." || part === "..")) {
+    throw new TypeError("A safe relative object key is required");
   }
   const bucket = String(env?.OBJECT_STORAGE_BUCKET || env?.TIGRIS_BUCKET || "siraj-media");
   const encodedKey = objectKey.split("/").map(encodeURIComponent).join("/");
