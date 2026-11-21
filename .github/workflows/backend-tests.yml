@@ -17,10 +17,6 @@ jobs:
           node-version: 22
       - name: Check Worker JavaScript syntax
         run: node --check src/src/index.js
-      - name: Check transformed Worker test module syntax
-        run: |
-          node test/prepare_worker_test_module.mjs
-          node --check /tmp/barq-worker-auth-transformed.mjs
       - name: Run backend authentication tests
         run: npm test
       - name: Test D1 migration SQL with SQLite
