@@ -3405,6 +3405,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     barqPendingNotificationTap.addListener(_handlePendingNotificationTap);
+    _syncRealtimeConnection();
     _loadCachedFriends().whenComplete(() { if (mounted) refreshAll(); });
     offlineSyncTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       BarqOfflineQueue.syncOutbox();
@@ -3419,11 +3420,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     super.dispose();
   }
 
+  void _syncRealtimeConnection() {
+    final token = Api.token;
+    if (token == null || token.isEmpty || SirajRealtime.socketUrl.isEmpty) return;
+    unawaited(SirajRealtime.instance.start(token));
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      _syncRealtimeConnection();
       BarqOfflineQueue.syncOutbox();
       if (phoneContactsPermissionGranted) matchPhoneContacts(silent: true);
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      unawaited(SirajRealtime.instance.stop());
     }
   }
 
