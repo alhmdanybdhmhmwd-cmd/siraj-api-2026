@@ -19,6 +19,8 @@ jobs:
         run: npm install --ignore-scripts --no-audit --no-fund --no-package-lock
       - name: Check Worker JavaScript syntax
         run: node --check src/src/index.js
+      - name: Check standalone Node API syntax
+        run: node --check node_server.mjs
       - name: Audit Worker runtime portability dependencies
         run: npm run audit:runtime-portability
       - name: Run backend authentication tests
