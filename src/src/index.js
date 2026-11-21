@@ -1251,7 +1251,7 @@ export default {
           const title = String(body.title || "").trim();
           const content = String(body.content || "").trim();
           const sourceType = body.sourceType === undefined ? "text" : String(body.sourceType);
-          if (title.length > 120 || !content || content.length > 10000 ||
+          if (title.length > 120 || (!content && !title) || content.length > 10000 ||
               !["text", "message"].includes(sourceType)) {
             return json({ error: "Memory title, content, or type is invalid" }, 400);
           }
@@ -1276,7 +1276,7 @@ export default {
           const body = await readJsonRequestLimited(request);
           const title = String(body.title || "").trim();
           const content = String(body.content || "").trim();
-          if (title.length > 120 || !content || content.length > 10000) {
+          if (title.length > 120 || (!content && !title) || content.length > 10000) {
             return json({ error: "Memory title or content is invalid" }, 400);
           }
           const updated = await env.DB.prepare(
