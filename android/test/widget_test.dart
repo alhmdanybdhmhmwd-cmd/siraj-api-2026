@@ -3,6 +3,33 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:barq/main.dart';
 
 void main() {
+  test('private invite links accept only the BARQ scheme, host and 12-character code', () {
+    expect(barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef123456')), 'ABCDEF123456');
+    expect(barqInviteCodeFromUri(Uri.parse('barq://invite?code=abcdef123456')), 'ABCDEF123456');
+    expect(barqInviteCodeFromUri(Uri.parse('https://invite/abcdef123456')), isNull);
+    expect(barqInviteCodeFromUri(Uri.parse('barq://other/abcdef123456')), isNull);
+    expect(barqInviteCodeFromUri(Uri.parse('barq://invite/abc123')), isNull);
+    expect(barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef12345z')), isNull);
+  });
+
+  test('Nearby accepts only bounded text messages from the verified peer', () {
+    final valid = <String, dynamic>{
+      'kind': 'barq_text_message',
+      'id': 'a1b2c3d4e5f60708',
+      'senderId': 'friend-1',
+      'receiverId': 'me',
+      'body': 'رسالة قريبة',
+    };
+    expect(isValidBarqNearbyTextPayload(valid, peerId: 'friend-1', currentUserId: 'me'), isTrue);
+    expect(isValidBarqNearbyTextPayload({...valid, 'senderId': 'stranger'}, peerId: 'friend-1', currentUserId: 'me'), isFalse);
+    expect(isValidBarqNearbyTextPayload({...valid, 'receiverId': 'other'}, peerId: 'friend-1', currentUserId: 'me'), isFalse);
+    expect(isValidBarqNearbyTextPayload({...valid, 'id': 'x'.padRight(129, 'x')}, peerId: 'friend-1', currentUserId: 'me'), isFalse);
+    expect(isValidBarqNearbyTextPayload({...valid, 'id': 'bad id'}, peerId: 'friend-1', currentUserId: 'me'), isFalse);
+    expect(isValidBarqNearbyTextPayload({...valid, 'body': '   '}, peerId: 'friend-1', currentUserId: 'me'), isFalse);
+    expect(isValidBarqNearbyTextPayload({...valid, 'body': 'x' * 5001}, peerId: 'friend-1', currentUserId: 'me'), isFalse);
+    expect(isValidBarqNearbyTextPayload({...valid, 'kind': 'media'}, peerId: 'friend-1', currentUserId: 'me'), isFalse);
+  });
+
   test('international phone normalization supports Arabic digits and 00 prefix', () {
     expect(normalizeBarqInternationalPhone(' +٩٦٧ ٧٧٠٠٠٠٠٠٠ '), '+967770000000');
     expect(normalizeBarqInternationalPhone('00447911123456'), '+447911123456');
