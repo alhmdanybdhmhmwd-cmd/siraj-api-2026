@@ -437,6 +437,45 @@ test("ephemeral messages start the ten-second TTL on recipient read and schedule
 });
 
 
+test("opening an ephemeral conversation as sender does not start or extend the recipient TTL", async () => {
+  const db = new FakeDB();
+  db.friendshipAllowed = true;
+  db.ephemeralRows = [{
+    id: "ephemeral-sender-read",
+    sender_id: user.id,
+    receiver_id: "friend-1",
+    body: "one-time text",
+    created_at: Math.floor(Date.now() / 1000),
+    read_at: null,
+    delete_at: null
+  }];
+  const senderToken = await worker.signToken(user, secret, 0);
+  const senderResponse = await worker.default.fetch(new Request(
+    "https://api.example.test/api/ephemeral-messages?with=friend-1",
+    { headers: { Authorization: "Bearer " + senderToken } }
+  ), { DB: db, JWT_SECRET: secret });
+  assert.equal(senderResponse.status, 200);
+  assert.equal(db.ephemeralRows[0].read_at, null);
+  assert.equal(db.ephemeralRows[0].delete_at, null);
+
+  const recipient = { ...user, id: "friend-1" };
+  const recipientToken = await worker.signToken(recipient, secret, 0);
+  const recipientRequest = () => worker.default.fetch(new Request(
+    "https://api.example.test/api/ephemeral-messages?with=" + user.id,
+    { headers: { Authorization: "Bearer " + recipientToken } }
+  ), { DB: db, JWT_SECRET: secret });
+
+  assert.equal((await recipientRequest()).status, 200);
+  const firstReadAt = db.ephemeralRows[0].read_at;
+  const firstDeleteAt = db.ephemeralRows[0].delete_at;
+  assert.ok(firstReadAt);
+  assert.equal(firstDeleteAt, firstReadAt + 10);
+
+  assert.equal((await recipientRequest()).status, 200);
+  assert.equal(db.ephemeralRows[0].read_at, firstReadAt);
+  assert.equal(db.ephemeralRows[0].delete_at, firstDeleteAt);
+});
+
 test("profile photo upload rejects mismatched image bytes before contacting storage", async () => {
   const db = new FakeDB();
   const token = await worker.signToken(user, secret, 0);
