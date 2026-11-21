@@ -892,6 +892,63 @@ void main() {
     expect(normalizeBarqFcmToken(List.filled(4096, 'x').join()), hasLength(4096));
   });
 
+  test('foreground push uses generic labels and respects category preferences', () {
+    expect(
+      barqForegroundPushLabel(
+        {'type': 'direct_message', 'body': 'secret message', 'sender': 'Private Name'},
+        {'messages': true},
+      ),
+      'وصلتك رسالة جديدة',
+    );
+    expect(
+      barqForegroundPushLabel({'type': 'group_message', 'body': 'secret'}, {'groups': true}),
+      'وصلتك رسالة جديدة في مجموعة',
+    );
+    expect(
+      barqForegroundPushLabel({'type': 'status_update', 'body': 'private'}, {'statuses': true}),
+      'هناك لحظة جديدة في SPARK',
+    );
+    expect(barqForegroundPushLabel({'type': 'direct_message'}, {'messages': false}), isNull);
+    expect(barqForegroundPushLabel({'type': 'group_message'}, {'groups': false}), isNull);
+    expect(barqForegroundPushLabel({'type': 'status_update'}, {'statuses': false}), isNull);
+    expect(barqForegroundPushLabel({'type': 'unknown'}, {}), isNull);
+  });
+
+  test('FCM logout revocation runs only with session and valid token', () async {
+    String? revoked;
+    final success = await revokeBarqFcmTokenSafely(
+      authToken: 'session-token',
+      fcmToken: '  device-token  ',
+      revoke: (value) async { revoked = value; },
+    );
+    expect(success, isTrue);
+    expect(revoked, 'device-token');
+
+    revoked = null;
+    final noSession = await revokeBarqFcmTokenSafely(
+      authToken: null,
+      fcmToken: 'device-token',
+      revoke: (value) async { revoked = value; },
+    );
+    expect(noSession, isFalse);
+    expect(revoked, isNull);
+
+    final invalidToken = await revokeBarqFcmTokenSafely(
+      authToken: 'session-token',
+      fcmToken: 'invalid token',
+      revoke: (value) async { revoked = value; },
+    );
+    expect(invalidToken, isFalse);
+    expect(revoked, isNull);
+
+    final networkFailure = await revokeBarqFcmTokenSafely(
+      authToken: 'session-token',
+      fcmToken: 'device-token',
+      revoke: (_) async { throw Exception('offline'); },
+    );
+    expect(networkFailure, isFalse);
+  });
+
   test('FCM registration requires authorized or provisional notification permission', () {
     expect(barqCanRegisterFcmToken(AuthorizationStatus.authorized), isTrue);
     expect(barqCanRegisterFcmToken(AuthorizationStatus.provisional), isTrue);
