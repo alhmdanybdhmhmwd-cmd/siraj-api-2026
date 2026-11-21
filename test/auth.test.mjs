@@ -2882,3 +2882,59 @@ test("deleted private memory photos cannot be read while storage cleanup is pend
     else globalThis.__fakeTigrisHandler = previousHandler;
   }
 });
+
+
+test("deleting a private memory atomically revokes photo access and queues storage cleanup", async () => {
+  const secret = "private-memory-delete-test-secret";
+  const token = await worker.signToken({ id: "owner-1", username: "owner-1" }, secret);
+  const batches = [];
+  const db = {
+    prepare(sql) {
+      const statement = {
+        sql,
+        params: [],
+        bind(...params) { this.params = params; return this; },
+        async run() { return { meta: { changes: 1 } }; },
+        async first() {
+          if (this.sql.includes("SELECT session_version FROM account_security")) {
+            return { session_version: 0 };
+          }
+          if (this.sql.includes("SELECT id FROM private_memories WHERE id = ? AND owner_id = ?")) {
+            assert.deepEqual(this.params, ["memory-1", "owner-1"]);
+            return { id: "memory-1" };
+          }
+          if (this.sql.includes("SELECT 1 FROM revoked_sessions")) return null;
+          return null;
+        },
+        async all() {
+          if (this.sql.includes("SELECT object_key FROM private_memory_media")) {
+            assert.deepEqual(this.params, ["memory-1", "owner-1"]);
+            return { results: [{ object_key: "owner-1/private-memories/photo-1" }] };
+          }
+          return { results: [] };
+        }
+      };
+      return statement;
+    },
+    async batch(statements) {
+      batches.push(statements.map(statement => ({ sql: statement.sql, params: statement.params })));
+      return statements.map(() => ({ meta: { changes: 1 } }));
+    }
+  };
+  const response = await worker.default.fetch(new Request(
+    "https://api.example.test/api/private-memories/memory-1",
+    { method: "DELETE", headers: { Authorization: "Bearer " + token } }
+  ), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { message: "Memory deleted" });
+  assert.equal(batches.length, 1);
+  const sql = batches[0].map(statement => statement.sql);
+  assert.ok(sql.some(value => value.includes("INSERT INTO media_expirations")));
+  assert.ok(sql.some(value => value.includes("DELETE FROM media_access")));
+  assert.ok(sql.some(value => value.includes("DELETE FROM private_memory_media")));
+  assert.ok(sql.some(value => value.includes("DELETE FROM private_memories")));
+  assert.ok(
+    sql.findIndex(value => value.includes("INSERT INTO media_expirations")) <
+    sql.findIndex(value => value.includes("DELETE FROM media_access"))
+  );
+});
