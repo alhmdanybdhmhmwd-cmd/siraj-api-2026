@@ -559,6 +559,23 @@ void main() {
   });
 
 
+  testWidgets('private memory photo gallery shows a safe empty state without paging', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 240,
+            child: PrivateMemoryPhotoGallery(media: []),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.photo_library_outlined), findsOneWidget);
+    expect(find.byType(PageView), findsNothing);
+    expect(find.textContaining('/'), findsNothing);
+  });
+
   testWidgets('private memory photo gallery pages through multiple zoomable photos', (tester) async {
     final photos = [
       {'attachmentId': 'owner-1/private-memories/photo-1'},
