@@ -24,6 +24,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:crypto/crypto.dart' as crypto;
+import 'barq_identity.dart';
 
 const Color gold = Color(0xFFD6AD55);
 const Color dark = Color(0xFF090909);
@@ -275,6 +276,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
   await BarqFeatures.load();
+  await BarqIdentity.load();
   await BarqInviteLinks.initialize();
   runApp(const SirajApp());
 }
@@ -313,36 +315,57 @@ class SirajApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'برق',
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: dark,
-        colorScheme: const ColorScheme.dark(
-          primary: gold,
-          secondary: electricBlue,
-          surface: panel,
-        ),
-        navigationBarTheme: NavigationBarThemeData(
-          backgroundColor: panel,
-          indicatorColor: electricBlue.withValues(alpha: .18),
-          iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
-            color: states.contains(WidgetState.selected) ? electricBlue : Colors.white70,
-          )),
-          labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
-            color: states.contains(WidgetState.selected) ? gold : Colors.white70,
-            fontSize: 11,
-            fontWeight: states.contains(WidgetState.selected) ? FontWeight.w700 : FontWeight.w500,
-          )),
-        ),
-        useMaterial3: true,
-      ),
-      home: const StartupPage(),
+    return ValueListenableBuilder<BarqIdentity>(
+      valueListenable: BarqIdentity.selected,
+      builder: (context, identity, _) {
+        final palette = BarqIdentityPalette.forIdentity(identity);
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'برق',
+          theme: ThemeData(
+            brightness: Brightness.dark,
+            scaffoldBackgroundColor: palette.background,
+            colorScheme: ColorScheme.dark(
+              primary: palette.primary,
+              secondary: palette.secondary,
+              surface: palette.surface,
+              onPrimary: palette.onPrimary,
+              onSecondary: palette.onSecondary,
+            ),
+            appBarTheme: AppBarTheme(
+              backgroundColor: palette.surface,
+              foregroundColor: palette.text,
+              surfaceTintColor: Colors.transparent,
+            ),
+            cardTheme: CardThemeData(
+              color: palette.surface,
+              surfaceTintColor: Colors.transparent,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+                side: BorderSide(color: palette.border),
+              ),
+            ),
+            navigationBarTheme: NavigationBarThemeData(
+              backgroundColor: palette.surface,
+              indicatorColor: palette.secondary.withValues(alpha: .18),
+              iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
+                color: states.contains(WidgetState.selected) ? palette.secondary : palette.mutedText,
+              )),
+              labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
+                color: states.contains(WidgetState.selected) ? palette.primary : palette.mutedText,
+                fontSize: 11,
+                fontWeight: states.contains(WidgetState.selected) ? FontWeight.w700 : FontWeight.w500,
+              )),
+            ),
+            useMaterial3: true,
+          ),
+          home: const StartupPage(),
+        );
+      },
     );
   }
 }
-
 
 /// اتصال لحظي اختياري؛ REST يبقى المصدر الدائم للرسائل.
 class SirajRealtime {
@@ -4839,6 +4862,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return ListView(
       padding: const EdgeInsets.all(14),
       children: [
+        Card(
+          child: ListTile(
+            leading: Icon(Icons.palette_outlined, color: Theme.of(context).colorScheme.primary),
+            title: const Text('هوية برق البصرية'),
+            subtitle: Text('الهوية الحالية: ${BarqIdentity.label(BarqIdentity.selected.value)}'),
+            trailing: const Icon(Icons.chevron_left),
+            onTap: () => _showBarqIdentityPicker(context),
+          ),
+        ),
+        const SizedBox(height: 10),
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
@@ -5035,6 +5068,81 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ],
     );
   }
+  Future<void> _showBarqIdentityPicker(BuildContext context) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => ValueListenableBuilder<BarqIdentity>(
+        valueListenable: BarqIdentity.selected,
+        builder: (context, selected, _) => AlertDialog(
+          title: const Text('اختر هوية برق'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: BarqIdentity.values.map((identity) {
+              final palette = BarqIdentityPalette.forIdentity(identity);
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () async {
+                    try {
+                      await BarqIdentity.set(identity);
+                      if (dialogContext.mounted) Navigator.pop(dialogContext);
+                    } catch (e) {
+                      if (dialogContext.mounted) {
+                        showMsg(dialogContext, 'تعذر حفظ الهوية: ${cleanError(e)}');
+                      }
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: selected == identity ? palette.primary : palette.border,
+                        width: selected == identity ? 2 : 1,
+                      ),
+                      color: palette.surface,
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(9),
+                            gradient: LinearGradient(colors: [palette.primary, palette.secondary]),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            BarqIdentity.label(identity),
+                            style: TextStyle(
+                              color: palette.text,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        if (selected == identity)
+                          Icon(Icons.check_circle_rounded, color: palette.primary),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('إغلاق'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
 }
 
 String _messageTime(String raw) {
