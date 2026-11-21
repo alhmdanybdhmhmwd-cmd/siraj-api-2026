@@ -545,3 +545,9 @@
 - تمت مواءمة CORS بين Vercel API gateway وCloudflare Worker: السماح بـPUT وPATCH وRange وX-Idempotency-Key، وكشف Content-Range وAccept-Ranges وETag وX-Request-Id.
 - Backend CI نجح على commit e39ab3e3f34c06c7df9877f33db7f62d0446fed0: 216/216 اختباراً دون فشل، وتكرر النجاح في run 44946761090.
 - هذا إغلاق برمجي لاختلاف CORS فقط. الاتصال الحي عبر Preview واختبار الشبكات اليمنية دون VPN لا يزالان معلقين؛ لا تغيير إنتاج أو DNS أو تخزين.
+
+## تحديث المرحلة 8 — تجهيز failover اختياري لبوابة API (2026-11-21)
+- جهزت بوابة Vercel لقبول BARQ_API_FALLBACK_UPSTREAM اختيارياً، مع تحقق HTTPS origin، وعزل Preview عن أي وجهة إنتاجية.
+- سياسة إعادة المحاولة تمنع تكرار عمليات الكتابة غير القابلة للتكرار؛ لا يعاد POST إلا عند وجود X-Idempotency-Key.
+- Backend CI نجح: 222/222 اختباراً، run 44947186202.
+- لا يوجد fallback host فعلي مضبوط أو منشور بعد، ولم يثبت تجاوز VPN من اليمن. ما زال الاختبار الحي اليمني وموافقة المستخدم شرطين قبل أي تفعيل في الإنتاج.
