@@ -122,6 +122,11 @@ String? barqForegroundPushLabel(
   Map<String, dynamic> data,
   Map<String, dynamic> preferences,
 ) {
+  final ephemeral = data['ephemeral'] == true ||
+      data['temporary'] == true ||
+      data['ephemeral']?.toString().toLowerCase() == 'true' ||
+      data['temporary']?.toString().toLowerCase() == 'true';
+  if (ephemeral) return null;
   switch (data['type']?.toString()) {
     case 'direct_message':
       return preferences['messages'] == false ? null : 'وصلتك رسالة جديدة';
@@ -341,6 +346,30 @@ class SirajPush {
       'groups': preferences['groups'] != false,
       'statuses': preferences['statuses'] != false,
     };
+    unawaited(storage.write(
+      key: 'barq_notification_prefs',
+      value: jsonEncode(_preferences),
+    ).catchError((_) {}));
+  }
+
+  static Future<void> loadCachedPreferences() async {
+    try {
+      final raw = await storage.read(key: 'barq_notification_prefs');
+      if (raw == null) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        _preferences = {
+          'messages': decoded['messages'] != false,
+          'groups': decoded['groups'] != false,
+          'statuses': decoded['statuses'] != false,
+        };
+      }
+    } catch (_) {}
+  }
+
+  static Future<void> clearPreferences() async {
+    _preferences = {'messages': true, 'groups': true, 'statuses': true};
+    try { await storage.delete(key: 'barq_notification_prefs'); } catch (_) {}
   }
 
   static void _handleForegroundMessage(RemoteMessage message) {
@@ -1504,6 +1533,7 @@ class Api {
     await SirajRealtime.instance.stop();
     await BarqNearbyService.instance.stop();
     token = null;
+    await SirajPush.clearPreferences();
     await storage.delete(key: 'siraj_token');
     await storage.delete(key: 'barq_cached_user');
     await storage.delete(key: 'barq_cached_friends');
@@ -2589,6 +2619,7 @@ class _StartupPageState extends State<StartupPage> {
       Api.token = saved;
       try {
         final user = await Api.me();
+        await SirajPush.loadCachedPreferences();
         await SirajPush.register();
         // اتصال REST عبر Vercel هو المسار المعتمد لتجنب workers.dev على الشبكات المقيدة.
       // المزامنة الدورية أدناه تُبقي الرسائل محدثة دون اتصال WebSocket مباشر.
@@ -4932,7 +4963,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               title: const Text('لحظات SPARK الجديدة'), value: statusesEnabled,
               onChanged: saving ? null : (v) => setDialog(() => statusesEnabled = v)),
             const SizedBox(height: 8),
-            const Text('هذه تفضيلات محفوظة في حسابك؛ وصول إشعارات الهاتف الفعلية يتطلب استكمال ربط خدمة الإرسال.', style: TextStyle(color: Colors.white60, fontSize: 12)),
+            const Text('عند استخدام التطبيق تظهر تنبيهات مختصرة دون كشف نص الرسائل؛ وتُحترم تفضيلات الرسائل والمجموعات وSPARK.', style: TextStyle(color: Colors.white60, fontSize: 12)),
           ]),
           actions: [
             TextButton(onPressed: saving ? null : () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
