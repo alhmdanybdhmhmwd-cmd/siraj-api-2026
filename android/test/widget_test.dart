@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:nearby_connections/nearby_connections.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:barq/main.dart';
+import 'package:barq/barq_identity.dart';
 
 void main() {
   test('private invite links accept only the BARQ scheme, host and 12-character code', () {
@@ -835,5 +836,36 @@ void main() {
     expect(find.text('2 / 3'), findsOneWidget);
   });
 
+
+  test('BARQ has exactly the four approved visual identities', () {
+    expect(BarqIdentity.values, [
+      BarqIdentity.blueLightning,
+      BarqIdentity.butterfly,
+      BarqIdentity.purpleShadow,
+      BarqIdentity.skyJewel,
+    ]);
+    expect(BarqIdentity.label(BarqIdentity.blueLightning), 'البرق الأزرق');
+    expect(BarqIdentity.label(BarqIdentity.butterfly), 'الفراشة');
+    expect(BarqIdentity.label(BarqIdentity.purpleShadow), 'الظل البنفسجي');
+    expect(BarqIdentity.label(BarqIdentity.skyJewel), 'الجوهرة السماوية');
+  });
+
+  test('BARQ identity palettes keep four distinct readable theme foundations', () {
+    final palettes = BarqIdentity.values
+        .map(BarqIdentityPalette.forIdentity)
+        .toList();
+    expect(palettes.map((p) => p.background).toSet().length, 4);
+    expect(palettes.map((p) => p.primary).toSet().length, 4);
+    for (final palette in palettes) {
+      expect(palette.text, isNot(palette.background));
+      expect(palette.primary, isNot(palette.background));
+      expect(palette.secondary, isNot(palette.surface));
+    }
+    final blue = BarqIdentityPalette.forIdentity(BarqIdentity.blueLightning);
+    expect(blue.primary, const Color(0xFFD6AD55));
+    expect(blue.secondary, const Color(0xFF168BFF));
+    expect(blue.background, const Color(0xFF090909));
+    expect(blue.surface, const Color(0xFF171717));
+  });
 
 }
