@@ -19,6 +19,30 @@ const SPARK_STATUS_BACKGROUNDS = new Set(["electric_blue", "violet", "gold", "mi
 const SPARK_STATUS_TEXT_COLORS = new Set(["white", "black", "gold"]);
 const SPARK_STATUS_FONTS = new Set(["modern", "classic", "mono"]);
 
+async function rollbackSparkMediaUpload(env, storage, storageUrl, objectKey) {
+  let objectDeleted = false;
+  try {
+    const response = await storage.fetch(storageUrl, { method: "DELETE" });
+    objectDeleted = response.ok || response.status === 404;
+  } catch (error) {
+    console.error("SPARK media rollback delete failed:", error);
+  }
+  try {
+    if (objectDeleted) {
+      await env.DB.prepare("DELETE FROM media_expirations WHERE object_key = ?").bind(objectKey).run();
+    } else {
+      // A failed upload rollback must become immediately eligible for the scheduled
+      // cleanup; otherwise a successful PUT followed by a D1 failure can orphan media.
+      await env.DB.prepare(
+        "INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?) ON CONFLICT(object_key) DO UPDATE SET expires_at = excluded.expires_at"
+      ).bind(objectKey, new Date().toISOString()).run();
+    }
+  } catch (error) {
+    console.error("SPARK media rollback cleanup record failed:", error);
+  }
+  return objectDeleted;
+}
+
 async function ensureSparkStatusStyleColumns(env) {
   const columns = await env.DB.prepare("PRAGMA table_info(status_posts)").all();
   const names = new Set((columns.results || []).map(column => column.name));
@@ -1830,25 +1854,11 @@ export default {
           );
           const savedRows = await env.DB.batch(statements);
           if (Number(savedRows?.[mediaInsertIndex]?.meta?.changes || 0) !== 1) {
-            let deleted = false;
-            try {
-              const deletion = await storage.fetch(storageUrl, { method: "DELETE" });
-              deleted = deletion.ok || deletion.status === 404;
-            } catch (_) {}
-            if (deleted) {
-              try { await env.DB.prepare("DELETE FROM media_expirations WHERE object_key = ?").bind(objectKey).run(); } catch (_) {}
-            }
+            await rollbackSparkMediaUpload(env, storage, storageUrl, objectKey);
             return json({ error: "A SPARK status can contain at most 10 media files" }, 409);
           }
         } catch (error) {
-          let deleted = false;
-          try {
-            const deletion = await storage.fetch(storageUrl, { method: "DELETE" });
-            deleted = deletion.ok || deletion.status === 404;
-          } catch (_) {}
-          if (deleted) {
-            try { await env.DB.prepare("DELETE FROM media_expirations WHERE object_key = ?").bind(objectKey).run(); } catch (_) {}
-          }
+          await rollbackSparkMediaUpload(env, storage, storageUrl, objectKey);
           throw error;
         }
         if (!requestedStatusId) {
