@@ -400,7 +400,7 @@ test("ephemeral send rejects non-friends, self messages and oversized text", asy
   assert.equal(db.ephemeralRows?.length || 0, 0);
 });
 
-test("ephemeral messages start the ten-second TTL on recipient read and schedule physical deletion", async () => {test("ephemeral messages start the ten-second TTL on recipient read and schedule physical deletion", async () => {
+test("ephemeral messages start the ten-second TTL on recipient read and schedule physical deletion", async () => {
   const db = new FakeDB();
   db.ephemeralRows = [{
     id: "ephemeral-1",
