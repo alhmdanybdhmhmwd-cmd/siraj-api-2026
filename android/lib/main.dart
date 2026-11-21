@@ -2637,6 +2637,7 @@ class _StartupPageState extends State<StartupPage> {
               if (cachedUser.isNotEmpty && mounted) {
                 await SirajPush.loadCachedPreferences();
                 await SirajPush.register();
+                if (!mounted) return;
                 Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomePage(user: cachedUser)));
                 return;
               }
