@@ -6,6 +6,7 @@ on:
       - barq/phase-2-android-ci-2026-11-20
     paths:
       - "test/barq_preview_integration.mjs"
+      - "test/barq_preview_media_integration.mjs"
       - ".github/workflows/barq-preview-integration-check.yml"
 
 permissions:
@@ -17,6 +18,7 @@ jobs:
     timeout-minutes: 10
     env:
       BARQ_PREVIEW_URL: https://barq-api-phase2-test.alhmdanybdhmhmwd.workers.dev
+      BARQ_PREVIEW_MEDIA_CREDENTIALS_CONFIGURED: ${{ secrets.BARQ_PREVIEW_TIGRIS_ACCESS_KEY_ID != '' && secrets.BARQ_PREVIEW_TIGRIS_SECRET_ACCESS_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -29,3 +31,9 @@ jobs:
           curl --connect-timeout 5 --max-time 15 --silent --show-error --fail "$BARQ_PREVIEW_URL/health/ready"
       - name: Run account, profile, privacy, contacts, messaging, and group integration tests
         run: node test/barq_preview_integration.mjs
+      - name: Run live media upload, download, range, and recipient checks
+        if: env.BARQ_PREVIEW_MEDIA_CREDENTIALS_CONFIGURED == 'true'
+        run: node test/barq_preview_media_integration.mjs
+      - name: Report media integration prerequisites
+        if: env.BARQ_PREVIEW_MEDIA_CREDENTIALS_CONFIGURED != 'true'
+        run: echo "Live media checks skipped: configure both Preview-only Tigris credentials, then redeploy the isolated Preview Worker." >> "$GITHUB_STEP_SUMMARY"
