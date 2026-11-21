@@ -1240,7 +1240,7 @@ export default {
           return json({ memory }, 201);
         }
 
-        const memoryMatch = path.match(/^\\/api\\/private-memories\\/([^/]+)$/);
+        const memoryMatch = path.match(new RegExp('^/api/private-memories/([^/]+)$'));
         if (memoryMatch && method === "PATCH") {
           let memoryId;
           try { memoryId = decodeURIComponent(memoryMatch[1]); } catch (_) {
