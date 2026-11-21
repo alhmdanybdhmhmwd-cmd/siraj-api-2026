@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 const files = ["src/src/index.js", "src/src/media_multipart_routes.js"];
 const [source, adapterSource] = await Promise.all([
-  Promise.all(files.map(path => readFile(new URL(`../${path}`, import.meta.url), "utf8"))).then(parts => parts.join("\\n")),
+  Promise.all(files.map(path => readFile(new URL(`../${path}`, import.meta.url), "utf8"))).then(parts => parts.join("\n")),
   readFile(new URL("../src/src/runtime_adapters.js", import.meta.url), "utf8")
 ]);
 const references = [...source.matchAll(/\benv\.([A-Za-z_$][\w$]*)/g)].reduce((counts, match) => {
