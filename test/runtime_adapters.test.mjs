@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   createAiProvider,
   createDatabaseProvider,
+  createLibsqlDatabaseProvider,
   createObjectStorageClient,
   createPushProvider,
   createBackgroundTaskScheduler
@@ -65,6 +66,43 @@ test("database provider exposes the supported SQL operations", async () => {
   const limited = createDatabaseProvider({ prepare: sql => ({ sql }) });
   await assert.rejects(() => limited.batch([]), /not supported/);
   await assert.rejects(() => limited.exec("SELECT 1"), /not supported/);
+});
+
+test("libSQL adapter exposes D1-compatible prepared statements and atomic batches", async () => {
+  const calls = [];
+  const client = {
+    async execute(statement) {
+      calls.push(["execute", statement]);
+      if (statement === "SELECT 1 AS barq_ready" || statement.sql === "SELECT 1 AS barq_ready") {
+        return { rows: [{ barq_ready: 1 }] };
+      }
+      return { rows: [{ value: statement.args?.[0] ?? null }], rowsAffected: 1 };
+    },
+    async batch(statements, mode) {
+      calls.push(["batch", statements, mode]);
+      return statements.map(() => ({ rowsAffected: 1 }));
+    },
+    async executeMultiple(sql) {
+      calls.push(["executeMultiple", sql]);
+      return { ok: true };
+    }
+  };
+  const db = createLibsqlDatabaseProvider(client);
+  assert.equal(await db.healthCheck(), true);
+  const statement = db.prepare("SELECT ? AS value").bind(42);
+  assert.deepEqual(await statement.first(), { value: 42 });
+  assert.deepEqual((await statement.all()).results, [{ value: 42 }]);
+  assert.equal((await statement.run()).success, true);
+  const batch = await db.batch([
+    db.prepare("INSERT INTO messages(id) VALUES (?)").bind("m1"),
+    db.prepare("INSERT INTO messages(id) VALUES (?)").bind("m2")
+  ]);
+  assert.equal(batch.length, 2);
+  assert.equal(calls.find(call => call[0] === "batch")[2], "write");
+  assert.deepEqual(calls.find(call => call[0] === "batch")[1].map(item => item.args), [["m1"], ["m2"]]);
+  assert.deepEqual(await db.exec("CREATE TABLE sample(id TEXT)"), { ok: true });
+  await assert.rejects(() => db.batch([{}]), /prepared by this provider/);
+  assert.throws(() => createLibsqlDatabaseProvider({}), /execute and batch/);
 });
 
 test("object storage client uses the common S3-compatible configuration", () => {
