@@ -60,6 +60,14 @@ export function createDatabaseProvider(binding) {
  */
 const LIBSQL_STATEMENT = Symbol("barq.libsql.statement");
 
+function toD1CompatibleMeta(result) {
+  return {
+    ...result,
+    changes: Number(result?.rowsAffected ?? result?.changes ?? 0),
+    last_row_id: result?.lastInsertRowid ?? result?.last_row_id ?? null
+  };
+}
+
 export function createLibsqlDatabaseProvider(client) {
   if (!client || typeof client.execute !== "function" || typeof client.batch !== "function") {
     throw new TypeError("A libSQL-compatible client with execute and batch is required");
@@ -83,12 +91,12 @@ export function createLibsqlDatabaseProvider(client) {
         return {
           results: result.rows ?? [],
           success: true,
-          meta: result
+          meta: toD1CompatibleMeta(result)
         };
       },
       async run() {
         const result = await client.execute({ sql, args });
-        return { success: true, meta: result };
+        return { success: true, meta: toD1CompatibleMeta(result) };
       }
     };
     return Object.freeze(statement);
@@ -106,7 +114,7 @@ export function createLibsqlDatabaseProvider(client) {
         statements.map(item => ({ sql: item.sql, args: item.args })),
         "write"
       );
-      return results.map(result => ({ success: true, meta: result }));
+      return results.map(result => ({ success: true, meta: toD1CompatibleMeta(result) }));
     },
     async exec(sql) {
       if (typeof sql !== "string" || !sql.trim()) throw new TypeError("SQL statement is required");
