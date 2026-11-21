@@ -123,7 +123,7 @@ module.exports = async (req, res) => {
     if (disposition) res.setHeader("Content-Disposition", disposition);
     const cacheControl = response.headers.get("cache-control");
     if (cacheControl) res.setHeader("Cache-Control", cacheControl);
-    for (const name of ["content-range", "content-length", "accept-ranges", "etag", "last-modified"]) {
+    for (const name of ["content-range", "content-length", "accept-ranges", "etag", "last-modified", "x-request-id", "retry-after", "server-timing", "vary"]) {
       const value = response.headers.get(name);
       if (value) res.setHeader(name, value);
     }
@@ -146,7 +146,7 @@ module.exports = async (req, res) => {
       return;
     }
     return res.status(502).json({
-      error: "تعذر الاتصال بخادم سراج",
+      error: "تعذر الاتصال بخادم برق",
     });
   }
 };
