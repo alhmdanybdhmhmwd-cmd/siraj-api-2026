@@ -104,7 +104,7 @@ class BarqIdentityPalette {
           border: Color(0x66D34BFF),
           glow: Color(0xFFD83DFF),
           tagline: 'أناقة بلا حدود',
-          motif: Icons.flutter_dash_rounded,
+          motif: Icons.auto_awesome_rounded,
         );
       // Deep, bold violet with restrained silver highlights.
       case BarqIdentity.purpleShadow:
