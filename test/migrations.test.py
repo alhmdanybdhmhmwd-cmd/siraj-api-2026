@@ -290,9 +290,6 @@ class RecoveryMigrationTests(unittest.TestCase):
         self.assertEqual(style, ("midnight", "white", "modern"))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
     def test_preview_group_roles_are_limited_and_cascade_with_membership(self):
         self.db.execute(
             "INSERT INTO users (id, username, display_name, password_hash, password_salt) VALUES ('owner', 'groupowner', 'Owner', 'hash', 'salt')"
@@ -331,3 +328,7 @@ if __name__ == "__main__":
                 "SELECT role FROM group_member_roles WHERE group_id = 'g1' AND user_id = 'admin'"
             ).fetchone()
         )
+
+
+if __name__ == "__main__":
+    unittest.main()
