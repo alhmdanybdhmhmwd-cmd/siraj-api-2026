@@ -4025,9 +4025,19 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           }
           return json({ error: "Attachment has expired" }, 410);
         }
-        const storageResponse = await storage.fetch(storageUrl, { method: "GET" });
+        const range = request.headers.get("Range");
+        const ifRange = request.headers.get("If-Range");
+        const downloadHeaders = {};
+        if (range) downloadHeaders.Range = range;
+        if (ifRange) downloadHeaders["If-Range"] = ifRange;
+        const storageResponse = await storage.fetch(storageUrl, {
+          method: "GET",
+          headers: downloadHeaders
+        });
         if (storageResponse.status === 404) return json({ error: "Attachment not found" }, 404);
-        if (!storageResponse.ok) return json({ error: "Media storage download failed", storageStatus: storageResponse.status }, 502);
+        if (storageResponse.status !== 200 && storageResponse.status !== 206 && storageResponse.status !== 416) {
+          return json({ error: "Media storage download failed", storageStatus: storageResponse.status }, 502);
+        }
         const headers = new Headers(corsHeaders);
         headers.set("Content-Type", headResponse.headers.get("content-type") || accessRow?.content_type || "application/octet-stream");
         const encodedName = headResponse.headers.get("x-amz-meta-filename") ||
@@ -4036,7 +4046,12 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         try { fileName = decodeURIComponent(encodedName); } catch (_) { fileName = encodedName; }
         headers.set("Content-Disposition", "attachment; filename*=UTF-8''" + encodeURIComponent(safeFileName(fileName)));
         headers.set("Cache-Control", "private, no-store");
-        return new Response(storageResponse.body, { status: 200, headers });
+        headers.set("Accept-Ranges", storageResponse.headers.get("accept-ranges") || "bytes");
+        for (const name of ["content-range", "content-length", "etag", "last-modified"]) {
+          const value = storageResponse.headers.get(name);
+          if (value) headers.set(name === "content-range" ? "Content-Range" : name === "content-length" ? "Content-Length" : name === "etag" ? "ETag" : "Last-Modified", value);
+        }
+        return new Response(storageResponse.body, { status: storageResponse.status, headers });
       }
 
       return json({ error: "Route not found" }, 404);
