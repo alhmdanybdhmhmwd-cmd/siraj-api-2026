@@ -744,9 +744,11 @@ async function cleanupExpiredEphemeralMessages(env, now = Date.now()) {
       sender_id TEXT NOT NULL,
       receiver_id TEXT NOT NULL,
       body TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       read_at INTEGER,
-      delete_at INTEGER
+      delete_at INTEGER,
+      FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `).run();
   await env.DB.prepare(
