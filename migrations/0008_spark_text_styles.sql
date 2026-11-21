@@ -1,4 +1,13 @@
--- SPARK text-only presentation metadata. Existing rows receive safe defaults.
-ALTER TABLE status_posts ADD COLUMN background_key TEXT NOT NULL DEFAULT 'midnight';
-ALTER TABLE status_posts ADD COLUMN text_color_key TEXT NOT NULL DEFAULT 'white';
-ALTER TABLE status_posts ADD COLUMN font_key TEXT NOT NULL DEFAULT 'modern';
+-- Ensure the SPARK status table has safe defaults on a fresh Preview database.
+-- Existing installations keep their rows; Worker adds missing style columns idempotently.
+CREATE TABLE IF NOT EXISTS status_posts (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  content TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at TEXT NOT NULL,
+  background_key TEXT NOT NULL DEFAULT 'midnight',
+  text_color_key TEXT NOT NULL DEFAULT 'white',
+  font_key TEXT NOT NULL DEFAULT 'modern',
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);

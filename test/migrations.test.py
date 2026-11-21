@@ -270,6 +270,26 @@ class RecoveryMigrationTests(unittest.TestCase):
         )
 
 
+    def test_spark_text_status_styles_have_safe_legacy_defaults(self):
+        columns = {
+            row[1] for row in self.db.execute("PRAGMA table_info(status_posts)")
+        }
+        self.assertTrue({
+            "id", "user_id", "content", "expires_at",
+            "background_key", "text_color_key", "font_key"
+        }.issubset(columns))
+        self.db.execute(
+            "INSERT INTO users (id, username, display_name, password_hash, password_salt) VALUES ('spark-owner', 'sparkowner', 'Spark Owner', 'hash', 'salt')"
+        )
+        self.db.execute(
+            "INSERT INTO status_posts (id, user_id, content, expires_at) VALUES ('spark-legacy', 'spark-owner', 'Old status', '2099-01-01T00:00:00Z')"
+        )
+        style = self.db.execute(
+            "SELECT background_key, text_color_key, font_key FROM status_posts WHERE id = 'spark-legacy'"
+        ).fetchone()
+        self.assertEqual(style, ("midnight", "white", "modern"))
+
+
 if __name__ == "__main__":
     unittest.main()
 
