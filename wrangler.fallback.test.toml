@@ -1,0 +1,18 @@
+name = "barq-api-phase2-fallback-test"
+main = "src/src/index.js"
+compatibility_date = "2026-11-16"
+workers_dev = true
+
+# Shares only the isolated BARQ Preview data namespace so failover preserves
+# Preview state. It never binds to the production database or media bucket.
+[[d1_databases]]
+binding = "DB"
+database_name = "barq-phase2-test-2026-11-20"
+database_id = "5bfada32-4f9b-4edb-85dd-3b3b30ab73b0"
+migrations_dir = "migrations"
+
+[vars]
+TIGRIS_BUCKET = "barq-preview-media"
+
+[ai]
+binding = "AI"
