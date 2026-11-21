@@ -642,3 +642,27 @@ test("SPARK scheduled cleanup removes expired audio reply metadata with its medi
   assert.ok(cleanup.includes('DELETE FROM media_expirations WHERE object_key = ? AND expires_at <= ?'));
   assert.ok(cleanup.includes('if (response.ok || response.status === 404)'));
 });
+
+
+test("SPARK audio downloads and media reads authorize viewers before touching Tigris", () => {
+  const audioStart = worker.indexOf("const sparkAudioReplyMatch = path.match");
+  const audioEnd = worker.indexOf("// SPARK replies and reactions are available only while the status is active and visible.", audioStart);
+  const audioRoute = worker.slice(audioStart, audioEnd);
+  assert.ok(audioStart >= 0 && audioEnd > audioStart);
+  const audioFriendship = audioRoute.indexOf("if (!friendship) return json({ error: \"SPARK status access denied\" }, 403)");
+  const audioStorage = audioRoute.indexOf("storage.fetch(storageUrl)");
+  assert.ok(audioFriendship >= 0 && audioStorage > audioFriendship,
+    "audio reply access must be authorized before downloading from Tigris");
+  assert.ok(audioRoute.includes("s.expires_at > CURRENT_TIMESTAMP"));
+
+  const mediaStart = worker.indexOf("const mediaMatch = path.match");
+  const mediaEnd = worker.indexOf('return json({ error: "Route not found" }, 404);', mediaStart);
+  const mediaRoute = worker.slice(mediaStart, mediaEnd);
+  assert.ok(mediaStart >= 0 && mediaEnd > mediaStart);
+  const mediaFriendship = mediaRoute.indexOf("reciprocal.user_id = ? AND reciprocal.friend_id = ?");
+  const mediaDenied = mediaRoute.indexOf('if (!permitted) return json({ error: "SPARK media access denied" }, 403)');
+  const mediaHead = mediaRoute.indexOf('storage.fetch(storageUrl, { method: "HEAD" })');
+  assert.ok(mediaFriendship >= 0 && mediaDenied > mediaFriendship && mediaHead > mediaDenied,
+    "SPARK media must require reciprocal friendship before any storage HEAD request");
+  assert.ok(mediaRoute.includes("sparkExpiry <= Date.now()"));
+});
