@@ -3810,6 +3810,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       text: memory == null ? initialContent : field(memory, ['content']),
     );
     final editing = memory != null;
+    final existingPhotos = memory?['media'] is List
+        ? (memory!['media'] as List)
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList()
+        : <Map<String, dynamic>>[];
     final photos = <Map<String, dynamic>>[];
     await showDialog<void>(
       context: pageContext,
@@ -3841,6 +3847,38 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       decoration: inputDecoration('اكتب ما تريد الاحتفاظ به', Icons.edit_note),
                     ),
                     const SizedBox(height: 10),
+                    if (existingPhotos.isNotEmpty) ...[
+                      const Align(
+                        alignment: Alignment.centerRight,
+                        child: Text('الصور المحفوظة في هذه الذكرى', style: TextStyle(color: gold)),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final item in existingPhotos)
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Image.network(
+                                Api.sparkMediaUri(field(item, ['attachmentId'])).toString(),
+                                headers: {if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'},
+                                width: 72,
+                                height: 72,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Container(
+                                  width: 72,
+                                  height: 72,
+                                  color: const Color(0xFF292929),
+                                  alignment: Alignment.center,
+                                  child: const Icon(Icons.broken_image_outlined, color: gold),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     OutlinedButton.icon(
                       onPressed: saving ? null : () async {
                         final result = await FilePicker.platform.pickFiles(
