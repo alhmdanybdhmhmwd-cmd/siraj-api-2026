@@ -21,6 +21,35 @@ void main() {
     expect(barqNearbyPermissionNamesForAndroidSdk(37), ['bluetoothAdvertise', 'bluetoothConnect', 'bluetoothScan', 'nearbyWifiDevices', 'accessLocalNetwork']);
   });
 
+  test('Nearby outgoing text validates sender, contact, stable ID and body', () {
+    const id = 'a1b2c3d4e5f60708a1b2c3d4e5f60708';
+    const contacts = {'friend-1'};
+    expect(isValidBarqNearbyOutgoingText(
+      senderId: 'me', currentUserId: 'me', receiverId: 'friend-1',
+      knownContacts: contacts, messageId: id, body: 'hello',
+    ), isTrue);
+    expect(isValidBarqNearbyOutgoingText(
+      senderId: 'spoofed', currentUserId: 'me', receiverId: 'friend-1',
+      knownContacts: contacts, messageId: id, body: 'hello',
+    ), isFalse);
+    expect(isValidBarqNearbyOutgoingText(
+      senderId: 'me', currentUserId: 'me', receiverId: 'stranger',
+      knownContacts: contacts, messageId: id, body: 'hello',
+    ), isFalse);
+    expect(isValidBarqNearbyOutgoingText(
+      senderId: 'me', currentUserId: 'me', receiverId: 'friend-1',
+      knownContacts: contacts, messageId: 'bad-id', body: 'hello',
+    ), isFalse);
+    expect(isValidBarqNearbyOutgoingText(
+      senderId: 'me', currentUserId: 'me', receiverId: 'friend-1',
+      knownContacts: contacts, messageId: id, body: '   ',
+    ), isFalse);
+    expect(isValidBarqNearbyOutgoingText(
+      senderId: 'me', currentUserId: 'me', receiverId: 'friend-1',
+      knownContacts: contacts, messageId: id, body: List.filled(5001, 'x').join(),
+    ), isFalse);
+  });
+
   test('Nearby accepts only bounded text messages from the verified peer', () {
     final valid = <String, dynamic>{
       'kind': 'barq_text_message',
