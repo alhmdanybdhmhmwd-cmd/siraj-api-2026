@@ -3122,9 +3122,8 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
 
 InputDecoration inputDecoration(String label, IconData icon) => InputDecoration(
       labelText: label,
-      prefixIcon: Icon(icon, color: gold),
+      prefixIcon: Icon(icon),
       filled: true,
-      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
     );
 
@@ -6995,7 +6994,7 @@ class _ChatPageState extends State<ChatPage> {
                                 margin: const EdgeInsets.symmetric(vertical: 4),
                                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                                 decoration: BoxDecoration(
-                                  color: mine ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surfaceContainerHighest,
+                                  color: mine ? Theme.of(context).colorScheme.primary.withValues(alpha: .18) : Theme.of(context).colorScheme.surfaceContainerHighest,
                                   borderRadius: BorderRadius.circular(16),
                                 ),
                                 child: Column(
