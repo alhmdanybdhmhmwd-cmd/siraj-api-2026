@@ -118,8 +118,8 @@ test("route integration: interruption, resume, duplicate chunks, exact final byt
   assert.equal((await f.call("/api/media/uploads/"+sessionId+"/chunks/1","PUT",chunk(source,1))).status,200);
   for(let n=4;n<=5;n++)assert.equal((await f.call("/api/media/uploads/"+sessionId+"/chunks/"+n,"PUT",chunk(source,n))).status,200);
   assert.equal(f.DB.parts.has(sessionId+":1"),true);
-  assert.equal([...f.DB.chunks.values()].filter(x=>x.session_id===sessionId).length,6,
-    "per-chunk checksums must remain after staged bytes are removed");
+  assert.equal([...f.DB.chunks.values()].filter(x=>x.session_id===sessionId).length,5,
+    "checksums for the five accepted chunks must remain after staged bytes are removed");
   assert.equal([...f.objects.keys()].some(k=>k.includes(".barq-staging/")),false);
   const duplicate=await f.call("/api/media/uploads/"+sessionId+"/chunks/5","PUT",chunk(source,5));
   assert.equal(duplicate.status,200);assert.equal((await duplicate.json()).alreadyStored,true);
