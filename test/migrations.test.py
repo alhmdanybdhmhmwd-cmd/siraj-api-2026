@@ -289,6 +289,86 @@ class RecoveryMigrationTests(unittest.TestCase):
         )
 
 
+    def test_resumable_media_upload_sessions_are_isolated_and_expire_independently(self):
+        tables = {
+            row[0] for row in self.db.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+        indexes = {
+            row[0] for row in self.db.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'index'"
+            )
+        }
+        self.assertIn("media_upload_sessions", tables)
+        self.assertIn("media_upload_parts", tables)
+        self.assertIn("idx_media_upload_sessions_expiry", indexes)
+        self.assertIn("idx_media_upload_sessions_owner", indexes)
+
+        self.db.execute(
+            "INSERT INTO users (id, username, display_name, password_hash, password_salt) VALUES ('upload-owner', 'uploadowner', 'Owner', 'hash', 'salt')"
+        )
+        self.db.execute(
+            "INSERT INTO users (id, username, display_name, password_hash, password_salt) VALUES ('upload-recipient', 'uploadrecipient', 'Recipient', 'hash', 'salt')"
+        )
+        self.db.execute(
+            """INSERT INTO media_upload_sessions
+               (id, owner_id, recipient_id, object_key, storage_upload_id,
+                file_name, content_type, total_size, part_size, expected_parts,
+                idempotency_key, expires_at)
+               VALUES ('session-1', 'upload-owner', 'upload-recipient',
+                'upload-owner/object-1', 'storage-upload-1', 'photo.png',
+                'image/png', 5242897, 5242880, 2, 'request-1',
+                '2099-01-01T00:00:00Z')"""
+        )
+        self.db.execute(
+            """INSERT INTO media_upload_parts
+               (session_id, part_number, etag, size)
+               VALUES ('session-1', 1, '"12345678"', 5242880)"""
+        )
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute(
+                """INSERT INTO media_upload_sessions
+                   (id, owner_id, recipient_id, object_key, storage_upload_id,
+                    file_name, content_type, total_size, part_size, expected_parts,
+                    idempotency_key, expires_at)
+                   VALUES ('session-2', 'upload-owner', 'upload-recipient',
+                    'upload-owner/object-2', 'storage-upload-2', 'photo.png',
+                    'image/png', 10, 5242880, 1, 'request-1',
+                    '2099-01-01T00:00:00Z')"""
+            )
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute(
+                """INSERT INTO media_upload_sessions
+                   (id, owner_id, recipient_id, group_id, object_key,
+                    storage_upload_id, file_name, content_type, total_size,
+                    part_size, expected_parts, idempotency_key, expires_at)
+                   VALUES ('session-invalid', 'upload-owner', 'upload-recipient',
+                    'group-1', 'upload-owner/object-x', 'storage-upload-x',
+                    'x.png', 'image/png', 10, 5242880, 1, 'request-x',
+                    '2099-01-01T00:00:00Z')"""
+            )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT part_number, size FROM media_upload_parts WHERE session_id = 'session-1'"
+            ).fetchone(),
+            (1, 5242880),
+        )
+        self.db.execute(
+            "UPDATE media_upload_sessions SET state = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = 'session-1'"
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT state FROM media_upload_sessions WHERE id = 'session-1'"
+            ).fetchone()[0],
+            "completed",
+        )
+        self.db.execute("DELETE FROM media_upload_sessions WHERE id = 'session-1'")
+        self.assertEqual(
+            self.db.execute("SELECT COUNT(*) FROM media_upload_parts").fetchone()[0],
+            0,
+        )
+
     def test_spark_text_status_styles_have_safe_legacy_defaults(self):
         columns = {
             row[1] for row in self.db.execute("PRAGMA table_info(status_posts)")
