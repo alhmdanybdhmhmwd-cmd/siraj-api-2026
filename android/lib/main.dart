@@ -44,7 +44,7 @@ const String mediaWorkerBase = String.fromEnvironment(
 const int maxAttachmentBytes = 60 * 1024 * 1024;
 
 String? barqSparkMediaContentType(String extension) {
-  switch (extension.trim().toLowerCase().replaceFirst(RegExp(r'^\\.'), '')) {
+  switch (extension.trim().toLowerCase().replaceFirst('.', '')) {
     case 'jpg':
     case 'jpeg':
       return 'image/jpeg';
