@@ -17,7 +17,13 @@ class AwsClient {
 }
 `);
 workerSource += "\nexport { signToken, verifyToken, authenticate, hashPassword, sendSirajPush, detectProfileImageType, readRequestBodyLimited, rollbackSparkMediaUpload };";
-const worker = await import("data:text/javascript;base64," + Buffer.from(workerSource).toString("base64"));
+let worker;
+try {
+  worker = await import("data:text/javascript;base64," + Buffer.from(workerSource).toString("base64"));
+} catch (error) {
+  console.error("Worker auth test module import failed:", error?.stack || error);
+  throw error;
+}
 
 test("profile image validation accepts JPEG, PNG, and WebP signatures", () => {
   assert.equal(worker.detectProfileImageType(Uint8Array.from([0xff, 0xd8, 0xff, 0x00])), "image/jpeg");
