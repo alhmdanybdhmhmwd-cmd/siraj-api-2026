@@ -170,7 +170,8 @@ String? barqInviteCodeFromUri(Uri uri) {
   }
 
   final code = rawCode.trim().toUpperCase();
-  return RegExp(r'^[A-F0-9]{12}
+  return RegExp(r'^[A-F0-9]{12}$').hasMatch(code) ? code : null;
+}
 
 /// يتحقق من هوية طرفي رسالة Nearby وحدودها قبل إدخالها إلى صندوق الرسائل المحلي.
 bool isValidBarqNearbyTextPayload(
