@@ -81,3 +81,12 @@
 - Backend CI على commit 4d906fb7da2d1602176dbe5ebf7efcf197c93502 نجح: 222/222 اختباراً دون فشل، run [44947186202](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026/actions/runs/44947186202). كما نجح فحص Worker المحلي وhealth probes على run [44946683888](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026/actions/runs/44946683888).
 - لم يُنشأ أو يُفعّل خادم احتياطي فعلي بعد؛ لا يوجد حتى الآن عنوان مستقل تم التحقق من DNS/TLS/الوصول إليه من اليمن. لا يعتبر هذا حلاً مثبتاً للـVPN، ولا تم نشر أي تعديل على الإنتاج أو تغيير DNS أو التخزين.
 - الخطوة التالية: اختيار مزود/نطاق مستقل، نشر Worker احتياطي معزول بعد موافقة المستخدم، ثم اختباره من اليمن دون VPN قبل وضع أي إعداد إنتاجي.
+
+## 12. إنشاء Worker احتياطي معزول لاختبار التعافي (2026-11-21)
+- أضيف إعداد مستقل wrangler.fallback.test.toml باسم barq-api-phase2-fallback-test، يستخدم نفس كود Worker، ويشارك قاعدة D1 وسلة Tigris الخاصة بالـPreview فقط حتى تبقى بيانات الاختبار متسقة عند التحويل.
+- لا يملك الإعداد Routes أو Cron، ولا يرتبط بقاعدة أو سلة الإنتاج. لا توجد ترحيلات D1 مكررة ولا جدولة تنظيف مزدوجة.
+- أضيف workflow يدوي فقط: .github/workflows/barq-preview-fallback-deploy.yml. لا ينشر إلا عند اختيار deploy_preview_fallback=true، ويتحقق من الأسرار ومن فصل موارد Preview عن Production قبل النشر، ثم يختبر /health/live و/health/ready.
+- نُسخت ملفات الإعداد والـworkflow إلى main حتى يظهر خيار التشغيل اليدوي في GitHub Actions، مع بقاء التنفيذ مشروطاً بموافقة صريحة داخل workflow.
+- أضيفت اختبارات عقد تمنع ربط Worker الاحتياطي بموارد الإنتاج أو تشغيله تلقائياً. Backend CI على commit 4d4bbb5b36499ece4d310484584dd093798c8b6d قيد التشغيل وقت تحديث التقرير؛ لا نسجل نجاحاً قبل ظهور النتيجة.
+- هذا Worker احتياطي داخل Cloudflare نفسه، وليس مزوداً مستقلاً. يفيد في اختبار تعطل/خلل Worker الأساسي فقط، ولا يعالج حجب Cloudflare أو workers.dev بالكامل. ما زال يلزم مزود مستقل فعلي واختبار من اليمن دون VPN.
+- لم يتم نشر Worker الاحتياطي بعد، ولم يتغير Vercel أو DNS أو Production.
