@@ -4865,8 +4865,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         Card(
           child: ListTile(
             leading: Icon(Icons.palette_outlined, color: Theme.of(context).colorScheme.primary),
-            title: const Text('هوية برق البصرية'),
-            subtitle: Text('الهوية الحالية: ${BarqIdentity.label(BarqIdentity.selected.value)}'),
+            title: const Text('المظهر والسمات'),
+            subtitle: Text('اختر هويتك المفضلة • الحالية: ${BarqIdentity.label(BarqIdentity.selected.value)}'),
             trailing: const Icon(Icons.chevron_left),
             onTap: () => _showBarqIdentityPicker(context),
           ),
