@@ -1,5 +1,5 @@
 import { AwsClient } from "aws4fetch";
-import { createAiProvider } from "./runtime_adapters.js";
+import { createAiProvider, createDatabaseProvider } from "./runtime_adapters.js";
 import { prepareConversationSummaryTranscript, buildConversationSummaryMessages, extractConversationSummaryText } from "./conversation_summary.js";
 import { handleResumableMediaUpload, cleanupExpiredUploadSessions } from "./media_multipart_routes.js";
 
@@ -818,6 +818,7 @@ async function createConversationSummary(env, messages, conversationType) {
 
 export default {
   async scheduled(_controller, env) {
+    env = { ...env, DB: createDatabaseProvider(env.DB) };
     try {
       const result = await cleanupExpiredRevokedSessions(env);
       console.log("Revoked session cleanup:", result);
@@ -852,6 +853,7 @@ export default {
     }
   },
   async fetch(request, env, ctx) {
+    env = { ...env, DB: createDatabaseProvider(env.DB) };
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders });
     }
