@@ -116,7 +116,7 @@ test("preview proxy returns a bounded gateway error when upstream fetch fails", 
     const res = makeResponse();
     await handler(makeRequest({ url: "/health/ready" }), res);
     assert.equal(res.statusCode, 502);
-    assert.deepEqual(res.body, { error: "تعذر الاتصال بخادم سراج" });
+    assert.deepEqual(res.body, { error: "تعذر الاتصال بخادم برق" });
   } finally {
     globalThis.fetch = originalFetch;
   }
