@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "audit:runtime-portability": "node scripts/barq-runtime-portability-audit.mjs"
   },
   "engines": {
     "node": ">=20"
