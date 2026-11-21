@@ -157,6 +157,32 @@ void main() {
     expect(barqOfflineIncomingMessageMatches(original, {...original, 'receiver_id': 'other'}), isFalse);
   });
 
+  test('offline reconciliation removes only an exact server copy', () {
+    const id = 'a1b2c3d4e5f60708a1b2c3d4e5f60708';
+    final queued = <Map<String, dynamic>>[
+      {'id': id, 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'hello'},
+      {'id': 'b1b2c3d4e5f60708a1b2c3d4e5f60708', 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'keep me'},
+    ];
+    final server = <Map<String, dynamic>>[
+      {'id': id, 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'hello'},
+    ];
+    expect(barqOfflineItemsNotOnServerPage(queued, server), [queued.last]);
+  });
+
+  test('offline reconciliation keeps a same-ID message when its content or parties differ', () {
+    const id = 'a1b2c3d4e5f60708a1b2c3d4e5f60708';
+    final queued = <Map<String, dynamic>>[
+      {'id': id, 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'original'},
+    ];
+    final server = <Map<String, dynamic>>[
+      {'id': id, 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'tampered'},
+    ];
+    expect(barqOfflineItemsNotOnServerPage(queued, server), queued);
+    expect(barqOfflineItemsNotOnServerPage(queued, [
+      {...server.single, 'sender_id': 'other', 'body': 'original'},
+    ]), queued);
+  });
+
   test('offline queue capacity rejects the first item beyond the limit', () {
     expect(barqOfflineQueueIsFull(0), isFalse);
     expect(barqOfflineQueueIsFull(199), isFalse);
