@@ -1,4 +1,5 @@
 import test from "node:test";
+import { Writable } from "node:stream";
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
@@ -152,6 +153,48 @@ test("preview proxy preserves byte-range download headers and partial response m
     assert.equal(res.headers.etag, '"sample-v1"');
     assert.equal(res.headers["last-modified"], "Wed, 21 Oct 2015 07:28:00 GMT");
     assert.deepEqual([...res.body], [7, 8, 9]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+test("preview proxy streams partial media without buffering the full response", async () => {
+  const originalFetch = globalThis.fetch;
+  const received = [];
+  try {
+    globalThis.fetch = async () => {
+      const response = new Response(new ReadableStream({
+        start(controller) {
+          controller.enqueue(new Uint8Array([1, 2]));
+          controller.enqueue(new Uint8Array([3, 4]));
+          controller.close();
+        }
+      }), {
+        status: 206,
+        headers: {
+          "content-type": "application/octet-stream",
+          "content-length": "4",
+          "content-range": "bytes 0-3/8"
+        }
+      });
+      response.arrayBuffer = async () => { throw new Error("streaming must not buffer"); };
+      return response;
+    };
+    const res = new Writable({
+      write(chunk, encoding, callback) { received.push(Buffer.from(chunk)); callback(); }
+    });
+    res.statusCode = 200;
+    res.headers = {};
+    res.setHeader = (name, value) => { res.headers[name.toLowerCase()] = value; };
+    res.status = (code) => { res.statusCode = code; return res; };
+    await handler(makeRequest({
+      method: "GET",
+      url: "/api/media/file-2",
+      headers: { range: "bytes=0-3" }
+    }), res);
+    assert.equal(res.statusCode, 206);
+    assert.equal(res.headers["content-length"], "4");
+    assert.equal(res.headers["content-range"], "bytes 0-3/8");
+    assert.deepEqual([...Buffer.concat(received)], [1, 2, 3, 4]);
   } finally {
     globalThis.fetch = originalFetch;
   }
