@@ -332,10 +332,10 @@ test("proxy preserves upstream request IDs and retry diagnostics", async () => {
     const res = makeResponse();
     await handler(makeRequest({ url: "/health/live", method: "GET", chunks: [] }), res);
     assert.equal(res.statusCode, 200);
-    assert.equal(res.headers["X-Request-Id"], "barq-probe-01");
-    assert.equal(res.headers["Retry-After"], "3");
-    assert.equal(res.headers["Server-Timing"], "origin;dur=12");
-    assert.equal(res.headers.Vary, "Accept-Encoding");
+    assert.equal(res.headers["x-request-id"], "barq-probe-01");
+    assert.equal(res.headers["retry-after"], "3");
+    assert.equal(res.headers["server-timing"], "origin;dur=12");
+    assert.equal(res.headers.vary, "Accept-Encoding");
     assert.deepEqual(JSON.parse(res.body.toString()), { status: "alive", service: "barq-api" });
   } finally {
     globalThis.fetch = originalFetch;
