@@ -1401,7 +1401,6 @@ class BarqNearbyService {
       'bluetoothConnect': Permission.bluetoothConnect,
       'bluetoothScan': Permission.bluetoothScan,
       'nearbyWifiDevices': Permission.nearbyWifiDevices,
-      'accessLocalNetwork': Permission.accessLocalNetwork,
     };
     final requestedPermissions = barqNearbyPermissionNamesForAndroidSdk(
       androidInfo.version.sdkInt,
