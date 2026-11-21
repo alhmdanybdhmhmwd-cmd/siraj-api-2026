@@ -559,4 +559,29 @@ void main() {
   });
 
 
+  testWidgets('private memory photo gallery renders every photo in swipeable zoomable pages', (tester) async {
+    final photos = [
+      {'attachmentId': 'owner-1/private-memories/photo-1'},
+      {'attachmentId': 'owner-1/private-memories/photo-2'},
+      {'attachmentId': 'owner-1/private-memories/photo-3'},
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 360,
+            child: PrivateMemoryPhotoGallery(media: photos),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PageView), findsOneWidget);
+    expect(find.byType(InteractiveViewer), findsNWidgets(3));
+    expect(find.byType(Image), findsNWidgets(3));
+  });
+
+
 }
