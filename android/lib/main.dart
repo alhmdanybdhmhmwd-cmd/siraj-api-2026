@@ -7434,7 +7434,7 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
           ),
           Container(
             width: double.infinity, padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-            decoration: const BoxDecoration(color: Color(0xFF151515), border: Border(top: BorderSide(color: Colors.white12))),
+            decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, border: Border(top: BorderSide(color: Theme.of(context).colorScheme.primary.withValues(alpha: .2)))),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
                 for (final emoji in ['❤️', '🔥', '😂', '👍'])
