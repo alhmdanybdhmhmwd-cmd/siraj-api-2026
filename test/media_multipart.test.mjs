@@ -3,6 +3,10 @@ import assert from "node:assert/strict";
 import {
   MEDIA_MULTIPART_PART_SIZE,
   MEDIA_MULTIPART_MAX_SIZE,
+  MEDIA_TRANSPORT_CHUNK_SIZE,
+  getTransportChunkBounds,
+  validateTransportChunk,
+  matchesUploadDeclaration,
   getMultipartPartBounds,
   validateMultipartDeclaration,
   validateMultipartPart,
@@ -63,4 +67,46 @@ test("upload sessions expire when their deadline is invalid or elapsed", () => {
   assert.equal(isUploadSessionExpired("invalid", 1000), true);
   assert.equal(isUploadSessionExpired(new Date(1000).toISOString(), 1000), true);
   assert.equal(isUploadSessionExpired(new Date(2000).toISOString(), 1000), false);
+});
+
+
+test("transport chunks are bounded at 1 MiB and cover a 5 MiB part exactly", () => {
+  const total = MEDIA_MULTIPART_PART_SIZE + 17;
+  for (let number = 1; number <= 5; number++) {
+    const bounds = getTransportChunkBounds(total, number);
+    assert.equal(bounds.size, MEDIA_TRANSPORT_CHUNK_SIZE);
+    assert.equal(bounds.isLast, false);
+    assert.equal(validateTransportChunk(total, number, bounds.size).size, MEDIA_TRANSPORT_CHUNK_SIZE);
+  }
+  const last = getTransportChunkBounds(total, 6);
+  assert.equal(last.size, 17);
+  assert.equal(last.isLast, true);
+  assert.throws(() => validateTransportChunk(total, 6, 16), RangeError);
+  assert.throws(() => getTransportChunkBounds(total, 7), RangeError);
+});
+
+test("transport chunk bounds cover the 60 MiB maximum without gaps", () => {
+  const total = MEDIA_MULTIPART_MAX_SIZE;
+  let cursor = 0;
+  for (let number = 1; number <= 60; number++) {
+    const bounds = getTransportChunkBounds(total, number);
+    assert.equal(bounds.start, cursor);
+    cursor = bounds.endExclusive;
+  }
+  assert.equal(cursor, total);
+  assert.throws(() => getTransportChunkBounds(total + 1, 1), RangeError);
+});
+
+test("resuming an upload requires the exact file and conversation declaration", () => {
+  const existing = {
+    size: 1234, recipientId: "friend-1", groupId: null,
+    contentType: "image/png", fileName: "photo.png"
+  };
+  const declaration = { size: 1234, contentType: "image/png", fileName: "photo.png" };
+  assert.equal(matchesUploadDeclaration(existing, declaration, "friend-1", null), true);
+  assert.equal(matchesUploadDeclaration(existing, declaration, "friend-2", null), false);
+  assert.equal(matchesUploadDeclaration(existing, declaration, null, "group-1"), false);
+  assert.equal(matchesUploadDeclaration(existing, { ...declaration, fileName: "other.png" }, "friend-1", null), false);
+  assert.equal(matchesUploadDeclaration(existing, { ...declaration, contentType: "image/jpeg" }, "friend-1", null), false);
+  assert.equal(matchesUploadDeclaration(existing, { ...declaration, size: 999 }, "friend-1", null), false);
 });
