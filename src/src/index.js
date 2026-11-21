@@ -1,5 +1,6 @@
 import { AwsClient } from "aws4fetch";
 import { prepareConversationSummaryTranscript, buildConversationSummaryMessages, extractConversationSummaryText } from "./conversation_summary.js";
+import { handleResumableMediaUpload } from "./media_multipart_routes.js";
 
 
 const corsHeaders = {
@@ -1184,6 +1185,10 @@ export default {
       if (!currentUser) {
         return json({ error: "Unauthorized" }, 401);
       }
+
+      // Resumable chat media uploads are isolated behind authenticated session routes.
+      const resumableMediaResponse = await handleResumableMediaUpload(request, env, currentUser, url, path, method);
+      if (resumableMediaResponse) return resumableMediaResponse;
 
       // Revoke only this bearer token; other device sessions remain valid.
       if (method === "POST" && path === "/api/logout") {
