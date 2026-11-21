@@ -131,3 +131,13 @@
 - Android لم يتغير في هذه الدفعة؛ آخر Android Quality Gate run [44925946919](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026/actions/runs/44925946919) ناجح: Analyze و48 اختبار Flutter. لا APK.
 
 الحالة: الدفعة السابعة منتهية برمجياً؛ الاختبار الحي مؤجل للمرحلة 11.
+
+
+## إغلاق المرحلة السابعة — الميزات الست (2026-11-21)
+
+- اكتملت برمجياً: وضع البرق، Nearby Connections، الرسائل المؤقتة، الترجمة العربية/الإنجليزية، تحويل الصوت إلى نص بموافقة المستخدم، والدعوة الخاصة الاختيارية.
+- Android Quality Gate run [44925946919](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026/actions/runs/44925946919): Analyze ناجح و48 اختبار Flutter ناجح.
+- Backend tests run [44926316746](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026): 177 اختباراً ناجحاً دون فشل، مع فحوص D1 وبيئة الاختبار.
+- لم يُبنَ APK ولم يُنشر Production. اختبارات Preview والهاتفين الفعلية مؤجلة للمرحلة 11.
+
+**المرحلة السابعة منتهية برمجياً، بقي الاختبار على الهواتف في المرحلة 11.**
