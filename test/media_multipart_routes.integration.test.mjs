@@ -153,6 +153,33 @@ test("route integration: interruption, resume, duplicate chunks, exact final byt
   assert.equal(f.objects.has(attachment.attachmentId),true);
 });
 
+test("route integrity: corrupted staged bytes are rejected before multipart assembly",async t=>{
+  const f=fixture();t.after(f.restore);
+  const source=Uint8Array.from({length:2*MiB},(_,i)=>(i*13+5)%251);
+  const created=await f.call("/api/media/uploads","POST",declaration(source.length,"integrity-stage-001"));
+  assert.equal(created.status,201);
+  const id=(await created.json()).session.id;
+  assert.equal((await f.call("/api/media/uploads/"+id+"/chunks/1","PUT",chunk(source,1))).status,200);
+  const stagedKey=f.DB.sessions.get(id).object_key+".barq-staging/"+id+"/1";
+  const corrupted=f.objects.get(stagedKey).slice();corrupted[0]^=0xff;f.objects.set(stagedKey,corrupted);
+  const second=await f.call("/api/media/uploads/"+id+"/chunks/2","PUT",chunk(source,2));
+  assert.equal(second.status,409,"stored bytes that no longer match their claimed SHA-256 must not enter the final part");
+  assert.equal(f.DB.parts.has(id+":1"),false,"a corrupted staged part must not be committed");
+});
+
+test("route integrity: direct multipart part retries are byte-idempotent",async t=>{
+  const f=fixture();t.after(f.restore);
+  const source=Uint8Array.from({length:128},(_,i)=>i);
+  const created=await f.call("/api/media/uploads","POST",declaration(source.length,"integrity-part-001"));
+  assert.equal(created.status,201);
+  const id=(await created.json()).session.id;
+  assert.equal((await f.call("/api/media/uploads/"+id+"/parts/1","PUT",source)).status,200);
+  const same=await f.call("/api/media/uploads/"+id+"/parts/1","PUT",source);
+  assert.equal(same.status,200);assert.equal((await same.json()).alreadyStored,true);
+  const changed=source.slice();changed[0]^=0xff;
+  assert.equal((await f.call("/api/media/uploads/"+id+"/parts/1","PUT",changed)).status,409);
+});
+
 test("route integration: idempotency declaration mismatch is rejected",async t=>{
   const f=fixture();t.after(f.restore);
   assert.equal((await f.call("/api/media/uploads","POST",declaration(100))).status,201);
