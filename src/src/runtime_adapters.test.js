@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createAiProvider, createDatabaseProvider } from "./runtime_adapters.js";
+import { createAiProvider, createDatabaseProvider, createObjectStorageClient } from "./runtime_adapters.js";
 
 test("AI adapter reports unavailable when no provider is configured", async () => {
   const provider = createAiProvider(null);
@@ -68,4 +68,24 @@ test("database adapter exposes the BARQ SQL capability contract", async () => {
 test("database adapter fails closed when no SQL provider is configured", () => {
   assert.equal(createDatabaseProvider(null), null);
   assert.equal(createDatabaseProvider({}), null);
+});
+
+test("object storage adapter injects S3-compatible transport and credentials", () => {
+  let received;
+  class FakeStorageClient {
+    constructor(options) { received = options; }
+  }
+  const client = createObjectStorageClient({
+    TIGRIS_ACCESS_KEY_ID: "preview-access",
+    TIGRIS_SECRET_ACCESS_KEY: "preview-secret"
+  }, FakeStorageClient);
+  assert.ok(client instanceof FakeStorageClient);
+  assert.deepEqual(received, {
+    accessKeyId: "preview-access",
+    secretAccessKey: "preview-secret",
+    service: "s3",
+    region: "auto",
+    retries: 2
+  });
+  assert.throws(() => createObjectStorageClient({}, FakeStorageClient), /credentials/);
 });
