@@ -207,6 +207,6 @@ test("preview proxy ignores a production upstream override", async () => {
   try {
     globalThis.fetch = async (url) => { calledUrl = String(url); return new Response("ok"); };
     await handler(makeRequest({ url: "/health/live" }), makeResponse());
-    assert.equal(calledUrl, "https://barq-api-phase2-test-2026-11-20.workers.dev/health/live");
+    assert.equal(calledUrl, "https://barq-api-phase2-test.alhmdanybdhmhmwd.workers.dev/health/live");
   } finally { globalThis.fetch = originalFetch; }
 });
