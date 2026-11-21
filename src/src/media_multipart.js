@@ -1,4 +1,6 @@
 export const MEDIA_MULTIPART_PART_SIZE = 5 * 1024 * 1024;
+// Transport chunks remain below the default Vercel request payload ceiling.
+export const MEDIA_TRANSPORT_CHUNK_SIZE = 1 * 1024 * 1024;
 export const MEDIA_MULTIPART_MAX_SIZE = 60 * 1024 * 1024;
 export const MEDIA_MULTIPART_MAX_PARTS = Math.ceil(
   MEDIA_MULTIPART_MAX_SIZE / MEDIA_MULTIPART_PART_SIZE
@@ -78,4 +80,25 @@ export function buildCompleteMultipartXml(parts) {
 export function isUploadSessionExpired(expiresAt, now = Date.now()) {
   const timestamp = Date.parse(expiresAt);
   return !Number.isFinite(timestamp) || timestamp <= now;
+}
+
+export function getTransportChunkBounds(totalSize, chunkNumber) {
+  if (!Number.isSafeInteger(totalSize) || totalSize < 1 || totalSize > MEDIA_MULTIPART_MAX_SIZE) {
+    throw new RangeError("Invalid total upload size");
+  }
+  const expectedChunks = Math.ceil(totalSize / MEDIA_TRANSPORT_CHUNK_SIZE);
+  if (!Number.isSafeInteger(chunkNumber) || chunkNumber < 1 || chunkNumber > expectedChunks) {
+    throw new RangeError("Invalid transport chunk number");
+  }
+  const start = (chunkNumber - 1) * MEDIA_TRANSPORT_CHUNK_SIZE;
+  const endExclusive = Math.min(start + MEDIA_TRANSPORT_CHUNK_SIZE, totalSize);
+  return { start, endExclusive, size: endExclusive - start, isLast: endExclusive === totalSize };
+}
+
+export function validateTransportChunk(totalSize, chunkNumber, receivedSize) {
+  const bounds = getTransportChunkBounds(totalSize, chunkNumber);
+  if (!Number.isSafeInteger(receivedSize) || receivedSize !== bounds.size) {
+    throw new RangeError("Transport chunk size does not match its declared byte range");
+  }
+  return bounds;
 }
