@@ -197,7 +197,7 @@ class FakeDB {
             created_at: Math.floor(Date.now() / 1000), read_at: null, delete_at: null
           });
         }
-        if (sql.includes("UPDATE ephemeral_messages") && sql.includes("SET read_at")) {        if (sql.includes("UPDATE ephemeral_messages") && sql.includes("SET read_at")) {
+        if (sql.includes("UPDATE ephemeral_messages") && sql.includes("SET read_at")) {
           const now = Math.floor(Date.now() / 1000);
           db.ephemeralRows = (db.ephemeralRows || []).map(row =>
             row.sender_id === this.params[0] && row.receiver_id === this.params[1] && row.read_at == null
