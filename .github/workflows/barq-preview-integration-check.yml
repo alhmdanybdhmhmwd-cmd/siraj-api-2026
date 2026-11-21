@@ -1,6 +1,7 @@
 name: BARQ isolated Preview integration verification
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - barq/phase-2-android-ci-2026-11-20
@@ -17,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      BARQ_PREVIEW_URL: https://barq-api-phase2-test.alhmdanybdhmhmwd.workers.dev
+      BARQ_PREVIEW_URL: https://barq-api-phase2-test.alhmdanybdhmhmwd-cmd.workers.dev
       BARQ_PREVIEW_MEDIA_CREDENTIALS_CONFIGURED: ${{ secrets.BARQ_PREVIEW_TIGRIS_ACCESS_KEY_ID != '' && secrets.BARQ_PREVIEW_TIGRIS_SECRET_ACCESS_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
