@@ -1433,7 +1433,9 @@ class BarqNearbyService {
                 decoded,
                 peerId: peerId,
                 currentUserId: _currentUserId ?? '',
-              )) return;
+              )) {
+            return;
+          }
           final body = decoded['body'].toString();
           final messageId = decoded['id'].toString();
           await BarqOfflineQueue.enqueueIncoming({
