@@ -164,6 +164,35 @@ export function createObjectStorageUrl(env, objectKey, query = {}) {
  * S3-compatible object storage client factory. The runtime supplies its
  * transport client, allowing another runtime to inject a compatible client.
  */
+/**
+ * Runtime-neutral object storage operations. The application depends on this
+ * contract rather than the AWS signing client's fetch implementation.
+ * A different runtime can inject any compatible request transport.
+ */
+export function createObjectStorageProvider({ request, urlFor }) {
+  if (typeof request !== "function" || typeof urlFor !== "function") {
+    throw new TypeError("Object storage request and URL functions are required");
+  }
+  const send = (key, init = {}, query = {}) => request(urlFor(key, query), init);
+  return Object.freeze({
+    request: send,
+    get: (key, query) => send(key, { method: "GET" }, query),
+    put: (key, body, headers = {}, query) => send(key, { method: "PUT", headers, body }, query),
+    delete: (key, query) => send(key, { method: "DELETE" }, query),
+    head: (key, query) => send(key, { method: "HEAD" }, query),
+    post: (key, body, headers = {}, query) => send(key, { method: "POST", headers, body }, query)
+  });
+}
+
+/** Construct the current S3-compatible provider using the runtime signer. */
+export function createS3ObjectStorageProvider(env, Client) {
+  const client = createObjectStorageClient(env, Client);
+  return createObjectStorageProvider({
+    request: (url, init) => client.fetch(url, init),
+    urlFor: (key, query) => createObjectStorageUrl(env, key, query)
+  });
+}
+
 export function createObjectStorageClient(env, Client) {
   if (typeof Client !== "function") throw new TypeError("Storage client implementation is required");
   const accessKeyId = env?.OBJECT_STORAGE_ACCESS_KEY_ID || env?.TIGRIS_ACCESS_KEY_ID;
