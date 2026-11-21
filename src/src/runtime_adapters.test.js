@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createAiProvider } from "../src/src/runtime_adapters.js";
+import { createAiProvider } from "./runtime_adapters.js";
 
 test("AI adapter reports unavailable when no provider is configured", async () => {
   const provider = createAiProvider(null);
