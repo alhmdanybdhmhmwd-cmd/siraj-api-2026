@@ -8,7 +8,7 @@ const USER = { sub: "user-1" };
 
 class FakeD1 {
   constructor() {
-    this.sessions = new Map(); this.chunks = new Map(); this.parts = new Map();
+    this.sessions = new Map(); this.chunks = new Map(); this.parts = new Map(); this.mediaAccess = new Map();
     this.friendships = new Set(["user-1:friend-1","user-1:friend-2"]); this.groups = new Set(["group-1:user-1","group-2:user-1"]);
   }
   prepare(sql) {
@@ -52,6 +52,11 @@ class FakeD1 {
         }
         if(q.startsWith("INSERT INTO media_upload_parts")){
           const [sid,n,etag,size]=args;db.parts.set(sid+":"+n,{session_id:sid,part_number:n,etag,size});return {meta:{changes:1}};
+        }
+        if(q.startsWith("INSERT INTO media_access")){
+          const [objectKey,owner,recipient,group,fileName,contentType,expiresAt]=args;
+          db.mediaAccess.set(objectKey,{object_key:objectKey,owner_id:owner,recipient_id:recipient,group_id:group,file_name:fileName,content_type:contentType,expires_at:expiresAt});
+          return {meta:{changes:1}};
         }
         if(q.startsWith("UPDATE media_upload_sessions SET state = 'completing'")){const r=db.sessions.get(args[0]);if(r)r.state="completing";return {meta:{changes:r?1:0}};}
         if(q.startsWith("UPDATE media_upload_sessions SET state = 'uploading'")){const r=db.sessions.get(args[0]);if(r)r.state="uploading";return {meta:{changes:r?1:0}};}
@@ -119,6 +124,20 @@ test("route integration: interruption, resume, duplicate chunks, exact final byt
   assert.ok(stored);assert.equal(stored.length,source.length);
   assert.equal(createHash("sha256").update(stored).digest("hex"),createHash("sha256").update(source).digest("hex"));
   assert.equal(f.DB.sessions.get(sessionId).state,"completed");
+  const access=f.DB.mediaAccess.get(attachment.attachmentId);
+  assert.ok(access,"completed upload must create durable access metadata");
+  assert.equal(access.expires_at,"9999-12-31T23:59:59.999Z","completed chat media must not inherit the temporary upload-session expiry");
+  // Simulate leftover staging metadata after a completed transfer. Scheduled cleanup
+  // may remove staging only; the final media object and access record must survive.
+  const stagedKey=f.DB.sessions.get(sessionId).object_key+".barq-staging/"+sessionId+"/1";
+  f.objects.set(stagedKey,Uint8Array.from([4,5,6]));
+  f.DB.chunks.set(sessionId+":1",{session_id:sessionId,chunk_number:1,size:3});
+  const cleanup=await cleanupExpiredUploadSessions({DB:f.DB,TIGRIS_ACCESS_KEY_ID:"fake-key",TIGRIS_SECRET_ACCESS_KEY:"fake-secret",TIGRIS_BUCKET:"test-bucket"},Date.now());
+  assert.equal(cleanup.cleaned,1);
+  assert.equal(f.objects.has(stagedKey),false,"cleanup must remove leftover staging bytes");
+  assert.equal(f.objects.has(attachment.attachmentId),true,"cleanup must preserve completed final media");
+  assert.equal(f.DB.mediaAccess.has(attachment.attachmentId),true,"cleanup must preserve final media access metadata");
+  assert.equal(f.DB.sessions.get(sessionId).state,"completed","cleanup must preserve completed upload session");
   const retry=await f.call("/api/media/uploads/"+sessionId+"/complete","POST",{});assert.equal(retry.status,200);
   assert.equal((await retry.json()).alreadyCompleted,true);
   assert.equal((await f.call("/api/media/uploads/"+sessionId,"DELETE")).status,409);
