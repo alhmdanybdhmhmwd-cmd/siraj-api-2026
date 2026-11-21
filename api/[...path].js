@@ -79,8 +79,6 @@ module.exports = async (req, res) => {
       body: ["GET", "HEAD"].includes(req.method) ? undefined : body,
     });
 
-    const responseBody = await response.arrayBuffer();
-
     res.status(response.status);
 
     res.setHeader(
@@ -91,11 +89,25 @@ module.exports = async (req, res) => {
     if (disposition) res.setHeader("Content-Disposition", disposition);
     const cacheControl = response.headers.get("cache-control");
     if (cacheControl) res.setHeader("Cache-Control", cacheControl);
-    for (const name of ["content-range", "accept-ranges", "etag", "last-modified"]) {
+    for (const name of ["content-range", "content-length", "accept-ranges", "etag", "last-modified"]) {
       const value = response.headers.get(name);
       if (value) res.setHeader(name, value);
     }
 
+    // Stream media instead of buffering the complete upstream response in memory.
+    // Keep a small fallback for non-Writable response doubles used by unit tests.
+    if (response.body && typeof res.write === "function" && typeof res.end === "function") {
+      const { Readable } = require("node:stream");
+      return await new Promise((resolve, reject) => {
+        const upstream = Readable.fromWeb(response.body);
+        upstream.once("error", reject);
+        res.once("error", reject);
+        res.once("finish", resolve);
+        upstream.pipe(res);
+      });
+    }
+
+    const responseBody = await response.arrayBuffer();
     return res.send(Buffer.from(responseBody));
   } catch (error) {
     return res.status(502).json({
