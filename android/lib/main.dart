@@ -1802,7 +1802,7 @@ const List<String> barqReactionEmojis = ["👍", "❤️", "😂", "😮", "😢
 Future<String?> showMessageReactionPicker(BuildContext context) {
   return showModalBottomSheet<String>(
     context: context,
-    backgroundColor: panel,
+    backgroundColor: Theme.of(context).colorScheme.surface,
     builder: (sheetContext) => SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -1910,7 +1910,7 @@ Future<void> showMessageActions(
 }) async {
   final action = await showModalBottomSheet<String>(
     context: context,
-    backgroundColor: panel,
+    backgroundColor: Theme.of(context).colorScheme.surface,
     builder: (sheetContext) => SafeArea(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1990,7 +1990,7 @@ Future<void> showMessageActions(
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: panel,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         title: const Text('حذف الرسالة؟'),
         content: const Text('سيتم حذف الرسالة من المحادثة.'),
         actions: [
@@ -2046,7 +2046,7 @@ class _EditMessageDialogState extends State<_EditMessageDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: panel,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       title: const Text('تعديل الرسالة'),
       content: TextField(
         controller: controller,
@@ -2637,7 +2637,7 @@ class _LoginPageState extends State<LoginPage> {
       final selected = await showModalBottomSheet<String>(
         context: context,
         isScrollControlled: true,
-        backgroundColor: panel,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         builder: (sheetContext) => StatefulBuilder(
           builder: (context, setSheetState) {
             final query = searchController.text.trim().toLowerCase();
@@ -3104,7 +3104,7 @@ Future<bool> confirmVoiceTranscription(BuildContext context) async {
   final accepted = await showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
-      backgroundColor: panel,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       title: const Text('تحويل التسجيل إلى نص'),
       content: const Text('سيُرسل الملف الصوتي إلى خدمة Cloudflare Workers AI لمعالجة الكلام وإرجاع النص. لا يُحفظ الملف في جدول الرسائل، لكن المعالجة تتم عبر الإنترنت وقد تُحتسب عليها تكلفة تشغيل. هل تريد المتابعة؟'),
       actions: [
@@ -3279,7 +3279,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialog) => AlertDialog(
-          backgroundColor: panel,
+          backgroundColor: Theme.of(context).colorScheme.surface,
           title: const Text('البحث عن مستخدم'),
           content: SizedBox(
             width: double.maxFinite,
@@ -3454,7 +3454,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: panel,
+          backgroundColor: Theme.of(context).colorScheme.surface,
           title: const Text('النشر في SPARK'),
           content: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -3579,7 +3579,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           builder: (context, setDialogState) => PopScope(
             canPop: !uploading,
             child: AlertDialog(
-            backgroundColor: panel,
+            backgroundColor: Theme.of(context).colorScheme.surface,
             title: Text('نشر ${prepared.length} وسائط في SPARK'),
             content: Column(mainAxisSize: MainAxisSize.min, children: [
               Text(prepared.map((item) => (item['file'] as PlatformFile).name).join('، '),
@@ -3660,7 +3660,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (!mounted) return;
       await showModalBottomSheet<void>(
         context: context,
-        backgroundColor: panel,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         builder: (context) => SafeArea(
           child: ListView(
             shrinkWrap: true,
@@ -3752,7 +3752,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ),
           for (final status in statuses)
             Card(
-              color: panel,
+              color: Theme.of(context).colorScheme.surface,
               child: ListTile(
                 onTap: () => _openSparkStatus(status),
                 leading: Container(
@@ -3821,7 +3821,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
         for (final friend in friends)
           Card(
-            color: panel,
+            color: Theme.of(context).colorScheme.surface,
             child: ListTile(
               leading: InkWell(
                 customBorder: const CircleBorder(),
@@ -3885,7 +3885,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
           for (final person in matchedContacts)
             Card(
-              color: panel,
+              color: Theme.of(context).colorScheme.surface,
               child: ListTile(
                 leading: personAvatar(person),
                 title: Text(_personName(person)),
@@ -3920,7 +3920,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         for (final person in friends)
           Card(
-            color: panel,
+            color: Theme.of(context).colorScheme.surface,
             child: ListTile(
               leading: InkWell(
                 customBorder: const CircleBorder(),
@@ -3954,7 +3954,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: panel,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         title: const Text('إنشاء مجموعة'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -4000,7 +4000,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialog) => AlertDialog(
-          backgroundColor: panel,
+          backgroundColor: Theme.of(context).colorScheme.surface,
           title: const Text('إضافة عضو للمجموعة'),
           content: SizedBox(
             width: double.maxFinite,
@@ -4083,7 +4083,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: panel,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         title: Text(field(memory, ['title'], 'صور الذكرى')),
         content: SizedBox(
           width: double.maxFinite,
@@ -4162,7 +4162,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ),
           for (final memory in memories)
             Card(
-              color: panel,
+              color: Theme.of(context).colorScheme.surface,
               child: ListTile(
                 leading: GestureDetector(
                   onTap: () => _showPrivateMemoryPhotos(memory),
@@ -4219,7 +4219,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           builder: (dialogContext, setDialogState) => PopScope(
             canPop: !saving,
             child: AlertDialog(
-              backgroundColor: panel,
+              backgroundColor: Theme.of(context).colorScheme.surface,
               title: Text(editing ? 'تعديل الذكرى' : 'إضافة ذكرى خاصة'),
               content: SingleChildScrollView(
                 child: Column(
@@ -4437,7 +4437,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final accepted = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: panel,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         title: const Text('حذف الذكرى؟'),
         content: const Text('سيتم حذف هذه الذكرى من مساحتك الخاصة.'),
         actions: [
@@ -4475,7 +4475,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               'لا توجد مجموعات بعد. أنشئ مجموعة وابدأ بإضافة الأشخاص مباشرة.',
               textAlign: TextAlign.center, style: TextStyle(color: Colors.white60))),
           for (final group in groups)
-            Card(color: panel, child: ListTile(
+            Card(color: Theme.of(context).colorScheme.surface, child: ListTile(
               leading: const CircleAvatar(backgroundColor: Color(0xFF46391F), child: Icon(Icons.groups, color: gold)),
               title: Text(field(group, ['name'], 'مجموعة')),
               subtitle: Text('${field(group, ['description'], 'مجموعة برق')} • ${field(group, ['member_count'], '1')} أعضاء'),
@@ -4543,7 +4543,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       final accepted = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          backgroundColor: panel,
+          backgroundColor: Theme.of(context).colorScheme.surface,
           title: const Text('معاينة صورة الملف الشخصي'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -4595,7 +4595,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialog) => AlertDialog(
-          backgroundColor: panel,
+          backgroundColor: Theme.of(context).colorScheme.surface,
           title: const Text('تعديل الملف الشخصي'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -4715,7 +4715,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          backgroundColor: panel,
+          backgroundColor: Theme.of(context).colorScheme.surface,
           title: const Text('ادعُ أصدقاءك إلى برق'),
           content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             const Text('هذا رابط دعوتك الخاص لمشاركة برق مع من تختار.'),
@@ -4760,7 +4760,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialog) => AlertDialog(
-          backgroundColor: panel,
+          backgroundColor: Theme.of(context).colorScheme.surface,
           title: const Text('تفضيلات الإشعارات'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             SwitchListTile(contentPadding: EdgeInsets.zero, activeThumbColor: gold,
@@ -4805,7 +4805,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialog) => AlertDialog(
-          backgroundColor: panel,
+          backgroundColor: Theme.of(context).colorScheme.surface,
           title: const Text('الخصوصية'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -5207,7 +5207,7 @@ Future<void> showBarqConversationTools(
 ) async {
   await showModalBottomSheet<void>(
     context: context,
-    backgroundColor: panel,
+    backgroundColor: Theme.of(context).colorScheme.surface,
     isScrollControlled: true,
     builder: (sheetContext) => SafeArea(
       child: Padding(
@@ -5257,7 +5257,7 @@ Future<void> showBarqMessageCollectionDialog(
   await showDialog<void>(
     context: context,
     builder: (dialogContext) => Dialog(
-      backgroundColor: panel,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       insetPadding: const EdgeInsets.all(14),
       child: SizedBox(
         width: 480,
@@ -5335,7 +5335,7 @@ class _BarqConversationSummaryDialogState extends State<BarqConversationSummaryD
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: panel,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       insetPadding: const EdgeInsets.all(16),
       child: SizedBox(
         width: 440,
@@ -5803,7 +5803,7 @@ class _AttachmentTileState extends State<_AttachmentTile> {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => Dialog(
-        backgroundColor: panel,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         insetPadding: const EdgeInsets.all(12),
         child: SizedBox(
           width: double.maxFinite,
@@ -6292,7 +6292,7 @@ class _NearbyDevicesPageState extends State<NearbyDevicesPage> {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: panel,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         title: const Text('تأكيد اتصال جهاز قريب'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           Text(name),
@@ -6345,7 +6345,7 @@ class _NearbyDevicesPageState extends State<NearbyDevicesPage> {
       child: Scaffold(
         appBar: AppBar(title: const Text('الأجهزة القريبة')),
         body: ListView(padding: const EdgeInsets.all(16), children: [
-          Card(color: panel, child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Card(color: Theme.of(context).colorScheme.surface, child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Row(children: [Icon(Icons.wifi_tethering, color: gold), SizedBox(width: 8), Text('مراسلة محلية دون إنترنت', style: TextStyle(fontWeight: FontWeight.bold))]),
             const SizedBox(height: 8),
             Text(statusText),
@@ -6365,7 +6365,7 @@ class _NearbyDevicesPageState extends State<NearbyDevicesPage> {
           const SizedBox(height: 12),
           Text('الأصدقاء القريبون (${discovered.length})', style: const TextStyle(color: gold, fontWeight: FontWeight.bold)),
           if (discovered.isEmpty) const ListTile(title: Text('لا يظهر أصدقاؤك الآن. افتح الشاشة نفسها على هاتف صديقك وتأكد من تشغيل Bluetooth والموقع.'), dense: true),
-          ...discovered.entries.map((entry) => Card(color: panel, child: ListTile(
+          ...discovered.entries.map((entry) => Card(color: Theme.of(context).colorScheme.surface, child: ListTile(
             leading: const Icon(Icons.phone_android, color: gold),
             title: Text(_friendName(entry.value)),
             subtitle: const Text('قريب — لم يتم الاتصال بعد'),
@@ -6487,7 +6487,7 @@ class PublicProfilePage extends StatelessWidget {
                 style: const TextStyle(color: gold, fontSize: 16)),
             const SizedBox(height: 26),
             Card(
-              color: panel,
+              color: Theme.of(context).colorScheme.surface,
               child: Column(
                 children: [
                   ListTile(
@@ -7857,7 +7857,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          backgroundColor: panel,
+          backgroundColor: Theme.of(context).colorScheme.surface,
           title: const Text('أعضاء المجموعة'),
           content: SizedBox(
             width: double.maxFinite,
@@ -7911,7 +7911,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
                                   final confirmed = await showDialog<bool>(
                                     context: context,
                                     builder: (confirmContext) => AlertDialog(
-                                      backgroundColor: panel,
+                                      backgroundColor: Theme.of(context).colorScheme.surface,
                                       title: const Text('تأكيد الإجراء'),
                                       content: Text(actionLabel),
                                       actions: [
