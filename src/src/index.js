@@ -1420,6 +1420,52 @@ export default {
         return json({ inviteCode: saved.invite_code });
       }
 
+      // Directional user blocks; shared group membership and group messages remain unchanged.
+      if (path === "/api/blocks" || path.startsWith("/api/blocks/") ||
+          path === "/api/messages" || path === "/api/ephemeral-messages" ||
+          path.startsWith("/api/profile/photo/") || path === "/api/statuses") {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS blocked_users (
+            blocker_id TEXT NOT NULL,
+            blocked_id TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (blocker_id, blocked_id),
+            CHECK (blocker_id <> blocked_id),
+            FOREIGN KEY (blocker_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (blocked_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+      }
+      if (path === "/api/blocks" && method === "GET") {
+        const result = await env.DB.prepare(
+          "SELECT blocked_id AS userId, created_at AS blockedAt FROM blocked_users WHERE blocker_id = ? ORDER BY created_at DESC"
+        ).bind(currentUser.sub).all();
+        return json({ blockedUsers: result.results || [] });
+      }
+      if (path === "/api/blocks" && (method === "POST" || method === "DELETE")) {
+        const body = method === "POST" ? await readJsonRequestLimited(request) : {};
+        const targetId = String(body.userId || url.searchParams.get("userId") || "").trim();
+        if (!targetId || targetId.length > 128 || targetId === currentUser.sub) {
+          return json({ error: "Invalid user to block" }, 400);
+        }
+        const target = await env.DB.prepare("SELECT id FROM users WHERE id = ?").bind(targetId).first();
+        if (!target) return json({ error: "User not found" }, 404);
+        if (method === "POST") {
+          await env.DB.prepare("INSERT OR IGNORE INTO blocked_users (blocker_id, blocked_id) VALUES (?, ?)")
+            .bind(currentUser.sub, targetId).run();
+          return json({ message: "User blocked", userId: targetId }, 201);
+        }
+        await env.DB.prepare("DELETE FROM blocked_users WHERE blocker_id = ? AND blocked_id = ?")
+          .bind(currentUser.sub, targetId).run();
+        return json({ message: "User unblocked", userId: targetId });
+      }
+      async function isBlockedPair(userA, userB) {
+        if (!userA || !userB || userA === userB) return false;
+        return Boolean(await env.DB.prepare(
+          "SELECT 1 FROM blocked_users WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?) LIMIT 1"
+        ).bind(userA, userB, userB, userA).first());
+      }
+
       // Ephemeral private messages are stored only in D1 (never sent to Firebase).
       // The ten-second deletion window starts when the recipient first fetches the message.
       if (path === "/api/ephemeral-messages" && (method === "GET" || method === "POST")) {
@@ -1456,6 +1502,7 @@ export default {
           if (receiverId === currentUser.sub) {
             return json({ error: "Cannot message yourself" }, 400);
           }
+          if (await isBlockedPair(currentUser.sub, receiverId)) return json({ error: "Private communication is unavailable" }, 403);
           if (message.length > 5000) {
             return json({ error: "Message is too long" }, 400);
           }
@@ -1617,6 +1664,7 @@ export default {
         }
 
         if (targetUserId !== currentUser.sub) {
+          if (await isBlockedPair(currentUser.sub, targetUserId)) return json({ error: "Profile photo access denied" }, 403);
           const friendship = await env.DB.prepare(
             `SELECT 1 FROM friendships
              WHERE (user_id = ? AND friend_id = ?)
@@ -2125,6 +2173,11 @@ export default {
            JOIN users u ON u.id = s.user_id
            LEFT JOIN profile_photos pp ON pp.user_id = u.id
            WHERE s.expires_at > CURRENT_TIMESTAMP
+             AND NOT EXISTS (
+               SELECT 1 FROM blocked_users b
+               WHERE (b.blocker_id = ? AND b.blocked_id = s.user_id)
+                  OR (b.blocker_id = s.user_id AND b.blocked_id = ?)
+             )
              AND (
                s.user_id = ?
                OR EXISTS (
@@ -2138,7 +2191,7 @@ export default {
              )
            ORDER BY s.created_at DESC
            LIMIT 100`
-        ).bind(currentUser.sub, currentUser.sub, currentUser.sub).all();
+        ).bind(currentUser.sub, currentUser.sub, currentUser.sub, currentUser.sub, currentUser.sub).all();
 
         const statuses = result.results || [];
         if (statuses.length) {
@@ -3265,6 +3318,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
             error: "You can only message friends"
           }, 403);
         }
+        if (await isBlockedPair(currentUser.sub, receiverId)) return json({ error: "Private communication is unavailable" }, 403);
 
         // The Android offline outbox retries with the same 128-bit client ID.
         // Persist that ID as the message primary key so a lost HTTP response
