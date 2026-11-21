@@ -140,3 +140,29 @@ test("route integration: membership is enforced and abort removes staging only",
   assert.equal([...f.objects.keys()].some(k=>k.includes(".barq-staging/")),false);
   assert.equal([...f.objects.keys()].some(k=>k.includes("/chat-media/")),false);
 });
+
+
+test("route integration: payload sizes from just over 4 MiB through the 60 MiB ceiling",async t=>{
+  const f=fixture();t.after(f.restore);
+  const sizes=[4*MiB+17,10*MiB+13,30*MiB+7,60*MiB];
+  for(let index=0;index<sizes.length;index++){
+    const size=sizes[index],source=new Uint8Array(size);
+    for(let i=0;i<size;i++)source[i]=(i*17+size)%251;
+    const key="stress-upload-"+String(index+1).padStart(4,"0");
+    const created=await f.call("/api/media/uploads","POST",declaration(size,key));
+    assert.equal(created.status,201,"create upload for "+size+" bytes");
+    const id=(await created.json()).session.id,totalChunks=Math.ceil(size/MiB);
+    for(let n=1;n<=totalChunks;n++){
+      const response=await f.call("/api/media/uploads/"+id+"/chunks/"+n,"PUT",chunk(source,n));
+      assert.equal(response.status,200,"upload chunk "+n+" of "+totalChunks+" for "+size+" bytes");
+    }
+    const done=await f.call("/api/media/uploads/"+id+"/complete","POST",{});
+    assert.equal(done.status,201,"complete upload for "+size+" bytes");
+    const attachment=(await done.json()).attachment,stored=f.objects.get(attachment.attachmentId);
+    assert.ok(stored,"final object exists for "+size+" bytes");
+    assert.equal(stored.length,size);
+    assert.equal(createHash("sha256").update(stored).digest("hex"),createHash("sha256").update(source).digest("hex"));
+    assert.equal([...f.objects.keys()].some(k=>k.includes(".barq-staging/")),false);
+    f.objects.delete(attachment.attachmentId);f.uploads.clear();
+  }
+});
