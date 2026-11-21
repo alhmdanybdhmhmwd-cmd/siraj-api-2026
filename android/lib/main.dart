@@ -623,6 +623,33 @@ class Api {
     });
   }
 
+  static Future<List<Map<String, dynamic>>> privateMemories() async =>
+      _list((await request('GET', '/api/private-memories'))['memories']);
+
+  static Future<Map<String, dynamic>> savePrivateMemory({
+    required String content,
+    String title = '',
+    String sourceType = 'text',
+  }) async => _map((await request('POST', '/api/private-memories', body: {
+    'title': title,
+    'content': content,
+    'sourceType': sourceType,
+  }))['memory']);
+
+  static Future<Map<String, dynamic>> updatePrivateMemory({
+    required String id,
+    required String content,
+    String title = '',
+  }) async => _map((await request(
+    'PATCH',
+    '/api/private-memories/${Uri.encodeComponent(id)}',
+    body: {'title': title, 'content': content},
+  ))['memory']);
+
+  static Future<void> deletePrivateMemory(String id) async {
+    await request('DELETE', '/api/private-memories/${Uri.encodeComponent(id)}');
+  }
+
   static Future<List<Map<String, dynamic>>> statuses() async =>
       _list((await request('GET', '/api/statuses'))['statuses']);
 
