@@ -199,18 +199,35 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
       const existingPart = await env.DB.prepare("SELECT part_number FROM media_upload_parts WHERE session_id = ? AND part_number = ?").bind(sessionId, targetPart).first();
       if (existingPart) return json({ sessionId, chunkNumber, partNumber: targetPart, partReady: true, alreadyStored: true });
       const stagedKey = stagedChunkKey(session, chunkNumber);
-      const stagedUpload = await storage.fetch(objectUrl(env, stagedKey), {
-        method: "PUT", headers: { "Content-Length": String(bytes.byteLength), "Content-Type": "application/octet-stream" }, body: bytes
-      });
-      if (!stagedUpload.ok) return json({ error: "Could not stage transport chunk", storageStatus: stagedUpload.status }, 502);
-      try {
-        await env.DB.prepare(
-          "INSERT INTO media_upload_chunks (session_id, chunk_number, size) VALUES (?, ?, ?) " +
-          "ON CONFLICT(session_id, chunk_number) DO UPDATE SET size = excluded.size, uploaded_at = CURRENT_TIMESTAMP"
-        ).bind(sessionId, chunkNumber, bytes.byteLength).run();
-      } catch (error) {
-        await storage.fetch(objectUrl(env, stagedKey), { method: "DELETE" }).catch(() => {});
-        throw error;
+      const existingChunk = await env.DB.prepare(
+        "SELECT size FROM media_upload_chunks WHERE session_id = ? AND chunk_number = ?"
+      ).bind(sessionId, chunkNumber).first();
+      if (existingChunk) {
+        const previous = await storage.fetch(objectUrl(env, stagedKey));
+        if (!previous.ok) return json({ error: "Previously staged chunk is temporarily unavailable" }, 503);
+        const previousBytes = new Uint8Array(await previous.arrayBuffer());
+        if (Number(existingChunk.size) !== bytes.byteLength || previousBytes.byteLength !== bytes.byteLength) {
+          return json({ error: "This chunk number was already used with different bytes" }, 409);
+        }
+        for (let index = 0; index < bytes.byteLength; index++) {
+          if (previousBytes[index] !== bytes[index]) {
+            return json({ error: "This chunk number was already used with different bytes" }, 409);
+          }
+        }
+      } else {
+        const stagedUpload = await storage.fetch(objectUrl(env, stagedKey), {
+          method: "PUT", headers: { "Content-Length": String(bytes.byteLength), "Content-Type": "application/octet-stream" }, body: bytes
+        });
+        if (!stagedUpload.ok) return json({ error: "Could not stage transport chunk", storageStatus: stagedUpload.status }, 502);
+        try {
+          await env.DB.prepare(
+            "INSERT INTO media_upload_chunks (session_id, chunk_number, size) VALUES (?, ?, ?) " +
+            "ON CONFLICT(session_id, chunk_number) DO UPDATE SET size = excluded.size, uploaded_at = CURRENT_TIMESTAMP"
+          ).bind(sessionId, chunkNumber, bytes.byteLength).run();
+        } catch (error) {
+          await storage.fetch(objectUrl(env, stagedKey), { method: "DELETE" }).catch(() => {});
+          throw error;
+        }
       }
       const firstChunk = (targetPart - 1) * chunksPerPart + 1;
       const expectedChunks = Math.ceil(Number(session.total_size) / MEDIA_TRANSPORT_CHUNK_SIZE);
