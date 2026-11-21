@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      BARQ_PREVIEW_URL: https://barq-api-phase2-test.alhmdanybdhmhmwd-cmd.workers.dev
+      BARQ_PREVIEW_URL: https://barq-api-phase2-test.alhmdanybdhmhmwd.workers.dev
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
