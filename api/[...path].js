@@ -69,6 +69,9 @@ module.exports = async (req, res) => {
     if (req.headers["x-group-id"]) {
       headers["X-Group-Id"] = req.headers["x-group-id"];
     }
+    // Preserve byte-range semantics for resumable/large media downloads.
+    if (req.headers.range) headers.Range = req.headers.range;
+    if (req.headers["if-range"]) headers["If-Range"] = req.headers["if-range"];
 
     const response = await fetch(UPSTREAM + req.url, {
       method: req.method,
@@ -88,6 +91,10 @@ module.exports = async (req, res) => {
     if (disposition) res.setHeader("Content-Disposition", disposition);
     const cacheControl = response.headers.get("cache-control");
     if (cacheControl) res.setHeader("Cache-Control", cacheControl);
+    for (const name of ["content-range", "accept-ranges", "etag", "last-modified"]) {
+      const value = response.headers.get(name);
+      if (value) res.setHeader(name, value);
+    }
 
     return res.send(Buffer.from(responseBody));
   } catch (error) {
