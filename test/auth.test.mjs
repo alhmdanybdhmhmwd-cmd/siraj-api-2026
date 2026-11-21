@@ -3011,3 +3011,74 @@ test("private memories list is owner-scoped and updates cannot cross owners", as
   assert.ok(queries.some(item => item.sql.includes("UPDATE private_memories") &&
     item.params[2] === "not-owned" && item.params[3] === "owner-1"));
 });
+
+
+test("private memory photo upload stores the owner-scoped record and access metadata", async () => {
+  const secret = "private-memory-photo-upload-test-secret";
+  const token = await worker.signToken({ id: "owner-1", username: "owner-1" }, secret);
+  const batches = [];
+  const db = {
+    prepare(sql) {
+      const statement = {
+        sql,
+        params: [],
+        bind(...params) { this.params = params; return this; },
+        async run() { return { meta: { changes: 1 } }; },
+        async first() {
+          if (this.sql.includes("SELECT session_version FROM account_security")) return { session_version: 0 };
+          if (this.sql.includes("SELECT id FROM private_memories WHERE id = ? AND owner_id = ?")) {
+            assert.deepEqual(this.params, ["memory-1", "owner-1"]);
+            return { id: "memory-1" };
+          }
+          return null;
+        },
+        async all() { return { results: [] }; }
+      };
+      return statement;
+    },
+    async batch(statements) {
+      batches.push(statements.map(statement => ({ sql: statement.sql, params: statement.params })));
+      return statements.map(() => ({ meta: { changes: 1 } }));
+    }
+  };
+  const storageCalls = [];
+  const previousHandler = globalThis.__fakeTigrisHandler;
+  globalThis.__fakeTigrisHandler = async (url, options) => {
+    storageCalls.push({ url: String(url), method: options.method, headers: options.headers });
+    return new Response(null, { status: 200 });
+  };
+  try {
+    const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const response = await worker.default.fetch(new Request(
+      "https://api.example.test/api/private-memories/memory-1/media",
+      {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + token,
+          "Content-Type": "image/png",
+          "X-File-Name": "memory.png"
+        },
+        body: png
+      }
+    ), {
+      DB: db,
+      JWT_SECRET: secret,
+      TIGRIS_ACCESS_KEY_ID: "test-access",
+      TIGRIS_SECRET_ACCESS_KEY: "test-secret"
+    });
+    assert.equal(response.status, 201);
+    const body = await response.json();
+    assert.equal(body.media.memoryId, "memory-1");
+    assert.match(body.media.attachmentId, /^owner-1\/private-memories\//);
+    assert.equal(body.media.contentType, "image/png");
+    assert.equal(storageCalls.length, 1);
+    assert.equal(storageCalls[0].method, "PUT");
+    assert.equal(batches.length, 1);
+    assert.ok(batches[0].some(item => item.sql.includes("INSERT INTO private_memory_media")));
+    assert.ok(batches[0].some(item => item.sql.includes("INSERT INTO media_access")));
+    assert.ok(batches[0].every(item => item.params.includes("owner-1")));
+  } finally {
+    if (previousHandler === undefined) delete globalThis.__fakeTigrisHandler;
+    else globalThis.__fakeTigrisHandler = previousHandler;
+  }
+});
