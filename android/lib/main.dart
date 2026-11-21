@@ -1935,12 +1935,18 @@ Widget personAvatar(Map<String, dynamic> person, {double radius = 22}) {
 
 class PrivateMemoryPhotoGallery extends StatelessWidget {
   final List<Map<String, dynamic>> media;
+  final ValueChanged<int>? onPageChanged;
 
-  const PrivateMemoryPhotoGallery({super.key, required this.media});
+  const PrivateMemoryPhotoGallery({
+    super.key,
+    required this.media,
+    this.onPageChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
     return PageView(
+      onPageChanged: onPageChanged,
       children: [
         for (final item in media)
           InteractiveViewer(
