@@ -134,7 +134,7 @@ test("object storage URLs preserve Tigris defaults and support generic S3 endpoi
   );
   assert.throws(() => createObjectStorageUrl({}, "/absolute/key"), /safe relative object key/);
   assert.throws(() => createObjectStorageUrl({}, "../private/file"), /safe relative object key/);
-  assert.throws(() => createObjectStorageUrl({}, "folder\\\\file"), /safe relative object key/);
+  assert.throws(() => createObjectStorageUrl({}, "folder\\file"), /safe relative object key/);
 });
 
 test("object storage client uses the common S3-compatible configuration", () => {
