@@ -9,7 +9,7 @@ const USER = { sub: "user-1" };
 class FakeD1 {
   constructor() {
     this.sessions = new Map(); this.chunks = new Map(); this.parts = new Map();
-    this.friendships = new Set(["user-1:friend-1"]); this.groups = new Set(["group-1:user-1"]);
+    this.friendships = new Set(["user-1:friend-1","user-1:friend-2"]); this.groups = new Set(["group-1:user-1","group-2:user-1"]);
   }
   prepare(sql) {
     const db=this; let args=[];
@@ -73,7 +73,7 @@ function fixture(){
     if(req.method==="POST"&&u.searchParams.has("uploads")){const id="upload-"+(uploads.size+1);uploads.set(id,{key,parts:new Map(),aborted:false});return new Response("<UploadId>"+id+"</UploadId>");}
     if(uploadId&&req.method==="PUT"&&part){const up=uploads.get(uploadId);if(!up||up.aborted)return new Response("",{status:404});const b=new Uint8Array(await req.arrayBuffer()),etag=createHash("md5").update(b).digest("hex");up.parts.set(part,{bytes:b,etag});return new Response("",{headers:{ETag:'"'+etag+'"'}});}
     if(uploadId&&req.method==="POST"){const up=uploads.get(uploadId);if(!up)return new Response("",{status:404});const list=[...up.parts.entries()].sort((a,b)=>a[0]-b[0]),len=list.reduce((s,x)=>s+x[1].bytes.length,0),out=new Uint8Array(len);let off=0;for(const [,p] of list){out.set(p.bytes,off);off+=p.bytes.length;}objects.set(up.key,out);return new Response("<CompleteMultipartUploadResult/>");}
-    if(uploadId&&req.method==="DELETE"){const up=uploads.get(uploadId);if(up)up.aborted=true;return new Response("",{status:204});}
+    if(uploadId&&req.method==="DELETE"){const up=uploads.get(uploadId);if(up)up.aborted=true;return new Response(null,{status:204});}
     if(req.method==="PUT"){objects.set(key,new Uint8Array(await req.arrayBuffer()));return new Response("",{status:200});}
     if(req.method==="GET"){const b=objects.get(key);return b?new Response(b):new Response("",{status:404});}
     if(req.method==="DELETE"){objects.delete(key);return new Response("",{status:204});}
