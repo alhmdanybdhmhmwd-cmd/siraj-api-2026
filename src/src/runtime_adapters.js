@@ -52,6 +52,78 @@ export function createDatabaseProvider(binding) {
 }
 
 /**
+ * libSQL adapter for independent Node runtimes.
+ *
+ * The application continues to consume the small D1-shaped SQL contract.
+ * A Node host can create a client with @libsql/client and inject it here;
+ * no Cloudflare binding or SDK import is required by Worker code.
+ */
+const LIBSQL_STATEMENT = Symbol("barq.libsql.statement");
+
+export function createLibsqlDatabaseProvider(client) {
+  if (!client || typeof client.execute !== "function" || typeof client.batch !== "function") {
+    throw new TypeError("A libSQL-compatible client with execute and batch is required");
+  }
+
+  const makeStatement = (sql, args = []) => {
+    if (typeof sql !== "string" || !sql.trim()) throw new TypeError("SQL statement is required");
+    const statement = {
+      [LIBSQL_STATEMENT]: true,
+      sql,
+      args,
+      bind(...nextArgs) {
+        return makeStatement(sql, nextArgs);
+      },
+      async first() {
+        const result = await client.execute({ sql, args });
+        return result.rows?.[0] ?? null;
+      },
+      async all() {
+        const result = await client.execute({ sql, args });
+        return {
+          results: result.rows ?? [],
+          success: true,
+          meta: result
+        };
+      },
+      async run() {
+        const result = await client.execute({ sql, args });
+        return { success: true, meta: result };
+      }
+    };
+    return Object.freeze(statement);
+  };
+
+  return Object.freeze({
+    prepare(sql) {
+      return makeStatement(sql);
+    },
+    async batch(statements) {
+      if (!Array.isArray(statements) || statements.some(item => !item?.[LIBSQL_STATEMENT])) {
+        throw new TypeError("libSQL batch accepts only statements prepared by this provider");
+      }
+      const results = await client.batch(
+        statements.map(item => ({ sql: item.sql, args: item.args })),
+        "write"
+      );
+      return results.map(result => ({ success: true, meta: result }));
+    },
+    async exec(sql) {
+      if (typeof sql !== "string" || !sql.trim()) throw new TypeError("SQL statement is required");
+      if (typeof client.executeMultiple === "function") {
+        return client.executeMultiple(sql);
+      }
+      return client.execute({ sql });
+    },
+    async healthCheck() {
+      const result = await client.execute("SELECT 1 AS barq_ready");
+      const row = result.rows?.[0];
+      return Number(row?.barq_ready) === 1;
+    }
+  });
+}
+
+/**
  * S3-compatible object storage client factory. The runtime supplies its
  * transport client, allowing another runtime to inject a compatible client.
  */
