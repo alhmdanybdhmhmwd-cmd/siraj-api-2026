@@ -4375,10 +4375,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       const SizedBox(height: 12),
                       const LinearProgressIndicator(),
                     ],
-                    const Align(
-                      alignment: Alignment.centerRight,
-                      child: Text('لا يراها سواك', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 12)),
-                    ),
+                    Align(alignment: Alignment.centerRight, child: Text('لا يراها سواك', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 12))),
                   ],
                 ),
               ),
