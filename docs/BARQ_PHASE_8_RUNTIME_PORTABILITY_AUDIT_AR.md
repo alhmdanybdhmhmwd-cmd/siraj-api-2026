@@ -48,3 +48,16 @@
 - نجح Backend CI على commit `2a8efac3dbe3ad85e5306be71fa4b9bbe196e731`، بما في ذلك خطوة `Audit Worker runtime portability dependencies`، واختبارات Backend وفحوص SQL وWrangler config وسلامة إعداد Android.
 - التشغيل: [44948538860](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026/actions/runs/44948538860).
 - هذا يثبت أن جرد bindings الآلي يعمل وأن الاختبارات الحالية اجتازت؛ لا يثبت أن محرك Node/AWS البديل بُني أو أن VPN حُل.
+
+## الدفعة البرمجية التالية: موائم الذكاء الاصطناعي
+
+تم تنفيذ أول فصل محدود وآمن من اعتماد Cloudflare:
+
+- إضافة `src/src/runtime_adapters.js` وفيه عقد `createAiProvider(binding)` بواجهة موحدة: `isAvailable()` و`run(model, input)`.
+- تحويل تلخيص المحادثات وتحويل الصوت إلى نص في `src/src/index.js` لاستخدام العقد بدلاً من استدعاء `env.AI.run` مباشرة.
+- أضيفت اختبارات مستقلة لحالة غياب المزود، وتمرير النموذج والمدخلات والنتيجة، وربط سياق المزود.
+- تم تحديث harness اختبارات Worker في `test/auth.test.mjs` و`test/health.test.mjs` لتحميل الموائم دون تغيير بيئة الإنتاج.
+
+نتيجة Backend CI على commit `ce7e1dbd052f8ee94052c6ef904ce0d1c942049c`: **نجاح**، بما فيها تدقيق bindings واختبارات المصادقة والترحيلات وفحص إعدادات Android. التشغيل: [44948913169](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026/actions/runs/44948913169).
+
+هذا أول موائم فقط؛ لم يتم بعد فصل D1 أو التخزين أو المجدول، ولم يتم تشغيل API مستقل أو تفعيل failover. يلزم استمرار الاختبارات بعد كل دفعة.
