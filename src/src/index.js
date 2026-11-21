@@ -1,5 +1,5 @@
 import { AwsClient } from "aws4fetch";
-import { createAiProvider, createDatabaseProvider, createObjectStorageClient } from "./runtime_adapters.js";
+import { createAiProvider, createDatabaseProvider, createObjectStorageClient, createPushProvider, createBackgroundTaskScheduler } from "./runtime_adapters.js";
 import { prepareConversationSummaryTranscript, buildConversationSummaryMessages, extractConversationSummaryText } from "./conversation_summary.js";
 import { handleResumableMediaUpload, cleanupExpiredUploadSessions } from "./media_multipart_routes.js";
 
@@ -430,6 +430,7 @@ async function sendSirajPush(env, recipientId, senderId, senderName, messageText
   const pushType = category === "groups" ? "group_message"
     : category === "statuses" ? "status_update" : "direct_message";
   if (!env.FCM_SERVICE_ACCOUNT_JSON) return;
+  const pushProvider = createPushProvider(fetch);
   try {
     const account = JSON.parse(env.FCM_SERVICE_ACCOUNT_JSON);
     const now = Math.floor(Date.now() / 1000);
@@ -453,7 +454,7 @@ async function sendSirajPush(env, recipientId, senderId, senderName, messageText
     const unsigned = assertionHeader + "." + assertionPayload;
     const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", signingKey, encoder.encode(unsigned));
     const assertion = unsigned + "." + base64url(new Uint8Array(signature));
-    const tokenResponse = await fetch(account.token_uri || "https://oauth2.googleapis.com/token", {
+    const tokenResponse = await pushProvider.request(account.token_uri || "https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -495,7 +496,7 @@ async function sendSirajPush(env, recipientId, senderId, senderName, messageText
 
     const preview = String(messageText || "").slice(0, 120);
     await Promise.all((devices.results || []).map(async device => {
-      const response = await fetch(
+      const response = await pushProvider.request(
         `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/messages:send`,
         {
           method: "POST",
@@ -1605,12 +1606,13 @@ export default {
         const messages = result.results || [];
         // Schedule physical D1 deletion for ten seconds after the recipient's first read.
         // Cron cleanup remains a recovery path if the request's background task is interrupted.
+        const backgroundScheduler = createBackgroundTaskScheduler(ctx);
         if (ctx && typeof ctx.waitUntil === "function") {
           for (const message of messages) {
             const deleteAt = Number(message.delete_at || 0);
             if (!message.id || !Number.isFinite(deleteAt) || deleteAt <= 0) continue;
             const delay = Math.max(0, deleteAt * 1000 - Date.now());
-            ctx.waitUntil(
+            backgroundScheduler.schedule(() =>
               new Promise(resolve => setTimeout(resolve, delay))
                 .then(() => env.DB.prepare(
                   "DELETE FROM ephemeral_messages WHERE id = ? AND delete_at IS NOT NULL AND delete_at <= unixepoch()"
