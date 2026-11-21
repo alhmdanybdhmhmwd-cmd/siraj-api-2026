@@ -13,7 +13,7 @@ workerSource = workerSource.replace(
 );
 workerSource = workerSource.replace(
   'import { handleResumableMediaUpload, cleanupExpiredUploadSessions } from "./media_multipart_routes.js";',
-  'const handleResumableMediaUpload = async () => new Response(JSON.stringify({ error: "not available in isolated unit test" }), { status: 501 }); const cleanupExpiredUploadSessions = async () => ({ expired: 0 });'
+  'const handleResumableMediaUpload = async () => null; const cleanupExpiredUploadSessions = async () => ({ expired: 0 });'
 );
 const workerModulePath = `/tmp/barq-health-worker-${process.pid}.mjs`;
 await writeFile(workerModulePath, workerSource, "utf8");
