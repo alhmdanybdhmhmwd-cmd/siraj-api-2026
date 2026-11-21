@@ -22,13 +22,19 @@ module.exports = async (req, res) => {
   try {
     const requestPath = new URL(req.url, "https://vercel.invalid").pathname;
     const isMediaUpload = req.method === "POST" && requestPath === "/api/media";
+    const isMultipartPartUpload = req.method === "PUT" &&
+      /^\/api\/media\/uploads\/[A-Za-z0-9-]{1,128}\/parts\/\d+$/.test(requestPath);
     const isProfilePhotoUpload = req.method === "POST" &&
       requestPath.startsWith("/api/profile/photo/");
     const maxMediaBytes = 60 * 1024 * 1024;
+    const maxMultipartPartBytes = 5 * 1024 * 1024;
     const maxProfilePhotoBytes = 4 * 1024 * 1024;
     const declaredLength = Number(req.headers["content-length"]);
     if (isMediaUpload && Number.isFinite(declaredLength) && declaredLength > maxMediaBytes) {
       return res.status(413).json({ error: "File must be between 1 byte and 60 MB" });
+    }
+    if (isMultipartPartUpload && Number.isFinite(declaredLength) && declaredLength > maxMultipartPartBytes) {
+      return res.status(413).json({ error: "Multipart part must not exceed 5 MiB" });
     }
     if (isProfilePhotoUpload && Number.isFinite(declaredLength) && declaredLength > maxProfilePhotoBytes) {
       return res.status(413).json({ error: "Profile photo must not exceed 4 MiB" });
@@ -42,6 +48,9 @@ module.exports = async (req, res) => {
       receivedBytes += buffer.length;
       if (isMediaUpload && receivedBytes > maxMediaBytes) {
         return res.status(413).json({ error: "File must be between 1 byte and 60 MB" });
+      }
+      if (isMultipartPartUpload && receivedBytes > maxMultipartPartBytes) {
+        return res.status(413).json({ error: "Multipart part must not exceed 5 MiB" });
       }
       if (isProfilePhotoUpload && receivedBytes > maxProfilePhotoBytes) {
         return res.status(413).json({ error: "Profile photo must not exceed 4 MiB" });
