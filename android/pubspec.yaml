@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   http: ^1.2.2
+  crypto: ^3.0.6
   flutter_secure_storage: ^9.2.2
   file_picker: ^8.1.7
   flutter_contacts: ^1.1.9+2
