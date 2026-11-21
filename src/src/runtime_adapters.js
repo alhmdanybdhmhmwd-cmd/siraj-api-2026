@@ -149,10 +149,10 @@ export function createObjectStorageUrl(env, objectKey, query = {}) {
   } else if (configuredEndpoint.includes("{bucket}")) {
     base = configuredEndpoint.replaceAll("{bucket}", encodeURIComponent(bucket));
   } else {
-    base = configuredEndpoint.replace(/\\/+$/, "") + "/" + encodeURIComponent(bucket);
+    base = configuredEndpoint.replace(/\/+$/, "") + "/" + encodeURIComponent(bucket);
   }
   const url = new URL(base);
-  url.pathname = url.pathname.replace(/\\/+$/, "") + "/" + encodedKey;
+  url.pathname = url.pathname.replace(/\/+$/, "") + "/" + encodedKey;
   for (const [name, value] of Object.entries(query || {})) {
     if (value !== undefined && value !== null) url.searchParams.set(name, String(value));
   }
