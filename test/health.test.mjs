@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 
 const workerPath = new URL("../src/src/index.js", import.meta.url);
 let workerSource = await readFile(workerPath, "utf8");
@@ -13,7 +14,7 @@ workerSource = workerSource.replace(
 let workerModule;
 try {
   workerModule = await import(
-    "data:text/javascript;base64," + Buffer.from(workerSource).toString("base64")
+    pathToFileURL((await (async () => { const modulePath = `/tmp/barq-health-worker-${process.pid}.mjs`; await writeFile(modulePath, workerSource, "utf8"); return modulePath; })())).href
   );
 } catch (error) {
   console.error("Worker health test module import failed:", error?.stack || error);
