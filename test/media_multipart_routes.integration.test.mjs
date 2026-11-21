@@ -36,7 +36,7 @@ class FakeD1 {
         if(q.includes("FROM media_upload_sessions")&&q.includes("expires_at <= ?")) return {results:[...db.sessions.values()].filter(x=>(["uploading","completing","failed"].includes(x.state)&&x.expires_at<=args[0])||x.state==="aborted"||(x.state==="completed"&&[...db.chunks.values()].some(ch=>ch.session_id===x.id))).slice(0,50).map(x=>({id:x.id,object_key:x.object_key,storage_upload_id:x.storage_upload_id,state:x.state}))};
         if(q.includes("sqlite_master")) return {results:[{name:"media_upload_sessions"},{name:"media_upload_parts"},{name:"media_upload_chunks"}]};
         if(q.includes("FROM media_upload_parts")) return {results:[...db.parts.values()].filter(x=>x.session_id===args[0]).sort((a,b)=>a.part_number-b.part_number).map(x=>({partNumber:x.part_number,etag:x.etag,size:x.size}))};
-        if(q.includes("FROM media_upload_chunks")&&q.includes("BETWEEN")) return {results:[...db.chunks.values()].filter(x=>x.session_id===args[0]&&x.chunk_number>=args[1]&&x.chunk_number<=args[2]).sort((a,b)=>a.chunk_number-b.chunk_number).map(x=>({chunkNumber:x.chunk_number,size:x.size}))};
+        if(q.includes("FROM media_upload_chunks")&&q.includes("BETWEEN")) return {results:[...db.chunks.values()].filter(x=>x.session_id===args[0]&&x.chunk_number>=args[1]&&x.chunk_number<=args[2]).sort((a,b)=>a.chunk_number-b.chunk_number).map(x=>({chunkNumber:x.chunk_number,size:x.size,sha256:x.sha256}))};
         if(q.includes("FROM media_upload_chunks")) return {results:[...db.chunks.values()].filter(x=>x.session_id===args[0]).map(x=>({chunkNumber:x.chunk_number}))};
         return {results:[]};
       },
@@ -48,10 +48,15 @@ class FakeD1 {
           return {meta:{changes:1}};
         }
         if(q.startsWith("INSERT INTO media_upload_chunks")){
-          const [sid,n,size]=args;db.chunks.set(sid+":"+n,{session_id:sid,chunk_number:n,size});return {meta:{changes:1}};
+          const [sid,n,size,sha256]=args;const key=sid+":"+n;
+          if(!db.chunks.has(key))db.chunks.set(key,{session_id:sid,chunk_number:n,size,sha256});
+          return {meta:{changes:db.chunks.has(key)?1:0}};
+        }
+        if(q.startsWith("UPDATE media_upload_chunks SET sha256")){
+          const [sha256,sid,n]=args;const row=db.chunks.get(sid+":"+n);if(row&&!row.sha256)row.sha256=sha256;return {meta:{changes:row?1:0}};
         }
         if(q.startsWith("INSERT INTO media_upload_parts")){
-          const [sid,n,etag,size]=args;db.parts.set(sid+":"+n,{session_id:sid,part_number:n,etag,size});return {meta:{changes:1}};
+          const [sid,n,etag,size,sha256]=args;db.parts.set(sid+":"+n,{session_id:sid,part_number:n,etag,size,sha256});return {meta:{changes:1}};
         }
         if(q.startsWith("INSERT INTO media_access")){
           const [objectKey,owner,recipient,group,fileName,contentType,expiresAt]=args;
@@ -113,10 +118,14 @@ test("route integration: interruption, resume, duplicate chunks, exact final byt
   assert.equal((await f.call("/api/media/uploads/"+sessionId+"/chunks/1","PUT",chunk(source,1))).status,200);
   for(let n=4;n<=5;n++)assert.equal((await f.call("/api/media/uploads/"+sessionId+"/chunks/"+n,"PUT",chunk(source,n))).status,200);
   assert.equal(f.DB.parts.has(sessionId+":1"),true);
-  assert.equal([...f.DB.chunks.values()].filter(x=>x.session_id===sessionId).length,0);
+  assert.equal([...f.DB.chunks.values()].filter(x=>x.session_id===sessionId).length,6,
+    "per-chunk checksums must remain after staged bytes are removed");
   assert.equal([...f.objects.keys()].some(k=>k.includes(".barq-staging/")),false);
   const duplicate=await f.call("/api/media/uploads/"+sessionId+"/chunks/5","PUT",chunk(source,5));
   assert.equal(duplicate.status,200);assert.equal((await duplicate.json()).alreadyStored,true);
+  const changedCommittedChunk=chunk(source,5).slice();changedCommittedChunk[0]^=0xff;
+  assert.equal((await f.call("/api/media/uploads/"+sessionId+"/chunks/5","PUT",changedCommittedChunk)).status,409,
+    "a committed chunk retry with different bytes must be rejected");
   const lastChunk=await f.call("/api/media/uploads/"+sessionId+"/chunks/6","PUT",chunk(source,6));assert.equal(lastChunk.status,200,await lastChunk.clone().text());
   assert.equal(f.DB.parts.has(sessionId+":2"),true,"last 17-byte part must be committed");
   const done=await f.call("/api/media/uploads/"+sessionId+"/complete","POST",{});assert.equal(done.status,201,await done.clone().text());
