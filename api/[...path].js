@@ -10,12 +10,15 @@ const UPSTREAM = process.env.VERCEL_ENV === "preview"
 
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   res.setHeader(
     "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, X-File-Name, X-Recipient-Id, X-Group-Id, X-Idempotency-Key, X-Status-Caption, X-Status-Id, X-Audio-Duration-Ms"
+    "Content-Type, Authorization, Range, X-File-Name, X-Recipient-Id, X-Group-Id, X-Idempotency-Key, X-Status-Caption, X-Status-Id, X-Audio-Duration-Ms"
   );
-  res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+  res.setHeader(
+    "Access-Control-Expose-Headers",
+    "Accept-Ranges, Content-Range, Content-Disposition, ETag, X-Request-Id"
+  );
 
   if (req.method === "OPTIONS") {
     return res.status(204).end();
