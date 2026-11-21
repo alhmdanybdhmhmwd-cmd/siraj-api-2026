@@ -1993,7 +1993,7 @@ export default {
             ).bind(currentUser.sub, currentUser.sub).all();
             await Promise.all((recipients.results || []).map(item =>
               sendSirajPush(env, item.friend_id, currentUser.sub,
-                currentUser.username, "لحظة جديدة في SPARK", { category: "statuses" })
+                currentUser.username, "لحظة جديدة في SPARK", { category: "statuses", statusId: id })
             ));
           } catch (notificationError) {
             console.error("SPARK media notification dispatch failed:", notificationError);
@@ -2069,7 +2069,7 @@ export default {
           ).bind(currentUser.sub, currentUser.sub).all();
           await Promise.all((recipients.results || []).map(item =>
             sendSirajPush(env, item.friend_id, currentUser.sub,
-              currentUser.username, "شارك لحظة جديدة في SPARK", { category: "statuses" })
+              currentUser.username, "شارك لحظة جديدة في SPARK", { category: "statuses", statusId: id })
           ));
         } catch (notificationError) {
           console.error("Status notification dispatch failed:", notificationError);
@@ -2327,7 +2327,7 @@ export default {
               const sender = await env.DB.prepare("SELECT display_name FROM users WHERE id = ?").bind(currentUser.sub).first();
               await sendSirajPush(env, status.user_id, currentUser.sub,
                 sender?.display_name || currentUser.username || "مستخدم برق",
-                "رد صوتي جديد على SPARK", { category: "statuses" });
+                "رد صوتي جديد على SPARK", { category: "statuses", statusId });
             } catch (notificationError) {
               console.error("SPARK audio reply notification failed:", notificationError);
             }
@@ -2476,7 +2476,7 @@ export default {
               ).bind(currentUser.sub).first();
               await sendSirajPush(env, status.user_id, currentUser.sub,
                 sender?.display_name || currentUser.username || "مستخدم برق",
-                "رد جديد على SPARK", { category: "statuses" });
+                "رد جديد على SPARK", { category: "statuses", statusId });
             } catch (notificationError) {
               console.error("SPARK reply notification failed:", notificationError);
             }
