@@ -585,10 +585,12 @@ void main() {
     expect(find.byType(PageView), findsOneWidget);
     expect(find.byType(InteractiveViewer), findsWidgets);
     expect(visiblePage, 0);
+    expect(find.text('1 / 3'), findsOneWidget);
 
     await tester.drag(find.byType(PageView), const Offset(-700, 0));
     await tester.pumpAndSettle();
     expect(visiblePage, 1);
+    expect(find.text('2 / 3'), findsOneWidget);
   });
 
 
