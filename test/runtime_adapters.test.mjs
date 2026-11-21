@@ -158,6 +158,9 @@ test("object storage provider exposes neutral get put delete head post and reque
   await provider.head("d.png");
   await provider.post("e.png", "<xml>", { "Content-Type": "application/xml" }, { uploads: "" });
   await provider.request("f.png", { method: "PATCH" }, { versionId: "v1" });
+  await provider.fetchUrl("https://signed.example/existing-object?signature=kept", { method: "GET" });
+  assert.equal(calls[6].url, "https://signed.example/existing-object?signature=kept");
+  assert.equal(calls[6].init.method, "GET");
   assert.deepEqual(calls.map(call => new URL(call.url).pathname), [
     "/bucket/a.png", "/bucket/b.png", "/bucket/c.png", "/bucket/d.png", "/bucket/e.png", "/bucket/f.png"
   ]);
