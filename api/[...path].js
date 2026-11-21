@@ -1,12 +1,24 @@
-// Keep production isolated on its existing upstream. Preview deployments
-// route through the isolated BARQ test Worker so reachability can be verified
-// without changing production traffic or data.
+// Keep Preview pinned to its isolated Worker. Production fallback is opt-in
+// and remains inert until a separately provisioned HTTPS upstream is configured.
 const PREVIEW_UPSTREAM = "https://barq-api-phase2-test.alhmdanybdhmhmwd.workers.dev";
-// Preview is pinned to its isolated Worker; an environment override must never
-// be able to route preview traffic to the production API.
-const UPSTREAM = process.env.VERCEL_ENV === "preview"
-  ? PREVIEW_UPSTREAM
-  : (process.env.BARQ_API_UPSTREAM || "https://siraj-api.alhmdanybdhmhmwd.workers.dev");
+const DEFAULT_PRODUCTION_UPSTREAM = "https://siraj-api.alhmdanybdhmhmwd.workers.dev";
+
+function getUpstreamCandidates(env = process.env) {
+  if (env.VERCEL_ENV === "preview") return [PREVIEW_UPSTREAM];
+  const primary = env.BARQ_API_UPSTREAM || DEFAULT_PRODUCTION_UPSTREAM;
+  const candidates = [primary];
+  const fallback = env.BARQ_API_FALLBACK_UPSTREAM;
+  if (fallback && fallback !== primary) {
+    try {
+      const parsed = new URL(fallback);
+      const normalized = fallback.replace(/\\/$/, "");
+      if (parsed.protocol === "https:" && parsed.origin === normalized) candidates.push(normalized);
+    } catch (_) {
+      // Ignore malformed fallback configuration; never route to an unsafe URL.
+    }
+  }
+  return candidates;
+}
 
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -110,11 +122,25 @@ module.exports = async (req, res) => {
     if (req.headers.range) headers.Range = req.headers.range;
     if (req.headers["if-range"]) headers["If-Range"] = req.headers["if-range"];
 
-    const response = await fetch(UPSTREAM + req.url, {
-      method: req.method,
-      headers,
-      body: ["GET", "HEAD"].includes(req.method) ? undefined : body,
-    });
+    const upstreams = getUpstreamCandidates();
+    let response = null;
+    let lastError = null;
+    for (let index = 0; index < upstreams.length; index += 1) {
+      try {
+        response = await fetch(upstreams[index] + req.url, {
+          method: req.method,
+          headers,
+          body: ["GET", "HEAD"].includes(req.method) ? undefined : body,
+        });
+        // Retry only gateway/service-unavailable responses. Application errors
+        // (including auth and validation failures) must not be replayed elsewhere.
+        if (![502, 503, 504].includes(response.status) || index === upstreams.length - 1) break;
+      } catch (error) {
+        lastError = error;
+        if (index === upstreams.length - 1) throw error;
+      }
+    }
+    if (!response) throw lastError || new Error("No BARQ upstream responded");
 
     res.status(response.status);
 
@@ -159,3 +185,5 @@ module.exports.config = {
     bodyParser: false,
   },
 };
+
+module.exports.getUpstreamCandidates = getUpstreamCandidates;
