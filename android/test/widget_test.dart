@@ -586,7 +586,7 @@ void main() {
     expect(find.byType(InteractiveViewer), findsWidgets);
     expect(visiblePage, 0);
 
-    await tester.drag(find.byType(PageView), const Offset(-300, 0));
+    await tester.drag(find.byType(PageView), const Offset(-700, 0));
     await tester.pumpAndSettle();
     expect(visiblePage, 1);
   });
