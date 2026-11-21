@@ -436,6 +436,9 @@ test("SPARK text statuses accept only allowlisted style keys and return persiste
   assert.ok(worker.includes('typeof backgroundKey !== "string" || !SPARK_STATUS_BACKGROUNDS.has(backgroundKey)'));
   assert.ok(worker.includes('typeof textColorKey !== "string" || !SPARK_STATUS_TEXT_COLORS.has(textColorKey)'));
   assert.ok(worker.includes('typeof fontKey !== "string" || !SPARK_STATUS_FONTS.has(fontKey)'));
+  assert.ok(worker.includes('(backgroundKey === "gold" && textColorKey !== "black")'));
+  assert.ok(worker.includes('(backgroundKey !== "gold" && textColorKey === "black")'));
+  assert.ok(flutterApp.includes(".where((entry) => backgroundKey == 'gold' ? entry.key == 'black' : entry.key != 'black')"));
   assert.ok(worker.includes("ensureSparkStatusStyleColumns(env)"));
   assert.ok(worker.includes("s.background_key AS backgroundKey"));
   assert.ok(worker.includes("s.text_color_key AS textColorKey"));

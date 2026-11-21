@@ -1899,7 +1899,9 @@ export default {
         }
         if (typeof backgroundKey !== "string" || !SPARK_STATUS_BACKGROUNDS.has(backgroundKey) ||
             typeof textColorKey !== "string" || !SPARK_STATUS_TEXT_COLORS.has(textColorKey) ||
-            typeof fontKey !== "string" || !SPARK_STATUS_FONTS.has(fontKey)) {
+            typeof fontKey !== "string" || !SPARK_STATUS_FONTS.has(fontKey) ||
+            (backgroundKey === "gold" && textColorKey !== "black") ||
+            (backgroundKey !== "gold" && textColorKey === "black")) {
           return json({ error: "Unsupported SPARK text style" }, 400);
         }
 

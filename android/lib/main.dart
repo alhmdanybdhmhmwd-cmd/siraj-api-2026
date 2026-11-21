@@ -2902,11 +2902,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 label: Text(backgroundLabels[entry.key]!),
                 selected: backgroundKey == entry.key,
                 selectedColor: entry.value,
-                onSelected: (_) => setDialogState(() => backgroundKey = entry.key),
+                onSelected: (_) => setDialogState(() {
+                  backgroundKey = entry.key;
+                  if (backgroundKey == 'gold') {
+                    textColorKey = 'black';
+                  } else if (textColorKey == 'black') {
+                    textColorKey = 'white';
+                  }
+                }),
               )).toList()),
               const SizedBox(height: 6),
               const Text('لون النص', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
-              Wrap(spacing: 7, children: textColors.entries.map((entry) => ChoiceChip(
+              Wrap(spacing: 7, children: textColors.entries
+                .where((entry) => backgroundKey == 'gold' ? entry.key == 'black' : entry.key != 'black')
+                .map((entry) => ChoiceChip(
                 label: Text(textColorLabels[entry.key]!),
                 selected: textColorKey == entry.key,
                 selectedColor: entry.value.withValues(alpha: .28),
