@@ -5158,7 +5158,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                           gradient: LinearGradient(colors: [draftPalette.primary, draftPalette.secondary]),
                           boxShadow: [BoxShadow(color: draftPalette.glow.withValues(alpha: .25), blurRadius: 12)],
                         ),
-                        child: Icon(draftPalette.motif, color: draftPalette.onPrimary),
+                        child: draftIdentity == BarqIdentity.butterfly
+                          ? const Text('🦋', style: TextStyle(fontSize: 23))
+                          : Icon(draftPalette.motif, color: draftPalette.onPrimary),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -5205,7 +5207,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                 borderRadius: BorderRadius.circular(12),
                                 gradient: LinearGradient(colors: [palette.primary, palette.secondary]),
                               ),
-                              child: Icon(palette.motif, color: palette.onPrimary, size: 23),
+                              child: identity == BarqIdentity.butterfly
+                                ? const Text('🦋', style: TextStyle(fontSize: 23))
+                                : Icon(palette.motif, color: palette.onPrimary, size: 23),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
