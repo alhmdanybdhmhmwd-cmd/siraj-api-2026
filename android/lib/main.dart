@@ -2302,6 +2302,7 @@ String profilePhotoPath(Map<String, dynamic> user) {
 }
 
 Widget personAvatar(Map<String, dynamic> person, {double radius = 22}) {
+  final palette = BarqIdentityPalette.forIdentity(BarqIdentity.selected.value);
   final user = person['user'] is Map
       ? Map<String, dynamic>.from(person['user'])
       : person;
@@ -2313,9 +2314,9 @@ Widget personAvatar(Map<String, dynamic> person, {double radius = 22}) {
       : '$apiBase$photoUrl?v=${Uri.encodeComponent(photoUpdatedAt)}';
   return CircleAvatar(
     radius: radius,
-    backgroundColor: const Color(0xFF46391F),
+    backgroundColor: palette.surface,
     child: imageUrl.isEmpty
-        ? Text(name.characters.first, style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: radius * 0.85))
+        ? Text(name.characters.first, style: TextStyle(color: palette.primary, fontSize: radius * 0.85))
         : ClipOval(
             child: Image.network(
               imageUrl,
@@ -2325,7 +2326,7 @@ Widget personAvatar(Map<String, dynamic> person, {double radius = 22}) {
               headers: {'Authorization': 'Bearer ${Api.token}'},
               errorBuilder: (_, __, ___) => Center(
                 child: Text(name.characters.first,
-                    style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: radius * 0.85)),
+                    style: TextStyle(color: palette.primary, fontSize: radius * 0.85)),
               ),
             ),
           ),
