@@ -173,8 +173,11 @@ test("Android API, media, and realtime origins are selectable for isolated previ
   assert.ok(flutterApp.includes("'BARQ_MEDIA_BASE'"));
   assert.ok(flutterApp.includes("'BARQ_REALTIME_URL'"));
   assert.ok(flutterApp.includes("defaultValue: 'https://siraj-api-2026.vercel.app'"));
-  assert.ok(flutterApp.includes("defaultValue: 'https://siraj-api.alhmdanybdhmhmwd.workers.dev'"));
-  assert.ok(flutterApp.includes("defaultValue: 'wss://siraj-api.alhmdanybdhmhmwd.workers.dev/api/realtime'"));
+  assert.ok(flutterApp.includes("defaultValue: '',"));
+  assert.ok(flutterApp.includes("final String mediaWorkerBase = String.fromEnvironment") === false);
+  assert.ok((flutterApp.match(/defaultValue: 'https:\/\/siraj-api-2026\.vercel\.app'/g) || []).length >= 2);
+  assert.ok(!flutterApp.includes("defaultValue: 'https://siraj-api.alhmdanybdhmhmwd.workers.dev'"));
+  assert.ok(!flutterApp.includes("defaultValue: 'wss://siraj-api.alhmdanybdhmhmwd.workers.dev/api/realtime'"));
 });
 
 
