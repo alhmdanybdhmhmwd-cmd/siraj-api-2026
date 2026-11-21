@@ -1056,6 +1056,78 @@ class Api {
     return request('POST', '/api/groups/${Uri.encodeComponent(groupId)}/summary');
   }
 
+  static Future<void> _uploadAttachmentResumable({
+    required List<int> bytes,
+    required String fileName,
+    required String contentType,
+    String? recipientId,
+    String? groupId,
+  }) async {
+    final idempotencyKey = newBarqMessageId();
+    final baseHeaders = <String, String>{
+      if (token != null) 'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    };
+    final start = await request('POST', '/api/media/uploads', body: {
+      'size': bytes.length,
+      'fileName': fileName,
+      'contentType': contentType,
+      if (recipientId != null) 'recipientId': recipientId,
+      if (groupId != null) 'groupId': groupId,
+      'idempotencyKey': idempotencyKey,
+    });
+    final session = start['session'];
+    if (session is! Map) throw Exception('استجابة بدء رفع الملف غير صالحة.');
+    final sessionId = session['id']?.toString() ?? '';
+    if (sessionId.isEmpty) throw Exception('لم يُرجع الخادم معرّف جلسة الرفع.');
+    final totalChunks = (bytes.length + 1024 * 1024 - 1) ~/ (1024 * 1024);
+
+    for (var chunkNumber = 1; chunkNumber <= totalChunks; chunkNumber++) {
+      final startOffset = (chunkNumber - 1) * 1024 * 1024;
+      final endOffset = math.min(startOffset + 1024 * 1024, bytes.length);
+      final chunk = bytes.sublist(startOffset, endOffset);
+      final uri = Uri.parse(
+        '$apiBase/api/media/uploads/${Uri.encodeComponent(sessionId)}/chunks/$chunkNumber',
+      );
+      http.Response? response;
+      Object? lastError;
+      for (var attempt = 0; attempt < 3; attempt++) {
+        try {
+          response = await http.put(uri, headers: {
+            if (token != null) 'Authorization': 'Bearer $token',
+            'Content-Type': 'application/octet-stream',
+            'Content-Length': chunk.length.toString(),
+          }, body: chunk).timeout(const Duration(seconds: 90));
+          if (response.statusCode >= 200 && response.statusCode < 300) break;
+          if (response.statusCode < 500) {
+            final decoded = jsonDecode(response.body);
+            final message = decoded is Map ? decoded['error'] : null;
+            throw Exception((message ?? 'تعذر رفع الجزء $chunkNumber').toString());
+          }
+          lastError = Exception('تعذر رفع الجزء $chunkNumber (${response.statusCode}).');
+        } catch (error) {
+          lastError = error;
+          if (error is Exception && error.toString().contains('تعذر رفع الجزء')) rethrow;
+        }
+        if (attempt < 2) {
+          await Future<void>.delayed(Duration(milliseconds: 400 * (attempt + 1)));
+        }
+      }
+      if (response == null || response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('توقف رفع الملف عند الجزء $chunkNumber ويمكن إعادة المحاولة. $lastError');
+      }
+    }
+
+    final completed = await request(
+      'POST',
+      '/api/media/uploads/${Uri.encodeComponent(sessionId)}/complete',
+    );
+    final attachment = completed['attachment'];
+    if (attachment is! Map || attachment['attachmentId'] == null) {
+      throw Exception('اكتمل الرفع دون تأكيد بيانات المرفق.');
+    }
+  }
+
   static Future<void> uploadAttachment({
     required List<int> bytes,
     required String fileName,
@@ -1072,10 +1144,17 @@ class Api {
     if (bytes.isEmpty || bytes.length > maxAttachmentBytes) {
       throw Exception('حجم الملف يجب ألا يتجاوز 60 ميجابايت.');
     }
-    // Keep small uploads on the Vercel proxy. Larger uploads bypass its
-    // 4.5 MB function payload ceiling and stream directly to the Worker.
-    final uploadBase = bytes.length <= proxyMediaThresholdBytes ? apiBase : mediaWorkerBase;
-    final uri = Uri.parse('$uploadBase/api/media');
+    // Preserve the existing fast path for files up to 4 MiB.
+    if (bytes.length > proxyMediaThresholdBytes) {
+      return _uploadAttachmentResumable(
+        bytes: bytes,
+        fileName: fileName,
+        contentType: contentType,
+        recipientId: recipientId,
+        groupId: groupId,
+      );
+    }
+    final uri = Uri.parse('$apiBase/api/media');
     final response = await http.post(uri, headers: {
       if (token != null) 'Authorization': 'Bearer $token',
       'Content-Type': contentType,
