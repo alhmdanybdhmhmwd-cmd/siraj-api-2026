@@ -254,3 +254,17 @@
 **التحقق:** Backend CI على commit 10c59c1abd2c1d885e712aa63d24f36fcf01e64f نجح: 243/243 اختباراً، صفر فشل — https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026/actions/runs/44953798482.
 
 الخطوة الرابعة مكتملة برمجياً في الاختبارات المعزولة. لم يتم استخدام مفاتيح Firebase حقيقية أو إرسال إشعارات إلى مستخدمين؛ اختبار FCM الحقيقي على مشروع Preview، واختبار ظهور الإشعار على الهواتف، واختبار اتصال الشبكة من اليمن دون VPN تبقى للاختبارات النهائية وبموافقة المستخدم. لا توجد تغييرات على إعدادات الإنتاج.
+## الخطوة الخامسة — بناء API مستقل عن Cloudflare (2026-11-22)
+
+تم إنشاء مدخل تشغيل Node مستقل في `node_server.mjs` يستخدم نفس Worker fetch handler دون نسخ مسارات API أو تغيير عقود التطبيق:
+- إنشاء بيئة تشغيل Node من `LIBSQL_URL` و`LIBSQL_AUTH_TOKEN` و`JWT_SECRET`، مع ربط موائم libSQL الموجود.
+- تحويل HTTP Node إلى Web Request وتمرير الطلبات إلى Worker handler، وإرجاع Web Response مع دعم تدفق أجسام الملفات وRange وAuthorization وHEAD وOPTIONS.
+- جعل `npm start` يشغل API المستقل، مع إبقاء proxy السابق متاحاً عبر `npm run start:proxy`.
+- إضافة فحص جاهزية قاعدة البيانات قبل فتح المنفذ، ومهلة للطلبات، وتصريف المهام الخلفية والمهام المجدولة قبل إغلاق اتصال قاعدة البيانات.
+- إضافة جدولة تنظيف كل 15 دقيقة مع منع تداخل التشغيل.
+- إضافة `.env.example` ودليل تشغيل عربي `docs/BARQ_STANDALONE_NODE_API_AR.md`، دون وضع أسرار فعلية في المستودع.
+- إضافة اختبارات HTTP للبايتات الثنائية وRange وAuthorization وHEAD وOPTIONS، واختبار readiness، واختبار Worker الحقيقي فوق HTTP مع قاعدة libSQL محلية مؤقتة.
+
+**نتيجة التحقق:** Backend CI على commit `2fc6f7eb3c70bc159660e38ebfaa6ec3f6554f31` نجح: **249/249 اختباراً، صفر فشل** — [run 44954171084](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026/actions/runs/44954171084).
+
+**حالة الخطوة:** اكتمل بناء API المستقل واختباره برمجياً على HTTP وlibSQL محلي. يلزم قبل اعتباره جاهزاً للتشغيل الفعلي إعداد قاعدة Preview منفصلة ومخططها، ثم اختبار اتصال مزود libSQL/S3/FCM الخارجي وWorkers AI البديل. Workers AI غير موصول تلقائياً في Node حتى الآن. لا توجد migrations تلقائية أو نقل بيانات أو تغييرات على الإنتاج أو DNS.
