@@ -3848,6 +3848,15 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           "SELECT owner_id, recipient_id, group_id, file_name, content_type, expires_at FROM media_access WHERE object_key = ?"
         ).bind(key).first();
         await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS blocked_users (
+            blocker_id TEXT NOT NULL, blocked_id TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (blocker_id, blocked_id), CHECK (blocker_id <> blocked_id),
+            FOREIGN KEY (blocker_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (blocked_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        await env.DB.prepare(`
           CREATE TABLE IF NOT EXISTS status_posts (
             id TEXT PRIMARY KEY, user_id TEXT NOT NULL, content TEXT NOT NULL,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, expires_at TEXT NOT NULL,
@@ -3900,6 +3909,10 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           }
           permitted = sparkMedia.ownerId === currentUser.sub;
           if (!permitted) {
+            const blocked = await env.DB.prepare(
+              "SELECT 1 FROM blocked_users WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?) LIMIT 1"
+            ).bind(currentUser.sub, sparkMedia.ownerId, sparkMedia.ownerId, currentUser.sub).first();
+            if (blocked) return json({ error: "SPARK media access denied" }, 403);
             const friendship = await env.DB.prepare(
               `SELECT 1 FROM friendships f
                WHERE f.user_id = ? AND f.friend_id = ?
@@ -3915,6 +3928,10 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         if (accessRow && !sparkMedia) {
           permitted = accessRow.owner_id === currentUser.sub;
           if (!permitted && accessRow.recipient_id === currentUser.sub && accessRow.owner_id) {
+            const blocked = await env.DB.prepare(
+              "SELECT 1 FROM blocked_users WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?) LIMIT 1"
+            ).bind(currentUser.sub, accessRow.owner_id, accessRow.owner_id, currentUser.sub).first();
+            if (blocked) return json({ error: "Attachment access denied" }, 403);
             const friendship = await env.DB.prepare(
               "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
             ).bind(currentUser.sub, accessRow.owner_id).first();
