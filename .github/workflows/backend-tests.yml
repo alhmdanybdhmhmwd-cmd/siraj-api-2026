@@ -15,6 +15,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Check Worker JavaScript syntax
+        run: node --check src/src/index.js
       - name: Run backend authentication tests
         run: npm test
       - name: Test D1 migration SQL with SQLite
@@ -25,5 +27,3 @@ jobs:
         run: python3 test/barq_wrangler_config.test.py
       - name: Verify Android Firebase package and signing-key safety
         run: python3 test/android_release_safety.test.py
-      - name: Check Worker JavaScript syntax
-        run: node --check src/src/index.js
