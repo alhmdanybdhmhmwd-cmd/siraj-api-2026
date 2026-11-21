@@ -105,8 +105,9 @@ test("route integration: interruption, resume, duplicate chunks, exact final byt
   assert.equal([...f.objects.keys()].some(k=>k.includes(".barq-staging/")),false);
   const duplicate=await f.call("/api/media/uploads/"+sessionId+"/chunks/5","PUT",chunk(source,5));
   assert.equal(duplicate.status,200);assert.equal((await duplicate.json()).alreadyStored,true);
-  assert.equal((await f.call("/api/media/uploads/"+sessionId+"/chunks/6","PUT",chunk(source,6))).status,200);
-  const done=await f.call("/api/media/uploads/"+sessionId+"/complete","POST",{});assert.equal(done.status,201);
+  const lastChunk=await f.call("/api/media/uploads/"+sessionId+"/chunks/6","PUT",chunk(source,6));assert.equal(lastChunk.status,200,await lastChunk.clone().text());
+  assert.equal(f.DB.parts.has(sessionId+":2"),true,"last 17-byte part must be committed");
+  const done=await f.call("/api/media/uploads/"+sessionId+"/complete","POST",{});assert.equal(done.status,201,await done.clone().text());
   const attachment=(await done.json()).attachment,stored=f.objects.get(attachment.attachmentId);
   assert.ok(stored);assert.equal(stored.length,source.length);
   assert.equal(createHash("sha256").update(stored).digest("hex"),createHash("sha256").update(source).digest("hex"));
