@@ -110,10 +110,10 @@ export function createLibsqlDatabaseProvider(client) {
     },
     async exec(sql) {
       if (typeof sql !== "string" || !sql.trim()) throw new TypeError("SQL statement is required");
-      if (typeof client.executeMultiple === "function") {
-        return client.executeMultiple(sql);
+      if (typeof client.executeMultiple !== "function") {
+        throw new Error("libSQL executeMultiple is required for multi-statement SQL scripts");
       }
-      return client.execute({ sql });
+      return client.executeMultiple(sql);
     },
     async healthCheck() {
       const result = await client.execute("SELECT 1 AS barq_ready");
