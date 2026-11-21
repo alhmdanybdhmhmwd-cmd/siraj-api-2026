@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 const worker = await readFile(new URL("../src/src/index.js", import.meta.url), "utf8");
 const flutterApp = await readFile(new URL("../android/lib/main.dart", import.meta.url), "utf8");
 const testConfig = await readFile(new URL("../wrangler.test.toml", import.meta.url), "utf8");
+const fallbackTestConfig = await readFile(new URL("../wrangler.fallback.test.toml", import.meta.url), "utf8");
 const productionConfig = await readFile(new URL("../wrangler.toml", import.meta.url), "utf8");
 const replyMigration = await readFile(new URL("../migrations/0004_preview_message_replies.sql", import.meta.url), "utf8");
 const interactionMigration = await readFile(new URL("../migrations/0006_preview_message_reactions_pins.sql", import.meta.url), "utf8");
@@ -721,4 +722,26 @@ test("Worker CORS matches the public gateway for resumable media and range downl
   assert.match(worker, /"Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS"/);
   assert.match(worker, /"Access-Control-Allow-Headers": "[^"]*Range[^"]*X-Idempotency-Key/);
   assert.match(worker, /"Access-Control-Expose-Headers": "[^"]*(?:Content-Range[^"]*Accept-Ranges|Accept-Ranges[^"]*Content-Range)/);
+});
+
+test("fallback Worker is isolated from production and shares only Preview data resources", () => {
+  assert.match(fallbackTestConfig, /^name = "barq-api-phase2-fallback-test"$/m);
+  assert.match(fallbackTestConfig, /^workers_dev = true$/m);
+  assert.match(fallbackTestConfig, /database_id = "5bfada32-4f9b-4edb-85dd-3b3b30ab73b0"/);
+  assert.match(fallbackTestConfig, /TIGRIS_BUCKET = "barq-preview-media"/);
+  assert.doesNotMatch(fallbackTestConfig, /^routes\s*=/m);
+  assert.doesNotMatch(fallbackTestConfig, /^crons\s*=/m);
+  assert.match(testConfig, /database_id = "5bfada32-4f9b-4edb-85dd-3b3b30ab73b0"/);
+  assert.match(productionConfig, /database_id = "0db93afd-4bf5-4423-9e25-7a2f4f4bdbe0"/);
+  assert.doesNotMatch(fallbackTestConfig, /0db93afd-4bf5-4423-9e25-7a2f4f4bdbe0/);
+  assert.doesNotMatch(fallbackTestConfig, /siraj-media/);
+});
+
+test("fallback Worker deployment requires explicit manual Preview approval", async () => {
+  const workflow = await readFile(new URL("../.github/workflows/barq-preview-fallback-deploy.yml", import.meta.url), "utf8");
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /default: false/);
+  assert.match(workflow, /inputs\.deploy_preview_fallback == true/);
+  assert.match(workflow, /wrangler\.fallback\.test\.toml/);
+  assert.doesNotMatch(workflow, /wrangler\.toml\s/);
 });
