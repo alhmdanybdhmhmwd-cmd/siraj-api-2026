@@ -81,9 +81,9 @@ function fixture(){
     return new Response("unsupported",{status:400});
   };
   const env={DB,TIGRIS_ACCESS_KEY_ID:"fake-key",TIGRIS_SECRET_ACCESS_KEY:"fake-secret",TIGRIS_BUCKET:"test-bucket"};
-  async function call(path,method="POST",body=null){
+  async function call(path,method="POST",body=null,user=USER){
     const request=new Request("https://preview.invalid"+path,{method,headers:{"Content-Type":"application/json"},body:body===null?undefined:(body instanceof Uint8Array?body:JSON.stringify(body))});
-    return handleResumableMediaUpload(request,env,USER,new URL(request.url),path,method);
+    return handleResumableMediaUpload(request,env,user,new URL(request.url),path,method);
   }
   return {DB,objects,uploads,call,restore(){globalThis.fetch=originalFetch;}};
 }
@@ -165,4 +165,30 @@ test("route integration: payload sizes from just over 4 MiB through the 60 MiB c
     assert.equal([...f.objects.keys()].some(k=>k.includes(".barq-staging/")),false);
     f.objects.delete(attachment.attachmentId);f.uploads.clear();
   }
+});
+
+
+test("route security: upload sessions are isolated to their owner",async t=>{
+  const f=fixture();t.after(f.restore);
+  const created=await f.call("/api/media/uploads","POST",declaration(32,"owner-only-001"));
+  assert.equal(created.status,201);
+  const id=(await created.json()).session.id;
+  const intruder={sub:"user-2"};
+  const read=await f.call("/api/media/uploads/"+id+"/complete","POST",{},intruder);
+  assert.equal(read.status,404,"another account must not discover or complete this session");
+  const chunk=await f.call("/api/media/uploads/"+id+"/chunks/1","PUT",Uint8Array.from({length:32},(_,i)=>i),intruder);
+  assert.equal(chunk.status,404,"another account must not upload into this session");
+  assert.equal(f.DB.sessions.get(id).state,"uploading");
+});
+
+test("route security: expired sessions reject chunk upload and completion",async t=>{
+  const f=fixture();t.after(f.restore);
+  const created=await f.call("/api/media/uploads","POST",declaration(32,"expired-session-001"));
+  assert.equal(created.status,201);
+  const id=(await created.json()).session.id;
+  f.DB.sessions.get(id).expires_at="2000-01-01T00:00:00.000Z";
+  const chunk=await f.call("/api/media/uploads/"+id+"/chunks/1","PUT",new Uint8Array(32));
+  assert.equal(chunk.status,410);
+  const complete=await f.call("/api/media/uploads/"+id+"/complete","POST",{});
+  assert.equal(complete.status,410);
 });
