@@ -103,6 +103,16 @@ test("libSQL adapter exposes D1-compatible prepared statements and atomic batche
   assert.deepEqual(await db.exec("CREATE TABLE sample(id TEXT)"), { ok: true });
   await assert.rejects(() => db.batch([{}]), /prepared by this provider/);
   assert.throws(() => createLibsqlDatabaseProvider({}), /execute and batch/);
+
+  const singleStatementOnlyClient = {
+    async execute() { return { rows: [] }; },
+    async batch() { return []; }
+  };
+  const limitedDb = createLibsqlDatabaseProvider(singleStatementOnlyClient);
+  await assert.rejects(
+    () => limitedDb.exec("CREATE TABLE a(id INTEGER); CREATE TABLE b(id INTEGER);"),
+    /executeMultiple is required/
+  );
 });
 
 test("object storage client uses the common S3-compatible configuration", () => {
