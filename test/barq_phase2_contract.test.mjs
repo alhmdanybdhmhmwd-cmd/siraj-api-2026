@@ -689,7 +689,7 @@ test("private memories are owner-scoped with bounded create, edit, and delete op
   assert.ok(route.includes("WHERE id = ? AND owner_id = ?"));
   assert.ok(route.includes("UPDATE private_memories SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND owner_id = ?"));
   assert.ok(route.includes("DELETE FROM private_memories WHERE id = ? AND owner_id = ?"));
-  assert.ok(worker.includes('"Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS"'));
+  assert.ok(worker.includes('"Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS"'));
 });
 
 
@@ -720,5 +720,5 @@ test("private memory photos are owner-only, size-limited, and scheduled for clea
 test("Worker CORS matches the public gateway for resumable media and range downloads", () => {
   assert.match(worker, /"Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS"/);
   assert.match(worker, /"Access-Control-Allow-Headers": "[^"]*Range[^"]*X-Idempotency-Key/);
-  assert.match(worker, /"Access-Control-Expose-Headers": "[^"]*Content-Range[^"]*Accept-Ranges/);
+  assert.match(worker, /"Access-Control-Expose-Headers": "[^"]*(?:Content-Range[^"]*Accept-Ranges|Accept-Ranges[^"]*Content-Range)/);
 });
