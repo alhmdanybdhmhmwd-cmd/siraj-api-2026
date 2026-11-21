@@ -1,12 +1,12 @@
 import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 
-const files = ["src/src/index.js", "src/src/media_multipart_routes.js"];
+const files = ["src/src/index.js", "src/src/media_multipart_routes.js", "src/src/runtime_adapters.js"];
 const [source, adapterSource] = await Promise.all([
   Promise.all(files.map(path => readFile(new URL(`../${path}`, import.meta.url), "utf8"))).then(parts => parts.join("\n")),
   readFile(new URL("../src/src/runtime_adapters.js", import.meta.url), "utf8")
 ]);
-const references = [...source.matchAll(/\benv\.([A-Za-z_$][\w$]*)/g)].reduce((counts, match) => {
+const references = [...source.matchAll(/\benv(?:\?\.)?\.([A-Za-z_$][\w$]*)/g)].reduce((counts, match) => {
   counts[match[1]] = (counts[match[1]] || 0) + 1;
   return counts;
 }, {});
@@ -16,6 +16,11 @@ const approvedBindings = [
   "FCM_PROJECT_ID",
   "FCM_SERVICE_ACCOUNT_JSON",
   "JWT_SECRET",
+  "OBJECT_STORAGE_ACCESS_KEY_ID",
+  "OBJECT_STORAGE_BUCKET",
+  "OBJECT_STORAGE_ENDPOINT",
+  "OBJECT_STORAGE_REGION",
+  "OBJECT_STORAGE_SECRET_ACCESS_KEY",
   "TIGRIS_ACCESS_KEY_ID",
   "TIGRIS_BUCKET",
   "TIGRIS_SECRET_ACCESS_KEY"
@@ -42,6 +47,6 @@ const report = {
   directD1References: references.DB,
   directWorkersAIReferences: references.AI,
   databaseAdapter: "SQL capability adapter is wired at HTTP and scheduled entrypoints; current implementation still wraps D1.",
-  note: "Static dependency inventory only; it does not prove a Node/AWS runtime implementation or VPN reachability."
+  note: "Static dependency inventory across route modules and runtime adapters only; it does not prove a remote storage provider is configured or VPN reachability."
 };
 process.stdout.write(JSON.stringify(report, null, 2) + "\n");
