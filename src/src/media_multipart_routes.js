@@ -134,10 +134,15 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
       }
       const expectedParts = Math.ceil(declaration.size / MEDIA_MULTIPART_PART_SIZE);
       const existing = await env.DB.prepare(
-        "SELECT id, state, total_size AS size, expected_parts AS expectedParts, expires_at AS expiresAt FROM media_upload_sessions WHERE owner_id = ? AND idempotency_key = ?"
+        "SELECT id, state, total_size AS size, expected_parts AS expectedParts, expires_at AS expiresAt, recipient_id AS recipientId, group_id AS groupId, content_type AS contentType, file_name AS fileName FROM media_upload_sessions WHERE owner_id = ? AND idempotency_key = ?"
       ).bind(currentUser.sub, idempotencyKey).first();
       if (existing && !isUploadSessionExpired(existing.expiresAt) && ["uploading", "completing", "completed"].includes(existing.state)) {
-        if (Number(existing.size) !== declaration.size || Number(existing.expectedParts) !== expectedParts) {
+        if (Number(existing.size) !== declaration.size ||
+            Number(existing.expectedParts) !== expectedParts ||
+            existing.recipientId !== recipientId ||
+            existing.groupId !== groupId ||
+            existing.contentType !== declaration.contentType ||
+            existing.fileName !== declaration.fileName) {
           return json({ error: "Idempotency key was already used for a different upload" }, 409);
         }
         const parts = await env.DB.prepare("SELECT part_number AS partNumber, etag, size FROM media_upload_parts WHERE session_id = ? ORDER BY part_number").bind(existing.id).all();
