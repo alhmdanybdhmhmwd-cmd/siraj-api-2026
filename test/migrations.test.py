@@ -524,5 +524,42 @@ class RecoveryMigrationTests(unittest.TestCase):
         )
 
 
+    def test_resumable_media_integrity_migration_persists_sha256_and_rejects_invalid_digest(self):
+        self.db.execute(
+            "INSERT INTO users (id, username, display_name, password_hash, password_salt) VALUES ('media-owner', 'mediaowner2', 'Media Owner', 'hash', 'salt')"
+        )
+        self.db.execute(
+            """INSERT INTO media_upload_sessions
+               (id, owner_id, recipient_id, object_key, storage_upload_id, file_name,
+                content_type, total_size, part_size, expected_parts, idempotency_key, expires_at)
+               VALUES ('upload-1', 'media-owner', 'media-owner', 'object-1', 'storage-1',
+                       'file.bin', 'application/octet-stream', 10, 5242880, 1,
+                       'integrity-key-1', '2099-01-01T00:00:00Z')"""
+        )
+        digest = "a" * 64
+        self.db.execute(
+            "INSERT INTO media_upload_chunks (session_id, chunk_number, size, sha256) VALUES (?, ?, ?, ?)",
+            ("upload-1", 1, 10, digest),
+        )
+        self.db.execute(
+            "INSERT INTO media_upload_parts (session_id, part_number, etag, size, sha256) VALUES (?, ?, ?, ?, ?)",
+            ("upload-1", 1, '"etag12345678"', 10, digest),
+        )
+        self.assertEqual(
+            self.db.execute("SELECT sha256 FROM media_upload_chunks WHERE session_id = 'upload-1'").fetchone()[0],
+            digest,
+        )
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute(
+                "INSERT INTO media_upload_chunks (session_id, chunk_number, size, sha256) VALUES (?, ?, ?, ?)",
+                ("upload-1", 2, 1, "not-a-sha256"),
+            )
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute(
+                "INSERT INTO media_upload_parts (session_id, part_number, etag, size, sha256) VALUES (?, ?, ?, ?, ?)",
+                ("upload-1", 2, '"etag12345678"', 1, "not-a-sha256"),
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
