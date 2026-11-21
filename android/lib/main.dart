@@ -4093,7 +4093,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       }
     }
     return CircleAvatar(
-      backgroundColor: const Color(0xFF46391F),
+      backgroundColor: Theme.of(context).colorScheme.surface,
       child: Icon(
         field(memory, ['sourceType']) == 'message' ? Icons.chat_bubble_outline : Icons.auto_awesome,
         color: Theme.of(context).colorScheme.primary,
@@ -4500,7 +4500,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               textAlign: TextAlign.center, style: TextStyle(color: Colors.white60))),
           for (final group in groups)
             Card(color: Theme.of(context).colorScheme.surface, child: ListTile(
-              leading: const CircleAvatar(backgroundColor: Color(0xFF46391F), child: Icon(Icons.groups)),
+              leading: CircleAvatar(backgroundColor: Theme.of(context).colorScheme.surface, child: const Icon(Icons.groups)),
               title: Text(field(group, ['name'], 'مجموعة')),
               subtitle: Text('${field(group, ['description'], 'مجموعة برق')} • ${field(group, ['member_count'], '1')} أعضاء'),
               trailing: const Icon(Icons.chevron_left),
@@ -4917,7 +4917,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   children: [
                     CircleAvatar(
                       radius: 39,
-                      backgroundColor: const Color(0xFF46391F),
+                      backgroundColor: Theme.of(context).colorScheme.surface,
                       backgroundImage: field(me, ['photoUrl']).isNotEmpty
                           ? NetworkImage(
                               '$apiBase${field(me, ['photoUrl'])}?v=${Uri.encodeComponent(field(me, ['photoUpdatedAt']))}',
@@ -6483,7 +6483,7 @@ class PublicProfilePage extends StatelessWidget {
                   ],
                 ),
                 child: CircleAvatar(
-                  backgroundColor: const Color(0xFF46391F),
+                  backgroundColor: Theme.of(context).colorScheme.surface,
                   child: imageUrl.isEmpty
                       ? Text(name.characters.first, style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 48))
                       : ClipOval(
