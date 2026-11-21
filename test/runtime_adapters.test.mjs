@@ -9,7 +9,8 @@ import {
   createS3ObjectStorageProvider,
   createObjectStorageUrl,
   createPushProvider,
-  createBackgroundTaskScheduler
+  createBackgroundTaskScheduler,
+  runScheduledTasks
 } from "../src/src/runtime_adapters.js";
 
 test("AI provider preserves the binding context and fails closed when absent", async () => {
@@ -230,4 +231,26 @@ test("background scheduler registers tasks only when waitUntil is available", as
   assert.equal(ran, true);
   assert.equal(createBackgroundTaskScheduler(null).schedule(async () => {}), false);
   assert.throws(() => scheduler.schedule(null), /must be a function/);
+});
+
+
+test("scheduled task runner isolates failures and continues later maintenance jobs", async () => {
+  const events = [];
+  const logger = {
+    log(message, result) { events.push(["log", message, result]); },
+    error(message, error) { events.push(["error", message, error.message]); }
+  };
+  const results = await runScheduledTasks([
+    { name: "first", run: async () => "ok" },
+    { name: "broken", run: async () => { throw new Error("temporary failure"); } },
+    { name: "last", run: async () => "still-running" }
+  ], logger);
+  assert.deepEqual(results.map(item => [item.name, item.ok]), [
+    ["first", true], ["broken", false], ["last", true]
+  ]);
+  assert.equal(events.length, 3);
+  assert.equal(events[1][0], "error");
+  assert.equal(events[2][1], "last:");
+  await assert.rejects(() => runScheduledTasks([{ name: "bad" }]), /name and run function/);
+  await assert.rejects(() => runScheduledTasks(null), /array/);
 });
