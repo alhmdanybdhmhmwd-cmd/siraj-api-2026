@@ -154,6 +154,7 @@
 
 - تسجيل حسابين فعلياً عبر `POST /api/register`.
 - تسجيل الدخول عبر `POST /api/login` باستخدام رقم الهاتف.
+- البحث عن مستخدم من المسار المحمي `GET /api/users/search`.
 - إضافة جهة اتصال عبر `POST /api/contacts`.
 - إرسال رسالة عبر `POST /api/messages` ثم إعادة نفس الطلب بنفس `clientMessageId`؛ أعاد المسار `duplicate: true` ولم ينشئ صفاً ثانياً.
 - قراءة سجل المحادثة عبر `GET /api/messages?with=...` والتحقق من هوية المرسل ونص الرسالة.
