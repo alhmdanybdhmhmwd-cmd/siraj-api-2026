@@ -1708,9 +1708,8 @@ export default {
             throw error;
           }
           if (previous?.object_key && previous.object_key !== objectKey) {
-            const oldPath = String(previous.object_key).split("/").map(encodeURIComponent).join("/");
             try {
-              await storage.fetchUrl("https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + oldPath, { method: "DELETE" });
+              await storage.delete(String(previous.object_key));
             } catch (error) {
               console.error("Previous profile photo cleanup failed:", error?.name || "Error");
             }
