@@ -1198,6 +1198,8 @@ String newBarqMessageId() {
 bool barqOfflineSyncShouldPause(Object error) =>
     error.toString().contains('NETWORK_DIAGNOSTIC');
 
+bool barqOfflineQueueIsFull(int length, {int limit = 200}) => length >= limit;
+
 List<Map<String, dynamic>> decodeBarqOfflineQueue(String? raw) {
   if (raw == null || raw.isEmpty) return [];
   final decoded = jsonDecode(raw);
@@ -1262,7 +1264,9 @@ class BarqOfflineQueue {
       }
       return;
     }
-    if (items.length >= 200) throw Exception('صندوق الرسائل دون إنترنت ممتلئ؛ اتصل بالإنترنت لمزامنة الرسائل أولاً.');
+    if (barqOfflineQueueIsFull(items.length)) {
+      throw Exception('صندوق الرسائل دون إنترنت ممتلئ؛ اتصل بالإنترنت لمزامنة الرسائل أولاً.');
+    }
     items.add(message);
     await _write(_outboxKey, items);
   }
@@ -1276,7 +1280,9 @@ class BarqOfflineQueue {
       }
       return;
     }
-    if (items.length >= 200) return;
+    if (barqOfflineQueueIsFull(items.length)) {
+      throw Exception('صندوق الرسائل الواردة دون إنترنت ممتلئ؛ افتح الإنترنت لمزامنة الرسائل أولاً.');
+    }
     items.add(message);
     await _write(_inboxKey, items);
   }
@@ -1485,7 +1491,13 @@ class BarqNearbyService {
             'created_at': decoded['createdAt']?.toString() ?? DateTime.now().toUtc().toIso8601String(),
           });
           _events.add({'type': 'message_received', 'senderId': peerId, 'id': messageId});
-        } catch (_) {}
+        } catch (error) {
+          _events.add({
+            'type': 'message_receive_failed',
+            'senderId': peerId,
+            'reason': error.toString(),
+          });
+        }
       },
       onPayloadTransferUpdate: (id, update) {},
     );
@@ -5880,6 +5892,8 @@ class _NearbyDevicesPageState extends State<NearbyDevicesPage> {
       setState(() => statusText = event['success'] == true ? 'تم الاتصال بالجهاز القريب.' : 'تعذر الاتصال: ${event['status']}');
     } else if (type == 'message_received') {
       setState(() => statusText = 'وصلت رسالة دون إنترنت من أحد أصدقائك.');
+    } else if (type == 'message_receive_failed') {
+      setState(() => statusText = 'تعذر حفظ الرسالة الواردة: ${event['reason'] ?? 'حدث خطأ غير معروف'}');
     } else if (type == 'stopped') {
       setState(() => statusText = 'تم إيقاف البحث والاتصالات القريبة.');
     }
