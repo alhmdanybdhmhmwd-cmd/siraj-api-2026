@@ -9,6 +9,13 @@ on:
       - "android/test/**"
       - "BARQ_PHASE_2_ANDROID_GITHUB_READY.zip"
       - ".github/workflows/barq-android-quality.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "android/**"
+      - "android/test/**"
+      - "BARQ_PHASE_2_ANDROID_GITHUB_READY.zip"
+      - ".github/workflows/barq-android-quality.yml"
 
 permissions:
   contents: write
@@ -48,6 +55,7 @@ jobs:
         working-directory: android
         run: flutter pub get
       - name: Commit resolved Flutter dependency lockfile
+        if: github.event_name != 'pull_request'
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
