@@ -429,5 +429,109 @@ class RecoveryMigrationTests(unittest.TestCase):
         )
 
 
+    def test_legacy_chat_attachment_migration_disables_expiry_without_touching_spark(self):
+        self.db.execute(
+            "INSERT INTO users (id, username, display_name, password_hash, password_salt) VALUES ('owner', 'mediaowner', 'Owner', 'hash', 'salt')"
+        )
+        self.db.execute(
+            "INSERT INTO users (id, username, display_name, password_hash, password_salt) VALUES ('friend', 'mediafriend', 'Friend', 'hash', 'salt')"
+        )
+        self.db.execute(
+            "INSERT INTO chat_groups (id, name, owner_id) VALUES ('g1', 'Group', 'owner')"
+        )
+        self.db.execute(
+            "INSERT INTO group_members (group_id, user_id) VALUES ('g1', 'owner')"
+        )
+
+        access_rows = [
+            ("private-object", "owner", "friend", None, "private.jpg", "image/jpeg", "2026-11-24T00:00:00Z"),
+            ("group-object", "owner", None, "g1", "group.pdf", "application/pdf", "2026-11-24T00:00:00Z"),
+            ("spark-object", "owner", None, None, "spark.mp4", "video/mp4", "2026-11-22T00:00:00Z"),
+            ("unrelated-object", "owner", "friend", None, "other.png", "image/png", "2026-11-24T00:00:00Z"),
+        ]
+        self.db.executemany(
+            """INSERT INTO media_access
+               (object_key, owner_id, recipient_id, group_id, file_name, content_type, expires_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            access_rows,
+        )
+        self.db.executemany(
+            "INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?)",
+            [
+                ("private-object", "2026-11-24T00:00:00Z"),
+                ("group-object", "2026-11-24T00:00:00Z"),
+                ("spark-object", "2026-11-22T00:00:00Z"),
+                ("unrelated-object", "2026-11-24T00:00:00Z"),
+            ],
+        )
+        self.db.execute(
+            """INSERT INTO messages (id, sender_id, receiver_id, body)
+               VALUES ('m-private', 'owner', 'friend',
+               '{"type":"attachment","attachmentId":"private-object"}')"""
+        )
+        self.db.execute(
+            """INSERT INTO group_messages (id, group_id, sender_id, body)
+               VALUES ('m-group', 'g1', 'owner',
+               '{"type":"attachment","attachmentId":"group-object"}')"""
+        )
+        self.db.execute(
+            """INSERT INTO status_posts (id, user_id, content, expires_at)
+               VALUES ('spark-status', 'owner', 'status', '2026-11-22T00:00:00Z')"""
+        )
+        self.db.execute(
+            """INSERT INTO status_media
+               (id, status_id, object_key, file_name, content_type, size, caption)
+               VALUES ('spark-media', 'spark-status', 'spark-object', 'spark.mp4', 'video/mp4', 3, '')"""
+        )
+
+        migration = (ROOT / "migrations" / "0012_retain_legacy_chat_attachments.sql").read_text(encoding="utf-8")
+        self.db.executescript(migration)
+
+        permanent = "9999-12-31T23:59:59.999Z"
+        self.assertEqual(
+            self.db.execute(
+                "SELECT expires_at FROM media_access WHERE object_key = 'private-object'"
+            ).fetchone()[0],
+            permanent,
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT expires_at FROM media_access WHERE object_key = 'group-object'"
+            ).fetchone()[0],
+            permanent,
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT object_key FROM media_expirations ORDER BY object_key"
+            ).fetchall(),
+            [("spark-object",), ("unrelated-object",)],
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT expires_at FROM media_access WHERE object_key = 'spark-object'"
+            ).fetchone()[0],
+            "2026-11-22T00:00:00Z",
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT expires_at FROM media_access WHERE object_key = 'unrelated-object'"
+            ).fetchone()[0],
+            "2026-11-24T00:00:00Z",
+        )
+        self.assertEqual(
+            self.db.execute("SELECT COUNT(*) FROM status_media WHERE object_key = 'spark-object'").fetchone()[0],
+            1,
+        )
+
+        # Applying the migration a second time must be harmless.
+        self.db.executescript(migration)
+        self.assertEqual(
+            self.db.execute(
+                "SELECT expires_at FROM media_access WHERE object_key = 'private-object'"
+            ).fetchone()[0],
+            permanent,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
