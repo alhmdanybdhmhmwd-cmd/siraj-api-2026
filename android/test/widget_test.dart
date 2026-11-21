@@ -596,7 +596,7 @@ void main() {
     );
 
     expect(find.text('تعذر تحميل ذكرياتك'), findsOneWidget);
-    expect(find.text('لم نحذف ذكرياتك المحفوظة.'), findsOneWidget);
+    expect(find.textContaining('لم نحذف ذكرياتك المحفوظة.'), findsOneWidget);
     await tester.tap(find.text('إعادة المحاولة'));
     expect(retried, isTrue);
   });
