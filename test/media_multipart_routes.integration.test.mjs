@@ -76,7 +76,7 @@ function fixture(){
     if(uploadId&&req.method==="DELETE"){const up=uploads.get(uploadId);if(up)up.aborted=true;return new Response(null,{status:204});}
     if(req.method==="PUT"){objects.set(key,new Uint8Array(await req.arrayBuffer()));return new Response("",{status:200});}
     if(req.method==="GET"){const b=objects.get(key);return b?new Response(b):new Response("",{status:404});}
-    if(req.method==="DELETE"){objects.delete(key);return new Response("",{status:204});}
+    if(req.method==="DELETE"){objects.delete(key);return new Response(null,{status:204});}
     return new Response("unsupported",{status:400});
   };
   const env={DB,TIGRIS_ACCESS_KEY_ID:"fake-key",TIGRIS_SECRET_ACCESS_KEY:"fake-secret",TIGRIS_BUCKET:"test-bucket"};
@@ -120,7 +120,7 @@ test("route integration: interruption, resume, duplicate chunks, exact final byt
 test("route integration: idempotency declaration mismatch is rejected",async t=>{
   const f=fixture();t.after(f.restore);
   assert.equal((await f.call("/api/media/uploads","POST",declaration(100))).status,201);
-  const variants=[declaration(101),declaration(100,"idem-key-0001",{fileName:"other.bin"}),declaration(100,"idem-key-0001",{contentType:"image/png"}),declaration(100,"idem-key-0001",{recipientId:"stranger"})];
+  const variants=[declaration(101),declaration(100,"idem-key-0001",{fileName:"other.bin"}),declaration(100,"idem-key-0001",{contentType:"image/png"}),declaration(100,"idem-key-0001",{recipientId:"friend-2"})];
   for(const body of variants)assert.equal((await f.call("/api/media/uploads","POST",body)).status,409);
 });
 
