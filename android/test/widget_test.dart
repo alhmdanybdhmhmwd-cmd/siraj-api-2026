@@ -12,6 +12,15 @@ void main() {
     expect(barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef12345z')), isNull);
   });
 
+  test('Nearby requests only permissions supported by the Android API level', () {
+    expect(barqNearbyPermissionNamesForAndroidSdk(26), ['location', 'bluetooth']);
+    expect(barqNearbyPermissionNamesForAndroidSdk(30), ['location', 'bluetooth']);
+    expect(barqNearbyPermissionNamesForAndroidSdk(31), ['location', 'bluetoothAdvertise', 'bluetoothConnect', 'bluetoothScan']);
+    expect(barqNearbyPermissionNamesForAndroidSdk(32), ['location', 'bluetoothAdvertise', 'bluetoothConnect', 'bluetoothScan']);
+    expect(barqNearbyPermissionNamesForAndroidSdk(33), ['bluetoothAdvertise', 'bluetoothConnect', 'bluetoothScan', 'nearbyWifiDevices']);
+    expect(barqNearbyPermissionNamesForAndroidSdk(37), ['bluetoothAdvertise', 'bluetoothConnect', 'bluetoothScan', 'nearbyWifiDevices']);
+  });
+
   test('Nearby accepts only bounded text messages from the verified peer', () {
     final valid = <String, dynamic>{
       'kind': 'barq_text_message',
