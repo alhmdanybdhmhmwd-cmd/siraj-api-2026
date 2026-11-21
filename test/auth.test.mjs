@@ -1,32 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile, writeFile } from "node:fs/promises";
-import { pathToFileURL } from "node:url";
-
-const workerPath = new URL("../src/src/index.js", import.meta.url);
-let workerSource = await readFile(workerPath, "utf8");
-const summarySource = await readFile(new URL("../src/src/conversation_summary.js", import.meta.url), "utf8");
-workerSource = workerSource.replace(
-  'import { prepareConversationSummaryTranscript, buildConversationSummaryMessages, extractConversationSummaryText } from "./conversation_summary.js";',
-  summarySource
-);
-workerSource = workerSource.replace('import { AwsClient } from "aws4fetch";', `
-class AwsClient {
-  async fetch(url, options) {
-    return globalThis.__fakeTigrisHandler(url, options);
-  }
-}
-`);
-workerSource += "\nexport { signToken, verifyToken, authenticate, hashPassword, sendSirajPush, detectProfileImageType, readRequestBodyLimited, rollbackSparkMediaUpload };";
-let worker;
-try {
-  const workerModulePath = `/tmp/barq-auth-worker-${process.pid}.mjs`;
-  await writeFile(workerModulePath, workerSource, "utf8");
-  worker = await import(pathToFileURL(workerModulePath).href);
-} catch (error) {
-  console.error("Worker auth test module import failed:", error?.stack || error);
-  throw error;
-}
+import * as worker from "../src/src/index.js";
 
 test("profile image validation accepts JPEG, PNG, and WebP signatures", () => {
   assert.equal(worker.detectProfileImageType(Uint8Array.from([0xff, 0xd8, 0xff, 0x00])), "image/jpeg");
