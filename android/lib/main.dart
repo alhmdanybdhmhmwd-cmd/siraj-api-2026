@@ -3790,7 +3790,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 onTap: () => _openSparkStatus(status),
                 leading: Container(
                   padding: const EdgeInsets.all(2),
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: LinearGradient(colors: [Theme.of(context).colorScheme.primary, Theme.of(context).colorScheme.secondary]),
                   ),
