@@ -56,6 +56,10 @@ async function ensureSessionSchema(env) {
   if (!names.has("media_upload_sessions") || !names.has("media_upload_parts") || !names.has("media_upload_chunks")) {
     throw new Error("Resumable media upload migrations 0010 and 0011 are not applied");
   }
+  // Fail closed when the integrity migration is missing instead of silently
+  // accepting retries that cannot be compared with their original payload.
+  await env.DB.prepare("SELECT sha256 FROM media_upload_chunks LIMIT 0").all();
+  await env.DB.prepare("SELECT sha256 FROM media_upload_parts LIMIT 0").all();
 }
 function stagedChunkKey(session, chunkNumber) {
   return session.object_key + ".barq-staging/" + session.id + "/" + chunkNumber;
