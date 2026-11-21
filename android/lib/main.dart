@@ -1440,6 +1440,7 @@ Widget messageReactionBar({
   required String currentUserId,
   required Future<void> Function(String emoji, bool remove) onReaction,
   Future<void> Function()? onPin,
+  Future<void> Function()? onSaveMemory,
   bool isPinned = false,
 }) {
   final reactions = normalizeMessageReactions(message['reactions']);
@@ -1532,6 +1533,12 @@ Future<void> showMessageActions(
               title: Text(isPinned ? 'إلغاء تثبيت الرسالة' : 'تثبيت الرسالة'),
               onTap: () => Navigator.pop(sheetContext, 'pin'),
             ),
+          if (onSaveMemory != null)
+            ListTile(
+              leading: const Icon(Icons.bookmark_add_outlined, color: gold),
+              title: const Text('حفظ في الذكريات الخاصة'),
+              onTap: () => Navigator.pop(sheetContext, 'save_memory'),
+            ),
           if (onReply != null)
             ListTile(
               leading: const Icon(Icons.reply_rounded, color: gold),
@@ -1559,6 +1566,8 @@ Future<void> showMessageActions(
     if (emoji != null) await onReact(emoji);
   } else if (action == 'pin' && onPin != null) {
     await onPin();
+  } else if (action == 'save_memory' && onSaveMemory != null) {
+    await onSaveMemory();
   } else if (action == 'reply' && onReply != null) {
     await onReply(message);
   } else if (action == 'edit' && onEdit != null && context.mounted) {
@@ -6198,6 +6207,17 @@ class _ChatPageState extends State<ChatPage> {
                                                   if (mounted) await loadMessages(silent: true);
                                                 }
                                               : null,
+                                          onSaveMemory: m['is_ephemeral'] != true && m['is_offline_pending'] != true &&
+                                                  field(m, ['body', 'content', 'message']).trim().isNotEmpty
+                                              ? () async {
+                                                  await Api.savePrivateMemory(
+                                                    title: 'رسالة محفوظة',
+                                                    content: field(m, ['body', 'content', 'message']),
+                                                    sourceType: 'message',
+                                                  );
+                                                  if (mounted) showMsg(context, 'تم حفظ الرسالة في ذكرياتك الخاصة.');
+                                                }
+                                              : null,
                                           isPinned: m['is_pinned'] == true,
                                         ),
                                         child: BarqMessageBody(text: field(m, ['body', 'content', 'message'])),
@@ -7285,6 +7305,16 @@ class _GroupChatPageState extends State<GroupChatPage> {
                                   await Api.pinGroupMessage(groupId, field(m, ['id', 'message_id']), pinned: m['is_pinned'] != true);
                                   if (mounted) await loadMessages(silent: true);
                                 },
+                                onSaveMemory: field(m, ['body', 'content', 'message']).trim().isNotEmpty
+                                    ? () async {
+                                        await Api.savePrivateMemory(
+                                          title: 'رسالة محفوظة',
+                                          content: field(m, ['body', 'content', 'message']),
+                                          sourceType: 'message',
+                                        );
+                                        if (mounted) showMsg(context, 'تم حفظ الرسالة في ذكرياتك الخاصة.');
+                                      }
+                                    : null,
                                 isPinned: m['is_pinned'] == true,
                               ),
                               child: BarqMessageBody(text: field(m, ['body'])),
