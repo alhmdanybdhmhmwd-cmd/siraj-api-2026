@@ -794,6 +794,38 @@ test("registration issues a one-time 160-bit recovery code and stores only its s
   assert.equal(db.recovery.expires_at > Math.floor(Date.now() / 1000), true);
 });
 
+test("registration rejects malformed private invite codes before account creation", async () => {
+  const db = new FakeDB();
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      displayName: "New User",
+      phone: "+447911123456",
+      password: "secure-password-123",
+      inviteCode: "NOT-A-CODE"
+    })
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 400);
+  assert.equal(db.users.length, 1);
+});
+
+test("registration rejects unknown private invite codes without creating an account", async () => {
+  const db = new FakeDB();
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      displayName: "New User",
+      phone: "+447911123456",
+      password: "secure-password-123",
+      inviteCode: "ABCDEF123456"
+    })
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 400);
+  assert.equal(db.users.length, 1);
+});
+
 test("registration accepts international numbers and generates a private handle when username is omitted", async () => {
   const db = new FakeDB();
   const response = await worker.default.fetch(new Request("https://api.example.test/api/register", {
