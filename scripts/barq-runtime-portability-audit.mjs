@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 
-const files = ["src/src/index.js", "src/src/media_multipart_routes.js", "src/src/runtime_adapters.js"];
+const files = ["src/src/index.js", "src/src/media_multipart_routes.js", "src/src/runtime_adapters.js", "src/src/notification_service.js"];
 const [source, adapterSource] = await Promise.all([
   Promise.all(files.map(path => readFile(new URL(`../${path}`, import.meta.url), "utf8"))).then(parts => parts.join("\n")),
   readFile(new URL("../src/src/runtime_adapters.js", import.meta.url), "utf8")
