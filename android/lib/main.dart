@@ -3637,81 +3637,158 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     String initialContent = '',
     String sourceType = 'text',
   }) async {
+    final pageContext = context;
     final titleController = TextEditingController(text: field(memory ?? {}, ['title']));
     final contentController = TextEditingController(
       text: memory == null ? initialContent : field(memory, ['content']),
     );
     final editing = memory != null;
+    List<int>? photoBytes;
+    String? photoFileName;
+    String? photoContentType;
     await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: panel,
-        title: Text(editing ? 'تعديل الذكرى' : 'إضافة ذكرى خاصة'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleController,
-                maxLength: 120,
-                decoration: inputDecoration('عنوان الذكرى (اختياري)', Icons.title),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: contentController,
-                autofocus: true,
-                maxLength: 10000,
-                minLines: 4,
-                maxLines: 8,
-                decoration: inputDecoration('اكتب ما تريد الاحتفاظ به', Icons.edit_note),
-              ),
-              const Align(
-                alignment: Alignment.centerRight,
-                child: Text('لا يراها سواك', style: TextStyle(color: gold, fontSize: 12)),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
-          FilledButton(
-            onPressed: () async {
-              final content = contentController.text.trim();
-              if (content.isEmpty || content.length > 10000 || titleController.text.trim().length > 120) {
-                showMsg(dialogContext, 'اكتب محتوى للذكرى ضمن الحد المسموح.');
-                return;
-              }
-              try {
-                final saved = editing
-                    ? await Api.updatePrivateMemory(
-                        id: field(memory, ['id']),
-                        title: titleController.text,
-                        content: content,
-                      )
-                    : await Api.savePrivateMemory(
-                        title: titleController.text,
-                        content: content,
-                        sourceType: sourceType,
-                      );
-                if (mounted) {
-                  setState(() {
-                    if (editing) {
-                      final index = memories.indexWhere((item) => item['id'] == saved['id']);
-                      if (index >= 0) memories[index] = saved;
-                    } else {
-                      memories.insert(0, saved);
+      context: pageContext,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: panel,
+          title: Text(editing ? 'تعديل الذكرى' : 'إضافة ذكرى خاصة'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleController,
+                  maxLength: 120,
+                  decoration: inputDecoration('عنوان الذكرى (اختياري)', Icons.title),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: contentController,
+                  autofocus: true,
+                  maxLength: 10000,
+                  minLines: 4,
+                  maxLines: 8,
+                  decoration: inputDecoration('اكتب ما تريد الاحتفاظ به', Icons.edit_note),
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final result = await FilePicker.platform.pickFiles(
+                      type: FileType.image,
+                      allowMultiple: false,
+                      withData: true,
+                    );
+                    if (result == null || result.files.isEmpty || !dialogContext.mounted) return;
+                    final file = result.files.single;
+                    final extension = (file.extension ?? '').toLowerCase();
+                    final contentType = switch (extension) {
+                      'jpg' || 'jpeg' => 'image/jpeg',
+                      'png' => 'image/png',
+                      'webp' => 'image/webp',
+                      _ => '',
+                    };
+                    final bytes = file.bytes;
+                    if (contentType.isEmpty || bytes == null || bytes.isEmpty || bytes.length > 4 * 1024 * 1024) {
+                      showMsg(dialogContext, 'اختر صورة JPG أو PNG أو WebP لا يتجاوز حجمها 4 ميجابايت.');
+                      return;
                     }
-                  });
-                }
-                if (dialogContext.mounted) Navigator.pop(dialogContext);
-                if (mounted) showMsg(context, editing ? 'تم تحديث الذكرى.' : 'تم حفظ الذكرى بشكل خاص.');
-              } catch (e) {
-                if (dialogContext.mounted) showMsg(dialogContext, cleanError(e));
-              }
-            },
-            child: const Text('حفظ'),
+                    setDialogState(() {
+                      photoBytes = bytes;
+                      photoFileName = file.name;
+                      photoContentType = contentType;
+                    });
+                  },
+                  icon: const Icon(Icons.add_photo_alternate_outlined),
+                  label: Text(photoFileName ?? 'إرفاق صورة خاصة'),
+                ),
+                if (photoBytes != null) ...[
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.memory(
+                      Uint8List.fromList(photoBytes!),
+                      height: 130,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => setDialogState(() {
+                      photoBytes = null;
+                      photoFileName = null;
+                      photoContentType = null;
+                    }),
+                    icon: const Icon(Icons.close),
+                    label: const Text('إزالة الصورة المختارة'),
+                  ),
+                ],
+                const Align(
+                  alignment: Alignment.centerRight,
+                  child: Text('لا يراها سواك', style: TextStyle(color: gold, fontSize: 12)),
+                ),
+              ],
+            ),
           ),
-        ],
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
+            FilledButton(
+              onPressed: () async {
+                final content = contentController.text.trim();
+                final title = titleController.text.trim();
+                final effectiveTitle = title.isEmpty && content.isEmpty && photoBytes != null
+                    ? 'صورة محفوظة'
+                    : title;
+                if ((content.isEmpty && effectiveTitle.isEmpty) ||
+                    content.length > 10000 || effectiveTitle.length > 120) {
+                  showMsg(dialogContext, 'أضف عنوانًا أو محتوى أو صورة للذكرى.');
+                  return;
+                }
+                Map<String, dynamic>? saved;
+                try {
+                  saved = editing
+                      ? await Api.updatePrivateMemory(
+                          id: field(memory, ['id']),
+                          title: effectiveTitle,
+                          content: content,
+                        )
+                      : await Api.savePrivateMemory(
+                          title: effectiveTitle,
+                          content: content,
+                          sourceType: sourceType,
+                        );
+                  if (photoBytes != null && photoContentType != null) {
+                    await Api.uploadPrivateMemoryPhoto(
+                      memoryId: field(saved, ['id']),
+                      bytes: photoBytes!,
+                      fileName: photoFileName ?? 'memory-photo',
+                      contentType: photoContentType!,
+                    );
+                  }
+                  final loaded = await Api.privateMemories();
+                  if (mounted) setState(() => memories = loaded);
+                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                  if (pageContext.mounted) {
+                    showMsg(pageContext, editing ? 'تم تحديث الذكرى.' : 'تم حفظ الذكرى بشكل خاص.');
+                  }
+                } catch (e) {
+                  if (saved != null) {
+                    try {
+                      final loaded = await Api.privateMemories();
+                      if (mounted) setState(() => memories = loaded);
+                    } catch (_) {}
+                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                    if (pageContext.mounted) {
+                      showMsg(pageContext, 'حُفظت الذكرى، لكن تعذّر إكمال الصورة: ${cleanError(e)}');
+                    }
+                  } else if (dialogContext.mounted) {
+                    showMsg(dialogContext, cleanError(e));
+                  }
+                }
+              },
+              child: const Text('حفظ'),
+            ),
+          ],
+        ),
       ),
     );
     titleController.dispose();
