@@ -327,6 +327,46 @@ class SirajApp extends StatelessWidget {
               surface: palette.surface,
               onPrimary: palette.onPrimary,
               onSecondary: palette.onSecondary,
+              onSurface: palette.text,
+              outline: palette.border,
+            ),
+            textTheme: ThemeData.dark().textTheme.apply(
+              bodyColor: palette.text,
+              displayColor: palette.text,
+            ),
+            dividerColor: palette.border,
+            dividerTheme: DividerThemeData(color: palette.border, thickness: 1),
+            listTileTheme: ListTileThemeData(
+              iconColor: palette.primary,
+              textColor: palette.text,
+              tileColor: Colors.transparent,
+            ),
+            textSelectionTheme: TextSelectionThemeData(
+              cursorColor: palette.primary,
+              selectionColor: palette.primary.withValues(alpha: .28),
+              selectionHandleColor: palette.primary,
+            ),
+            checkboxTheme: CheckboxThemeData(
+              fillColor: WidgetStateProperty.resolveWith((states) =>
+                states.contains(WidgetState.selected) ? palette.primary : Colors.transparent),
+              checkColor: WidgetStateProperty.all(palette.onPrimary),
+              side: BorderSide(color: palette.border),
+            ),
+            radioTheme: RadioThemeData(
+              fillColor: WidgetStateProperty.resolveWith((states) =>
+                states.contains(WidgetState.selected) ? palette.primary : palette.mutedText),
+            ),
+            switchTheme: SwitchThemeData(
+              thumbColor: WidgetStateProperty.resolveWith((states) =>
+                states.contains(WidgetState.selected) ? palette.onPrimary : palette.mutedText),
+              trackColor: WidgetStateProperty.resolveWith((states) =>
+                states.contains(WidgetState.selected) ? palette.primary : palette.border),
+            ),
+            sliderTheme: SliderThemeData(
+              activeTrackColor: palette.primary,
+              inactiveTrackColor: palette.border,
+              thumbColor: palette.primary,
+              overlayColor: palette.primary.withValues(alpha: .16),
             ),
             iconTheme: IconThemeData(color: palette.primary),
             progressIndicatorTheme: ProgressIndicatorThemeData(color: palette.primary),
@@ -346,10 +386,16 @@ class SirajApp extends StatelessWidget {
             inputDecorationTheme: InputDecorationTheme(
               filled: true,
               fillColor: palette.surface,
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: palette.border),
+              ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
                 borderSide: BorderSide(color: palette.primary, width: 1.5),
               ),
+              labelStyle: TextStyle(color: palette.mutedText),
+              hintStyle: TextStyle(color: palette.mutedText),
             ),
             filledButtonTheme: FilledButtonThemeData(
               style: FilledButton.styleFrom(
