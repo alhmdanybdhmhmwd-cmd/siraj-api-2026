@@ -87,6 +87,6 @@
 - لا يملك الإعداد Routes أو Cron، ولا يرتبط بقاعدة أو سلة الإنتاج. لا توجد ترحيلات D1 مكررة ولا جدولة تنظيف مزدوجة.
 - أضيف workflow يدوي فقط: .github/workflows/barq-preview-fallback-deploy.yml. لا ينشر إلا عند اختيار deploy_preview_fallback=true، ويتحقق من الأسرار ومن فصل موارد Preview عن Production قبل النشر، ثم يختبر /health/live و/health/ready.
 - نُسخت ملفات الإعداد والـworkflow إلى main حتى يظهر خيار التشغيل اليدوي في GitHub Actions، مع بقاء التنفيذ مشروطاً بموافقة صريحة داخل workflow.
-- أضيفت اختبارات عقد تمنع ربط Worker الاحتياطي بموارد الإنتاج أو تشغيله تلقائياً. Backend CI على commit 4d4bbb5b36499ece4d310484584dd093798c8b6d قيد التشغيل وقت تحديث التقرير؛ لا نسجل نجاحاً قبل ظهور النتيجة.
+- أضيفت اختبارات عقد تمنع ربط Worker الاحتياطي بموارد الإنتاج أو تشغيله تلقائياً. Backend CI نجح على commit 4d4bbb5b36499ece4d310484584dd093798c8b6d: 224/224 اختباراً دون فشل، وتكرر النجاح في run [44947501727](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026/actions/runs/44947501727).
 - هذا Worker احتياطي داخل Cloudflare نفسه، وليس مزوداً مستقلاً. يفيد في اختبار تعطل/خلل Worker الأساسي فقط، ولا يعالج حجب Cloudflare أو workers.dev بالكامل. ما زال يلزم مزود مستقل فعلي واختبار من اليمن دون VPN.
 - لم يتم نشر Worker الاحتياطي بعد، ولم يتغير Vercel أو DNS أو Production.
