@@ -2,6 +2,12 @@
 -- This migration is intentionally data-scoped: only media_access rows referenced by
 -- private/group message attachment payloads are made permanent. Status media keeps
 -- its own expiry policy, and unrelated expiration records are left untouched.
+CREATE TABLE IF NOT EXISTS media_expirations (
+  object_key TEXT PRIMARY KEY,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS media_access (
   object_key TEXT PRIMARY KEY,
   owner_id TEXT NOT NULL,
