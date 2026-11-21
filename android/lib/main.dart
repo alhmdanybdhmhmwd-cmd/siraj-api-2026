@@ -7005,7 +7005,7 @@ class _ChatPageState extends State<ChatPage> {
                                         ]),
                                       ),
                                     if (m['is_ephemeral'] == true)
-                                      const Padding(
+                                      Padding(
                                         padding: EdgeInsets.only(bottom: 5),
                                         child: Row(mainAxisSize: MainAxisSize.min, children: [
                                           Icon(Icons.timer_outlined, size: 13),
@@ -7122,7 +7122,7 @@ class _ChatPageState extends State<ChatPage> {
                                       ],
                                     ),
                                     if (m['is_pinned'] == true)
-                                      const Padding(
+                                      Padding(
                                         padding: EdgeInsets.only(top: 4),
                                         child: Row(mainAxisSize: MainAxisSize.min, children: [
                                           Icon(Icons.push_pin, size: 12),
@@ -8220,7 +8220,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
                             ],
                           )),
                           if (m['is_pinned'] == true)
-                            const Padding(
+                            Padding(
                               padding: EdgeInsets.only(top: 4),
                               child: Row(mainAxisSize: MainAxisSize.min, children: [
                                 Icon(Icons.push_pin, size: 12),
