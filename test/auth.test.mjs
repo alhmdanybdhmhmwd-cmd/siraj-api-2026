@@ -3271,7 +3271,19 @@ test("private memory creation accepts a title-only photo note and rejects unsupp
   assert.equal(saved.memory.content, "");
   assert.equal(inserts.length, 1);
   assert.equal(inserts[0][1], "owner-1");
-  const invalid = await create({ title: "Invalid", content: "text", sourceType: "admin" });
-  assert.equal(invalid.status, 400);
+  const invalidType = await create({ title: "Invalid", content: "text", sourceType: "admin" });
+  assert.equal(invalidType.status, 400);
+  const empty = await create({ title: "  ", content: "  " });
+  assert.equal(empty.status, 400);
+  const longTitle = await create({ title: "t".repeat(121), content: "" });
+  assert.equal(longTitle.status, 400);
+  const longContent = await create({ title: "", content: "c".repeat(10001) });
+  assert.equal(longContent.status, 400);
   assert.equal(inserts.length, 1);
+
+  const savedMessage = await create({ title: "Saved chat", content: "Copied message", sourceType: "message" });
+  assert.equal(savedMessage.status, 201);
+  assert.equal(inserts.length, 2);
+  assert.equal(inserts[1][1], "owner-1");
+  assert.equal(inserts[1][4], "message");
 });
