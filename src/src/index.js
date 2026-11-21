@@ -1435,6 +1435,7 @@ export default {
       // Directional user blocks; shared group membership and group messages remain unchanged.
       if (path === "/api/blocks" || path.startsWith("/api/blocks/") ||
           path === "/api/messages" || path === "/api/media" || path === "/api/ephemeral-messages" ||
+          path === "/api/users/search" || path === "/api/friends" ||
           path.startsWith("/api/profile/photo/") || path === "/api/statuses") {
         await env.DB.prepare(`
           CREATE TABLE IF NOT EXISTS blocked_users (
@@ -2590,8 +2591,13 @@ export default {
            WHERE id != ?
              AND username LIKE ?
              AND COALESCE((SELECT searchable FROM user_privacy WHERE user_id = users.id), 1) = 1
+             AND NOT EXISTS (
+               SELECT 1 FROM blocked_users b
+               WHERE (b.blocker_id = ? AND b.blocked_id = users.id)
+                  OR (b.blocker_id = users.id AND b.blocked_id = ?)
+             )
            LIMIT 30`
-        ).bind(currentUser.sub, "%" + q + "%").all();
+        ).bind(currentUser.sub, "%" + q + "%", currentUser.sub, currentUser.sub).all();
         for (const candidate of usernameMatches.results || []) byId.set(candidate.id, candidate);
 
         // Phone lookup uses normalized digits so a Yemen local number can find
@@ -2743,6 +2749,11 @@ export default {
            JOIN users u ON u.id = f.friend_id
            LEFT JOIN profile_photos p ON p.user_id = u.id
            WHERE f.user_id = ?
+             AND NOT EXISTS (
+               SELECT 1 FROM blocked_users b
+               WHERE (b.blocker_id = f.user_id AND b.blocked_id = f.friend_id)
+                  OR (b.blocker_id = f.friend_id AND b.blocked_id = f.user_id)
+             )
            ORDER BY u.display_name`
         ).bind(currentUser.sub).all();
 
