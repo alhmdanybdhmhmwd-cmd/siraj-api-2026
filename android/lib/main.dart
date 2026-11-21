@@ -613,6 +613,16 @@ class SirajApp extends StatelessWidget {
 bool barqRealtimeCanConnect({required String? authToken, required bool appResumed, required String socketUrl}) =>
     appResumed && authToken != null && authToken.isNotEmpty && socketUrl.trim().isNotEmpty;
 
+bool barqRealtimeMessageMatchesConversation(
+  Map<String, dynamic> event,
+  String conversationUserId,
+) {
+  if (conversationUserId.isEmpty || event['type'] != 'message') return false;
+  final sender = event['senderId']?.toString();
+  final receiver = event['receiverId']?.toString();
+  return sender == conversationUserId || receiver == conversationUserId;
+}
+
 /// اتصال لحظي اختياري؛ REST يبقى المصدر الدائم للرسائل.
 class SirajRealtime {
   SirajRealtime._();
@@ -6988,10 +6998,7 @@ class _ChatPageState extends State<ChatPage> {
       }
     });
     realtimeSubscription = SirajRealtime.instance.events.listen((event) {
-      if (event['type'] != 'message') return;
-      final sender = event['senderId']?.toString();
-      final receiver = event['receiverId']?.toString();
-      if (sender == friendId || receiver == friendId) {
+      if (barqRealtimeMessageMatchesConversation(event, friendId)) {
         loadMessages(silent: true);
       }
     });
