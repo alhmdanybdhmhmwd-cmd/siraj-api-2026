@@ -102,13 +102,15 @@ test("group and SPARK categories use their own titles, data types and channels",
 
   const spark = makeHarness();
   await sendBarqPushNotification(spark.env, "r", "s", "Sender", "ignored body", {
-    category: "statuses"
+    category: "statuses",
+    statusId: "spark-status-9"
   }, spark.dependencies);
   const sparkPayload = JSON.parse(spark.calls.find(call => call.kind === "fetch" && String(call.url).includes("messages:send")).init.body).message;
   assert.equal(sparkPayload.notification.title, "SPARK جديد من Sender");
   assert.equal(sparkPayload.notification.body, "شارك لحظة جديدة في SPARK");
   assert.equal(sparkPayload.android.notification.channel_id, "barq_statuses");
   assert.equal(sparkPayload.data.type, "status_update");
+  assert.equal(sparkPayload.data.statusId, "spark-status-9");
 });
 
 test("invalid FCM registration is deleted without logging it as a normal send failure", async () => {
