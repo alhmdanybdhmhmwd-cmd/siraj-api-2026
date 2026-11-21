@@ -881,4 +881,21 @@ void main() {
     expect(blue.surface, const Color(0xFF171717));
   });
 
+  test('FCM token normalization trims valid tokens and rejects invalid values', () {
+    expect(normalizeBarqFcmToken('  fcm-token-123  '), 'fcm-token-123');
+    expect(normalizeBarqFcmToken(null), isNull);
+    expect(normalizeBarqFcmToken(''), isNull);
+    expect(normalizeBarqFcmToken('   '), isNull);
+    expect(normalizeBarqFcmToken('token with spaces'), isNull);
+    expect(normalizeBarqFcmToken(List.filled(4097, 'x').join()), isNull);
+    expect(normalizeBarqFcmToken(List.filled(4096, 'x').join()), hasLength(4096));
+  });
+
+  test('FCM registration requires authorized or provisional notification permission', () {
+    expect(barqCanRegisterFcmToken(AuthorizationStatus.authorized), isTrue);
+    expect(barqCanRegisterFcmToken(AuthorizationStatus.provisional), isTrue);
+    expect(barqCanRegisterFcmToken(AuthorizationStatus.denied), isFalse);
+    expect(barqCanRegisterFcmToken(AuthorizationStatus.notDetermined), isFalse);
+  });
+
 }
