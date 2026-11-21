@@ -9,6 +9,9 @@ if (!/^https:\/\/[a-z0-9.-]+\.workers\.dev$/i.test(base)) {
   throw new Error("BARQ_PREVIEW_URL must target the isolated workers.dev Preview host");
 }
 
+if (process.env.BARQ_PREVIEW_MEDIA_CREDENTIALS_CONFIGURED !== "true") {
+  console.log("Preview media integration skipped: Preview-only Tigris credentials are not configured.");
+} else {
 async function request(path, { method = "GET", token, body, headers = {}, expected = 200 } = {}) {
   const response = await fetch(new URL(path, base), {
     method,
@@ -111,4 +114,6 @@ assert.equal(retry.alreadyCompleted, true, "completion retry must be idempotent"
 
 console.log("Preview media integration passed: 5 MiB+17 upload via 1 MiB chunks, multipart completion, exact SHA-256 readback, HTTP Range, recipient authorization, and completion retry.");
 
+
+}
 }
