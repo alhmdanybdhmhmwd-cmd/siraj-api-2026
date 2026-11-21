@@ -42,6 +42,31 @@ const String mediaWorkerBase = String.fromEnvironment(
   defaultValue: 'https://siraj-api.alhmdanybdhmhmwd.workers.dev',
 );
 const int maxAttachmentBytes = 60 * 1024 * 1024;
+
+String? barqSparkMediaContentType(String extension) {
+  switch (extension.trim().toLowerCase().replaceFirst(RegExp(r'^\\.'), '')) {
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'png':
+      return 'image/png';
+    case 'webp':
+      return 'image/webp';
+    case 'gif':
+      return 'image/gif';
+    case 'mp4':
+      return 'video/mp4';
+    case 'webm':
+      return 'video/webm';
+    case 'mov':
+      return 'video/quicktime';
+    default:
+      return null;
+  }
+}
+
+bool isBarqSparkMediaSizeAllowed(int byteLength) =>
+    byteLength > 0 && byteLength <= maxAttachmentBytes;
 const int maxTranscriptionBytes = 2 * 1024 * 1024;
 
 bool isBarqTranscriptionSizeAllowed(int byteLength) =>
@@ -2967,22 +2992,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       showMsg(pageContext, 'يمكن نشر 10 وسائط كحد أقصى في اللحظة الواحدة.');
       return;
     }
-    const mimeTypes = <String, String>{
-      'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
-      'webp': 'image/webp', 'gif': 'image/gif',
-      'mp4': 'video/mp4', 'webm': 'video/webm', 'mov': 'video/quicktime',
-    };
     final prepared = <Map<String, dynamic>>[];
     String? preparationError;
     for (final file in picked.files) {
       final extension = (file.extension ?? '').toLowerCase();
-      final contentType = mimeTypes[extension];
+      final contentType = barqSparkMediaContentType(extension);
       if (contentType == null) {
         preparationError = 'الملف ${file.name} ليس بصيغة صورة أو فيديو مدعومة.';
         break;
       }
       final bytes = file.bytes ?? (file.path == null ? null : await File(file.path!).readAsBytes());
-      if (bytes == null || bytes.isEmpty || bytes.length > maxAttachmentBytes) {
+      if (bytes == null || !isBarqSparkMediaSizeAllowed(bytes.length)) {
         preparationError = 'تعذر قراءة ${file.name} أو تجاوز حجمه 60 ميجابايت.';
         break;
       }
