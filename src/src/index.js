@@ -15,6 +15,25 @@ const json = (data, status = 200) =>
     headers: corsHeaders
   });
 
+const SPARK_STATUS_BACKGROUNDS = new Set(["electric_blue", "violet", "gold", "midnight"]);
+const SPARK_STATUS_TEXT_COLORS = new Set(["white", "black", "gold"]);
+const SPARK_STATUS_FONTS = new Set(["modern", "classic", "mono"]);
+
+async function ensureSparkStatusStyleColumns(env) {
+  const columns = await env.DB.prepare("PRAGMA table_info(status_posts)").all();
+  const names = new Set((columns.results || []).map(column => column.name));
+  const additions = [
+    ["background_key", "TEXT NOT NULL DEFAULT 'midnight'"],
+    ["text_color_key", "TEXT NOT NULL DEFAULT 'white'"],
+    ["font_key", "TEXT NOT NULL DEFAULT 'modern'"]
+  ];
+  for (const [name, definition] of additions) {
+    if (!names.has(name)) {
+      await env.DB.prepare(`ALTER TABLE status_posts ADD COLUMN ${name} ${definition}`).run();
+    }
+  }
+}
+
 const encoder = new TextEncoder();
 
 function base64url(bytes) {
@@ -1871,9 +1890,17 @@ export default {
         }
         const body = await readJsonRequestLimited(request);
         const content = String(body.content || "").trim();
+        const backgroundKey = body.backgroundKey === undefined ? "midnight" : body.backgroundKey;
+        const textColorKey = body.textColorKey === undefined ? "white" : body.textColorKey;
+        const fontKey = body.fontKey === undefined ? "modern" : body.fontKey;
 
         if (!content || content.length > 1000) {
           return json({ error: "Status text must be between 1 and 1000 characters" }, 400);
+        }
+        if (typeof backgroundKey !== "string" || !SPARK_STATUS_BACKGROUNDS.has(backgroundKey) ||
+            typeof textColorKey !== "string" || !SPARK_STATUS_TEXT_COLORS.has(textColorKey) ||
+            typeof fontKey !== "string" || !SPARK_STATUS_FONTS.has(fontKey)) {
+          return json({ error: "Unsupported SPARK text style" }, 400);
         }
 
         await env.DB.prepare(`
@@ -1883,15 +1910,20 @@ export default {
             content TEXT NOT NULL,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             expires_at TEXT NOT NULL,
+            background_key TEXT NOT NULL DEFAULT 'midnight',
+            text_color_key TEXT NOT NULL DEFAULT 'white',
+            font_key TEXT NOT NULL DEFAULT 'modern',
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
           )
         `).run();
+        await ensureSparkStatusStyleColumns(env);
 
         const id = crypto.randomUUID();
         await env.DB.prepare(
-          `INSERT INTO status_posts (id, user_id, content, expires_at)
-           VALUES (?, ?, ?, datetime('now', '+24 hours'))`
-        ).bind(id, currentUser.sub, content).run();
+          `INSERT INTO status_posts
+             (id, user_id, content, expires_at, background_key, text_color_key, font_key)
+           VALUES (?, ?, ?, datetime('now', '+24 hours'), ?, ?, ?)`
+        ).bind(id, currentUser.sub, content, backgroundKey, textColorKey, fontKey).run();
 
         // Status persistence is authoritative; push failures must not undo it.
         try {
@@ -1928,6 +1960,7 @@ export default {
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
           )
         `).run();
+        await ensureSparkStatusStyleColumns(env);
 
         await ensureProfilePhotos(env);
         // A first-ever SPARK feed request must not query status_views before
@@ -1945,6 +1978,9 @@ export default {
         const result = await env.DB.prepare(
           `SELECT s.id, s.user_id AS userId, u.username,
                   u.display_name AS displayName, s.content,
+                  s.background_key AS backgroundKey,
+                  s.text_color_key AS textColorKey,
+                  s.font_key AS fontKey,
                   s.created_at AS createdAt, s.expires_at AS expiresAt,
                   CASE WHEN pp.user_id IS NOT NULL
                     THEN '/api/profile/photo/' || u.id ELSE NULL END AS photoUrl,

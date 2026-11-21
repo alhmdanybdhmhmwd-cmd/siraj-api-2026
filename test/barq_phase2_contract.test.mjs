@@ -429,6 +429,40 @@ test("SPARK stories can group multiple media objects under one owner-controlled 
   assert.ok(flutterApp.includes("for (final item in prepared)"));
 });
 
+test("SPARK text statuses accept only allowlisted style keys and return persisted style fields", () => {
+  assert.ok(worker.includes('const SPARK_STATUS_BACKGROUNDS = new Set(["electric_blue", "violet", "gold", "midnight"])'));
+  assert.ok(worker.includes('const SPARK_STATUS_TEXT_COLORS = new Set(["white", "black", "gold"])'));
+  assert.ok(worker.includes('const SPARK_STATUS_FONTS = new Set(["modern", "classic", "mono"])'));
+  assert.ok(worker.includes('typeof backgroundKey !== "string" || !SPARK_STATUS_BACKGROUNDS.has(backgroundKey)'));
+  assert.ok(worker.includes('typeof textColorKey !== "string" || !SPARK_STATUS_TEXT_COLORS.has(textColorKey)'));
+  assert.ok(worker.includes('typeof fontKey !== "string" || !SPARK_STATUS_FONTS.has(fontKey)'));
+  assert.ok(worker.includes("ensureSparkStatusStyleColumns(env)"));
+  assert.ok(worker.includes("s.background_key AS backgroundKey"));
+  assert.ok(worker.includes("s.text_color_key AS textColorKey"));
+  assert.ok(worker.includes("s.font_key AS fontKey"));
+  assert.ok(worker.includes("DEFAULT 'midnight'"));
+  assert.ok(worker.includes("DEFAULT 'white'"));
+  assert.ok(worker.includes("DEFAULT 'modern'"));
+  assert.ok(flutterApp.includes("backgroundKey: backgroundKey"));
+  assert.ok(flutterApp.includes("textColorKey: textColorKey"));
+  assert.ok(flutterApp.includes("fontKey: fontKey"));
+  assert.ok(flutterApp.includes("معاينة لحظتك"));
+  assert.ok(flutterApp.includes("backgroundKey: field(status"));
+});
+
+test("SPARK text formatting is applied only to text-only status viewing, not media presentation", () => {
+  const viewerStart = flutterApp.indexOf("class SparkMediaViewer");
+  const viewerEnd = flutterApp.indexOf("class _SparkAudioReplyTile", viewerStart);
+  const viewer = flutterApp.slice(viewerStart, viewerEnd);
+  assert.ok(viewer.includes("widget.media.isEmpty"));
+  assert.ok(viewer.includes("widget.backgroundKey"));
+  assert.ok(viewer.includes("widget.textColorKey"));
+  assert.ok(viewer.includes("widget.fontKey"));
+  const mediaBranch = viewer.slice(viewer.indexOf(": PageView.builder"), viewer.indexOf("          ),\n          Container", viewer.indexOf(": PageView.builder")));
+  assert.ok(!mediaBranch.includes("widget.backgroundKey"));
+  assert.ok(!mediaBranch.includes("widget.fontKey"));
+});
+
 test("SPARK voice replies are private, limited, tied to status expiry, and cleaned from Tigris", () => {
   const start = worker.indexOf("const sparkAudioReplyMatch");
   const end = worker.indexOf("// SPARK replies and reactions", start);

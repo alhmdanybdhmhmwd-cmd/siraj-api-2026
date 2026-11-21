@@ -600,8 +600,18 @@ class Api {
   static Future<List<Map<String, dynamic>>> statuses() async =>
       _list((await request('GET', '/api/statuses'))['statuses']);
 
-  static Future<void> publishStatus(String content) async {
-    await request('POST', '/api/statuses', body: {'content': content});
+  static Future<void> publishStatus(
+    String content, {
+    String backgroundKey = 'midnight',
+    String textColorKey = 'white',
+    String fontKey = 'modern',
+  }) async {
+    await request('POST', '/api/statuses', body: {
+      'content': content,
+      'backgroundKey': backgroundKey,
+      'textColorKey': textColorKey,
+      'fontKey': fontKey,
+    });
   }
 
   static Future<String> publishSparkMedia({
@@ -2828,37 +2838,109 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<void> publishStatusDialog() async {
     final controller = TextEditingController();
+    String backgroundKey = 'midnight';
+    String textColorKey = 'white';
+    String fontKey = 'modern';
+    const backgrounds = <String, Color>{
+      'electric_blue': Color(0xFF0757D5),
+      'violet': Color(0xFF43206F),
+      'gold': Color(0xFFB98B2F),
+      'midnight': Color(0xFF101827),
+    };
+    const backgroundLabels = <String, String>{
+      'electric_blue': 'أزرق برق',
+      'violet': 'بنفسجي',
+      'gold': 'ذهبي',
+      'midnight': 'داكن',
+    };
+    const textColors = <String, Color>{
+      'white': Colors.white, 'black': Colors.black, 'gold': Color(0xFFFFD166),
+    };
+    const textColorLabels = <String, String>{
+      'white': 'أبيض', 'black': 'أسود', 'gold': 'ذهبي',
+    };
+    const fonts = <String, String>{
+      'modern': 'حديث', 'classic': 'كلاسيكي', 'mono': 'تقني',
+    };
+    Color previewTextColor() => textColors[textColorKey]!;
+    String? previewFontFamily() => switch (fontKey) {
+      'classic' => 'serif',
+      'mono' => 'monospace',
+      _ => null,
+    };
     await showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: panel,
-        title: const Text('النشر في SPARK'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 1000,
-          maxLines: 5,
-          decoration: inputDecoration('ماذا تريد أن تشارك؟', Icons.edit_note),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
-            onPressed: () async {
-              final content = controller.text.trim();
-              if (content.isEmpty) return;
-              try {
-                await Api.publishStatus(content);
-                if (dialogContext.mounted) Navigator.pop(dialogContext);
-                await refreshAll();
-                if (mounted) showMsg(context, 'نُشرت حالتك لمدة 24 ساعة.');
-              } catch (e) {
-                if (mounted) showMsg(context, cleanError(e));
-              }
-            },
-            child: const Text('نشر في SPARK'),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: panel,
+          title: const Text('النشر في SPARK'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Container(
+                constraints: const BoxConstraints(minHeight: 116),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(color: backgrounds[backgroundKey], borderRadius: BorderRadius.circular(14)),
+                alignment: Alignment.center,
+                child: Text(
+                  controller.text.isEmpty ? 'معاينة لحظتك' : controller.text,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: previewTextColor(), fontSize: 20, fontFamily: previewFontFamily(), fontWeight: FontWeight.w600),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                maxLength: 1000,
+                maxLines: 4,
+                onChanged: (_) => setDialogState(() {}),
+                decoration: inputDecoration('ماذا تريد أن تشارك؟', Icons.edit_note),
+              ),
+              const SizedBox(height: 8),
+              const Text('الخلفية', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
+              Wrap(spacing: 7, runSpacing: 4, children: backgrounds.entries.map((entry) => ChoiceChip(
+                label: Text(backgroundLabels[entry.key]!),
+                selected: backgroundKey == entry.key,
+                selectedColor: entry.value,
+                onSelected: (_) => setDialogState(() => backgroundKey = entry.key),
+              )).toList()),
+              const SizedBox(height: 6),
+              const Text('لون النص', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
+              Wrap(spacing: 7, children: textColors.entries.map((entry) => ChoiceChip(
+                label: Text(textColorLabels[entry.key]!),
+                selected: textColorKey == entry.key,
+                selectedColor: entry.value.withValues(alpha: .28),
+                onSelected: (_) => setDialogState(() => textColorKey = entry.key),
+              )).toList()),
+              const SizedBox(height: 6),
+              const Text('الخط', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
+              Wrap(spacing: 7, children: fonts.entries.map((entry) => ChoiceChip(
+                label: Text(entry.value),
+                selected: fontKey == entry.key,
+                onSelected: (_) => setDialogState(() => fontKey = entry.key),
+              )).toList()),
+            ]),
           ),
-        ],
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+              onPressed: () async {
+                final content = controller.text.trim();
+                if (content.isEmpty) return;
+                try {
+                  await Api.publishStatus(content, backgroundKey: backgroundKey, textColorKey: textColorKey, fontKey: fontKey);
+                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                  await refreshAll();
+                  if (mounted) showMsg(context, 'نُشرت حالتك لمدة 24 ساعة.');
+                } catch (e) {
+                  if (mounted) showMsg(context, cleanError(e));
+                }
+              },
+              child: const Text('نشر في SPARK'),
+            ),
+          ],
+        ),
       ),
     );
     controller.dispose();
@@ -3014,6 +3096,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           media: media,
           author: field(status, ['displayName', 'display_name', 'username'], 'مستخدم برق'),
           caption: field(status, ['content']),
+          backgroundKey: field(status, ['backgroundKey', 'background_key'], 'midnight'),
+          textColorKey: field(status, ['textColorKey', 'text_color_key'], 'white'),
+          fontKey: field(status, ['fontKey', 'font_key'], 'modern'),
         ),
       ),
     );
@@ -5969,7 +6054,13 @@ class SparkMediaViewer extends StatefulWidget {
   final List<Map<String, dynamic>> media;
   final String author;
   final String caption;
-  const SparkMediaViewer({super.key, required this.statusId, required this.media, required this.author, required this.caption});
+  final String backgroundKey;
+  final String textColorKey;
+  final String fontKey;
+  const SparkMediaViewer({
+    super.key, required this.statusId, required this.media, required this.author, required this.caption,
+    this.backgroundKey = 'midnight', this.textColorKey = 'white', this.fontKey = 'modern',
+  });
 
   @override
   State<SparkMediaViewer> createState() => _SparkMediaViewerState();
@@ -6120,10 +6211,35 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
         child: Column(children: [
           Expanded(
             child: widget.media.isEmpty
-                ? Center(child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(widget.caption, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 22)),
-                  ))
+                ? Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(28),
+                    color: const <String, Color>{
+                      'electric_blue': Color(0xFF0757D5),
+                      'violet': Color(0xFF43206F),
+                      'gold': Color(0xFFB98B2F),
+                      'midnight': Color(0xFF101827),
+                    }[widget.backgroundKey] ?? const Color(0xFF101827),
+                    alignment: Alignment.center,
+                    child: SingleChildScrollView(
+                      child: Text(
+                        widget.caption,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: const <String, Color>{
+                            'white': Colors.white, 'black': Colors.black, 'gold': Color(0xFFFFD166),
+                          }[widget.textColorKey] ?? Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w600,
+                          fontFamily: switch (widget.fontKey) {
+                            'classic' => 'serif',
+                            'mono' => 'monospace',
+                            _ => null,
+                          },
+                        ),
+                      ),
+                    ),
+                  )
                 : PageView.builder(
                     itemCount: widget.media.length,
                     itemBuilder: (context, index) {
