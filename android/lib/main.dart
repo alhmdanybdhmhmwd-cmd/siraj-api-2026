@@ -3429,8 +3429,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       authToken: token,
       appResumed: true,
       socketUrl: SirajRealtime.socketUrl,
-    )) return;
-    unawaited(SirajRealtime.instance.start(token));
+    )) {
+      return;
+    }
+    unawaited(SirajRealtime.instance.start(token!));
   }
 
   @override
