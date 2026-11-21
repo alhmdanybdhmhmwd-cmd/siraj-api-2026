@@ -1,4 +1,5 @@
 import { AwsClient } from "aws4fetch";
+import { createAiProvider } from "./runtime_adapters.js";
 import { prepareConversationSummaryTranscript, buildConversationSummaryMessages, extractConversationSummaryText } from "./conversation_summary.js";
 import { handleResumableMediaUpload, cleanupExpiredUploadSessions } from "./media_multipart_routes.js";
 
@@ -793,7 +794,8 @@ export { phoneVariants, safeFileName, cleanupExpiredMedia, cleanupExpiredRateLim
 
 
 async function createConversationSummary(env, messages, conversationType) {
-  if (!env.AI || typeof env.AI.run !== "function") {
+  const ai = createAiProvider(env.AI);
+  if (!ai.isAvailable()) {
     return json({ error: "Conversation summaries are not configured" }, 503);
   }
   const transcript = prepareConversationSummaryTranscript(messages);
@@ -801,7 +803,7 @@ async function createConversationSummary(env, messages, conversationType) {
     return json({ error: "لا توجد رسائل نصية كافية لتلخيصها." }, 422);
   }
   try {
-    const result = await env.AI.run("@cf/qwen/qwen3.8-27b", {
+    const result = await ai.run("@cf/qwen/qwen3.8-27b", {
       messages: buildConversationSummaryMessages(transcript, conversationType),
       max_tokens: 380,
       temperature: 0.2
@@ -1451,7 +1453,8 @@ export default {
 
       // Explicitly requested speech transcription. Audio and transcript are never persisted.
       if (method === "POST" && path === "/api/transcribe") {
-        if (!env.AI || typeof env.AI.run !== "function") {
+        const ai = createAiProvider(env.AI);
+        if (!ai.isAvailable()) {
           return json({ error: "Speech transcription is not configured" }, 503);
         }
         const contentType = (request.headers.get("Content-Type") || "").split(";")[0].trim().toLowerCase();
@@ -1497,7 +1500,7 @@ export default {
         }
 
         try {
-          const result = await env.AI.run("@cf/openai/whisper", {
+          const result = await ai.run("@cf/openai/whisper", {
             audio: Array.from(new Uint8Array(audio))
           });
           const text = String(result?.text || "").trim();
