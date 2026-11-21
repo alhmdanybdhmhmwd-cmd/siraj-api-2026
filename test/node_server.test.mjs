@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createNodeApiServer, createNodeEnvironment } from "../node_server.mjs";
+import { createNodeApiServer, createNodeEnvironment, startNodeApiServer } from "../node_server.mjs";
 
 const silentLogger = { log() {}, error() {} };
 
@@ -80,4 +80,24 @@ test("standalone adapter preserves HEAD and OPTIONS behavior", async () => {
     assert.equal(options.status, 204);
   });
   assert.deepEqual(methods, ["HEAD", "OPTIONS"]);
+});
+
+
+test("standalone server refuses startup when its database readiness probe fails", async () => {
+  await assert.rejects(
+    () => startNodeApiServer({
+      env: { DB: { async healthCheck() { return false; } } },
+      disableScheduler: true,
+      logger: silentLogger
+    }),
+    /database readiness check failed/
+  );
+});
+
+test("standalone HTTP adapter can serve the real Worker liveness route", async () => {
+  await withServer(undefined, async base => {
+    const response = await fetch(base + "/health/live");
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { status: "alive", service: "barq-api" });
+  });
 });
