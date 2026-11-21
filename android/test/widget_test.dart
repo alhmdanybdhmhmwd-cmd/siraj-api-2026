@@ -21,6 +21,14 @@ void main() {
     expect(barqNearbyPermissionNamesForAndroidSdk(37), ['bluetoothAdvertise', 'bluetoothConnect', 'bluetoothScan', 'nearbyWifiDevices']);
   });
 
+  test('Nearby payload transfer treats failure and cancellation as failed', () {
+    expect(barqNearbyPayloadTransferFailed(PayloadStatus.FAILURE), isTrue);
+    expect(barqNearbyPayloadTransferFailed(PayloadStatus.CANCELED), isTrue);
+    expect(barqNearbyPayloadTransferFailed(PayloadStatus.SUCCESS), isFalse);
+    expect(barqNearbyPayloadTransferFailed(PayloadStatus.IN_PROGRESS), isFalse);
+    expect(barqNearbyPayloadTransferFailed(PayloadStatus.NONE), isFalse);
+  });
+
   test('Nearby outgoing text validates sender, contact, stable ID and body', () {
     const id = 'a1b2c3d4e5f60708a1b2c3d4e5f60708';
     const contacts = {'friend-1'};
