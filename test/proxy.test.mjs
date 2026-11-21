@@ -447,3 +447,65 @@ test("gateway does not replay non-idempotent POST requests to fallback", async (
     else process.env.VERCEL_ENV = previousEnvironment;
   }
 });
+
+test("gateway retries a network failure on GET through the configured fallback", async () => {
+  const originalFetch = globalThis.fetch;
+  const previousFallback = process.env.BARQ_API_FALLBACK_UPSTREAM;
+  const previousEnvironment = process.env.VERCEL_ENV;
+  const calls = [];
+  process.env.BARQ_API_FALLBACK_UPSTREAM = "https://barq-fallback.example";
+  delete process.env.VERCEL_ENV;
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    if (calls.length === 1) throw new Error("simulated DNS failure");
+    return new Response(JSON.stringify({ status: "alive", service: "barq-api" }), {
+      status: 200, headers: { "content-type": "application/json" }
+    });
+  };
+  try {
+    const res = makeResponse();
+    await handler(makeRequest({ url: "/health/live", method: "GET", chunks: [] }), res);
+    assert.equal(calls.length, 2);
+    assert.match(calls[1], /^https:\/\/barq-fallback\.example\//);
+    assert.equal(res.statusCode, 200);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousFallback === undefined) delete process.env.BARQ_API_FALLBACK_UPSTREAM;
+    else process.env.BARQ_API_FALLBACK_UPSTREAM = previousFallback;
+    if (previousEnvironment === undefined) delete process.env.VERCEL_ENV;
+    else process.env.VERCEL_ENV = previousEnvironment;
+  }
+});
+
+test("gateway retries a POST only when an idempotency key is supplied", async () => {
+  const originalFetch = globalThis.fetch;
+  const previousFallback = process.env.BARQ_API_FALLBACK_UPSTREAM;
+  const previousEnvironment = process.env.VERCEL_ENV;
+  const calls = [];
+  process.env.BARQ_API_FALLBACK_UPSTREAM = "https://barq-fallback.example";
+  delete process.env.VERCEL_ENV;
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    return new Response(calls.length === 1 ? "temporarily unavailable" : JSON.stringify({ ok: true }), {
+      status: calls.length === 1 ? 503 : 201,
+      headers: { "content-type": "application/json" }
+    });
+  };
+  try {
+    const res = makeResponse();
+    await handler(makeRequest({
+      url: "/api/media/uploads/session-1/complete",
+      method: "POST",
+      headers: { "x-idempotency-key": "complete-once-1" },
+      chunks: [Buffer.from("{}")]
+    }), res);
+    assert.equal(calls.length, 2);
+    assert.equal(res.statusCode, 201);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousFallback === undefined) delete process.env.BARQ_API_FALLBACK_UPSTREAM;
+    else process.env.BARQ_API_FALLBACK_UPSTREAM = previousFallback;
+    if (previousEnvironment === undefined) delete process.env.VERCEL_ENV;
+    else process.env.VERCEL_ENV = previousEnvironment;
+  }
+});
