@@ -571,6 +571,34 @@ test("recipient read schedules physical ephemeral deletion after the ten-second 
   }
 });
 
+test("sender viewing an ephemeral conversation does not mark outgoing messages as read", async () => {
+  const db = new FakeDB();
+  db.ephemeralRows = [{
+    id: "ephemeral-outgoing",
+    sender_id: user.id,
+    receiver_id: "friend-1",
+    body: "sent but not yet read",
+    created_at: Math.floor(Date.now() / 1000),
+    read_at: null,
+    delete_at: null
+  }];
+  const token = await worker.signToken(user, secret, 0);
+  const pending = [];
+  const response = await worker.default.fetch(new Request(
+    "https://api.example.test/api/ephemeral-messages?with=friend-1",
+    { headers: { Authorization: "Bearer " + token } }
+  ), { DB: db, JWT_SECRET: secret }, {
+    waitUntil(promise) { pending.push(promise); }
+  });
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.messages.length, 1);
+  assert.equal(payload.messages[0].read_at, null);
+  assert.equal(payload.messages[0].delete_at, null);
+  assert.equal(db.ephemeralRows[0].read_at, null);
+  assert.equal(pending.length, 0);
+});
+
 test("scheduled ephemeral cleanup removes rows at or before the expiry cutoff", async () => {
   const db = new FakeDB();
   db.expiredEphemeralCount = 3;
