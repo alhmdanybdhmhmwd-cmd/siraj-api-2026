@@ -1,5 +1,6 @@
 import { AwsClient } from "aws4fetch";
-import { createAiProvider, createDatabaseProvider, createS3ObjectStorageProvider, createObjectStorageUrl, createPushProvider, createBackgroundTaskScheduler, runScheduledTasks } from "./runtime_adapters.js";
+import { createAiProvider, createDatabaseProvider, createS3ObjectStorageProvider, createObjectStorageUrl, createBackgroundTaskScheduler, runScheduledTasks } from "./runtime_adapters.js";
+import { sendBarqPushNotification } from "./notification_service.js";
 import { prepareConversationSummaryTranscript, buildConversationSummaryMessages, extractConversationSummaryText } from "./conversation_summary.js";
 import { handleResumableMediaUpload, cleanupExpiredUploadSessions } from "./media_multipart_routes.js";
 
@@ -428,119 +429,7 @@ function safeFileName(value) {
 
 
 async function sendSirajPush(env, recipientId, senderId, senderName, messageText, options = {}) {
-  const category = ["groups", "statuses"].includes(options.category) ? options.category : "messages";
-  const pushType = category === "groups" ? "group_message"
-    : category === "statuses" ? "status_update" : "direct_message";
-  if (!env.FCM_SERVICE_ACCOUNT_JSON) return;
-  const pushProvider = createPushProvider(fetch);
-  try {
-    const account = JSON.parse(env.FCM_SERVICE_ACCOUNT_JSON);
-    const now = Math.floor(Date.now() / 1000);
-    const pem = String(account.private_key || "").replace(/\\n/g, "\n");
-    const keyBytes = Uint8Array.from(
-      atob(pem.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\\s/g, "")),
-      c => c.charCodeAt(0)
-    );
-    const signingKey = await crypto.subtle.importKey(
-      "pkcs8", keyBytes,
-      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-      false, ["sign"]
-    );
-    const assertionHeader = base64url(encoder.encode(JSON.stringify({ alg: "RS256", typ: "JWT" })));
-    const assertionPayload = base64url(encoder.encode(JSON.stringify({
-      iss: account.client_email,
-      scope: "https://www.googleapis.com/auth/firebase.messaging",
-      aud: account.token_uri || "https://oauth2.googleapis.com/token",
-      iat: now, exp: now + 3600
-    })));
-    const unsigned = assertionHeader + "." + assertionPayload;
-    const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", signingKey, encoder.encode(unsigned));
-    const assertion = unsigned + "." + base64url(new Uint8Array(signature));
-    const tokenResponse = await pushProvider.request(account.token_uri || "https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-        assertion
-      })
-    });
-    if (!tokenResponse.ok) throw new Error("FCM OAuth token request failed: " + tokenResponse.status);
-    const tokenData = await tokenResponse.json();
-    const projectId = account.project_id || env.FCM_PROJECT_ID;
-    if (!projectId || !tokenData.access_token) throw new Error("FCM project or access token missing");
-
-    await env.DB.prepare(`
-      CREATE TABLE IF NOT EXISTS notification_preferences (
-        user_id TEXT PRIMARY KEY,
-        messages INTEGER NOT NULL DEFAULT 1,
-        groups INTEGER NOT NULL DEFAULT 1,
-        statuses INTEGER NOT NULL DEFAULT 1,
-        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-      )
-    `).run();
-    const pref = await env.DB.prepare(
-      "SELECT " + category + " AS enabled FROM notification_preferences WHERE user_id = ?"
-    ).bind(recipientId).first();
-    if (pref && pref.enabled === 0) return;
-
-    await env.DB.prepare(`
-      CREATE TABLE IF NOT EXISTS device_tokens (
-        user_id TEXT NOT NULL,
-        fcm_token TEXT PRIMARY KEY,
-        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-      )
-    `).run();
-    const devices = await env.DB.prepare(
-      "SELECT fcm_token FROM device_tokens WHERE user_id = ?"
-    ).bind(recipientId).all();
-
-    const preview = String(messageText || "").slice(0, 120);
-    await Promise.all((devices.results || []).map(async device => {
-      const response = await pushProvider.request(
-        `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/messages:send`,
-        {
-          method: "POST",
-          headers: {
-            "Authorization": "Bearer " + tokenData.access_token,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            message: {
-              token: device.fcm_token,
-              notification: {
-                title: category === "groups"
-                  ? "رسالة في " + String(options.groupName || "مجموعة برق").slice(0, 65)
-                  : category === "statuses"
-                    ? "SPARK جديد من " + String(senderName || "مستخدم برق").slice(0, 80)
-                    : "رسالة من " + String(senderName || "مستخدم برق").slice(0, 80),
-                body: category === "statuses" ? "شارك لحظة جديدة في SPARK" : preview || "لديك رسالة جديدة"
-              },
-              data: {
-                type: pushType,
-                senderId: String(senderId || ""),
-                ...(category === "groups" ? { groupId: String(options.groupId || "") } : {})
-              },
-              android: { priority: "HIGH", notification: { channel_id: category === "groups" ? "barq_groups" : category === "statuses" ? "barq_statuses" : "barq_messages" } }
-            }
-          })
-        }
-      );
-      if (!response.ok) {
-        const detail = await response.clone().text().catch(() => "");
-        if ((response.status === 404 || response.status === 400) &&
-            /UNREGISTERED|INVALID_ARGUMENT/i.test(detail)) {
-          await env.DB.prepare("DELETE FROM device_tokens WHERE fcm_token = ?")
-            .bind(device.fcm_token).run();
-        } else {
-          console.error("FCM message send failed:", response.status, detail.slice(0, 300));
-        }
-      }
-    }));
-  } catch (error) {
-    console.error("Barq push delivery failed:", error);
-  }
+  return sendBarqPushNotification(env, recipientId, senderId, senderName, messageText, options);
 }
 
 
