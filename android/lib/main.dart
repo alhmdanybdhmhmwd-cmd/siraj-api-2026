@@ -1103,7 +1103,9 @@ class Api {
           lastError = Exception('تعذر رفع الجزء $chunkNumber (${response.statusCode}).');
         } catch (error) {
           lastError = error;
-          if (error is Exception && error.toString().contains('تعذر رفع الجزء')) rethrow;
+          if (response != null && response.statusCode >= 400 && response.statusCode < 500) {
+            rethrow;
+          }
         }
         if (attempt < 2) {
           await Future<void>.delayed(Duration(milliseconds: 400 * (attempt + 1)));
