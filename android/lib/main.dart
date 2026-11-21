@@ -1184,25 +1184,40 @@ class Api {
     }
   }
 
+  // Try each configured media gateway once. By default mediaWorkerBase and
+  // apiBase are identical, so retrying the same hostname would add delay without
+  // providing a real failover path.
+  static Future<http.Response> _getMediaResponse(
+    String attachmentId, {
+    Map<String, String> headers = const {},
+    Duration timeout = const Duration(minutes: 2),
+  }) async {
+    final bases = <String>{mediaWorkerBase, apiBase};
+    Object? lastError;
+    for (final base in bases) {
+      try {
+        final response = await http.get(
+          Uri.parse('$base/api/media/${Uri.encodeComponent(attachmentId)}'),
+          headers: headers,
+        ).timeout(timeout);
+        if (response.statusCode < 500) return response;
+        lastError = HttpException('Media gateway returned ${response.statusCode}');
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError ?? const HttpException('No media gateway is configured');
+  }
+
   /// يجلب المرفق الصوتي المصرح به ثم يرسله مباشرة إلى مسار التفريغ الصوتي.
   /// لا يُحفظ الملف الصوتي أو النص الناتج في جدول الرسائل العادي.
   static Future<String> transcribeAttachment(String attachmentId, {String? expectedContentType}) async {
     final requestHeaders = {if (token != null) 'Authorization': 'Bearer $token'};
-    http.Response audioResponse;
-    try {
-      audioResponse = await http.get(
-        Uri.parse('$mediaWorkerBase/api/media/${Uri.encodeComponent(attachmentId)}'),
-        headers: requestHeaders,
-      ).timeout(const Duration(minutes: 2));
-      if (audioResponse.statusCode >= 500) {
-        throw const HttpException('Media Worker unavailable');
-      }
-    } catch (_) {
-      audioResponse = await http.get(
-        Uri.parse('$apiBase/api/media/${Uri.encodeComponent(attachmentId)}'),
-        headers: requestHeaders,
-      ).timeout(const Duration(minutes: 2));
-    }
+    final audioResponse = await _getMediaResponse(
+      attachmentId,
+      headers: requestHeaders,
+      timeout: const Duration(minutes: 2),
+    );
     if (audioResponse.statusCode < 200 || audioResponse.statusCode >= 300) {
       throw Exception('تعذر جلب التسجيل الصوتي (${audioResponse.statusCode}).');
     }
@@ -1257,19 +1272,11 @@ class Api {
 
   static Future<Uint8List> fetchAttachmentBytes(String attachmentId) async {
     final headers = {if (token != null) 'Authorization': 'Bearer $token'};
-    http.Response response;
-    try {
-      response = await http.get(
-        Uri.parse('$mediaWorkerBase/api/media/${Uri.encodeComponent(attachmentId)}'),
-        headers: headers,
-      ).timeout(const Duration(minutes: 2));
-      if (response.statusCode >= 500) throw const HttpException('Media Worker unavailable');
-    } catch (_) {
-      response = await http.get(
-        Uri.parse('$apiBase/api/media/${Uri.encodeComponent(attachmentId)}'),
-        headers: headers,
-      ).timeout(const Duration(minutes: 2));
-    }
+    final response = await _getMediaResponse(
+      attachmentId,
+      headers: headers,
+      timeout: const Duration(minutes: 2),
+    );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('تعذر معاينة الملف (${response.statusCode}).');
     }
@@ -1281,21 +1288,11 @@ class Api {
     required String fileName,
   }) async {
     final requestHeaders = {if (token != null) 'Authorization': 'Bearer $token'};
-    http.Response response;
-    try {
-      response = await http.get(
-        Uri.parse('$mediaWorkerBase/api/media/${Uri.encodeComponent(attachmentId)}'),
-        headers: requestHeaders,
-      ).timeout(const Duration(minutes: 3));
-      // Do not retry authorization, not-found, or expiry responses through a
-      // second host. Only transport/server failures are eligible for fallback.
-      if (response.statusCode >= 500) throw const HttpException('Media Worker unavailable');
-    } catch (_) {
-      response = await http.get(
-        Uri.parse('$apiBase/api/media/${Uri.encodeComponent(attachmentId)}'),
-        headers: requestHeaders,
-      ).timeout(const Duration(minutes: 3));
-    }
+    final response = await _getMediaResponse(
+      attachmentId,
+      headers: requestHeaders,
+      timeout: const Duration(minutes: 3),
+    );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('تعذر تنزيل الملف (${response.statusCode}).');
     }
@@ -5970,7 +5967,7 @@ class _VideoAttachmentDialogState extends State<_VideoAttachmentDialog> {
       return;
     }
     final headers = {if (Api.token != null) 'Authorization': 'Bearer \${Api.token}'};
-    final bases = <String>[mediaWorkerBase, if (apiBase != mediaWorkerBase) apiBase];
+    final bases = <String>{mediaWorkerBase, apiBase}.toList(growable: false);
     Object? lastError;
     for (final base in bases) {
       VideoPlayerController? candidate;
