@@ -219,6 +219,7 @@ test("cleanup integration: expired incomplete sessions abort multipart and remov
   session.expires_at="2000-01-01T00:00:00.000Z";
   const stagingKey=session.object_key+".barq-staging/"+id+"/1";
   f.objects.set(stagingKey,Uint8Array.from([1,2,3]));
+  f.DB.chunks.set(id+":1",{session_id:id,chunk_number:1,size:3});
   const result=await cleanupExpiredUploadSessions({DB:f.DB,TIGRIS_ACCESS_KEY_ID:"fake-key",TIGRIS_SECRET_ACCESS_KEY:"fake-secret",TIGRIS_BUCKET:"test-bucket"},Date.parse("2001-01-01T00:00:00.000Z"));
   assert.equal(result.checked,1);assert.equal(result.cleaned,1);
   assert.equal(f.DB.sessions.has(id),false);
