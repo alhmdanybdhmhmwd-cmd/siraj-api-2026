@@ -483,8 +483,8 @@ test("SPARK voice replies are private, limited, tied to status expiry, and clean
   assert.ok(route.includes("INSERT INTO media_expirations"));
   assert.ok(route.includes("statusId.length > 128"));
   assert.ok(route.includes("audioReplyId.length > 128"));
-  assert.ok(route.includes("objectRemoved = deletion.ok || deletion.status === 404"));
-  assert.ok(route.includes("INSERT OR IGNORE INTO media_expirations"));
+  assert.ok(route.includes("rollbackSparkMediaUpload(env, storage, storageUrl, objectKey)"));
+  assert.ok(worker.includes("INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?) ON CONFLICT(object_key) DO UPDATE SET expires_at = excluded.expires_at"));
   assert.ok(route.includes('"Cache-Control": "private, no-store"'));
   const cleanupStart = worker.indexOf("async function cleanupExpiredMedia");
   const cleanupEnd = worker.indexOf("async function cleanupExpiredEphemeralMessages", cleanupStart);
