@@ -3772,7 +3772,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ]),
           ),
           if (statuses.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 45, horizontal: 18),
               child: Column(children: [
                 Icon(Icons.circle_outlined, size: 54),
@@ -3847,8 +3847,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
-        const Padding(
-          padding: EdgeInsets.all(12),
+        Padding(
+          padding: const EdgeInsets.all(12),
           child: Text('محادثاتك', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 21)),
         ),
         for (final friend in friends)
@@ -6224,7 +6224,7 @@ class _VideoAttachmentDialogState extends State<_VideoAttachmentDialog> {
                       child: VideoProgressIndicator(
                         controller,
                         allowScrubbing: true,
-                        colors: const VideoProgressColors(
+                        colors: VideoProgressColors(
                           playedColor: Theme.of(context).colorScheme.primary,
                           bufferedColor: Colors.white54,
                           backgroundColor: Colors.white24,
@@ -8102,7 +8102,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
                         constraints: const BoxConstraints(maxWidth: 310),
                         margin: const EdgeInsets.symmetric(vertical: 4),
                         padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: mine ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surfaceContainerHighest,
+                        decoration: BoxDecoration(color: mine ? Theme.of(context).colorScheme.primary.withValues(alpha: .18) : Theme.of(context).colorScheme.surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(15)),
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           if (field(m, ['reply_to_id']).isNotEmpty)
