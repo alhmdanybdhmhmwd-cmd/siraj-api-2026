@@ -13,9 +13,9 @@ workerSource = workerSource.replace(
 );
 let workerModule;
 try {
-  workerModule = await import(
-    pathToFileURL((await (async () => { const modulePath = `/tmp/barq-health-worker-${process.pid}.mjs`; await writeFile(modulePath, workerSource, "utf8"); return modulePath; })())).href
-  );
+  const workerModulePath = `/tmp/barq-health-worker-${process.pid}.mjs`;
+  await writeFile(workerModulePath, workerSource, "utf8");
+  workerModule = await import(pathToFileURL(workerModulePath).href);
 } catch (error) {
   console.error("Worker health test module import failed:", error?.stack || error);
   throw error;
