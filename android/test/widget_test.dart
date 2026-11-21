@@ -652,6 +652,16 @@ void main() {
     expect(isBarqMessageTextAllowed(List.filled(5001, 'س').join()), isFalse);
   });
 
+  test('translation failures become retryable after a cooldown', () {
+    final now = DateTime.utc(2026, 11, 21, 12);
+    final retryAfter = {'message-1': now.add(const Duration(minutes: 1))};
+    expect(barqTranslationRetryAllowed('message-1', retryAfter, now: now), isFalse);
+    expect(barqTranslationRetryAllowed('message-1', retryAfter,
+        now: now.add(const Duration(minutes: 1))), isTrue);
+    expect(barqTranslationRetryAllowed('message-2', retryAfter, now: now), isTrue);
+    expect(barqTranslationRetryAllowed('', retryAfter, now: now), isFalse);
+  });
+
   test('audio transcription enforces the worker two-megabyte limit', () {
     expect(isBarqTranscriptionSizeAllowed(0), isFalse);
     expect(isBarqTranscriptionSizeAllowed(1), isTrue);
