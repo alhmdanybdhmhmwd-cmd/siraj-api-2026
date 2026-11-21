@@ -280,7 +280,7 @@ Future<void> main() async {
 /// Normalize an FCM token before sending it to the authenticated API.
 String? normalizeBarqFcmToken(String? token) {
   final value = token?.trim() ?? '';
-  if (value.isEmpty || value.length > 4096 || RegExp(r'\\s').hasMatch(value)) {
+  if (value.isEmpty || value.length > 4096 || RegExp(r'\s').hasMatch(value)) {
     return null;
   }
   return value;
