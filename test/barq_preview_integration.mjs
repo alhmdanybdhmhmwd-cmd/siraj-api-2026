@@ -128,7 +128,7 @@ await call("/api/messages/search?with=" + encodeURIComponent(a.user.id) + "&q=in
 await call("/api/messages/search?with=" + encodeURIComponent(b.user.id) + "&q=x", { token: a.token, expected: 400 });
 await call("/api/messages/search?with=" + encodeURIComponent(a.user.id) + "&q=integration", { token: a.token, expected: 403 });
 
-const group = await call("/api/groups", { method: "POST", token: a.token, body: { name: "Search Test " + suffix } });
+const group = await call("/api/groups", { method: "POST", token: a.token, body: { name: "Search Test " + suffix }, expected: 201 });
 assert.ok(group.group?.id);
 await call("/api/groups/" + encodeURIComponent(group.group.id) + "/members", {
   method: "POST", token: a.token, body: { userId: b.user.id }, expected: 201
