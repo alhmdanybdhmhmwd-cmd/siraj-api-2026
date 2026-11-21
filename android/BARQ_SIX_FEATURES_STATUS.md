@@ -86,3 +86,15 @@
 - طُبق السلوك على المحادثات الفردية والجماعية، وأضيف اختبار لوظيفة السماح بإعادة المحاولة قبل المهلة وبعدها، ولرسالة أخرى لم تفشل.
 - نتائج التحقق على كود الإصلاح والاختبار: Android Quality Gate run `44924483672` ناجح (Analyze Dart وFlutter tests ناجحان؛ خطوات APK كلها skipped كما اتفقنا)، وBackend CI run `44924483652` ناجح. كما نجح Backend CI بعد تحديث سجل الحالة والخطة في run `44924491572`.
 - **حالة الدفعة الثالثة: منتهية برمجياً**؛ يبقى اختبار الاستخدام الحي على الهواتف في المرحلة 11.
+
+
+## المرحلة السابعة — الدفعة الرابعة: تدقيق الرسائل المؤقتة (2026-11-21)
+
+- تأكدنا أن الرسائل المؤقتة تستخدم مسار API وجدول D1 مستقلين عن الرسائل العادية، ولا تُرسل عبر Firebase/FCM ولا تدخل صندوق المزامنة المحلي.
+- يبدأ عداد العشر ثواني عند أول GET من المستلم فقط؛ فتح المرسل للمحادثة لا يعلّم رسائله الصادرة كمقروءة. أضيف اختبار Worker لهذه الحالة.
+- الحذف الفعلي من D1 يُجدول عبر `ctx.waitUntil` عند انتهاء المهلة، والتنظيف المجدول كل 15 دقيقة احتياطي لاسترداد الصفوف المنتهية.
+- تمت مواءمة تعريف الجدول في التنظيف المجدول مع API (Unix integer لـ `created_at` وقيود FK للمرسل والمستلم)، وأضيفت migration `0009_ephemeral_messages.sql` واختبار SQLite للتحقق من schema وعزل الجدول عن `messages`.
+- Backend tests run [44924889831](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api/actions/runs/44924889831)، وD1 migration workflow run [44924899758](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api/actions/runs/44924899758)، وLocal runtime health probes run [44924889800](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api/actions/runs/44924889800) — جميعها ناجحة.
+- Android لم يتغير في هذه الدفعة؛ آخر Android Quality Gate run [44924676891](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api/actions/runs/44924676891) ناجح على مصدر Android الحالي. لا APK ولا نشر Production. اختبار الهاتفين مؤجل للمرحلة 11.
+
+الحالة: الدفعة الرابعة منتهية برمجياً؛ الاختبار الحي والاعتماد النهائي مؤجلان للمرحلة 11.
