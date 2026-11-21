@@ -1,4 +1,5 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:nearby_connections/nearby_connections.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:barq/main.dart';
 
