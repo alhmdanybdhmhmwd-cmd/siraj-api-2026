@@ -1329,7 +1329,7 @@ class BarqNearbyService {
     _knownContacts = friends.map((item) => field(item, ['id', 'user_id'])).where((id) => id.isNotEmpty).toSet();
     final safeName = displayName.replaceAll('|', '');
     _endpointName = 'BARQ|$userId|${safeName.substring(0, math.min(safeName.length, 12).toInt())}';
-    await [
+    final permissionResults = await [
       Permission.location,
       Permission.bluetooth,
       Permission.bluetoothAdvertise,
@@ -1337,6 +1337,15 @@ class BarqNearbyService {
       Permission.bluetoothScan,
       Permission.nearbyWifiDevices,
     ].request();
+    final deniedPermissions = permissionResults.entries
+        .where((entry) => !entry.value.isGranted)
+        .map((entry) => entry.key)
+        .toList();
+    if (deniedPermissions.isNotEmpty) {
+      throw Exception(
+        'تعذر تشغيل الاتصال القريب؛ اسمح بأذونات Bluetooth والأجهزة القريبة والموقع عند طلبها من إعدادات التطبيق، ثم أعد المحاولة.',
+      );
+    }
     final locationServiceStatus = await Permission.location.serviceStatus;
     if (!locationServiceStatus.isEnabled) {
       throw Exception('شغّل خدمة الموقع في إعدادات الهاتف؛ مكتبة Nearby تحتاجها لاكتشاف الأجهزة على بعض إصدارات Android، ولا يتم جمع موقعك.');
