@@ -315,3 +315,42 @@ test("proxy forwards authenticated POST requests for device-scoped logout", asyn
     globalThis.fetch = originalFetch;
   }
 });
+
+test("proxy preserves upstream request IDs and retry diagnostics", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response(JSON.stringify({ status: "alive", service: "barq-api" }), {
+      status: 200,
+      headers: {
+        "content-type": "application/json",
+        "x-request-id": "barq-probe-01",
+        "retry-after": "3",
+        "server-timing": "origin;dur=12",
+        "vary": "Accept-Encoding"
+      }
+    });
+    const res = makeResponse();
+    await handler(makeRequest({ url: "/health/live", method: "GET", chunks: [] }), res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.headers["X-Request-Id"], "barq-probe-01");
+    assert.equal(res.headers["Retry-After"], "3");
+    assert.equal(res.headers["Server-Timing"], "origin;dur=12");
+    assert.equal(res.headers.Vary, "Accept-Encoding");
+    assert.deepEqual(JSON.parse(res.body.toString()), { status: "alive", service: "barq-api" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("proxy reports BARQ identity when upstream connection fails", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => { throw new Error("simulated upstream failure"); };
+    const res = makeResponse();
+    await handler(makeRequest({ url: "/health/live", method: "GET", chunks: [] }), res);
+    assert.equal(res.statusCode, 502);
+    assert.deepEqual(res.body, { error: "تعذر الاتصال بخادم برق" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
