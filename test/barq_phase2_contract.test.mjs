@@ -689,7 +689,7 @@ test("private memories are owner-scoped with bounded create, edit, and delete op
 
 test("private memory photos are owner-only, size-limited, and scheduled for cleanup on memory deletion", () => {
   const start = worker.indexOf("const memoryPathPrefix = \"/api/private-memories/\";");
-  const end = worker.indexOf("const memoryMatch = path.match", start);
+  const end = worker.indexOf("const memoryIdOnly", start);
   const upload = worker.slice(start, end);
   assert.ok(start >= 0 && end > start);
   assert.ok(upload.includes("WHERE id = ? AND owner_id = ?"));
