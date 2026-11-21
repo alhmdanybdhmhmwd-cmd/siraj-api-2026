@@ -33,7 +33,7 @@
 
 ## المرحلة السابعة — الدفعة الثانية، تدقيق مزامنة Nearby (2026-11-21)
 
-- نجح Android Quality Gate لتعديل التحقق من نتائج أذونات Nearby على commit `bfa1d698a228eb56f76640bc252dd21486851490` في run [44920444089](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026-11-20/actions/runs/44920444089).
+- نجح Android Quality Gate لتعديل التحقق من نتائج أذونات Nearby على commit `bfa1d698a228eb56f76640bc252dd21486851490` في run [44920444089](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api/actions/runs/44920444089).
 - راجعنا تنفيذ `BarqOfflineQueue` واستقبال Nearby وواجهة `POST /api/messages`. تأكد أن `syncOutbox` يرسل الصادر فقط، وأن `enqueueIncoming` يحفظ الوارد محليًا، وأن `reconcile` يزيل الوارد عند ظهوره في صفحات الخادم.
 - لا يوجد في واجهة Flutter الحالية endpoint موثق لتسليم رسالة واردة مع الحفاظ على هوية مرسلها الأصلي؛ إعادة استخدام `Api.sendMessage` غير آمنة لأنها تبني طلبًا من المستخدم الحالي إلى مستلم. لذلك لم نضف رفعًا تخمينيًا قد يقلب اتجاه الرسالة أو يكررها.
 - مزامنة الصادر تُستدعى من `loadMessages` عند فتح/تحديث المحادثة، ويوجد تحديث دوري للمحادثة المفتوحة. لا توجد حزمة `connectivity_plus` في `pubspec.yaml`؛ لذلك لا ندعي وجود مستمع عام لعودة الشبكة.
