@@ -1265,7 +1265,105 @@ export default {
           return json({ memory }, 201);
         }
 
-        const memoryMediaMatch = path.match(new RegExp('^/api/private-memories/([^/]+)/media        if (memoryMatch && method === "PATCH") {
+        const memoryPathPrefix = "/api/private-memories/";
+        const memoryPathPart = path.startsWith(memoryPathPrefix) ? path.slice(memoryPathPrefix.length) : "";
+        const memoryMediaId = memoryPathPart.endsWith("/media") ? memoryPathPart.slice(0, -6) : "";
+        if (memoryMediaId && method === "POST") {
+          let memoryId;
+          try { memoryId = decodeURIComponent(memoryMediaId); } catch (_) {
+            return json({ error: "Invalid memory identifier" }, 400);
+          }
+          const memory = await env.DB.prepare(
+            "SELECT id FROM private_memories WHERE id = ? AND owner_id = ?"
+          ).bind(memoryId, currentUser.sub).first();
+          if (!memory) return json({ error: "Memory not found" }, 404);
+          if (!env.TIGRIS_ACCESS_KEY_ID || !env.TIGRIS_SECRET_ACCESS_KEY) {
+            return json({ error: "Media storage credentials are not configured" }, 503);
+          }
+          const contentType = (request.headers.get("Content-Type") || "").split(";")[0].trim().toLowerCase();
+          if (!["image/jpeg", "image/png", "image/webp"].includes(contentType)) {
+            return json({ error: "Private memory photos must be JPEG, PNG, or WebP" }, 415);
+          }
+          const maxPhotoBytes = 4 * 1024 * 1024;
+          const declaredLength = Number(request.headers.get("Content-Length"));
+          if (Number.isFinite(declaredLength) && declaredLength > maxPhotoBytes) {
+            return json({ error: "Private memory photo must not exceed 4 MB" }, 413);
+          }
+          const bytes = await readRequestBodyLimited(request, maxPhotoBytes);
+          if (!bytes || !bytes.byteLength) return json({ error: "Photo is empty or exceeds 4 MB" }, 413);
+          if (detectProfileImageType(bytes) !== contentType) {
+            return json({ error: "Photo content does not match its declared image type" }, 415);
+          }
+          let suppliedName = "memory-photo";
+          try {
+            suppliedName = safeFileName(decodeURIComponent(request.headers.get("X-File-Name") || "memory-photo"));
+          } catch (_) {
+            return json({ error: "Invalid photo filename" }, 400);
+          }
+          await env.DB.prepare(
+            "CREATE TABLE IF NOT EXISTS media_expirations (object_key TEXT PRIMARY KEY, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+          ).run();
+          const objectKey = currentUser.sub + "/private-memories/" + crypto.randomUUID();
+          const bucket = env.TIGRIS_BUCKET || "siraj-media";
+          const objectPath = objectKey.split("/").map(encodeURIComponent).join("/");
+          const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
+          const storage = new AwsClient({
+            accessKeyId: env.TIGRIS_ACCESS_KEY_ID,
+            secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY,
+            service: "s3",
+            region: "auto",
+            retries: 2
+          });
+          const expiresAt = "9999-12-31T23:59:59.999Z";
+          const putResponse = await storage.fetch(storageUrl, {
+            method: "PUT",
+            headers: {
+              "Content-Type": contentType,
+              "x-amz-meta-ownerid": currentUser.sub,
+              "x-amz-meta-category": "private-memory",
+              "x-amz-meta-expiresat": expiresAt
+            },
+            body: bytes
+          });
+          if (!putResponse.ok) return json({ error: "Private memory photo upload failed" }, 502);
+          const mediaId = crypto.randomUUID();
+          try {
+            await env.DB.prepare(`
+              CREATE TABLE IF NOT EXISTS media_access (
+                object_key TEXT PRIMARY KEY,
+                owner_id TEXT NOT NULL,
+                recipient_id TEXT,
+                group_id TEXT,
+                file_name TEXT NOT NULL,
+                content_type TEXT NOT NULL,
+                expires_at TEXT NOT NULL
+              )
+            `).run();
+            const savedRows = await env.DB.batch([
+              env.DB.prepare(
+                "INSERT INTO private_memory_media (id, memory_id, owner_id, object_key, file_name, content_type, size) VALUES (?, ?, ?, ?, ?, ?, ?)"
+              ).bind(mediaId, memoryId, currentUser.sub, objectKey, suppliedName, contentType, bytes.byteLength),
+              env.DB.prepare(
+                "INSERT INTO media_access (object_key, owner_id, recipient_id, group_id, file_name, content_type, expires_at) VALUES (?, ?, NULL, NULL, ?, ?, ?)"
+              ).bind(objectKey, currentUser.sub, suppliedName, contentType, expiresAt)
+            ]);
+            if (Number(savedRows?.[0]?.meta?.changes || 0) !== 1 ||
+                Number(savedRows?.[1]?.meta?.changes || 0) !== 1) {
+              await rollbackSparkMediaUpload(env, storage, storageUrl, objectKey);
+              return json({ error: "Could not save private memory photo metadata" }, 500);
+            }
+          } catch (error) {
+            await rollbackSparkMediaUpload(env, storage, storageUrl, objectKey);
+            throw error;
+          }
+          return json({
+            media: { id: mediaId, memoryId, attachmentId: objectKey, fileName: suppliedName, contentType, size: bytes.byteLength }
+          }, 201);
+        }
+
+        const memoryIdOnly = memoryPathPart && !memoryPathPart.includes("/") ? memoryPathPart : "";
+        const memoryMatch = memoryIdOnly ? [path, memoryIdOnly] : null;
+        if (memoryMatch && method === "PATCH") {
           let memoryId;
           try { memoryId = decodeURIComponent(memoryMatch[1]); } catch (_) {
             return json({ error: "Invalid memory identifier" }, 400);
