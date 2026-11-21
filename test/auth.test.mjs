@@ -2897,6 +2897,26 @@ test("transcription route enforces the per-account hourly inference limit", asyn
   assert.equal(inferenceCalls, 0);
 });
 
+test("transcription route requires authentication before reading audio or invoking AI", async () => {
+  const db = new FakeDB();
+  let inferenceCalls = 0;
+  const response = await worker.default.fetch(new Request(
+    "https://api.example.test/api/transcribe",
+    {
+      method: "POST",
+      headers: { "Content-Type": "audio/webm" },
+      body: Uint8Array.from([1, 2, 3])
+    }
+  ), {
+    DB: db,
+    JWT_SECRET: secret,
+    AI: { async run() { inferenceCalls++; return { text: "must not run" }; } }
+  });
+  assert.equal(response.status, 401);
+  assert.equal(db.transcriptionRateLimit, null);
+  assert.equal(inferenceCalls, 0);
+});
+
 test("transcription route rejects unsupported content types before counting or inference", async () => {
   const db = new FakeDB();
   const token = await worker.signToken(user, secret, 0);
