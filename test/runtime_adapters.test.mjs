@@ -118,17 +118,34 @@ test("libSQL adapter exposes D1-compatible prepared statements and atomic batche
   );
 });
 
+test("object storage URLs preserve Tigris defaults and support generic S3 endpoints", () => {
+  assert.equal(
+    createObjectStorageUrl({ TIGRIS_BUCKET: "barq-media" }, "users/u1/profile photo.png"),
+    "https://barq-media.t3.storage.dev/users/u1/profile%20photo.png"
+  );
+  assert.equal(
+    createObjectStorageUrl({ OBJECT_STORAGE_BUCKET: "barq-media", OBJECT_STORAGE_ENDPOINT: "https://{bucket}.objects.example" }, "chat/a+b.png", { versionId: "v1" }),
+    "https://barq-media.objects.example/chat/a%2Bb.png?versionId=v1"
+  );
+  assert.equal(
+    createObjectStorageUrl({ OBJECT_STORAGE_BUCKET: "barq-media", OBJECT_STORAGE_ENDPOINT: "https://objects.example/s3" }, "chat/file.bin"),
+    "https://objects.example/s3/barq-media/chat/file.bin"
+  );
+  assert.throws(() => createObjectStorageUrl({}, "/absolute/key"), /relative object key/);
+});
+
 test("object storage client uses the common S3-compatible configuration", () => {
   class FakeClient { constructor(options) { this.options = options; } }
   const client = createObjectStorageClient({
-    TIGRIS_ACCESS_KEY_ID: "access",
-    TIGRIS_SECRET_ACCESS_KEY: "secret"
+    OBJECT_STORAGE_ACCESS_KEY_ID: "access",
+    OBJECT_STORAGE_SECRET_ACCESS_KEY: "secret",
+    OBJECT_STORAGE_REGION: "us-east-1"
   }, FakeClient);
   assert.deepEqual(client.options, {
     accessKeyId: "access",
     secretAccessKey: "secret",
     service: "s3",
-    region: "auto",
+    region: "us-east-1",
     retries: 2
   });
   assert.throws(() => createObjectStorageClient({}, FakeClient), /credentials are not configured/);
