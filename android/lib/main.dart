@@ -392,7 +392,7 @@ class SirajPush {
       final messaging = FirebaseMessaging.instance;
       // Foreground in-app alerts are independent from OS notification permission.
       if (!_foregroundListening) {
-        messaging.onMessage.listen(_handleForegroundMessage);
+        FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
         _foregroundListening = true;
       }
 
