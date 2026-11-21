@@ -25,7 +25,7 @@ assert.deepEqual(
   "A new or removed Worker binding needs an explicit portability/security review."
 );
 assert.match(source, /env\.DB\.prepare\(/, "D1 access should remain visible to the portability audit.");
-assert.match(source, /env\.AI\./, "Workers AI access should remain visible to the portability audit.");
+assert.match(source, /createAiProvider\(env\.AI\)/, "Workers AI should flow through the provider-neutral adapter.");
 assert.match(source, /AwsClient/, "Tigris/S3-compatible storage adapter should remain visible to the portability audit.");
 
 const report = {
