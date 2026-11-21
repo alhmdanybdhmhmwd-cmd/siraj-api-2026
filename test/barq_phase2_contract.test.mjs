@@ -130,7 +130,7 @@ test("speech transcription requires authentication, validates audio, rate-limits
   const start = worker.indexOf('path === "/api/transcribe"');
   const end = worker.indexOf("// A single private invite code", start);
   const route = worker.slice(start, end);
-  assert.ok(route.includes('env.AI.run("@cf/openai/whisper"'));
+  assert.ok(route.includes('ai.run("@cf/openai/whisper"'));
   assert.ok(route.includes("maxTranscriptionBytes = 2 * 1024 * 1024"));
   assert.ok(route.includes("transcription_rate_limits"));
   assert.ok(route.includes("attempts") && route.includes("> 10"));
@@ -302,7 +302,7 @@ test("speech transcription route is behind bearer authentication and never persi
   assert.ok(authIndex >= 0 && unauthorizedIndex > authIndex && routeIndex > unauthorizedIndex);
   assert.ok(route.includes("audio/mp4"));
   assert.ok(route.includes("maxTranscriptionBytes = 2 * 1024 * 1024"));
-  assert.ok(route.includes('env.AI.run("@cf/openai/whisper"'));
+  assert.ok(route.includes('ai.run("@cf/openai/whisper"'));
   assert.ok(!route.includes("INSERT INTO messages"));
   assert.ok(!route.includes("INSERT INTO group_messages"));
   assert.ok(!route.includes("sendSirajPush"));
