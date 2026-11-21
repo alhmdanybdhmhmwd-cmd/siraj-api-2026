@@ -24,6 +24,71 @@ function makeRequest({ url = "/api/media", method = "POST", headers = {}, chunks
   };
 }
 
+test("proxy forwards SPARK media metadata and idempotency headers", async () => {
+  const originalFetch = globalThis.fetch;
+  let forwarded;
+  globalThis.fetch = async (url, options) => {
+    forwarded = { url: String(url), headers: options.headers };
+    return new Response(JSON.stringify({ status: { id: "spark-1" } }), {
+      status: 201, headers: { "content-type": "application/json" }
+    });
+  };
+  try {
+    const res = makeResponse();
+    await handler(makeRequest({
+      url: "/api/statuses/media",
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-token",
+        "content-type": "video/mp4",
+        "x-file-name": "clip.mp4",
+        "x-status-caption": "لقطة برق",
+        "x-status-id": "spark-existing",
+        "x-idempotency-key": "upload-once-123"
+      },
+      chunks: [Buffer.from([1, 2, 3])]
+    }), res);
+    assert.equal(res.statusCode, 201);
+    assert.equal(forwarded.headers.Authorization, "Bearer test-token");
+    assert.equal(forwarded.headers["X-File-Name"], "clip.mp4");
+    assert.equal(forwarded.headers["X-Status-Caption"], "لقطة برق");
+    assert.equal(forwarded.headers["X-Status-Id"], "spark-existing");
+    assert.equal(forwarded.headers["X-Idempotency-Key"], "upload-once-123");
+    assert.match(res.headers["Access-Control-Allow-Headers"], /X-Status-Caption/);
+    assert.match(res.headers["Access-Control-Allow-Headers"], /X-Audio-Duration-Ms/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("proxy forwards SPARK audio reply duration metadata", async () => {
+  const originalFetch = globalThis.fetch;
+  let forwarded;
+  globalThis.fetch = async (url, options) => {
+    forwarded = { url: String(url), headers: options.headers };
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 201, headers: { "content-type": "application/json" }
+    });
+  };
+  try {
+    const res = makeResponse();
+    await handler(makeRequest({
+      url: "/api/statuses/spark-1/audio-replies",
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-token",
+        "content-type": "audio/mp4",
+        "x-audio-duration-ms": "4200"
+      },
+      chunks: [Buffer.from([4, 5, 6])]
+    }), res);
+    assert.equal(res.statusCode, 201);
+    assert.equal(forwarded.headers["X-Audio-Duration-Ms"], "4200");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("media proxy rejects oversized declared Content-Length before reading or forwarding", async () => {
   const originalFetch = globalThis.fetch;
   let fetchCalled = false;
