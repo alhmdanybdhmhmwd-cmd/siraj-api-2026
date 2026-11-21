@@ -65,3 +65,10 @@
 - أضيف تمرير رؤوس تشخيص الخادم عبر البوابة: `X-Request-Id`, `Retry-After`, `Server-Timing`, `Vary`.
 - تغيرت رسالة خطأ البوابة إلى الهوية الرسمية «برق» بدلاً من الاسم البرمجي القديم.
 - أضيفت اختبارات تغطي رؤوس التشخيص ورسالة فشل الاتصال. Backend CI على commit `b7052f34d40ff7b3fec8b207fd2f84f18a4c8730` نجح، runs `44946399349` و`44946395715`.
+
+## 10. إصلاح توافق CORS بين البوابة وWorker (2026-11-21)
+- كشف التدقيق أن Vercel gateway يسمح بـPUT لكنه لم يعلن PATCH في CORS، كما لم يعلن Range ضمن الرؤوس المسموحة. Worker بدوره لم يعلن PUT أو X-Idempotency-Key أو Range، ولم يكشف رؤوس استجابة HTTP Range للعميل.
+- تمت مواءمة الجهتين: PUT وPATCH، والرؤوس Range وX-Idempotency-Key، وكشف Content-Range وAccept-Ranges وETag وX-Request-Id.
+- أضيفت اختبارات عقد Worker واختبار preflight فعلي لبوابة Vercel يغطي تعديل الرسائل والرفع المجزأ وتنزيل أجزاء الملف.
+- Backend CI على commit e39ab3e3f34c06c7df9877f33db7f62d0446fed0 نجح: 216/216 اختباراً، دون فشل، run [44946754896](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026/actions/runs/44946754896). تكرار CI على commit نفسه run [44946761090](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026/actions/runs/44946761090) نجح أيضاً.
+- هذا إصلاح لتوافق CORS وليس دليلاً على تجاوز حجب الشبكات أو حل VPN. لم يحدث نشر جديد أو تغيير DNS أو إعداد إنتاج.
