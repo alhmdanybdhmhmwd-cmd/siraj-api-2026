@@ -55,6 +55,24 @@ jobs:
           print("Preview target guard passed: dedicated Worker + isolated D1/media namespace, no production routes.")
           PY
           npx --yes wrangler@4 whoami
+      - name: Apply migrations to the isolated Preview D1 database only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import tomllib
+          from pathlib import Path
+          cfg = tomllib.loads(Path("wrangler.test.toml").read_text())
+          assert cfg["name"] == "barq-api-phase2-test"
+          db = cfg["d1_databases"][0]
+          assert db["database_name"] == "barq-phase2-test-2026-11-20"
+          assert db["database_id"] == "5bfada32-4f9b-4edb-85dd-3b3b30ab73b0"
+          prod = tomllib.loads(Path("wrangler.toml").read_text())
+          assert db["database_id"] != prod["d1_databases"][0]["database_id"]
+          print("Guard passed: migrations target the isolated BARQ Preview D1 database.")
+          PY
+          npx --yes wrangler@4 d1 migrations apply barq-phase2-test-2026-11-20 --remote --config wrangler.test.toml
+
       - name: Deploy isolated Preview Worker
         shell: bash
         run: |
