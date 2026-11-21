@@ -3082,3 +3082,58 @@ test("private memory photo upload stores the owner-scoped record and access meta
     else globalThis.__fakeTigrisHandler = previousHandler;
   }
 });
+
+
+test("private memory creation accepts a title-only photo note and rejects unsupported source types", async () => {
+  const secret = "private-memory-create-test-secret";
+  const token = await worker.signToken({ id: "owner-1", username: "owner-1" }, secret);
+  const inserts = [];
+  const db = {
+    prepare(sql) {
+      const statement = {
+        sql,
+        params: [],
+        bind(...params) { this.params = params; return this; },
+        async run() {
+          if (this.sql.includes("INSERT INTO private_memories")) inserts.push(this.params);
+          return { meta: { changes: 1 } };
+        },
+        async first() {
+          if (this.sql.includes("SELECT session_version FROM account_security")) return { session_version: 0 };
+          if (this.sql.includes("SELECT id, title, content, source_type AS sourceType")) {
+            return {
+              id: this.params[0],
+              title: "Photo memory",
+              content: "",
+              sourceType: "text"
+            };
+          }
+          return null;
+        },
+        async all() { return { results: [] }; }
+      };
+      return statement;
+    }
+  };
+  const create = body => worker.default.fetch(new Request(
+    "https://api.example.test/api/private-memories",
+    {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + token,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    }
+  ), { DB: db, JWT_SECRET: secret });
+  const valid = await create({ title: "Photo memory", content: "", sourceType: "text" });
+  assert.equal(valid.status, 201);
+  const saved = await valid.json();
+  assert.equal(saved.memory.title, "Photo memory");
+  assert.equal(saved.memory.content, "");
+  assert.equal(inserts.length, 1);
+  assert.equal(inserts[0][1], "owner-1");
+  const invalid = await create({ title: "Invalid", content: "text", sourceType: "admin" });
+  assert.equal(invalid.status, 400);
+  assert.equal(inserts.length, 1);
+});
