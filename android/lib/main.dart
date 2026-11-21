@@ -610,6 +610,9 @@ class SirajApp extends StatelessWidget {
   }
 }
 
+bool barqRealtimeCanConnect({required String? authToken, required bool appResumed, required String socketUrl}) =>
+    appResumed && authToken != null && authToken.isNotEmpty && socketUrl.trim().isNotEmpty;
+
 /// اتصال لحظي اختياري؛ REST يبقى المصدر الدائم للرسائل.
 class SirajRealtime {
   SirajRealtime._();
@@ -3422,7 +3425,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   void _syncRealtimeConnection() {
     final token = Api.token;
-    if (token == null || token.isEmpty || SirajRealtime.socketUrl.isEmpty) return;
+    if (!barqRealtimeCanConnect(
+      authToken: token,
+      appResumed: true,
+      socketUrl: SirajRealtime.socketUrl,
+    )) return;
     unawaited(SirajRealtime.instance.start(token));
   }
 
