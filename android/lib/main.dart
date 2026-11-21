@@ -3774,13 +3774,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
           if (statuses.isEmpty)
             Padding(
-              padding: EdgeInsets.symmetric(vertical: 45, horizontal: 18),
+              padding: const EdgeInsets.symmetric(vertical: 45, horizontal: 18),
               child: Column(children: [
-                Icon(Icons.circle_outlined, size: 54),
-                SizedBox(height: 12),
+                const Icon(Icons.circle_outlined, size: 54),
+                const SizedBox(height: 12),
                 Text('لا توجد حالات نشطة', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 18)),
-                SizedBox(height: 6),
-                Text('انشر أول لحظة في SPARK أو اسحب للأسفل للتحديث.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60)),
+                const SizedBox(height: 6),
+                const Text('انشر أول لحظة في SPARK أو اسحب للأسفل للتحديث.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60)),
               ]),
             ),
           for (final status in statuses)
@@ -7007,10 +7007,10 @@ class _ChatPageState extends State<ChatPage> {
                                       ),
                                     if (m['is_ephemeral'] == true)
                                       Padding(
-                                        padding: EdgeInsets.only(bottom: 5),
+                                        padding: const EdgeInsets.only(bottom: 5),
                                         child: Row(mainAxisSize: MainAxisSize.min, children: [
-                                          Icon(Icons.timer_outlined, size: 13),
-                                          SizedBox(width: 4),
+                                          const Icon(Icons.timer_outlined, size: 13),
+                                          const SizedBox(width: 4),
                                           Text('رسالة مؤقتة', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 10)),
                                         ]),
                                       ),
@@ -7124,10 +7124,10 @@ class _ChatPageState extends State<ChatPage> {
                                     ),
                                     if (m['is_pinned'] == true)
                                       Padding(
-                                        padding: EdgeInsets.only(top: 4),
+                                        padding: const EdgeInsets.only(top: 4),
                                         child: Row(mainAxisSize: MainAxisSize.min, children: [
-                                          Icon(Icons.push_pin, size: 12),
-                                          SizedBox(width: 3),
+                                          const Icon(Icons.push_pin, size: 12),
+                                          const SizedBox(width: 3),
                                           Text('مثبتة', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 10)),
                                         ]),
                                       ),
@@ -8222,10 +8222,10 @@ class _GroupChatPageState extends State<GroupChatPage> {
                           )),
                           if (m['is_pinned'] == true)
                             Padding(
-                              padding: EdgeInsets.only(top: 4),
+                              padding: const EdgeInsets.only(top: 4),
                               child: Row(mainAxisSize: MainAxisSize.min, children: [
-                                Icon(Icons.push_pin, size: 12),
-                                SizedBox(width: 3),
+                                const Icon(Icons.push_pin, size: 12),
+                                const SizedBox(width: 3),
                                 Text('مثبتة', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 10)),
                               ]),
                             ),
