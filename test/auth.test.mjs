@@ -17,7 +17,6 @@ class AwsClient {
   }
 }
 `);
-workerSource += "\nexport { signToken, verifyToken, authenticate, hashPassword, sendSirajPush, detectProfileImageType, readRequestBodyLimited, rollbackSparkMediaUpload };";
 const workerModulePath = `/tmp/barq-auth-worker-${process.pid}.mjs`;
 await writeFile(workerModulePath, workerSource, "utf8");
 const worker = await import(pathToFileURL(workerModulePath).href);
