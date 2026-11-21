@@ -216,13 +216,13 @@ void main() {
     expect(barqOfflineIncomingMessageMatches(original, {...original, 'receiver_id': 'other'}), isFalse);
   });
 
-  test('offline queue reconciliation removes IDs found on any server page only', () {
+  test('offline queue reconciliation removes exact matches found on any server page', () {
     final queued = [
-      {'id': 'offline-old', 'body': 'وصلت دون إنترنت'},
-      {'id': 'offline-new', 'body': 'بانتظار المزامنة'},
+      {'id': 'offline-old', 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'وصلت دون إنترنت'},
+      {'id': 'offline-new', 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'بانتظار المزامنة'},
     ];
     final remaining = barqOfflineItemsNotOnServerPage(queued, [
-      {'id': 'offline-old'},
+      {'id': 'offline-old', 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'وصلت دون إنترنت'},
     ]);
 
     expect(remaining.map((item) => item['id']).toList(), ['offline-new']);
