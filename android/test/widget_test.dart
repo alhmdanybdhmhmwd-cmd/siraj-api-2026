@@ -169,6 +169,25 @@ void main() {
     expect(barqOfflineItemsNotOnServerPage(queued, server), [queued.last]);
   });
 
+  test('accepted outbox removal preserves a same-ID entry with changed content or reply target', () {
+    final accepted = <String, dynamic>{
+      'id': 'a1b2c3d4e5f60708a1b2c3d4e5f60708',
+      'sender_id': 'me',
+      'receiver_id': 'friend-1',
+      'body': 'hello',
+      'reply_to_id': 'reply-a',
+    };
+    final changed = {...accepted, 'reply_to_id': 'reply-b'};
+    expect(
+      barqOfflineQueueWithoutExactMessage([accepted, changed], accepted),
+      [changed],
+    );
+    expect(
+      barqOfflineQueueWithoutExactMessage([accepted], accepted),
+      isEmpty,
+    );
+  });
+
   test('offline reconciliation keeps a same-ID message when its content or parties differ', () {
     const id = 'a1b2c3d4e5f60708a1b2c3d4e5f60708';
     final queued = <Map<String, dynamic>>[
