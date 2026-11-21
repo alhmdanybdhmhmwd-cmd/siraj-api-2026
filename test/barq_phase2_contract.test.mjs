@@ -482,7 +482,7 @@ test("SPARK media expiration cleanup is scheduled and preserves failed deletion 
   const scheduledEnd = worker.indexOf("async fetch(request, env, ctx)", scheduledStart);
   const scheduled = worker.slice(scheduledStart, scheduledEnd);
   assert.ok(scheduledStart >= 0 && scheduledEnd > scheduledStart);
-  assert.ok(scheduled.includes("await cleanupExpiredMedia(env)"));
+  assert.ok(scheduled.includes("run: () => cleanupExpiredMedia(env)"));
 
   const cleanupStart = worker.indexOf("async function cleanupExpiredMedia");
   const cleanupEnd = worker.indexOf("async function cleanupExpiredEphemeralMessages", cleanupStart);
