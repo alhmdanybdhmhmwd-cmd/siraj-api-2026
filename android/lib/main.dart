@@ -2905,7 +2905,7 @@ class _LoginPageState extends State<LoginPage> {
                                 height: 56,
                                 child: FilledButton.icon(
                                   style: FilledButton.styleFrom(
-                                    backgroundColor: gold, foregroundColor: Colors.black,
+                                    backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary,
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                                   ),
                                   onPressed: busy ? null : submit,
@@ -3766,7 +3766,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   onPressed: publishSparkMediaDialog,
                   icon: const Icon(Icons.add_photo_alternate_outlined),
                   label: const Text('صورة أو فيديو'),
-                  style: OutlinedButton.styleFrom(foregroundColor: gold, side: const BorderSide(color: gold)),
+                  style: OutlinedButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.primary, side: BorderSide(color: Theme.of(context).colorScheme.primary)),
                 ),
               ),
             ]),
@@ -4273,10 +4273,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     ),
                     const SizedBox(height: 10),
                     if (existingPhotos.isNotEmpty) ...[
-                      const Align(
-                        alignment: Alignment.centerRight,
-                        child: Text('الصور المحفوظة في هذه الذكرى', style: TextStyle(color: gold)),
-                      ),
+                      Align(alignment: Alignment.centerRight, child: Text('الصور المحفوظة في هذه الذكرى', style: TextStyle(color: Theme.of(context).colorScheme.primary))),
                       const SizedBox(height: 8),
                       Wrap(
                         spacing: 8,
@@ -4908,7 +4905,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           decoration: BoxDecoration(
             gradient: const LinearGradient(colors: [Color(0xFF302719), Color(0xFF17130D)]),
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: gold.withValues(alpha: 0.4)),
+            border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4)),
           ),
           child: Column(
             children: [
@@ -8111,7 +8108,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
                               margin: const EdgeInsets.only(bottom: 7),
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8),
-                                border: const Border(right: BorderSide(color: gold, width: 3))),
+                                border: Border(right: BorderSide(color: Theme.of(context).colorScheme.primary, width: 3))),
                               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                 Text(field(m, ['reply_to_sender_id']) == widget.currentUserId ? 'رد على رسالتك' : 'رد على رسالة',
                                   style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 10, fontWeight: FontWeight.bold)),
