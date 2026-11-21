@@ -11,7 +11,7 @@ workerSource = workerSource.replace(
   'import { prepareConversationSummaryTranscript, buildConversationSummaryMessages, extractConversationSummaryText } from "./conversation_summary.js";',
   summarySource
 );
-workerSource = workerSource.replace(/import \\{[^}]+\\} from "\\.\\/runtime_adapters\\.js";/, adapterSource.replaceAll("export function ", "function "));
+workerSource = workerSource.replace(/import \{[^}]+\} from "\.\/runtime_adapters\.js";/, adapterSource.replaceAll("export function ", "function "));
 workerSource = workerSource.replace('import { AwsClient } from "aws4fetch";', `
 class AwsClient {
   async fetch(url, options) {
