@@ -51,7 +51,7 @@ class FakeDB {
     this.loginAttempts = new Map();
     this.transcriptionRateLimit = null;
     this.inviteCodes = new Map();
-    this.friendshipPairs = new Set();    this.inviteCodes = new Map();
+    this.friendshipPairs = new Set();
     this.contactCandidates = [];
     this.privacySettings = null;
     this.notificationSettings = null;
@@ -77,6 +77,9 @@ class FakeDB {
           return db.revokedSessions?.has(this.params[0]) ? { 1: 1 } : null;
         }
         if (sql.includes("SELECT 1 FROM friendships")) {
+          if (sql.includes("WHERE user_id = ? AND friend_id = ?")) {
+            return db.friendshipPairs.has(this.params.join(":")) ? { 1: 1 } : null;
+          }
           return db.friendshipAllowed === false ? null : { 1: 1 };
         }
         if (sql.includes("FROM group_members mine")) {
@@ -138,13 +141,7 @@ class FakeDB {
         if (sql.includes("SELECT attempts FROM transcription_rate_limits")) {
           return { attempts: db.transcriptionRateLimit?.attempts || 0 };
         }
-        if (sql.includes("SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?")) {
-          return db.friendshipPairs.has(this.params.join(":")) ? { 1: 1 } : null;
-        }
         if (sql.includes("SELECT invite_code FROM user_invite_codes WHERE user_id = ?")) {
-          const inviteCode = db.inviteCodes.get(this.params[0]);
-          return inviteCode ? { invite_code: inviteCode } : null;
-        }        if (sql.includes("SELECT invite_code FROM user_invite_codes WHERE user_id = ?")) {
           const inviteCode = db.inviteCodes.get(this.params[0]);
           return inviteCode ? { invite_code: inviteCode } : null;
         }
