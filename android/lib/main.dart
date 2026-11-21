@@ -2788,7 +2788,7 @@ class _LoginPageState extends State<LoginPage> {
     prefixText: prefix,
     prefixIcon: Icon(icon),
     filled: true,
-    fillColor: glass,
+    fillColor: Theme.of(context).colorScheme.surface,
     labelStyle: const TextStyle(color: Colors.white70),
     prefixStyle: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold),
     contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
@@ -2798,7 +2798,7 @@ class _LoginPageState extends State<LoginPage> {
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(20),
-      borderSide: const BorderSide(color: electricBlue, width: 1.5),
+      borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 1.5),
     ),
   );
 
@@ -2822,17 +2822,17 @@ class _LoginPageState extends State<LoginPage> {
       child: Scaffold(
         body: Stack(
           children: [
-            const Positioned.fill(child: DecoratedBox(
+            Positioned.fill(child: DecoratedBox(
               decoration: BoxDecoration(gradient: LinearGradient(
                 begin: Alignment.topRight, end: Alignment.bottomLeft,
-                colors: [Color(0xFF101722), Color(0xFF08090D), Color(0xFF050505)],
+                colors: [Theme.of(context).colorScheme.surface, Theme.of(context).scaffoldBackgroundColor, Theme.of(context).scaffoldBackgroundColor],
               )),
             )),
             Positioned(top: -110, right: -70, child: Container(
               width: 260, height: 260,
               decoration: BoxDecoration(shape: BoxShape.circle,
-                color: electricBlue.withValues(alpha: .10),
-                boxShadow: [BoxShadow(color: electricBlue.withValues(alpha: .12), blurRadius: 90, spreadRadius: 20)]),
+                color: Theme.of(context).colorScheme.secondary.withValues(alpha: .10),
+                boxShadow: [BoxShadow(color: Theme.of(context).colorScheme.secondary.withValues(alpha: .12), blurRadius: 90, spreadRadius: 20)]),
             )),
             SafeArea(
               child: Center(
@@ -4361,7 +4361,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                     visualDensity: VisualDensity.compact,
                                     style: IconButton.styleFrom(
                                       backgroundColor: Colors.black87,
-                                      foregroundColor: Colors.white,
+                                      foregroundColor: Theme.of(context).colorScheme.onPrimary,
                                     ),
                                     onPressed: saving ? null : () => setDialogState(() => photos.removeAt(index)),
                                     icon: const Icon(Icons.close, size: 16),
@@ -4913,7 +4913,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: electricBlue.withValues(alpha: 0.55), width: 2),
+                  border: Border.all(color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.55), width: 2),
                 ),
                 child: Stack(
                   clipBehavior: Clip.none,
