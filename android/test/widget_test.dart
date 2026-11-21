@@ -6,6 +6,28 @@ import 'package:barq/main.dart';
 import 'package:barq/barq_identity.dart';
 
 void main() {
+  test('notification tap routing validates private chat, group and SPARK destinations', () {
+    expect(
+      barqNotificationRouteFromData({'type': 'direct_message', 'senderId': 'user-7'}),
+      {'type': 'direct_message', 'senderId': 'user-7'},
+    );
+    expect(
+      barqNotificationRouteFromData({'type': 'group_message', 'groupId': 'group-4'}),
+      {'type': 'group_message', 'groupId': 'group-4'},
+    );
+    expect(
+      barqNotificationRouteFromData({'type': 'status_update'}),
+      {'type': 'status_update'},
+    );
+    expect(
+      barqNotificationRouteFromData({'type': 'status_update', 'statusId': 'spark-9'}),
+      {'type': 'status_update', 'statusId': 'spark-9'},
+    );
+    expect(barqNotificationRouteFromData({'type': 'direct_message'}), isNull);
+    expect(barqNotificationRouteFromData({'type': 'group_message', 'groupId': ' '}), isNull);
+    expect(barqNotificationRouteFromData({'type': 'unknown', 'senderId': 'user-7'}), isNull);
+  });
+
   test('private invite links accept only the BARQ scheme, host and 12-character code', () {
     expect(barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef123456')), 'ABCDEF123456');
     expect(barqInviteCodeFromUri(Uri.parse('barq://invite?code=abcdef123456')), 'ABCDEF123456');
