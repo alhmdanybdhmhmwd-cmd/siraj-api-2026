@@ -14,6 +14,44 @@ void main() {
     expect(barqRealtimeCanConnect(authToken: 'session', appResumed: true, socketUrl: ''), isFalse);
   });
 
+  test('realtime events refresh only the matching direct conversation', () {
+    expect(
+      barqRealtimeMessageMatchesConversation(
+        {'type': 'message', 'senderId': 'friend-1', 'receiverId': 'me'},
+        'friend-1',
+      ),
+      isTrue,
+    );
+    expect(
+      barqRealtimeMessageMatchesConversation(
+        {'type': 'message', 'senderId': 'me', 'receiverId': 'friend-1'},
+        'friend-1',
+      ),
+      isTrue,
+    );
+    expect(
+      barqRealtimeMessageMatchesConversation(
+        {'type': 'message', 'senderId': 'other', 'receiverId': 'me'},
+        'friend-1',
+      ),
+      isFalse,
+    );
+    expect(
+      barqRealtimeMessageMatchesConversation(
+        {'type': 'presence', 'senderId': 'friend-1'},
+        'friend-1',
+      ),
+      isFalse,
+    );
+    expect(
+      barqRealtimeMessageMatchesConversation(
+        {'type': 'message', 'senderId': 'friend-1'},
+        '',
+      ),
+      isFalse,
+    );
+  });
+
   test('notification tap routing validates private chat, group and SPARK destinations', () {
     expect(
       barqNotificationRouteFromData({'type': 'direct_message', 'senderId': 'user-7'}),
