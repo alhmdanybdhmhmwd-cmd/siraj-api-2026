@@ -3913,6 +3913,28 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
            FROM status_media sm JOIN status_posts sp ON sp.id = sm.status_id
            WHERE sm.object_key = ? LIMIT 1`
         ).bind(key).first();
+        // Private memory photos must remain linked to a live owner-owned memory.
+        // This also blocks reads immediately after deletion while Tigris cleanup is pending.
+        if (key.split("/").length === 3 && key.split("/")[1] === "private-memories") {
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS private_memory_media (
+              id TEXT PRIMARY KEY,
+              memory_id TEXT NOT NULL,
+              owner_id TEXT NOT NULL,
+              object_key TEXT NOT NULL UNIQUE,
+              file_name TEXT NOT NULL,
+              content_type TEXT NOT NULL,
+              size INTEGER NOT NULL,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (memory_id) REFERENCES private_memories(id) ON DELETE CASCADE,
+              FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+          `).run();
+          const privateMemoryMedia = await env.DB.prepare(
+            "SELECT id FROM private_memory_media WHERE object_key = ? AND owner_id = ?"
+          ).bind(key, currentUser.sub).first();
+          if (!privateMemoryMedia) return json({ error: "Private memory photo not found" }, 404);
+        }
         let permitted = false;
         if (sparkMedia) {
           // Expiry applies to the owner too: possession of the original status
