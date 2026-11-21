@@ -104,6 +104,14 @@ void main() {
     expect(barqOfflineIncomingMessageMatches(original, {...original, 'receiver_id': 'other'}), isFalse);
   });
 
+  test('offline queue capacity rejects the first item beyond the limit', () {
+    expect(barqOfflineQueueIsFull(0), isFalse);
+    expect(barqOfflineQueueIsFull(199), isFalse);
+    expect(barqOfflineQueueIsFull(200), isTrue);
+    expect(barqOfflineQueueIsFull(201), isTrue);
+    expect(barqOfflineQueueIsFull(3, limit: 3), isTrue);
+  });
+
   test('offline queue decoding preserves empty queues and rejects corrupted data', () {
     expect(decodeBarqOfflineQueue(null), isEmpty);
     expect(decodeBarqOfflineQueue(''), isEmpty);
