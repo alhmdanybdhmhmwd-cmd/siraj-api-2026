@@ -3373,9 +3373,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('برق', style: TextStyle(color: gold, fontWeight: FontWeight.bold)),
+          title: Text('برق', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
           actions: [
-            IconButton(onPressed: refreshAll, icon: const Icon(Icons.refresh, color: gold), tooltip: 'تحديث'),
+            IconButton(onPressed: refreshAll, icon: Icon(Icons.refresh, color: Theme.of(context).colorScheme.primary), tooltip: 'تحديث'),
           ],
         ),
         body: loading
@@ -3383,8 +3383,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             : pages[selectedTab],
         floatingActionButton: selectedTab >= 1 && selectedTab <= 4
             ? FloatingActionButton(
-                backgroundColor: gold,
-                foregroundColor: Colors.black,
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
                 onPressed: selectedTab == 1
                     ? publishStatusDialog
                     : (selectedTab == 2
@@ -3398,7 +3398,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               )
             : null,
         bottomNavigationBar: NavigationBar(
-          backgroundColor: panel,
           selectedIndex: selectedTab,
           onDestinationSelected: (value) {
             setState(() => selectedTab = value);
@@ -4865,7 +4864,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         Card(
           child: ListTile(
             leading: Icon(Icons.palette_outlined, color: Theme.of(context).colorScheme.primary),
-            title: const Text('المظهر والسمات'),
+            title: const Text('هوية برق البصرية'),
             subtitle: Text('اختر هويتك المفضلة • الحالية: ${BarqIdentity.label(BarqIdentity.selected.value)}'),
             trailing: const Icon(Icons.chevron_left),
             onTap: () => _showBarqIdentityPicker(context),
@@ -4935,16 +4934,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
         const SizedBox(height: 14),
         const Card(
-          color: panel,
-          child: ListTile(
+                    child: ListTile(
             leading: Icon(Icons.info_outline, color: gold),
             title: Text('حالة الاتصال'),
             subtitle: Text('متصل بخادم برق'),
           ),
         ),
         Card(
-          color: panel,
-          child: ListTile(
+                    child: ListTile(
             leading: const Icon(Icons.edit_outlined, color: gold),
             title: const Text('تعديل الملف الشخصي'),
             subtitle: const Text('تغيير الاسم الظاهر ورقم الهاتف'),
@@ -4953,8 +4950,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ),
         Card(
-          color: panel,
-          child: ListTile(
+                    child: ListTile(
             leading: const Icon(Icons.key_rounded, color: gold),
             title: const Text('رمز استرداد الحساب'),
             subtitle: const Text('إنشاء رمز جديد بعد تأكيد كلمة المرور'),
@@ -4963,8 +4959,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ),
         Card(
-          color: panel,
-          child: ListTile(
+                    child: ListTile(
             leading: const Icon(Icons.lock_outline, color: gold),
             title: const Text('إعدادات الخصوصية'),
             subtitle: const Text('الظهور في البحث وإشعارات قراءة الرسائل'),
@@ -4973,8 +4968,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ),
         Card(
-          color: panel,
-          child: ListTile(
+                    child: ListTile(
             leading: const Icon(Icons.notifications_outlined, color: gold),
             title: const Text('تفضيلات الإشعارات'),
             subtitle: const Text('الرسائل الخاصة والمجموعات وSPARK'),
@@ -4983,8 +4977,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ),
         Card(
-          color: panel,
-          child: SwitchListTile(
+                    child: SwitchListTile(
             secondary: const Icon(Icons.flash_on_rounded, color: gold),
             title: const Text('وضع البرق'),
             subtitle: const Text('أولوية للرسائل النصية وتعطيل إرسال الصور والفيديو والملفات لتقليل استهلاك البيانات.'),
@@ -5001,8 +4994,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ),
         Card(
-          color: panel,
-          child: SwitchListTile(
+                    child: SwitchListTile(
             secondary: const Icon(Icons.translate_rounded, color: gold),
             title: const Text('الترجمة التلقائية عربي / إنجليزي'),
             subtitle: const Text('تعرض ترجمة الرسائل بجانب النص الأصلي باستخدام نموذج محلي على الجهاز. يمكنك إيقافها في أي وقت.'),
@@ -5019,8 +5011,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ),
         Card(
-          color: panel,
-          child: ListTile(
+                    child: ListTile(
             leading: const Icon(Icons.wifi_tethering, color: gold),
             title: const Text('المراسلة دون إنترنت — الأجهزة القريبة'),
             subtitle: const Text('اكتشاف هاتف صديق قريب ونقل الرسائل النصية دون إنترنت.'),
@@ -5029,8 +5020,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ),
         Card(
-          color: panel,
-          child: ListTile(
+                    child: ListTile(
             leading: const Icon(Icons.bolt, color: gold),
             title: const Text('رابط الدعوة الخاص'),
             subtitle: const Text('شارك رابطك الخاص للانضمام إلى برق.'),
@@ -5039,8 +5029,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ),
         Card(
-          color: panel,
-          child: ListTile(
+                    child: ListTile(
             leading: const Icon(Icons.refresh, color: gold),
             title: const Text('تحديث البيانات'),
             onTap: refreshAll,
@@ -5048,8 +5037,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
         const SizedBox(height: 12),
         const Card(
-          color: panel,
-          child: ListTile(
+                    child: ListTile(
             leading: Icon(Icons.info_outline, color: gold),
             title: Text('حول برق'),
             subtitle: Text('المطور: يحيى المهدي'),
