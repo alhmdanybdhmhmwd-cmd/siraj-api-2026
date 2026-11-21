@@ -1,7 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import * as workerModule from "../src/src/index.js";
+import { readFile, writeFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 
+const workerPath = new URL("../src/src/index.js", import.meta.url);
+let workerSource = await readFile(workerPath, "utf8");
+const summarySource = await readFile(new URL("../src/src/conversation_summary.js", import.meta.url), "utf8");
+workerSource = workerSource.replace('import { AwsClient } from "aws4fetch";', "class AwsClient {}");
+workerSource = workerSource.replace(
+  'import { prepareConversationSummaryTranscript, buildConversationSummaryMessages, extractConversationSummaryText } from "./conversation_summary.js";',
+  summarySource
+);
+const workerModulePath = `/tmp/barq-health-worker-${process.pid}.mjs`;
+await writeFile(workerModulePath, workerSource, "utf8");
+const workerModule = await import(pathToFileURL(workerModulePath).href);
 const fetchWorker = workerModule.default.fetch;
 
 function request(path) {
