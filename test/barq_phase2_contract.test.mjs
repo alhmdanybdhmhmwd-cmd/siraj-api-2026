@@ -596,6 +596,7 @@ test("SPARK media uploads validate file signatures and enforce the ten-item serv
   assert.ok(worker.includes("function detectSparkMediaType(bytes)"));
   assert.ok(worker.includes("detectSparkMediaType(bytes) !== contentType"));
   assert.ok(worker.includes('ascii(4, 8) === "ftyp"'));
+  assert.ok(worker.includes('ascii(8, 12) === "qt  " ? "video/quicktime" : "video/mp4"'), "SPARK MOV files selected by Android must pass server MIME validation");
   assert.ok(worker.includes('ascii(0, 6) === "GIF87a"'));
   const uploadStart = worker.indexOf('if (method === "POST" && path === "/api/statuses/media")');
   const uploadEnd = worker.indexOf("// Publish a 24-hour text status", uploadStart);
