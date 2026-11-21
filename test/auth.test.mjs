@@ -569,6 +569,51 @@ test("profile photo upload enforces the 4 MiB limit before storage", async () =>
   }
 });
 
+class ProfileOwnershipTestDB extends FakeDB {
+  constructor() {
+    super();
+    this.profileUpdateParams = null;
+  }
+  prepare(sql) {
+    const statement = super.prepare(sql);
+    const first = statement.first.bind(statement);
+    const run = statement.run.bind(statement);
+    statement.first = async () => {
+      if (sql.includes("SELECT u.id, u.username, u.display_name, u.phone")) {
+        return { id: user.id, username: user.username, display_name: "Updated Name", phone: "+967700000002" };
+      }
+      return first();
+    };
+    statement.run = async () => {
+      if (sql.includes("UPDATE users SET display_name = ?, phone = ?")) {
+        this.profileUpdateParams = statement.params;
+        assert.match(sql, /WHERE id = \? AND NOT EXISTS/);
+        return { meta: { changes: 1 } };
+      }
+      return run();
+    };
+    return statement;
+  }
+}
+
+test("profile updates are always scoped to the authenticated account despite a spoofed target userId", async () => {
+  const db = new ProfileOwnershipTestDB();
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request("https://api.example.test/api/profile", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      userId: "victim-account",
+      displayName: "Updated Name",
+      phone: "+967700000002"
+    })
+  }), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 200);
+  assert.equal(db.profileUpdateParams[2], user.id);
+  assert.equal(db.profileUpdateParams[3], user.id);
+  assert.notEqual(db.profileUpdateParams[2], "victim-account");
+});
+
 test("profile photo reads deny non-friends when the target profile is private", async () => {
   const db = new FakeDB();
   db.friendshipAllowed = false;
