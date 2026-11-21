@@ -135,6 +135,16 @@ test("FCM transport errors are contained and logged instead of escaping the requ
   assert.match(String(h.errors[0][1]), /simulated network outage/);
 });
 
+test("ambiguous INVALID_ARGUMENT payload errors do not revoke a device token", async () => {
+  const h = makeHarness({
+    fcmResponses: [{ status: 400, body: JSON.stringify({ error: { status: "INVALID_ARGUMENT", message: "Invalid message payload" } }) }]
+  });
+  await sendBarqPushNotification(h.env, "recipient-1", "sender-1", "Sender", "hello", {}, h.dependencies);
+  assert.deepEqual(h.deleted, []);
+  assert.equal(h.errors.length, 1);
+  assert.match(String(h.errors[0][2]), /INVALID_ARGUMENT|Invalid message payload/);
+});
+
 test("missing service credentials safely skip delivery", async () => {
   const h = makeHarness();
   delete h.env.FCM_SERVICE_ACCOUNT_JSON;
