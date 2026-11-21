@@ -312,8 +312,11 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
 
     if (method === "DELETE" && !action && partNumber === null) {
       if (session.state === "completed") return json({ error: "Completed media cannot be aborted through its upload session" }, 409);
+      const staged = await env.DB.prepare("SELECT chunk_number AS chunkNumber FROM media_upload_chunks WHERE session_id = ?").bind(sessionId).all();
       const aborted = await storage.fetch(objectUrl(env, session.object_key, session.storage_upload_id), { method: "DELETE" });
       if (!aborted.ok && aborted.status !== 404) return json({ error: "Storage could not abort the upload", storageStatus: aborted.status }, 502);
+      await deleteStagedChunks(storage, env, session, (staged.results || []).map(item => Number(item.chunkNumber)));
+      await env.DB.prepare("DELETE FROM media_upload_chunks WHERE session_id = ?").bind(sessionId).run();
       await env.DB.prepare("UPDATE media_upload_sessions SET state = 'aborted', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND owner_id = ?").bind(sessionId, currentUser.sub).run();
       await env.DB.prepare("DELETE FROM media_upload_parts WHERE session_id = ?").bind(sessionId).run();
       return json({ sessionId, state: "aborted" });
