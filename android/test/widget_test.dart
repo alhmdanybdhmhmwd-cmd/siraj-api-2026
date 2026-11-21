@@ -104,6 +104,19 @@ void main() {
     expect(barqOfflineIncomingMessageMatches(original, {...original, 'receiver_id': 'other'}), isFalse);
   });
 
+  test('Nearby outbox duplicate IDs must match sender, receiver, and body', () {
+    final original = <String, dynamic>{
+      'id': 'a1b2c3d4e5f60708a1b2c3d4e5f60708',
+      'sender_id': 'me',
+      'receiver_id': 'friend-1',
+      'body': 'hello',
+    };
+    expect(barqOfflineIncomingMessageMatches(original, Map<String, dynamic>.from(original)), isTrue);
+    expect(barqOfflineIncomingMessageMatches(original, {...original, 'body': 'tampered'}), isFalse);
+    expect(barqOfflineIncomingMessageMatches(original, {...original, 'sender_id': 'other'}), isFalse);
+    expect(barqOfflineIncomingMessageMatches(original, {...original, 'receiver_id': 'other'}), isFalse);
+  });
+
   test('offline queue reconciliation removes IDs found on any server page only', () {
     final queued = [
       {'id': 'offline-old', 'body': 'وصلت دون إنترنت'},
