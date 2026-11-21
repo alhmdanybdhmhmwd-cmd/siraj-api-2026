@@ -2930,13 +2930,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 if (content.isEmpty) return;
                 try {
                   await Api.publishStatus(content, backgroundKey: backgroundKey, textColorKey: textColorKey, fontKey: fontKey);
-                  if (!mounted) return;
-                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                  if (!dialogContext.mounted) return;
+                  Navigator.pop(dialogContext);
                   await refreshAll();
-                  if (!mounted) return;
+                  if (!context.mounted) return;
                   showMsg(context, 'نُشرت حالتك لمدة 24 ساعة.');
                 } catch (e) {
-                  if (mounted) showMsg(context, cleanError(e));
+                  if (context.mounted) showMsg(context, cleanError(e));
                 }
               },
               child: const Text('نشر في SPARK'),
