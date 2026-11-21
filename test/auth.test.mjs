@@ -2080,7 +2080,7 @@ test("chunked oversized JSON requests are rejected before route processing", asy
 
 
 
-test("each uploaded attachment receives its own 72-hour expiration timestamp", async () => {
+test("chat attachments are retained without automatic 72-hour expiry", async () => {
   const db = new FakeDB();
   const originalPrepare = db.prepare.bind(db);
   let savedExpiry = null;
@@ -2126,8 +2126,9 @@ test("each uploaded attachment receives its own 72-hour expiration timestamp", a
       TIGRIS_SECRET_ACCESS_KEY: "test-secret"
     });
     assert.equal(response.status, 201);
-    const expiry = Date.parse(savedExpiry);
-    assert.equal(savedExpiry, storageExpiry);
+    const permanentExpiry = "9999-12-31T23:59:59.999Z";
+    assert.equal(savedExpiry, null, "successful chat attachments must not enter scheduled expiry cleanup");
+    assert.equal(storageExpiry, permanentExpiry);
     assert.ok(savedAccess, "upload must persist a D1 authorization row");
     assert.match(savedAccess.sql, /INSERT INTO media_access/);
     assert.deepEqual(savedAccess.params.slice(0, 6), [
@@ -2138,9 +2139,8 @@ test("each uploaded attachment receives its own 72-hour expiration timestamp", a
       "attachment",
       "image/jpeg"
     ]);
-    assert.equal(savedAccess.params[6], savedExpiry);
-    assert.ok(expiry >= before + 72 * 60 * 60 * 1000 - 1000);
-    assert.ok(expiry <= Date.now() + 72 * 60 * 60 * 1000 + 1000);
+    assert.equal(savedAccess.params[6], permanentExpiry);
+    assert.equal(Date.parse(savedAccess.params[6]), Date.parse(permanentExpiry));
   } finally {
     delete globalThis.__fakeTigrisHandler;
   }
@@ -2148,7 +2148,7 @@ test("each uploaded attachment receives its own 72-hour expiration timestamp", a
 
 
 
-test("group attachment upload persists group-scoped access without a private recipient", async () => {
+test("group attachment upload persists permanent group-scoped access without a private recipient", async () => {
   const db = new FakeDB();
   const originalPrepare = db.prepare.bind(db);
   let savedAccess = null;
@@ -2197,9 +2197,7 @@ test("group attachment upload persists group-scoped access without a private rec
       "application/pdf"
     ]);
     assert.equal(savedAccess.length, 7);
-    const accessExpiry = Date.parse(savedAccess[6]);
-    assert.ok(accessExpiry > Date.now() + 71 * 60 * 60 * 1000);
-    assert.ok(accessExpiry < Date.now() + 73 * 60 * 60 * 1000);
+    assert.equal(savedAccess[6], "9999-12-31T23:59:59.999Z");
     assert.equal(storageCalls.length, 1);
     assert.equal(storageCalls[0].method, "PUT");
     assert.equal(storageCalls[0].headers["x-amz-meta-groupid"], "group-42");
