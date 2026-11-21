@@ -1401,23 +1401,31 @@ export default {
           const attachedMedia = await env.DB.prepare(
             "SELECT object_key FROM private_memory_media WHERE memory_id = ? AND owner_id = ?"
           ).bind(memoryId, currentUser.sub).all();
+          const deletionStatements = [];
           if ((attachedMedia.results || []).length) {
             await env.DB.prepare(
               "CREATE TABLE IF NOT EXISTS media_expirations (object_key TEXT PRIMARY KEY, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
             ).run();
+            const cleanupAt = new Date().toISOString();
             for (const media of attachedMedia.results) {
-              await env.DB.prepare(
-                "INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?) ON CONFLICT(object_key) DO UPDATE SET expires_at = excluded.expires_at"
-              ).bind(media.object_key, new Date().toISOString()).run();
-              await env.DB.prepare("DELETE FROM media_access WHERE object_key = ?").bind(media.object_key).run();
+              deletionStatements.push(
+                env.DB.prepare(
+                  "INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?) ON CONFLICT(object_key) DO UPDATE SET expires_at = excluded.expires_at"
+                ).bind(media.object_key, cleanupAt),
+                env.DB.prepare("DELETE FROM media_access WHERE object_key = ?").bind(media.object_key),
+                env.DB.prepare(
+                  "DELETE FROM private_memory_media WHERE memory_id = ? AND owner_id = ? AND object_key = ?"
+                ).bind(memoryId, currentUser.sub, media.object_key)
+              );
             }
-            await env.DB.prepare(
-              "DELETE FROM private_memory_media WHERE memory_id = ? AND owner_id = ?"
-            ).bind(memoryId, currentUser.sub).run();
           }
-          const deleted = await env.DB.prepare(
-            "DELETE FROM private_memories WHERE id = ? AND owner_id = ?"
-          ).bind(memoryId, currentUser.sub).run();
+          deletionStatements.push(
+            env.DB.prepare(
+              "DELETE FROM private_memories WHERE id = ? AND owner_id = ?"
+            ).bind(memoryId, currentUser.sub)
+          );
+          const deletionResults = await env.DB.batch(deletionStatements);
+          const deleted = deletionResults?.[deletionStatements.length - 1];
           if (Number(deleted?.meta?.changes || 0) !== 1) {
             return json({ error: "Memory not found" }, 404);
           }
