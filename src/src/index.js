@@ -10,7 +10,13 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, Range, X-File-Name, X-Recipient-Id, X-Group-Id, X-Idempotency-Key, X-Status-Caption, X-Status-Id, X-Audio-Duration-Ms",
   "Access-Control-Expose-Headers": "Accept-Ranges, Content-Range, Content-Disposition, ETag, X-Request-Id",
-  "Content-Type": "application/json; charset=utf-8"
+  "Content-Type": "application/json; charset=utf-8",
+  "Cache-Control": "no-store",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "no-referrer",
+  "X-Permitted-Cross-Domain-Policies": "none",
+  "Strict-Transport-Security": "max-age=31536000"
 };
 
 const json = (data, status = 200) =>
