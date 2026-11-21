@@ -1507,6 +1507,7 @@ Future<void> showMessageActions(
   Future<void> Function(String body)? onEdit,
   Future<void> Function(String emoji)? onReact,
   Future<void> Function()? onPin,
+  Future<void> Function()? onSaveMemory,
   bool isPinned = false,
 }) async {
   final action = await showModalBottomSheet<String>(
