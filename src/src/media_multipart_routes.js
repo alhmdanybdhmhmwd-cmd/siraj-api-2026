@@ -81,6 +81,7 @@ export async function cleanupExpiredUploadSessions(env, now = Date.now()) {
   const rows = await env.DB.prepare(
     "SELECT id, object_key, storage_upload_id, state FROM media_upload_sessions " +
     "WHERE (state IN ('uploading', 'completing', 'failed') AND expires_at <= ?) " +
+    "OR state = 'aborted' " +
     "OR (state = 'completed' AND EXISTS (SELECT 1 FROM media_upload_chunks c WHERE c.session_id = media_upload_sessions.id)) " +
     "ORDER BY expires_at LIMIT 50"
   ).bind(cutoff).all();
@@ -97,7 +98,7 @@ export async function cleanupExpiredUploadSessions(env, now = Date.now()) {
       await deleteStagedChunks(storage, env, cleanupSession, (staged.results || []).map(item => Number(item.chunkNumber)));
       await env.DB.prepare("DELETE FROM media_upload_chunks WHERE session_id = ?").bind(row.id).run();
       if (row.state !== "completed") {
-        await env.DB.prepare("DELETE FROM media_upload_sessions WHERE id = ? AND state IN ('uploading', 'completing', 'failed') AND expires_at <= ?")
+        await env.DB.prepare("DELETE FROM media_upload_sessions WHERE id = ? AND ((state IN ('uploading', 'completing', 'failed') AND expires_at <= ?) OR state = 'aborted')")
           .bind(row.id, cutoff).run();
       }
       cleaned++;
