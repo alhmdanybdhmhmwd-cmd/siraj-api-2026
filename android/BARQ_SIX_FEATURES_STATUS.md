@@ -66,3 +66,14 @@
 
 - Flutter 3.50 يحدد targetSdk الافتراضي إلى API 36؛ لذلك أزلنا ACCESS_LOCAL_NETWORK من Manifest ومن طلبات وقت التشغيل حالياً. وثائق Android تنص صراحة على عدم إضافته أو طلبه إذا كان targetSdk 36 أو أقل. نعيد إدراجه فقط عند رفع targetSdk إلى 37+ وبعد التحقق من مسار Nearby المستخدم.
 - بقيت صلاحيات Nearby المطلوبة حسب API الجهاز: الموقع حتى API 32، Bluetooth الحديث من API 31، وNEARBY_WIFI_DEVICES من API 33. يظل compileSdk 37 لدعم permission_handler 13.0.2 ولا يعني أن targetSdk أصبح 37.
+
+
+### إغلاق الدفعة الثانية من المرحلة السابعة — 2026-11-21
+
+- اكتمل تدقيق صلاحيات Nearby بحسب Android API: الموقع حتى API 32، Bluetooth الحديث من API 31، وNEARBY_WIFI_DEVICES من API 33. التطبيق يستهدف API 36 حالياً؛ لذلك لا يعلن ولا يطلب ACCESS_LOCAL_NETWORK حتى رفع targetSdk إلى 37 وفق سياسة Android 17.
+- اكتمل تدقيق دورة Nearby: تنظيف فشل بدء الإعلان/الاكتشاف، رفض الأجهزة غير المعروفة، التحقق من الرسائل الصادرة والواردة، معالجة تكرار/تعارض المعرفات وامتلاء الطوابير، وإظهار فشل حفظ/نقل الرسائل للمستخدم.
+- أضيفت اختبارات لمصفوفة الصلاحيات، والتحقق من الرسائل الصادرة، وحالات نقل PayloadStatus (FAILURE/CANCELED/SUCCESS/IN_PROGRESS/NONE).
+- Android Quality Gate run 44923482485 على commit e732a39ec804b32fcb3258eadbfa1fbd8ab8f0f4 نجح: Flutter analyze وFlutter tests ناجحان. Backend tests run 44923487097 نجح أيضاً.
+- لم يتم بناء APK؛ خطوات بناء APK التشخيصي ونسخة release بقيت skipped حسب اتفاقنا. اختبار الهاتفين الحقيقي يبقى في المرحلة 11.
+
+<escape>الحالة: المرحلة السابعة — الدفعة الثانية منتهية برمجياً، والاختبار الحي مؤجل للمرحلة 11.</escape>
