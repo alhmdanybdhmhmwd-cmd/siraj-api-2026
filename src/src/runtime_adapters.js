@@ -138,7 +138,7 @@ export function createLibsqlDatabaseProvider(client) {
  */
 export function createObjectStorageUrl(env, objectKey, query = {}) {
   if (typeof objectKey !== "string" || !objectKey || objectKey.startsWith("/") ||
-      objectKey.includes("\\\\") || objectKey.split("/").some(part => !part || part === "." || part === "..")) {
+      objectKey.includes("\\") || objectKey.split("/").some(part => !part || part === "." || part === "..")) {
     throw new TypeError("A safe relative object key is required");
   }
   const bucket = String(env?.OBJECT_STORAGE_BUCKET || env?.TIGRIS_BUCKET || "siraj-media");
