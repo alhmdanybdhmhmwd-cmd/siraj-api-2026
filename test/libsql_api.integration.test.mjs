@@ -72,6 +72,15 @@ test("BARQ account registration, contact creation, and idempotent chat work thro
     assert.equal(secondRegistration.status, 201);
     const second = await secondRegistration.json();
 
+    const loginResponse = await request("/api/login", "POST", {
+      username: "+12025550101",
+      password: "Barq-Test-Password-1"
+    });
+    assert.equal(loginResponse.status, 200);
+    const loggedIn = await loginResponse.json();
+    assert.equal(loggedIn.user.id, first.user.id);
+    assert.ok(loggedIn.token);
+
     const contactResponse = await request(
       "/api/contacts",
       "POST",
