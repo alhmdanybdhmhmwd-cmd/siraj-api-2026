@@ -72,3 +72,12 @@
 - أضيفت اختبارات عقد Worker واختبار preflight فعلي لبوابة Vercel يغطي تعديل الرسائل والرفع المجزأ وتنزيل أجزاء الملف.
 - Backend CI على commit e39ab3e3f34c06c7df9877f33db7f62d0446fed0 نجح: 216/216 اختباراً، دون فشل، run [44946754896](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026/actions/runs/44946754896). تكرار CI على commit نفسه run [44946761090](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026/actions/runs/44946761090) نجح أيضاً.
 - هذا إصلاح لتوافق CORS وليس دليلاً على تجاوز حجب الشبكات أو حل VPN. لم يحدث نشر جديد أو تغيير DNS أو إعداد إنتاج.
+
+## 11. تجهيز خيار API failover اختياري وآمن (2026-11-21)
+- أضيف إلى Vercel gateway خيار خادم احتياطي server-side عبر متغير اختياري BARQ_API_FALLBACK_UPSTREAM. لا يوجد عنوان احتياطي مضبوط حالياً، لذلك يبقى الخيار غير مفعّل ولا يغيّر حركة الإنتاج.
+- لا يقبل الإعداد الاحتياطي إلا HTTPS origin صالحاً ومختلفاً عن الأساسي؛ الروابط ذات المسارات أو العناوين غير الآمنة تُهمل. بيئة Preview تبقى مثبتة على Worker الاختبار المعزول وتتجاهل أي override أو fallback.
+- عند وجود عنوان احتياطي، يسمح التحويل إليه بعد فشل الشبكة أو استجابات 502/503/504 فقط. لا يعاد إرسال POST أو PATCH غير القابل للتكرار؛ POST لا يعاد إلا مع X-Idempotency-Key. GET/HEAD/PUT/DELETE/OPTIONS قابلة لإعادة المحاولة وفق دلالاتها.
+- أضيفت اختبارات تغطي 503، وفشل الشبكة/DNS، وPOST مع idempotency key، ومنع تكرار POST العادي، ورفض HTTP أو fallback غير صالح، وعزل Preview.
+- Backend CI على commit 4d906fb7da2d1602176dbe5ebf7efcf197c93502 نجح: 222/222 اختباراً دون فشل، run [44947186202](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026/actions/runs/44947186202). كما نجح فحص Worker المحلي وhealth probes على run [44946683888](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026/actions/runs/44946683888).
+- لم يُنشأ أو يُفعّل خادم احتياطي فعلي بعد؛ لا يوجد حتى الآن عنوان مستقل تم التحقق من DNS/TLS/الوصول إليه من اليمن. لا يعتبر هذا حلاً مثبتاً للـVPN، ولا تم نشر أي تعديل على الإنتاج أو تغيير DNS أو التخزين.
+- الخطوة التالية: اختيار مزود/نطاق مستقل، نشر Worker احتياطي معزول بعد موافقة المستخدم، ثم اختباره من اليمن دون VPN قبل وضع أي إعداد إنتاجي.
