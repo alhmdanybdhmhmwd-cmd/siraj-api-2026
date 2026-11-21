@@ -3978,7 +3978,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       return;
                     }
                     setDialogState(() => saving = true);
-                    Map<String, dynamic>? saved;
+                    late final Map<String, dynamic> saved;
                     try {
                       saved = editing
                           ? await Api.updatePrivateMemory(
@@ -3992,16 +3992,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                               sourceType: sourceType,
                             );
                     } catch (e) {
-                      if (saved != null) {
-                        try {
-                          final loaded = await Api.privateMemories();
-                          if (mounted) setState(() => memories = loaded);
-                        } catch (_) {}
-                        if (dialogContext.mounted) Navigator.pop(dialogContext);
-                        if (pageContext.mounted) {
-                          showMsg(pageContext, 'حُفظت الذكرى، لكن تعذّر إكمال الصورة: ${cleanError(e)}');
-                        }
-                      } else if (dialogContext.mounted) {
+                      if (dialogContext.mounted) {
                         setDialogState(() => saving = false);
                         showMsg(dialogContext, cleanError(e));
                       }
