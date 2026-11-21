@@ -169,7 +169,6 @@ List<String> barqNearbyPermissionNamesForAndroidSdk(int sdkInt) => [
   ] else
     'bluetooth',
   if (sdkInt >= 33) 'nearbyWifiDevices',
-  if (sdkInt >= 37) 'accessLocalNetwork',
 ];
 
 /// يتحقق من صلاحية رسالة Nearby الصادرة قبل إرسالها إلى جهاز آخر.
