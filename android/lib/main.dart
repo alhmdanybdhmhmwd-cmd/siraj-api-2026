@@ -2769,6 +2769,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   List<Map<String, dynamic>> groups = [];
   List<Map<String, dynamic>> statuses = [];
   List<Map<String, dynamic>> memories = [];
+  bool memoriesLoadFailed = false;
   bool loading = true;
   Map<String, dynamic> privacySettings = {'searchable': true, 'readReceipts': true};
   Map<String, dynamic> notificationPrefs = {'messages': true, 'groups': true, 'statuses': true};
@@ -2846,8 +2847,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       }
       try {
         memories = await Api.privateMemories();
+        memoriesLoadFailed = false;
       } catch (_) {
-        memories = [];
+        // Preserve previously loaded memories; a network error must not look like an empty vault.
+        memoriesLoadFailed = true;
       }
       try {
         referralStats = await Api.referrals();
@@ -3735,8 +3738,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       onRefresh: () async {
         try {
           final loaded = await Api.privateMemories();
-          if (mounted) setState(() => memories = loaded);
+          if (mounted) setState(() {
+            memories = loaded;
+            memoriesLoadFailed = false;
+          });
         } catch (e) {
+          if (mounted) setState(() => memoriesLoadFailed = true);
           if (mounted) showMsg(context, cleanError(e));
         }
       },
@@ -3747,7 +3754,37 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             padding: EdgeInsets.all(12),
             child: Text('مساحة ذكرياتك الخاصة', style: TextStyle(color: gold, fontSize: 21)),
           ),
-          if (memories.isEmpty)
+          if (memoriesLoadFailed)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 20),
+              child: Column(
+                children: [
+                  const Icon(Icons.cloud_off_outlined, color: gold, size: 48),
+                  const SizedBox(height: 12),
+                  const Text('تعذر تحميل ذكرياتك', style: TextStyle(color: gold, fontSize: 18)),
+                  const SizedBox(height: 8),
+                  const Text('تحقق من اتصالك وحاول التحديث. لم نحذف ذكرياتك المحفوظة.', textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white60)),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: () async {
+                      try {
+                        final loaded = await Api.privateMemories();
+                        if (mounted) setState(() {
+                          memories = loaded;
+                          memoriesLoadFailed = false;
+                        });
+                      } catch (e) {
+                        if (mounted) showMsg(context, cleanError(e));
+                      }
+                    },
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('إعادة المحاولة'),
+                  ),
+                ],
+              ),
+            )
+          else if (memories.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 20),
               child: Column(
@@ -4005,8 +4042,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     );
                     try {
                       final loaded = await Api.privateMemories();
-                      if (mounted) setState(() => memories = loaded);
+                      if (mounted) setState(() {
+                        memories = loaded;
+                        memoriesLoadFailed = false;
+                      });
                     } catch (_) {
+                      if (mounted) setState(() => memoriesLoadFailed = true);
                       // The save/upload succeeded; a list refresh failure is not a save failure.
                     }
                     if (dialogContext.mounted) Navigator.pop(dialogContext);
