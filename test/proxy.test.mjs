@@ -417,3 +417,33 @@ test("gateway ignores non-HTTPS and malformed fallback upstreams", () => {
     BARQ_API_FALLBACK_UPSTREAM: "not a URL"
   }), ["https://siraj-api.alhmdanybdhmhmwd.workers.dev"]);
 });
+
+test("gateway does not replay non-idempotent POST requests to fallback", async () => {
+  const originalFetch = globalThis.fetch;
+  const previousFallback = process.env.BARQ_API_FALLBACK_UPSTREAM;
+  const previousEnvironment = process.env.VERCEL_ENV;
+  let calls = 0;
+  process.env.BARQ_API_FALLBACK_UPSTREAM = "https://barq-fallback.example";
+  delete process.env.VERCEL_ENV;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return new Response("temporarily unavailable", { status: 503 });
+  };
+  try {
+    const res = makeResponse();
+    await handler(makeRequest({
+      url: "/api/messages",
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      chunks: [Buffer.from(JSON.stringify({ text: "one message" }))]
+    }), res);
+    assert.equal(calls, 1);
+    assert.equal(res.statusCode, 503);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousFallback === undefined) delete process.env.BARQ_API_FALLBACK_UPSTREAM;
+    else process.env.BARQ_API_FALLBACK_UPSTREAM = previousFallback;
+    if (previousEnvironment === undefined) delete process.env.VERCEL_ENV;
+    else process.env.VERCEL_ENV = previousEnvironment;
+  }
+});
