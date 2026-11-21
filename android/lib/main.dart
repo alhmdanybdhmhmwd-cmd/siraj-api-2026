@@ -3599,6 +3599,49 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _showPrivateMemoryPhotos(Map<String, dynamic> memory) async {
+    final rawMedia = memory['media'];
+    final media = rawMedia is List
+        ? rawMedia.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList()
+        : <Map<String, dynamic>>[];
+    if (media.isEmpty) {
+      await _showPrivateMemoryDialog(memory: memory);
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: panel,
+        title: Text(field(memory, ['title'], 'صور الذكرى')),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 360,
+          child: PageView(
+            children: [
+              for (final item in media)
+                InteractiveViewer(
+                  child: Image.network(
+                    Api.sparkMediaUri(field(item, ['attachmentId'])).toString(),
+                    headers: {if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'},
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Center(
+                      child: Icon(Icons.broken_image_outlined, color: gold, size: 48),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('إغلاق'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _memoriesPage() {
     return RefreshIndicator(
       color: gold,
@@ -3641,7 +3684,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             Card(
               color: panel,
               child: ListTile(
-                leading: _privateMemoryLeading(memory),
+                leading: GestureDetector(
+                  onTap: () => _showPrivateMemoryPhotos(memory),
+                  child: _privateMemoryLeading(memory),
+                ),
                 title: Text(field(memory, ['title'], 'ذكرى محفوظة')),
                 subtitle: Text(
                   field(memory, ['content'], 'صورة محفوظة'),
