@@ -1933,6 +1933,31 @@ Widget personAvatar(Map<String, dynamic> person, {double radius = 22}) {
   );
 }
 
+class PrivateMemoryPhotoGallery extends StatelessWidget {
+  final List<Map<String, dynamic>> media;
+
+  const PrivateMemoryPhotoGallery({super.key, required this.media});
+
+  @override
+  Widget build(BuildContext context) {
+    return PageView(
+      children: [
+        for (final item in media)
+          InteractiveViewer(
+            child: Image.network(
+              Api.sparkMediaUri(field(item, ['attachmentId'])).toString(),
+              headers: {if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'},
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const Center(
+                child: Icon(Icons.broken_image_outlined, color: gold, size: 48),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class StartupPage extends StatefulWidget {
   const StartupPage({super.key});
 
@@ -3616,21 +3641,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         content: SizedBox(
           width: double.maxFinite,
           height: 360,
-          child: PageView(
-            children: [
-              for (final item in media)
-                InteractiveViewer(
-                  child: Image.network(
-                    Api.sparkMediaUri(field(item, ['attachmentId'])).toString(),
-                    headers: {if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'},
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => const Center(
-                      child: Icon(Icons.broken_image_outlined, color: gold, size: 48),
-                    ),
-                  ),
-                ),
-            ],
-          ),
+          child: PrivateMemoryPhotoGallery(media: media),
         ),
         actions: [
           TextButton(
