@@ -169,6 +169,7 @@ List<String> barqNearbyPermissionNamesForAndroidSdk(int sdkInt) => [
   ] else
     'bluetooth',
   if (sdkInt >= 33) 'nearbyWifiDevices',
+  if (sdkInt >= 37) 'accessLocalNetwork',
 ];
 
 /// استقبال روابط الدعوة barq://invite/CODE حتى عند فتح التطبيق من رابط خارجي.
@@ -1386,6 +1387,7 @@ class BarqNearbyService {
       'bluetoothConnect': Permission.bluetoothConnect,
       'bluetoothScan': Permission.bluetoothScan,
       'nearbyWifiDevices': Permission.nearbyWifiDevices,
+      'accessLocalNetwork': Permission.accessLocalNetwork,
     };
     final requestedPermissions = barqNearbyPermissionNamesForAndroidSdk(
       androidInfo.version.sdkInt,
