@@ -1434,7 +1434,7 @@ export default {
 
       // Directional user blocks; shared group membership and group messages remain unchanged.
       if (path === "/api/blocks" || path.startsWith("/api/blocks/") ||
-          path === "/api/messages" || path === "/api/ephemeral-messages" ||
+          path === "/api/messages" || path === "/api/media" || path === "/api/ephemeral-messages" ||
           path.startsWith("/api/profile/photo/") || path === "/api/statuses") {
         await env.DB.prepare(`
           CREATE TABLE IF NOT EXISTS blocked_users (
@@ -3684,6 +3684,9 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           return json({ error: "Choose one conversation destination" }, 400);
         }
         if (recipientId) {
+          if (await isBlockedPair(currentUser.sub, recipientId)) {
+            return json({ error: "Private media sharing is unavailable" }, 403);
+          }
           const friendship = await env.DB.prepare(
             "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
           ).bind(currentUser.sub, recipientId).first();
@@ -3954,6 +3957,10 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           const groupId = headResponse.headers.get("x-amz-meta-groupid") || "";
           permitted = ownerId === currentUser.sub;
           if (!permitted && recipientId === currentUser.sub && ownerId) {
+            const blocked = await env.DB.prepare(
+              "SELECT 1 FROM blocked_users WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?) LIMIT 1"
+            ).bind(currentUser.sub, ownerId, ownerId, currentUser.sub).first();
+            if (blocked) return json({ error: "Attachment access denied" }, 403);
             const friendship = await env.DB.prepare(
               "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
             ).bind(currentUser.sub, ownerId).first();
