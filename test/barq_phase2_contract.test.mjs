@@ -370,7 +370,7 @@ test("SPARK media publishing stores private image/video objects with a 24-hour l
   assert.ok(uploadRoute.includes("INSERT INTO media_expirations"));
   assert.ok(uploadRoute.includes('category: "statuses"'));
   assert.ok(uploadRoute.includes("env.DB.batch"));
-  assert.ok(uploadRoute.includes("storage.fetch(storageUrl, { method: \"DELETE\" })"));
+  assert.ok(uploadRoute.includes("rollbackSparkMediaUpload(env, storage, storageUrl, objectKey)"));
 });
 
 test("SPARK media reads enforce active friend visibility and expire with their status", () => {
