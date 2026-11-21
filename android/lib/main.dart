@@ -2930,9 +2930,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 if (content.isEmpty) return;
                 try {
                   await Api.publishStatus(content, backgroundKey: backgroundKey, textColorKey: textColorKey, fontKey: fontKey);
+                  if (!mounted) return;
                   if (dialogContext.mounted) Navigator.pop(dialogContext);
                   await refreshAll();
-                  if (mounted) showMsg(context, 'نُشرت حالتك لمدة 24 ساعة.');
+                  if (!mounted) return;
+                  showMsg(context, 'نُشرت حالتك لمدة 24 ساعة.');
                 } catch (e) {
                   if (mounted) showMsg(context, cleanError(e));
                 }
