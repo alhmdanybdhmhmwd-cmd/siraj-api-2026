@@ -366,3 +366,54 @@ test("proxy CORS permits edits, resumable media, and byte-range downloads", asyn
   assert.match(res.headers["Access-Control-Expose-Headers"], /Content-Range/);
   assert.match(res.headers["Access-Control-Expose-Headers"], /Accept-Ranges/);
 });
+
+test("production API gateway retries an opt-in HTTPS fallback after upstream 503", async () => {
+  const originalFetch = globalThis.fetch;
+  const previousFallback = process.env.BARQ_API_FALLBACK_UPSTREAM;
+  const previousEnvironment = process.env.VERCEL_ENV;
+  const calls = [];
+  process.env.BARQ_API_FALLBACK_UPSTREAM = "https://barq-fallback.example";
+  delete process.env.VERCEL_ENV;
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    if (calls.length === 1) return new Response("temporarily unavailable", { status: 503 });
+    return new Response(JSON.stringify({ status: "alive", service: "barq-api" }), {
+      status: 200, headers: { "content-type": "application/json" }
+    });
+  };
+  try {
+    const res = makeResponse();
+    await handler(makeRequest({ url: "/health/live", method: "GET", chunks: [] }), res);
+    assert.deepEqual(calls, [
+      "https://siraj-api.alhmdanybdhmhmwd.workers.dev/health/live",
+      "https://barq-fallback.example/health/live"
+    ]);
+    assert.equal(res.statusCode, 200);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousFallback === undefined) delete process.env.BARQ_API_FALLBACK_UPSTREAM;
+    else process.env.BARQ_API_FALLBACK_UPSTREAM = previousFallback;
+    if (previousEnvironment === undefined) delete process.env.VERCEL_ENV;
+    else process.env.VERCEL_ENV = previousEnvironment;
+  }
+});
+
+test("Preview gateway remains pinned to its isolated upstream and ignores fallback configuration", () => {
+  const candidates = handler.getUpstreamCandidates({
+    VERCEL_ENV: "preview",
+    BARQ_API_UPSTREAM: "https://production-override.example",
+    BARQ_API_FALLBACK_UPSTREAM: "https://production-fallback.example"
+  });
+  assert.deepEqual(candidates, [
+    "https://barq-api-phase2-test.alhmdanybdhmhmwd.workers.dev"
+  ]);
+});
+
+test("gateway ignores non-HTTPS and malformed fallback upstreams", () => {
+  assert.deepEqual(handler.getUpstreamCandidates({
+    BARQ_API_FALLBACK_UPSTREAM: "http://insecure.example"
+  }), ["https://siraj-api.alhmdanybdhmhmwd.workers.dev"]);
+  assert.deepEqual(handler.getUpstreamCandidates({
+    BARQ_API_FALLBACK_UPSTREAM: "not a URL"
+  }), ["https://siraj-api.alhmdanybdhmhmwd.workers.dev"]);
+});
