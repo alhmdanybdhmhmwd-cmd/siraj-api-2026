@@ -373,6 +373,7 @@ class SirajPush {
   }
 
   static void _handleForegroundMessage(RemoteMessage message) {
+    if (Api.token == null) return;
     final label = barqForegroundPushLabel(message.data, _preferences);
     if (label == null) return;
     final messenger = barqScaffoldMessengerKey.currentState;
