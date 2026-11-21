@@ -666,3 +666,22 @@ test("SPARK audio downloads and media reads authorize viewers before touching Ti
     "SPARK media must require reciprocal friendship before any storage HEAD request");
   assert.ok(mediaRoute.includes("sparkExpiry <= Date.now()"));
 });
+
+
+test("private memories are owner-scoped with bounded create, edit, and delete operations", () => {
+  const start = worker.indexOf("if (path === \"/api/private-memories\" || path.startsWith(\"/api/private-memories/\"))");
+  const end = worker.indexOf("// Explicitly requested speech transcription", start);
+  const route = worker.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  assert.ok(route.includes("CREATE TABLE IF NOT EXISTS private_memories"));
+  assert.ok(route.includes("owner_id TEXT NOT NULL"));
+  assert.ok(route.includes("WHERE owner_id = ? ORDER BY updated_at DESC"));
+  assert.ok(route.includes("LIMIT 200"));
+  assert.ok(route.includes("title.length > 120"));
+  assert.ok(route.includes("content.length > 10000"));
+  assert.ok(route.includes('["text", "message"].includes(sourceType)'));
+  assert.ok(route.includes("WHERE id = ? AND owner_id = ?"));
+  assert.ok(route.includes("UPDATE private_memories SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND owner_id = ?"));
+  assert.ok(route.includes("DELETE FROM private_memories WHERE id = ? AND owner_id = ?"));
+  assert.ok(worker.includes('"Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS"'));
+});
