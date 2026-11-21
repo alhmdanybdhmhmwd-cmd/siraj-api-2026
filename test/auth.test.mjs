@@ -16,7 +16,7 @@ class AwsClient {
   }
 }
 `);
-workerSource += "\nexport { signToken, verifyToken, authenticate, hashPassword, sendSirajPush, detectProfileImageType, readRequestBodyLimited };";
+workerSource += "\nexport { signToken, verifyToken, authenticate, hashPassword, sendSirajPush, detectProfileImageType, readRequestBodyLimited, rollbackSparkMediaUpload };";
 const worker = await import("data:text/javascript;base64," + Buffer.from(workerSource).toString("base64"));
 
 test("profile image validation accepts JPEG, PNG, and WebP signatures", () => {
@@ -2701,4 +2701,63 @@ test("new media download denies outsiders before making any storage request", as
   } finally {
     delete globalThis.__fakeTigrisHandler;
   }
+});
+
+
+test("failed SPARK media rollback schedules immediate cleanup retry", async () => {
+  const statements = [];
+  const db = {
+    prepare(sql) {
+      return {
+        params: [],
+        bind(...params) { this.params = params; return this; },
+        async run() {
+          statements.push({ sql, params: this.params });
+          return { meta: { changes: 1 } };
+        }
+      };
+    }
+  };
+  const storage = {
+    async fetch(_url, options) {
+      assert.equal(options.method, "DELETE");
+      return new Response("temporary storage outage", { status: 503 });
+    }
+  };
+  const before = Date.now();
+  const deleted = await worker.rollbackSparkMediaUpload(
+    { DB: db }, storage, "https://storage.example.test/spark-object", "user-1/spark-object"
+  );
+  assert.equal(deleted, false);
+  assert.equal(statements.length, 1);
+  assert.match(statements[0].sql, /INSERT INTO media_expirations/);
+  assert.match(statements[0].sql, /ON CONFLICT\(object_key\) DO UPDATE/);
+  assert.equal(statements[0].params[0], "user-1/spark-object");
+  const retryAt = Date.parse(statements[0].params[1]);
+  assert.ok(Number.isFinite(retryAt));
+  assert.ok(retryAt >= before && retryAt <= Date.now() + 1000);
+});
+
+test("successful SPARK media rollback clears its cleanup record", async () => {
+  const statements = [];
+  const db = {
+    prepare(sql) {
+      return {
+        params: [],
+        bind(...params) { this.params = params; return this; },
+        async run() { statements.push({ sql, params: this.params }); return { meta: { changes: 1 } }; }
+      };
+    }
+  };
+  const storage = { async fetch(_url, options) {
+    assert.equal(options.method, "DELETE");
+    return new Response(null, { status: 204 });
+  }};
+  const deleted = await worker.rollbackSparkMediaUpload(
+    { DB: db }, storage, "https://storage.example.test/spark-object", "user-1/spark-object"
+  );
+  assert.equal(deleted, true);
+  assert.equal(statements.length, 1);
+  assert.match(statements[0].sql, /^DELETE FROM media_expirations/);
+  assert.deepEqual(statements[0].params, ["user-1/spark-object"]);
 });
