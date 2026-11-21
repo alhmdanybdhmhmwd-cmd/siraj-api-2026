@@ -74,6 +74,7 @@ assert.ok(friendsB.friends.some(user => user.id === a.user.id), "contact additio
 
 // A lost response followed by an offline-outbox retry must persist and notify
 // only one message. Reusing an ID for a different sender/recipient is rejected.
+// Keep the id unique across persistent Preview runs so reruns remain idempotent within each attempt.
 const clientMessageId = randomUUID().replaceAll("-", "");
 const firstMessage = await call("/api/messages", {
   method: "POST", token: a.token,
