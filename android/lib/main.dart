@@ -4084,7 +4084,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             width: 52,
             height: 52,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => const CircleAvatar(
+            errorBuilder: (_, __, ___) => CircleAvatar(
               backgroundColor: Theme.of(context).colorScheme.surface,
               child: Icon(Icons.broken_image_outlined),
             ),
