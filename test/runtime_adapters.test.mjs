@@ -132,7 +132,9 @@ test("object storage URLs preserve Tigris defaults and support generic S3 endpoi
     createObjectStorageUrl({ OBJECT_STORAGE_BUCKET: "barq-media", OBJECT_STORAGE_ENDPOINT: "https://objects.example/s3" }, "chat/file.bin"),
     "https://objects.example/s3/barq-media/chat/file.bin"
   );
-  assert.throws(() => createObjectStorageUrl({}, "/absolute/key"), /relative object key/);
+  assert.throws(() => createObjectStorageUrl({}, "/absolute/key"), /safe relative object key/);
+  assert.throws(() => createObjectStorageUrl({}, "../private/file"), /safe relative object key/);
+  assert.throws(() => createObjectStorageUrl({}, "folder\\\\file"), /safe relative object key/);
 });
 
 test("object storage client uses the common S3-compatible configuration", () => {
