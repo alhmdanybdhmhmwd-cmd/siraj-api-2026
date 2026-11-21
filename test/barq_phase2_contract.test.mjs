@@ -708,5 +708,5 @@ test("private memory photos are owner-only, size-limited, and scheduled for clea
   assert.ok(route.includes("FROM private_memory_media WHERE owner_id = ?"));
   assert.ok(route.includes("INSERT INTO media_expirations (object_key, expires_at)"));
   assert.ok(route.includes("DELETE FROM media_access WHERE object_key = ?"));
-  assert.ok(route.includes("DELETE FROM private_memory_media WHERE memory_id = ? AND owner_id = ?"));
+  assert.ok(route.includes("DELETE FROM private_memory_media WHERE memory_id = ? AND owner_id = ? AND object_key = ?"));
 });
