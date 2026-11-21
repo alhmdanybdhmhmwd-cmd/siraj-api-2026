@@ -114,6 +114,9 @@ const int proxyMediaThresholdBytes = 4 * 1024 * 1024;
 
 const storage = FlutterSecureStorage();
 
+final ValueNotifier<Map<String, String>?> barqPendingNotificationTap =
+    ValueNotifier<Map<String, String>?>(null);
+
 final GlobalKey<ScaffoldMessengerState> barqScaffoldMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
 
@@ -312,10 +315,44 @@ class BarqTranslator {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+  FirebaseMessaging.onBackgroundMessage(barqFcmBackgroundHandler);
+  try {
+    final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
+    if (initialMessage != null) {
+      SirajPush.queueNotificationTap(initialMessage);
+    }
+  } catch (_) {}
   await BarqFeatures.load();
   await BarqIdentity.load();
   await BarqInviteLinks.initialize();
   runApp(const SirajApp());
+}
+
+/// Firebase requires a top-level background handler. Notification payloads are
+/// displayed by the Android FCM SDK; this handler intentionally avoids private data.
+@pragma('vm:entry-point')
+Future<void> barqFcmBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+}
+
+/// Converts only supported notification payloads into safe navigation intents.
+Map<String, String>? barqNotificationRouteFromData(Map<String, dynamic> data) {
+  final type = data['type']?.toString();
+  if (type == 'direct_message') {
+    final senderId = data['senderId']?.toString().trim() ?? '';
+    if (senderId.isEmpty) return null;
+    return {'type': type, 'senderId': senderId};
+  }
+  if (type == 'group_message') {
+    final groupId = data['groupId']?.toString().trim() ?? '';
+    if (groupId.isEmpty) return null;
+    return {'type': type, 'groupId': groupId};
+  }
+  if (type == 'status_update') {
+    final statusId = data['statusId']?.toString().trim() ?? '';
+    return {'type': type, if (statusId.isNotEmpty) 'statusId': statusId};
+  }
+  return null;
 }
 
 /// Normalize an FCM token before sending it to the authenticated API.
@@ -336,6 +373,18 @@ bool barqCanRegisterFcmToken(AuthorizationStatus status) =>
 class SirajPush {
   static bool _foregroundListening = false;
   static bool _tokenRefreshListening = false;
+  static bool _tapListening = false;
+  static String? _lastTapFingerprint;
+
+  static void queueNotificationTap(RemoteMessage message) {
+    final route = barqNotificationRouteFromData(message.data);
+    if (route == null) return;
+    final fingerprint = message.messageId ??
+        '${route['type']}:${route['senderId'] ?? route['groupId'] ?? route['statusId'] ?? ''}';
+    if (_lastTapFingerprint == fingerprint) return;
+    _lastTapFingerprint = fingerprint;
+    barqPendingNotificationTap.value = route;
+  }
   static Map<String, dynamic> _preferences = {
     'messages': true, 'groups': true, 'statuses': true,
   };
@@ -394,6 +443,10 @@ class SirajPush {
       if (!_foregroundListening) {
         FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
         _foregroundListening = true;
+      }
+      if (!_tapListening) {
+        FirebaseMessaging.onMessageOpenedApp.listen(queueNotificationTap);
+        _tapListening = true;
       }
 
       final permission = await messaging.requestPermission(
@@ -3343,6 +3396,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Map<String, dynamic> notificationPrefs = {'messages': true, 'groups': true, 'statuses': true};
   Map<String, dynamic> referralStats = {};
   Timer? offlineSyncTimer;
+  bool _handlingNotificationTap = false;
 
   String get myId => field(me, ['id', 'user_id']);
 
@@ -3350,6 +3404,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    barqPendingNotificationTap.addListener(_handlePendingNotificationTap);
     _loadCachedFriends().whenComplete(() { if (mounted) refreshAll(); });
     offlineSyncTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       BarqOfflineQueue.syncOutbox();
@@ -3359,6 +3414,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    barqPendingNotificationTap.removeListener(_handlePendingNotificationTap);
     offlineSyncTimer?.cancel();
     super.dispose();
   }
@@ -3368,6 +3424,79 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       BarqOfflineQueue.syncOutbox();
       if (phoneContactsPermissionGranted) matchPhoneContacts(silent: true);
+    }
+  }
+
+  Future<void> _handlePendingNotificationTap() async {
+    if (!mounted || loading || _handlingNotificationTap || Api.token == null) return;
+    final route = barqPendingNotificationTap.value;
+    if (route == null) return;
+    _handlingNotificationTap = true;
+    barqPendingNotificationTap.value = null;
+    try {
+      switch (route['type']) {
+        case 'direct_message':
+          final senderId = route['senderId'];
+          Map<String, dynamic>? friend;
+          for (final item in friends) {
+            final person = item['user'] is Map
+                ? Map<String, dynamic>.from(item['user'])
+                : item;
+            if (field(person, ['id', 'user_id', 'friend_id']) == senderId) {
+              friend = item;
+              break;
+            }
+          }
+          if (friend != null && mounted) {
+            await Navigator.push<void>(context, MaterialPageRoute(
+              builder: (_) => ChatPage(friend: friend!, currentUserId: myId),
+            ));
+          } else if (mounted) {
+            setState(() => selectedTab = 0);
+            showMsg(context, 'لا يمكن فتح هذه المحادثة حالياً؛ حدّث قائمة الأشخاص أولاً.');
+          }
+          break;
+        case 'group_message':
+          final groupId = route['groupId'];
+          Map<String, dynamic>? group;
+          for (final item in groups) {
+            if (field(item, ['id', 'group_id']) == groupId) {
+              group = item;
+              break;
+            }
+          }
+          if (mounted) setState(() => selectedTab = 3);
+          if (group != null && mounted) {
+            final targetGroup = group;
+            await Navigator.push<void>(context, MaterialPageRoute(
+              builder: (_) => GroupChatPage(
+                group: targetGroup,
+                currentUserId: myId,
+                onAddMember: () => addMemberDialog(targetGroup),
+                onGroupChanged: refreshAll,
+              ),
+            ));
+          }
+          break;
+        case 'status_update':
+          if (mounted) setState(() => selectedTab = 1);
+          final statusId = route['statusId'];
+          if (statusId != null && statusId.isNotEmpty) {
+            Map<String, dynamic>? status;
+            for (final item in statuses) {
+              if (field(item, ['id']) == statusId) {
+                status = item;
+                break;
+              }
+            }
+            if (status != null && mounted) _openSparkStatus(status);
+          }
+          break;
+      }
+    } catch (_) {
+      if (mounted) showMsg(context, 'تعذر فتح وجهة الإشعار. يمكنك الوصول إليها من برق.');
+    } finally {
+      _handlingNotificationTap = false;
     }
   }
 
@@ -3429,7 +3558,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     } catch (e) {
       if (mounted) showMsg(context, cleanError(e));
     } finally {
-      if (mounted) setState(() => loading = false);
+      if (mounted) {
+        setState(() => loading = false);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _handlePendingNotificationTap();
+        });
+      }
     }
   }
 
