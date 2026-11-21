@@ -50,3 +50,21 @@ export function createDatabaseProvider(binding) {
   };
   return Object.freeze(provider);
 }
+
+/**
+ * S3-compatible object storage client factory. The runtime supplies its
+ * transport client, allowing another runtime to inject a compatible client.
+ */
+export function createObjectStorageClient(env, Client) {
+  if (typeof Client !== "function") throw new TypeError("Storage client implementation is required");
+  if (!env?.TIGRIS_ACCESS_KEY_ID || !env?.TIGRIS_SECRET_ACCESS_KEY) {
+    throw new Error("Object storage credentials are not configured");
+  }
+  return new Client({
+    accessKeyId: env.TIGRIS_ACCESS_KEY_ID,
+    secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY,
+    service: "s3",
+    region: "auto",
+    retries: 2
+  });
+}
