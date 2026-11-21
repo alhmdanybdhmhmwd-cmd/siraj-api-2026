@@ -7,7 +7,7 @@ const workerPath = new URL("../src/src/index.js", import.meta.url);
 let workerSource = await readFile(workerPath, "utf8");
 const summarySource = await readFile(new URL("../src/src/conversation_summary.js", import.meta.url), "utf8");
 const adapterSource = await readFile(new URL("../src/src/runtime_adapters.js", import.meta.url), "utf8");
-workerSource = workerSource.replace('import { createAiProvider, createDatabaseProvider } from "./runtime_adapters.js";', adapterSource.replaceAll("export function ", "function "));
+workerSource = workerSource.replace(/import \\{[^}]+\\} from "\\.\\/runtime_adapters\\.js";/, adapterSource.replaceAll("export function ", "function "));
 workerSource = workerSource.replace('import { AwsClient } from "aws4fetch";', "class AwsClient {}");
 workerSource = workerSource.replace(
   'import { prepareConversationSummaryTranscript, buildConversationSummaryMessages, extractConversationSummaryText } from "./conversation_summary.js";',
