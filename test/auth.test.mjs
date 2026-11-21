@@ -51,6 +51,7 @@ class FakeDB {
     this.loginAttempts = new Map();
     this.transcriptionRateLimit = null;
     this.inviteCodes = new Map();
+    this.friendshipPairs = new Set();    this.inviteCodes = new Map();
     this.contactCandidates = [];
     this.privacySettings = null;
     this.notificationSettings = null;
@@ -137,7 +138,13 @@ class FakeDB {
         if (sql.includes("SELECT attempts FROM transcription_rate_limits")) {
           return { attempts: db.transcriptionRateLimit?.attempts || 0 };
         }
+        if (sql.includes("SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?")) {
+          return db.friendshipPairs.has(this.params.join(":")) ? { 1: 1 } : null;
+        }
         if (sql.includes("SELECT invite_code FROM user_invite_codes WHERE user_id = ?")) {
+          const inviteCode = db.inviteCodes.get(this.params[0]);
+          return inviteCode ? { invite_code: inviteCode } : null;
+        }        if (sql.includes("SELECT invite_code FROM user_invite_codes WHERE user_id = ?")) {
           const inviteCode = db.inviteCodes.get(this.params[0]);
           return inviteCode ? { invite_code: inviteCode } : null;
         }
@@ -182,7 +189,15 @@ class FakeDB {
         return { results: [] };
       },
       async run() {
-        if (sql.includes("UPDATE ephemeral_messages") && sql.includes("SET read_at")) {
+        if (sql.includes("INSERT INTO ephemeral_messages")) {
+          db.ephemeralRows ??= [];
+          const [id, senderId, receiverId, body] = this.params;
+          db.ephemeralRows.push({
+            id, sender_id: senderId, receiver_id: receiverId, body,
+            created_at: Math.floor(Date.now() / 1000), read_at: null, delete_at: null
+          });
+        }
+        if (sql.includes("UPDATE ephemeral_messages") && sql.includes("SET read_at")) {        if (sql.includes("UPDATE ephemeral_messages") && sql.includes("SET read_at")) {
           const now = Math.floor(Date.now() / 1000);
           db.ephemeralRows = (db.ephemeralRows || []).map(row =>
             row.sender_id === this.params[0] && row.receiver_id === this.params[1] && row.read_at == null
@@ -336,7 +351,56 @@ test("private invite endpoint creates one stable twelve-character code per accou
   assert.equal(db.inviteCodes.size, 1);
 });
 
-test("ephemeral messages start the ten-second TTL on recipient read and schedule physical deletion", async () => {
+test("ephemeral send stores only in its isolated table and requires a friend", async () => {
+  const db = new FakeDB();
+  db.friendshipPairs.add(user.id + ":friend-1");
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request(
+    "https://api.example.test/api/ephemeral-messages",
+    {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + token,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ receiverId: "friend-1", body: "one-time text" })
+    }
+  ), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 201);
+  const payload = await response.json();
+  assert.match(payload.id, /^[0-9a-f-]{36}$/i);
+  assert.equal(db.ephemeralRows.length, 1);
+  assert.deepEqual(
+    [db.ephemeralRows[0].sender_id, db.ephemeralRows[0].receiver_id, db.ephemeralRows[0].body],
+    [user.id, "friend-1", "one-time text"]
+  );
+  assert.equal(db.messageRows, undefined);
+  assert.equal(db.deviceTokens, undefined);
+});
+
+test("ephemeral send rejects non-friends, self messages and oversized text", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  const post = body => worker.default.fetch(new Request(
+    "https://api.example.test/api/ephemeral-messages",
+    {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + token,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    }
+  ), { DB: db, JWT_SECRET: secret });
+
+  assert.equal((await post({ receiverId: "stranger", body: "hello" })).status, 403);
+  assert.equal((await post({ receiverId: user.id, body: "hello" })).status, 400);
+  db.friendshipPairs.add(user.id + ":friend-1");
+  assert.equal((await post({ receiverId: "friend-1", body: "x".repeat(5001) })).status, 400);
+  assert.equal(db.ephemeralRows?.length || 0, 0);
+});
+
+test("ephemeral messages start the ten-second TTL on recipient read and schedule physical deletion", async () => {test("ephemeral messages start the ten-second TTL on recipient read and schedule physical deletion", async () => {
   const db = new FakeDB();
   db.ephemeralRows = [{
     id: "ephemeral-1",
