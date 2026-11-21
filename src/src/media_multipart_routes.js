@@ -26,6 +26,10 @@ function storageClient(env) {
     throw error;
   }
 }
+async function sha256Hex(bytes) {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+}
 async function readLimited(request, limit) {
   const declared = Number(request.headers.get("Content-Length"));
   if (Number.isFinite(declared) && declared > limit) return null;
@@ -204,44 +208,65 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
       catch (error) { return json({ error: error.message }, 400); }
       const chunksPerPart = MEDIA_MULTIPART_PART_SIZE / MEDIA_TRANSPORT_CHUNK_SIZE;
       const targetPart = Math.ceil(chunkNumber / chunksPerPart);
-      const existingPart = await env.DB.prepare("SELECT part_number FROM media_upload_parts WHERE session_id = ? AND part_number = ?").bind(sessionId, targetPart).first();
-      if (existingPart) return json({ sessionId, chunkNumber, partNumber: targetPart, partReady: true, alreadyStored: true });
       const stagedKey = stagedChunkKey(session, chunkNumber);
-      const existingChunk = await env.DB.prepare(
-        "SELECT size FROM media_upload_chunks WHERE session_id = ? AND chunk_number = ?"
+      const chunkHash = await sha256Hex(bytes);
+
+      // Claim each chunk's exact bytes in D1 before touching object storage.
+      // Concurrent retries with different bytes cannot overwrite the winner.
+      await env.DB.prepare(
+        "INSERT INTO media_upload_chunks (session_id, chunk_number, size, sha256) VALUES (?, ?, ?, ?) " +
+        "ON CONFLICT(session_id, chunk_number) DO NOTHING"
+      ).bind(sessionId, chunkNumber, bytes.byteLength, chunkHash).run();
+      let existingChunk = await env.DB.prepare(
+        "SELECT size, sha256 FROM media_upload_chunks WHERE session_id = ? AND chunk_number = ?"
       ).bind(sessionId, chunkNumber).first();
-      if (existingChunk) {
-        const previous = await storage.get(stagedKey);
-        if (!previous.ok) return json({ error: "Previously staged chunk is temporarily unavailable" }, 503);
+      if (!existingChunk || Number(existingChunk.size) !== bytes.byteLength ||
+          (existingChunk.sha256 && existingChunk.sha256 !== chunkHash)) {
+        return json({ error: "This chunk number was already used with different bytes" }, 409);
+      }
+      // Backfill checksums for an in-flight session created before migration 0013.
+      if (!existingChunk.sha256) {
+        await env.DB.prepare(
+          "UPDATE media_upload_chunks SET sha256 = ? WHERE session_id = ? AND chunk_number = ? AND sha256 IS NULL"
+        ).bind(chunkHash, sessionId, chunkNumber).run();
+        existingChunk = { ...existingChunk, sha256: chunkHash };
+      }
+
+      const existingPart = await env.DB.prepare(
+        "SELECT part_number FROM media_upload_parts WHERE session_id = ? AND part_number = ?"
+      ).bind(sessionId, targetPart).first();
+      if (existingPart) {
+        return json({ sessionId, chunkNumber, partNumber: targetPart, partReady: true, alreadyStored: true, sha256: chunkHash });
+      }
+
+      // A staging write may have succeeded even if the previous HTTP response
+      // was lost. Verify it before reuse; repair a damaged/missing staged object
+      // only with bytes matching the checksum already claimed in D1.
+      const previous = await storage.get(stagedKey);
+      if (previous.ok) {
         const previousBytes = new Uint8Array(await previous.arrayBuffer());
-        if (Number(existingChunk.size) !== bytes.byteLength || previousBytes.byteLength !== bytes.byteLength) {
-          return json({ error: "This chunk number was already used with different bytes" }, 409);
+        if (previousBytes.byteLength !== bytes.byteLength ||
+            await sha256Hex(previousBytes) !== chunkHash) {
+          const repaired = await storage.request(stagedKey, {
+            method: "PUT",
+            headers: { "Content-Length": String(bytes.byteLength), "Content-Type": "application/octet-stream" },
+            body: bytes
+          });
+          if (!repaired.ok) return json({ error: "Could not repair a staged upload chunk", storageStatus: repaired.status }, 502);
         }
-        for (let index = 0; index < bytes.byteLength; index++) {
-          if (previousBytes[index] !== bytes[index]) {
-            return json({ error: "This chunk number was already used with different bytes" }, 409);
-          }
-        }
-      } else {
+      } else if (previous.status === 404) {
         const stagedUpload = await storage.request(stagedKey, {
           method: "PUT", headers: { "Content-Length": String(bytes.byteLength), "Content-Type": "application/octet-stream" }, body: bytes
         });
         if (!stagedUpload.ok) return json({ error: "Could not stage transport chunk", storageStatus: stagedUpload.status }, 502);
-        try {
-          await env.DB.prepare(
-            "INSERT INTO media_upload_chunks (session_id, chunk_number, size) VALUES (?, ?, ?) " +
-            "ON CONFLICT(session_id, chunk_number) DO UPDATE SET size = excluded.size, uploaded_at = CURRENT_TIMESTAMP"
-          ).bind(sessionId, chunkNumber, bytes.byteLength).run();
-        } catch (error) {
-          await storage.request(stagedKey, { method: "DELETE" }).catch(() => {});
-          throw error;
-        }
+      } else {
+        return json({ error: "Previously staged chunk is temporarily unavailable" }, 503);
       }
       const firstChunk = (targetPart - 1) * chunksPerPart + 1;
       const expectedChunks = Math.ceil(Number(session.total_size) / MEDIA_TRANSPORT_CHUNK_SIZE);
       const lastChunk = Math.min(targetPart * chunksPerPart, expectedChunks);
       const stagedRows = await env.DB.prepare(
-        "SELECT chunk_number AS chunkNumber, size FROM media_upload_chunks WHERE session_id = ? AND chunk_number BETWEEN ? AND ? ORDER BY chunk_number"
+        "SELECT chunk_number AS chunkNumber, size, sha256 FROM media_upload_chunks WHERE session_id = ? AND chunk_number BETWEEN ? AND ? ORDER BY chunk_number"
       ).bind(sessionId, firstChunk, lastChunk).all();
       const readyRows = stagedRows.results || [];
       if (readyRows.length !== lastChunk - firstChunk + 1) return json({ sessionId, chunkNumber, partNumber: targetPart, partReady: false });
@@ -252,7 +277,10 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
         if (!response.ok) return json({ error: "A staged chunk is temporarily unavailable; retry this chunk" }, 503);
         const chunkBytes = new Uint8Array(await response.arrayBuffer());
         const recorded = readyRows.find(item => Number(item.chunkNumber) === number);
-        if (!recorded || chunkBytes.byteLength !== Number(recorded.size)) return json({ error: "A staged chunk failed its size integrity check" }, 409);
+        if (!recorded || chunkBytes.byteLength !== Number(recorded.size) ||
+            !recorded.sha256 || await sha256Hex(chunkBytes) !== recorded.sha256) {
+          return json({ error: "A staged chunk failed its SHA-256 integrity check" }, 409);
+        }
         buffers.push(chunkBytes); totalBytes += chunkBytes.byteLength;
       }
       const partBytes = new Uint8Array(totalBytes);
@@ -268,12 +296,13 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
       try { etag = normalizeMultipartEtag(uploaded.headers.get("ETag")); }
       catch (error) { return json({ error: error.message }, 502); }
       await env.DB.prepare(
-        "INSERT INTO media_upload_parts (session_id, part_number, etag, size) VALUES (?, ?, ?, ?) " +
-        "ON CONFLICT(session_id, part_number) DO UPDATE SET etag = excluded.etag, size = excluded.size, uploaded_at = CURRENT_TIMESTAMP"
-      ).bind(sessionId, targetPart, etag, partBytes.byteLength).run();
+        "INSERT INTO media_upload_parts (session_id, part_number, etag, size, sha256) VALUES (?, ?, ?, ?, ?) " +
+        "ON CONFLICT(session_id, part_number) DO UPDATE SET etag = excluded.etag, size = excluded.size, sha256 = excluded.sha256, uploaded_at = CURRENT_TIMESTAMP"
+      ).bind(sessionId, targetPart, etag, partBytes.byteLength, await sha256Hex(partBytes)).run();
       try {
+        // Keep the tiny checksum rows until session cleanup so retries after a
+        // committed multipart part can still reject a different payload.
         await deleteStagedChunks(storage, env, session, Array.from({ length: lastChunk - firstChunk + 1 }, (_, index) => firstChunk + index));
-        await env.DB.prepare("DELETE FROM media_upload_chunks WHERE session_id = ? AND chunk_number BETWEEN ? AND ?").bind(sessionId, firstChunk, lastChunk).run();
       } catch (cleanupError) {
         console.error("Completed multipart staging cleanup deferred:", cleanupError?.name || "Error");
       }
@@ -288,6 +317,16 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
       if (!bytes?.byteLength) return json({ error: "Part is empty or exceeds the maximum part size" }, 413);
       try { validateMultipartPart(Number(session.total_size), partNumber, bytes.byteLength); }
       catch (error) { return json({ error: error.message }, 400); }
+      const partHash = await sha256Hex(bytes);
+      const committedPart = await env.DB.prepare(
+        "SELECT size, sha256 FROM media_upload_parts WHERE session_id = ? AND part_number = ?"
+      ).bind(sessionId, partNumber).first();
+      if (committedPart) {
+        if (!committedPart.sha256 || Number(committedPart.size) !== bytes.byteLength || committedPart.sha256 !== partHash) {
+          return json({ error: "This part number was already used with different bytes" }, 409);
+        }
+        return json({ sessionId, partNumber, size: bytes.byteLength, sha256: partHash, alreadyStored: true });
+      }
       const uploaded = await storage.request(session.object_key, {
         method: "PUT", headers: { "Content-Length": String(bytes.byteLength) }, body: bytes
       }, { uploadId: session.storage_upload_id, partNumber });
@@ -296,10 +335,10 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
       try { etag = normalizeMultipartEtag(uploaded.headers.get("ETag")); }
       catch (error) { return json({ error: error.message }, 502); }
       await env.DB.prepare(
-        `INSERT INTO media_upload_parts (session_id, part_number, etag, size)
-         VALUES (?, ?, ?, ?) ON CONFLICT(session_id, part_number) DO UPDATE SET
-         etag = excluded.etag, size = excluded.size, uploaded_at = CURRENT_TIMESTAMP`
-      ).bind(sessionId, partNumber, etag, bytes.byteLength).run();
+        `INSERT INTO media_upload_parts (session_id, part_number, etag, size, sha256)
+         VALUES (?, ?, ?, ?, ?) ON CONFLICT(session_id, part_number) DO UPDATE SET
+         etag = excluded.etag, size = excluded.size, sha256 = excluded.sha256, uploaded_at = CURRENT_TIMESTAMP`
+      ).bind(sessionId, partNumber, etag, bytes.byteLength, partHash).run();
       await env.DB.prepare("UPDATE media_upload_sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = ? AND owner_id = ? AND state = 'uploading'").bind(sessionId, currentUser.sub).run();
       return json({ sessionId, partNumber, etag, size: bytes.byteLength });
     }
