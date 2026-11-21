@@ -172,6 +172,9 @@ List<String> barqNearbyPermissionNamesForAndroidSdk(int sdkInt) => [
 ];
 
 /// يتحقق من صلاحية رسالة Nearby الصادرة قبل إرسالها إلى جهاز آخر.
+bool barqNearbyPayloadTransferFailed(PayloadStatus status) =>
+    status == PayloadStatus.FAILURE || status == PayloadStatus.CANCELED;
+
 bool isValidBarqNearbyOutgoingText({
   required String senderId,
   required String currentUserId,
@@ -1555,7 +1558,16 @@ class BarqNearbyService {
           });
         }
       },
-      onPayloadTransferUpdate: (id, update) {},
+      onPayloadTransferUpdate: (id, update) {
+        if (barqNearbyPayloadTransferFailed(update.status)) {
+          _events.add({
+            'type': 'payload_transfer_failed',
+            'senderId': peerId,
+            'payloadId': update.id,
+            'status': update.status.name,
+          });
+        }
+      },
     );
     _events.add({'type': 'connection_accepted', 'endpointId': endpointId, 'userId': peerId});
   }
@@ -5962,6 +5974,8 @@ class _NearbyDevicesPageState extends State<NearbyDevicesPage> {
       setState(() => statusText = 'وصلت رسالة دون إنترنت من أحد أصدقائك.');
     } else if (type == 'message_receive_failed') {
       setState(() => statusText = 'تعذر حفظ الرسالة الواردة: ${event['reason'] ?? 'حدث خطأ غير معروف'}');
+    } else if (type == 'payload_transfer_failed') {
+      setState(() => statusText = 'تعذر نقل رسالة عبر الاتصال القريب؛ تأكد من بقاء الجهازين متصلين، وستبقى الرسالة الصادرة محفوظة للمزامنة عبر الإنترنت.');
     } else if (type == 'stopped') {
       setState(() => statusText = 'تم إيقاف البحث والاتصالات القريبة.');
     }
