@@ -1064,10 +1064,6 @@ class Api {
     String? groupId,
   }) async {
     final idempotencyKey = newBarqMessageId();
-    final baseHeaders = <String, String>{
-      if (token != null) 'Authorization': 'Bearer $token',
-      'Content-Type': 'application/json',
-    };
     final start = await request('POST', '/api/media/uploads', body: {
       'size': bytes.length,
       'fileName': fileName,
@@ -1084,7 +1080,7 @@ class Api {
 
     for (var chunkNumber = 1; chunkNumber <= totalChunks; chunkNumber++) {
       final startOffset = (chunkNumber - 1) * 1024 * 1024;
-      final endOffset = math.min(startOffset + 1024 * 1024, bytes.length);
+      final endOffset = math.min(startOffset + 1024 * 1024, bytes.length).toInt();
       final chunk = bytes.sublist(startOffset, endOffset);
       final uri = Uri.parse(
         '$apiBase/api/media/uploads/${Uri.encodeComponent(sessionId)}/chunks/$chunkNumber',
