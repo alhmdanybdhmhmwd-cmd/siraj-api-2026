@@ -1,5 +1,5 @@
 import { AwsClient } from "aws4fetch";
-import { createAiProvider, createDatabaseProvider, createS3ObjectStorageProvider, createObjectStorageUrl, createPushProvider, createBackgroundTaskScheduler } from "./runtime_adapters.js";
+import { createAiProvider, createDatabaseProvider, createS3ObjectStorageProvider, createObjectStorageUrl, createPushProvider, createBackgroundTaskScheduler, runScheduledTasks } from "./runtime_adapters.js";
 import { prepareConversationSummaryTranscript, buildConversationSummaryMessages, extractConversationSummaryText } from "./conversation_summary.js";
 import { handleResumableMediaUpload, cleanupExpiredUploadSessions } from "./media_multipart_routes.js";
 
@@ -820,38 +820,39 @@ async function createConversationSummary(env, messages, conversationType) {
 export default {
   async scheduled(_controller, env) {
     env = { ...env, DB: createDatabaseProvider(env.DB) };
-    try {
-      const result = await cleanupExpiredRevokedSessions(env);
-      console.log("Revoked session cleanup:", result);
-    } catch (error) {
-      console.error("Revoked session cleanup failed:", error);
-    }
-    try {
-      const result = await cleanupExpiredRateLimits(env);
-      console.log("Rate limit cleanup:", result);
-    } catch (error) {
-      console.error("Rate limit cleanup failed:", error);
-    }
-    try {
-      const result = await cleanupExpiredMedia(env);
-      console.log("Media expiration cleanup:", result);
-    } catch (error) {
-      console.error("Media expiration cleanup failed:", error);
-    }
-
-    // Expired upload sessions are temporary control records; completed media is untouched.
-    try {
-      const result = await cleanupExpiredUploadSessions(env);
-      console.log("Expired multipart session cleanup:", result);
-    } catch (error) {
-      console.error("Expired multipart session cleanup failed:", error);
-    }
-    try {
-      const result = await cleanupExpiredEphemeralMessages(env);
-      console.log("Ephemeral message cleanup:", result);
-    } catch (error) {
-      console.error("Ephemeral message cleanup failed:", error);
-    }
+    // Each cleanup is isolated: a transient failure must not block other jobs.
+    await runScheduledTasks([
+      {
+        name: "Revoked session cleanup",
+        successMessage: "Revoked session cleanup:",
+        failureMessage: "Revoked session cleanup failed:",
+        run: () => cleanupExpiredRevokedSessions(env)
+      },
+      {
+        name: "Rate limit cleanup",
+        successMessage: "Rate limit cleanup:",
+        failureMessage: "Rate limit cleanup failed:",
+        run: () => cleanupExpiredRateLimits(env)
+      },
+      {
+        name: "Media expiration cleanup",
+        successMessage: "Media expiration cleanup:",
+        failureMessage: "Media expiration cleanup failed:",
+        run: () => cleanupExpiredMedia(env)
+      },
+      {
+        name: "Expired multipart session cleanup",
+        successMessage: "Expired multipart session cleanup:",
+        failureMessage: "Expired multipart session cleanup failed:",
+        run: () => cleanupExpiredUploadSessions(env)
+      },
+      {
+        name: "Ephemeral message cleanup",
+        successMessage: "Ephemeral message cleanup:",
+        failureMessage: "Ephemeral message cleanup failed:",
+        run: () => cleanupExpiredEphemeralMessages(env)
+      }
+    ]);
   },
   async fetch(request, env, ctx) {
     env = { ...env, DB: createDatabaseProvider(env.DB) };
