@@ -120,3 +120,39 @@ test("preview proxy returns a bounded gateway error when upstream fetch fails", 
     globalThis.fetch = originalFetch;
   }
 });
+test("preview proxy preserves byte-range download headers and partial response metadata", async () => {
+  const originalFetch = globalThis.fetch;
+  let captured;
+  try {
+    globalThis.fetch = async (url, options) => {
+      captured = { url: String(url), headers: options.headers };
+      return new Response(new Uint8Array([7, 8, 9]), {
+        status: 206,
+        headers: {
+          "content-type": "application/octet-stream",
+          "content-range": "bytes 7-9/10",
+          "accept-ranges": "bytes",
+          "etag": '"sample-v1"',
+          "last-modified": "Wed, 21 Oct 2015 07:28:00 GMT"
+        }
+      });
+    };
+    const res = makeResponse();
+    await handler(makeRequest({
+      method: "GET",
+      url: "/api/media/file-1",
+      headers: { range: "bytes=7-9", "if-range": '"sample-v1"' }
+    }), res);
+    assert.equal(captured.url, "https://preview-worker.example.workers.dev/api/media/file-1");
+    assert.equal(captured.headers.Range, "bytes=7-9");
+    assert.equal(captured.headers["If-Range"], '"sample-v1"');
+    assert.equal(res.statusCode, 206);
+    assert.equal(res.headers["content-range"], "bytes 7-9/10");
+    assert.equal(res.headers["accept-ranges"], "bytes");
+    assert.equal(res.headers.etag, '"sample-v1"');
+    assert.equal(res.headers["last-modified"], "Wed, 21 Oct 2015 07:28:00 GMT");
+    assert.deepEqual([...res.body], [7, 8, 9]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
