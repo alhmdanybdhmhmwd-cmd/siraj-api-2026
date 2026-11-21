@@ -187,6 +187,14 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
       return json({ error: "Upload session expired; start a new upload" }, 410);
     }
 
+    // Membership may be revoked after session creation; re-check before accepting
+    // more bytes or making the uploaded object available to the conversation.
+    const mutatesUpload = (chunkNumber !== null && method === "PUT") ||
+      (partNumber !== null && method === "PUT") ||
+      (action === "complete" && method === "POST");
+    if (mutatesUpload && !(await canUploadToConversation(env, currentUser.sub, session.recipient_id, session.group_id))) {
+      return json({ error: "You are no longer a member of this conversation" }, 403);
+    }
 
     if (chunkNumber !== null && method === "PUT") {
       if (session.state !== "uploading") return json({ error: "Upload session is not accepting chunks" }, 409);
