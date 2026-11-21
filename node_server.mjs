@@ -121,11 +121,11 @@ export async function startNodeApiServer(options = {}) {
   const server = createNodeApiServer({ env, logger: options.logger || console });
   const port = Number(options.port ?? process.env.PORT ?? 8787);
   const host = options.host || process.env.HOST || "0.0.0.0";
-  const stopMaintenance = options.disableScheduler ? () => {} : startScheduledMaintenance(env);
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(port, host, resolve);
   });
+  const stopMaintenance = options.disableScheduler ? async () => {} : startScheduledMaintenance(env);
   server.requestTimeout = 120_000;
   server.headersTimeout = 30_000;
   server.keepAliveTimeout = 5_000;
