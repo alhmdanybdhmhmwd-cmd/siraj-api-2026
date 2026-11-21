@@ -68,3 +68,33 @@ export function createObjectStorageClient(env, Client) {
     retries: 2
   });
 }
+
+
+/**
+ * Push transport contract. Authentication and message policy stay in the
+ * domain layer; runtimes provide only an HTTP-compatible transport.
+ */
+export function createPushProvider(fetchImpl = globalThis.fetch) {
+  if (typeof fetchImpl !== "function") throw new TypeError("Push transport must be a fetch-compatible function");
+  return Object.freeze({
+    request(url, init) {
+      return fetchImpl(url, init);
+    }
+  });
+}
+
+/**
+ * Durable-work boundary for request-scoped background tasks. A runtime
+ * without waitUntil support returns false so callers can choose a safe
+ * synchronous or persistent-queue fallback instead of silently dropping work.
+ */
+export function createBackgroundTaskScheduler(context) {
+  return Object.freeze({
+    schedule(task) {
+      if (typeof task !== "function") throw new TypeError("Background task must be a function");
+      if (!context || typeof context.waitUntil !== "function") return false;
+      context.waitUntil(Promise.resolve().then(task));
+      return true;
+    }
+  });
+}
