@@ -5,7 +5,7 @@ const notificationEncoder = new TextEncoder();
 function notificationBase64Url(bytes) {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/, "");
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 /**
@@ -36,7 +36,7 @@ export async function sendBarqPushNotification(
     const now = Math.floor(nowProvider() / 1000);
     const pem = String(account.private_key || "").replace(/\\n/g, "\n");
     const keyBytes = Uint8Array.from(
-      atob(pem.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\\s/g, "")),
+      atob(pem.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g, "")),
       c => c.charCodeAt(0)
     );
     const signingKey = await cryptoImpl.subtle.importKey(
