@@ -74,6 +74,17 @@ const int maxTranscriptionBytes = 2 * 1024 * 1024;
 bool isBarqTranscriptionSizeAllowed(int byteLength) =>
     byteLength > 0 && byteLength <= maxTranscriptionBytes;
 
+/// Allows retrying a failed on-device translation after a short cooldown.
+bool barqTranslationRetryAllowed(
+  String messageId,
+  Map<String, DateTime> retryAfter, {
+  DateTime? now,
+}) {
+  if (messageId.isEmpty) return false;
+  final retryAt = retryAfter[messageId];
+  return retryAt == null || !retryAt.isAfter(now ?? DateTime.now());
+}
+
 bool isBarqMessageTextAllowed(String value) =>
     value.trim().isNotEmpty && value.trim().length <= 5000;
 
@@ -6283,7 +6294,7 @@ class _ChatPageState extends State<ChatPage> {
   List<Map<String, dynamic>> messages = [];
   final Map<String, String> translatedMessages = {};
   final Set<String> translatingMessageIds = {};
-  final Set<String> translationFailedMessageIds = {};
+  final Map<String, DateTime> translationRetryAfter = {};
   final Map<String, String> voiceTranscripts = {};
   final Set<String> transcribingMessageIds = {};
   bool loading = true;
@@ -6392,20 +6403,24 @@ class _ChatPageState extends State<ChatPage> {
       final original = field(message, ['body', 'content', 'message']);
       if (id.isEmpty || senderId == widget.currentUserId || original.isEmpty ||
           _attachmentData(message) != null || translatedMessages.containsKey(id) ||
-          translatingMessageIds.contains(id) || translationFailedMessageIds.contains(id)) {
+          translatingMessageIds.contains(id) ||
+          !barqTranslationRetryAllowed(id, translationRetryAfter)) {
         continue;
       }
       translatingMessageIds.add(id);
       try {
         final translated = await BarqTranslator.translateArabicEnglish(original);
         if (mounted && translated.isNotEmpty) {
-          setState(() => translatedMessages[id] = translated);
+          setState(() {
+            translatedMessages[id] = translated;
+            translationRetryAfter.remove(id);
+          });
         } else {
-          translationFailedMessageIds.add(id);
+          translationRetryAfter[id] = DateTime.now().add(const Duration(minutes: 1));
         }
       } catch (_) {
-        translationFailedMessageIds.add(id);
-        // تبقى الرسالة الأصلية ظاهرة ولا نكرر المحاولة تلقائيًا كل دورة تحديث.
+        translationRetryAfter[id] = DateTime.now().add(const Duration(minutes: 1));
+        // تبقى الرسالة الأصلية ظاهرة، وتُعاد المحاولة بعد دقيقة إذا توفر النموذج المحلي.
       } finally {
         translatingMessageIds.remove(id);
       }
@@ -7379,7 +7394,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
   List<Map<String, dynamic>> messages = [];
   final Map<String, String> translatedMessages = {};
   final Set<String> translatingMessageIds = {};
-  final Set<String> translationFailedMessageIds = {};
+  final Map<String, DateTime> translationRetryAfter = {};
   final Map<String, String> voiceTranscripts = {};
   final Set<String> transcribingMessageIds = {};
   bool loading = true;
@@ -7437,20 +7452,24 @@ class _GroupChatPageState extends State<GroupChatPage> {
       final original = field(message, ['body', 'content', 'message']);
       if (id.isEmpty || senderId == widget.currentUserId || original.isEmpty ||
           _attachmentData(message) != null || translatedMessages.containsKey(id) ||
-          translatingMessageIds.contains(id) || translationFailedMessageIds.contains(id)) {
+          translatingMessageIds.contains(id) ||
+          !barqTranslationRetryAllowed(id, translationRetryAfter)) {
         continue;
       }
       translatingMessageIds.add(id);
       try {
         final translated = await BarqTranslator.translateArabicEnglish(original);
         if (mounted && translated.isNotEmpty) {
-          setState(() => translatedMessages[id] = translated);
+          setState(() {
+            translatedMessages[id] = translated;
+            translationRetryAfter.remove(id);
+          });
         } else {
-          translationFailedMessageIds.add(id);
+          translationRetryAfter[id] = DateTime.now().add(const Duration(minutes: 1));
         }
       } catch (_) {
-        translationFailedMessageIds.add(id);
-        // تبقى الرسالة الأصلية ظاهرة ولا نكرر المحاولة تلقائيًا كل دورة تحديث.
+        translationRetryAfter[id] = DateTime.now().add(const Duration(minutes: 1));
+        // تبقى الرسالة الأصلية ظاهرة، وتُعاد المحاولة بعد دقيقة إذا توفر النموذج المحلي.
       } finally {
         translatingMessageIds.remove(id);
       }
