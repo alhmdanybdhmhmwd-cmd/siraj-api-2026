@@ -2617,8 +2617,13 @@ export default {
              WHERE id != ?
                AND (${normalizedPhoneSql("phone")} LIKE ?${exactClause}${suffixClause})
                AND COALESCE((SELECT searchable FROM user_privacy WHERE user_id = users.id), 1) = 1
+               AND NOT EXISTS (
+                 SELECT 1 FROM blocked_users b
+                 WHERE (b.blocker_id = ? AND b.blocked_id = users.id)
+                    OR (b.blocker_id = users.id AND b.blocked_id = ?)
+               )
              LIMIT 100`
-          ).bind(currentUser.sub, "%" + normalizedQuery + "%", ...variants, ...suffixes).all();
+          ).bind(currentUser.sub, "%" + normalizedQuery + "%", ...variants, ...suffixes, currentUser.sub, currentUser.sub).all();
           const localSearchDigits = normalizedQuery.startsWith("0")
             ? normalizedQuery.slice(1) : normalizedQuery;
           for (const candidate of phoneMatches.results || []) {
