@@ -98,18 +98,19 @@ module.exports = async (req, res) => {
     // Keep a small fallback for non-Writable response doubles used by unit tests.
     if (response.body && typeof res.write === "function" && typeof res.end === "function") {
       const { Readable } = require("node:stream");
-      return await new Promise((resolve, reject) => {
-        const upstream = Readable.fromWeb(response.body);
-        upstream.once("error", reject);
-        res.once("error", reject);
-        res.once("finish", resolve);
-        upstream.pipe(res);
-      });
+      const { pipeline } = require("node:stream/promises");
+      await pipeline(Readable.fromWeb(response.body), res);
+      return;
     }
 
     const responseBody = await response.arrayBuffer();
     return res.send(Buffer.from(responseBody));
   } catch (error) {
+    // Once streaming has started, a JSON gateway response would corrupt the partial file.
+    if (res.headersSent) {
+      res.destroy(error);
+      return;
+    }
     return res.status(502).json({
       error: "تعذر الاتصال بخادم سراج",
     });
