@@ -92,12 +92,15 @@ test("libSQL adapter exposes D1-compatible prepared statements and atomic batche
   const statement = db.prepare("SELECT ? AS value").bind(42);
   assert.deepEqual(await statement.first(), { value: 42 });
   assert.deepEqual((await statement.all()).results, [{ value: 42 }]);
-  assert.equal((await statement.run()).success, true);
+  const runResult = await statement.run();
+  assert.equal(runResult.success, true);
+  assert.equal(runResult.meta.changes, 1);
   const batch = await db.batch([
     db.prepare("INSERT INTO messages(id) VALUES (?)").bind("m1"),
     db.prepare("INSERT INTO messages(id) VALUES (?)").bind("m2")
   ]);
   assert.equal(batch.length, 2);
+  assert.equal(batch[0].meta.changes, 1);
   assert.equal(calls.find(call => call[0] === "batch")[2], "write");
   assert.deepEqual(calls.find(call => call[0] === "batch")[1].map(item => item.args), [["m1"], ["m2"]]);
   assert.deepEqual(await db.exec("CREATE TABLE sample(id TEXT)"), { ok: true });
