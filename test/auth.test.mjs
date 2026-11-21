@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 
 const workerPath = new URL("../src/src/index.js", import.meta.url);
 let workerSource = await readFile(workerPath, "utf8");
@@ -19,7 +20,9 @@ class AwsClient {
 workerSource += "\nexport { signToken, verifyToken, authenticate, hashPassword, sendSirajPush, detectProfileImageType, readRequestBodyLimited, rollbackSparkMediaUpload };";
 let worker;
 try {
-  worker = await import("data:text/javascript;base64," + Buffer.from(workerSource).toString("base64"));
+  const workerModulePath = `/tmp/barq-auth-worker-${process.pid}.mjs`;
+  await writeFile(workerModulePath, workerSource, "utf8");
+  worker = await import(pathToFileURL(workerModulePath).href);
 } catch (error) {
   console.error("Worker auth test module import failed:", error?.stack || error);
   throw error;
