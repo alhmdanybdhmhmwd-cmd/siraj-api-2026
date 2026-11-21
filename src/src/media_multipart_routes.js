@@ -1,5 +1,5 @@
 import { AwsClient } from "aws4fetch";
-import { createObjectStorageClient } from "./runtime_adapters.js";
+import { createObjectStorageClient, createObjectStorageUrl } from "./runtime_adapters.js";
 import {
   MEDIA_MULTIPART_PART_SIZE, MEDIA_MULTIPART_MAX_SIZE, MEDIA_UPLOAD_SESSION_TTL_MS,
   MEDIA_TRANSPORT_CHUNK_SIZE, validateMultipartDeclaration, validateMultipartPart,
@@ -27,12 +27,7 @@ function storageClient(env) {
   }
 }
 function objectUrl(env, objectKey, uploadId, partNumber) {
-  const bucket = encodeURIComponent(env.TIGRIS_BUCKET || "siraj-media");
-  const key = objectKey.split("/").map(encodeURIComponent).join("/");
-  const url = new URL("https://" + bucket + ".t3.storage.dev/" + key);
-  if (uploadId !== undefined) url.searchParams.set("uploadId", uploadId);
-  if (partNumber !== undefined) url.searchParams.set("partNumber", String(partNumber));
-  return url.toString();
+  return createObjectStorageUrl(env, objectKey, { uploadId, partNumber });
 }
 async function readLimited(request, limit) {
   const declared = Number(request.headers.get("Content-Length"));
