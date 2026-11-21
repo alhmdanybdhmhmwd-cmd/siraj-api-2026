@@ -444,7 +444,7 @@ test("SPARK voice replies are private, limited, tied to status expiry, and clean
   assert.ok(route.includes('audioSignature !== "ftyp"'));
   assert.ok(route.includes("INSERT INTO status_audio_replies"));
   assert.ok(route.includes("INSERT INTO media_expirations"));
-  assert.ok(route.includes(""Cache-Control": \"private, no-store\""));
+  assert.ok(route.includes('"Cache-Control": "private, no-store"'));
   const cleanupStart = worker.indexOf("async function cleanupExpiredMedia");
   const cleanupEnd = worker.indexOf("async function cleanupExpiredEphemeralMessages", cleanupStart);
   const cleanup = worker.slice(cleanupStart, cleanupEnd);
