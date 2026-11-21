@@ -1,0 +1,31 @@
+name: BARQ isolated Preview integration verification
+
+on:
+  push:
+    branches:
+      - barq/phase-2-android-ci-2026-11-20
+    paths:
+      - "test/barq_preview_integration.mjs"
+      - ".github/workflows/barq-preview-integration-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BARQ_PREVIEW_URL: https://barq-api-phase2-test.alhmdanybdhmhmwd.workers.dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify isolated Preview health and D1 readiness
+        run: |
+          set -euo pipefail
+          curl --connect-timeout 5 --max-time 15 --silent --show-error --fail "$BARQ_PREVIEW_URL/health/live"
+          curl --connect-timeout 5 --max-time 15 --silent --show-error --fail "$BARQ_PREVIEW_URL/health/ready"
+      - name: Run account, profile, privacy, contacts, messaging, and group integration tests
+        run: node test/barq_preview_integration.mjs
