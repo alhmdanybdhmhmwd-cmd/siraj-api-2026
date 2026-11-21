@@ -2986,7 +2986,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> publishSparkMediaDialog() async {
     final pageContext = context;
     final picked = await FilePicker.platform.pickFiles(
-      type: FileType.media, allowMultiple: true, withData: true,
+      type: FileType.media, allowMultiple: true, withData: false,
     );
     if (picked == null || picked.files.isEmpty || !pageContext.mounted) return;
     if (picked.files.length > 10) {
@@ -3002,12 +3002,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         preparationError = 'الملف ${file.name} ليس بصيغة صورة أو فيديو مدعومة.';
         break;
       }
-      final bytes = file.bytes ?? (file.path == null ? null : await File(file.path!).readAsBytes());
-      if (bytes == null || !isBarqSparkMediaSizeAllowed(bytes.length)) {
-        preparationError = 'تعذر قراءة ${file.name} أو تجاوز حجمه 60 ميجابايت.';
+      if (!isBarqSparkMediaSizeAllowed(file.size)) {
+        preparationError = 'حجم الملف ${file.name} غير صالح أو يتجاوز 60 ميجابايت.';
         break;
       }
-      prepared.add({'file': file, 'bytes': bytes, 'contentType': contentType});
+      prepared.add({'file': file, 'contentType': contentType});
     }
     if (!pageContext.mounted) return;
     if (preparationError != null) {
@@ -3047,8 +3046,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   try {
                     for (final item in prepared) {
                       final file = item['file'] as PlatformFile;
+                      // Read one media file at a time to avoid retaining up to 600 MB in memory.
+                      final bytes = file.bytes ??
+                          (file.path == null ? null : await File(file.path!).readAsBytes());
+                      if (bytes == null || !isBarqSparkMediaSizeAllowed(bytes.length)) {
+                        throw Exception('تعذر قراءة ${file.name} أو تجاوز حجمه 60 ميجابايت.');
+                      }
                       statusId = await Api.publishSparkMedia(
-                        bytes: item['bytes'] as List<int>,
+                        bytes: bytes,
                         fileName: file.name,
                         contentType: item['contentType'] as String,
                         caption: captionController.text,
