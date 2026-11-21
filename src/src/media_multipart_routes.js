@@ -1,4 +1,5 @@
 import { AwsClient } from "aws4fetch";
+import { createObjectStorageClient } from "./runtime_adapters.js";
 import {
   MEDIA_MULTIPART_PART_SIZE, MEDIA_MULTIPART_MAX_SIZE, MEDIA_UPLOAD_SESSION_TTL_MS,
   MEDIA_TRANSPORT_CHUNK_SIZE, validateMultipartDeclaration, validateMultipartPart,
@@ -16,8 +17,14 @@ const headers = {
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers });
 
 function storageClient(env) {
-  if (!env.TIGRIS_ACCESS_KEY_ID || !env.TIGRIS_SECRET_ACCESS_KEY) throw new Error("Media storage credentials are not configured");
-  return new AwsClient({ accessKeyId: env.TIGRIS_ACCESS_KEY_ID, secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY, service: "s3", region: "auto", retries: 2 });
+  try {
+    return createObjectStorageClient(env, AwsClient);
+  } catch (error) {
+    if (error instanceof Error && error.message === "Object storage credentials are not configured") {
+      throw new Error("Media storage credentials are not configured");
+    }
+    throw error;
+  }
 }
 function objectUrl(env, objectKey, uploadId, partNumber) {
   const bucket = encodeURIComponent(env.TIGRIS_BUCKET || "siraj-media");
