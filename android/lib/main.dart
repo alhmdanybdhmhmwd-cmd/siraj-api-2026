@@ -329,7 +329,8 @@ bool barqCanRegisterFcmToken(AuthorizationStatus status) =>
 
 /// تفعيل إذن الإشعارات وتسجيل رمز الجهاز بعد تسجيل الدخول.
 class SirajPush {
-  static bool _listening = false;
+  static bool _foregroundListening = false;
+  static bool _tokenRefreshListening = false;
   static Map<String, dynamic> _preferences = {
     'messages': true, 'groups': true, 'statuses': true,
   };
@@ -359,13 +360,18 @@ class SirajPush {
   static Future<void> register() async {
     try {
       final messaging = FirebaseMessaging.instance;
+      // Foreground in-app alerts are independent from OS notification permission.
+      if (!_foregroundListening) {
+        messaging.onMessage.listen(_handleForegroundMessage);
+        _foregroundListening = true;
+      }
+
       final permission = await messaging.requestPermission(
         alert: true, badge: true, sound: true,
       );
       if (!barqCanRegisterFcmToken(permission.authorizationStatus)) return;
 
-      if (!_listening) {
-        messaging.onMessage.listen(_handleForegroundMessage);
+      if (!_tokenRefreshListening) {
         messaging.onTokenRefresh.listen((newToken) async {
           final refreshedToken = normalizeBarqFcmToken(newToken);
           if (Api.token == null || refreshedToken == null) return;
@@ -373,7 +379,7 @@ class SirajPush {
             await Api.registerDeviceToken(refreshedToken);
           } catch (_) {}
         });
-        _listening = true;
+        _tokenRefreshListening = true;
       }
 
       final token = normalizeBarqFcmToken(await messaging.getToken());
