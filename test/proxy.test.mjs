@@ -354,3 +354,15 @@ test("proxy reports BARQ identity when upstream connection fails", async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test("proxy CORS permits edits, resumable media, and byte-range downloads", async () => {
+  const res = makeResponse();
+  await handler(makeRequest({ url: "/api/media/file-1", method: "OPTIONS" }), res);
+  assert.equal(res.statusCode, 204);
+  assert.match(res.headers["Access-Control-Allow-Methods"], /PATCH/);
+  assert.match(res.headers["Access-Control-Allow-Methods"], /PUT/);
+  assert.match(res.headers["Access-Control-Allow-Headers"], /Range/);
+  assert.match(res.headers["Access-Control-Allow-Headers"], /X-Idempotency-Key/);
+  assert.match(res.headers["Access-Control-Expose-Headers"], /Content-Range/);
+  assert.match(res.headers["Access-Control-Expose-Headers"], /Accept-Ranges/);
+});
