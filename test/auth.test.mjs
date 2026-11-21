@@ -49,6 +49,7 @@ class FakeDB {
     this.sessionVersion = 0;
     this.recoveryAttempts = new Map();
     this.loginAttempts = new Map();
+    this.transcriptionRateLimit = null;
     this.contactCandidates = [];
     this.privacySettings = null;
     this.notificationSettings = null;
@@ -131,6 +132,9 @@ class FakeDB {
         }
         if (sql.includes("SELECT attempts FROM login_rate_limits")) {
           return { attempts: db.loginAttempts.get(this.params[0]) || 0 };
+        }
+        if (sql.includes("SELECT attempts FROM transcription_rate_limits")) {
+          return { attempts: db.transcriptionRateLimit?.attempts || 0 };
         }
         return null;
       },
@@ -233,6 +237,13 @@ class FakeDB {
         if (sql.includes("INSERT INTO login_rate_limits")) {
           const key = this.params[0];
           db.loginAttempts.set(key, (db.loginAttempts.get(key) || 0) + 1);
+        }
+        if (sql.includes("INSERT INTO transcription_rate_limits")) {
+          const [userId, now, windowStart] = this.params;
+          const current = db.transcriptionRateLimit;
+          db.transcriptionRateLimit = !current || current.windowStarted <= windowStart
+            ? { userId, windowStarted: now, attempts: 1 }
+            : { ...current, attempts: current.attempts + 1 };
         }
         if (sql.includes("INSERT INTO recovery_codes")) {
           db.recovery = { code_hash: this.params[1], code_salt: this.params[2], expires_at: this.params[3], consumed_at: null };
@@ -2593,6 +2604,82 @@ test("bounded request reader accepts a body exactly at the configured limit", as
     Array.from(await worker.readRequestBodyLimited(request, 4)),
     [1, 2, 3, 4]
   );
+});
+
+test("transcription route accepts supported audio and returns only the transcript", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  let inferenceInput;
+  const response = await worker.default.fetch(new Request(
+    "https://api.example.test/api/transcribe",
+    {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + token,
+        "Content-Type": "audio/webm"
+      },
+      body: Uint8Array.from([1, 2, 3, 4])
+    }
+  ), {
+    DB: db,
+    JWT_SECRET: secret,
+    AI: { async run(model, input) { inferenceInput = { model, input }; return { text: "  مرحبًا بك  " }; } }
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { text: "مرحبًا بك" });
+  assert.equal(inferenceInput.model, "@cf/openai/whisper");
+  assert.deepEqual(inferenceInput.input.audio, [1, 2, 3, 4]);
+  assert.equal(db.transcriptionRateLimit.attempts, 1);
+});
+
+test("transcription route enforces the per-account hourly inference limit", async () => {
+  const db = new FakeDB();
+  const now = Math.floor(Date.now() / 1000);
+  db.transcriptionRateLimit = { userId: user.id, windowStarted: now, attempts: 10 };
+  const token = await worker.signToken(user, secret, 0);
+  let inferenceCalls = 0;
+  const response = await worker.default.fetch(new Request(
+    "https://api.example.test/api/transcribe",
+    {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + token,
+        "Content-Type": "audio/webm"
+      },
+      body: Uint8Array.from([1, 2, 3])
+    }
+  ), {
+    DB: db,
+    JWT_SECRET: secret,
+    AI: { async run() { inferenceCalls++; return { text: "not allowed" }; } }
+  });
+  assert.equal(response.status, 429);
+  assert.equal(db.transcriptionRateLimit.attempts, 11);
+  assert.equal(inferenceCalls, 0);
+});
+
+test("transcription route rejects unsupported content types before counting or inference", async () => {
+  const db = new FakeDB();
+  const token = await worker.signToken(user, secret, 0);
+  let inferenceCalls = 0;
+  const response = await worker.default.fetch(new Request(
+    "https://api.example.test/api/transcribe",
+    {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + token,
+        "Content-Type": "application/octet-stream"
+      },
+      body: Uint8Array.from([1, 2, 3])
+    }
+  ), {
+    DB: db,
+    JWT_SECRET: secret,
+    AI: { async run() { inferenceCalls++; return { text: "not allowed" }; } }
+  });
+  assert.equal(response.status, 415);
+  assert.equal(db.transcriptionRateLimit, null);
+  assert.equal(inferenceCalls, 0);
 });
 
 test("transcription route rejects oversized chunked audio before inference", async () => {
