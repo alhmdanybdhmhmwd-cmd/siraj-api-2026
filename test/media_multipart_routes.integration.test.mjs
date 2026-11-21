@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { handleResumableMediaUpload } from "../src/src/media_multipart_routes.js";
+import { handleResumableMediaUpload, cleanupExpiredUploadSessions } from "../src/src/media_multipart_routes.js";
 
 const MiB = 1024 * 1024;
 const USER = { sub: "user-1" };
@@ -33,6 +33,7 @@ class FakeD1 {
       },
       async all(){
         const q=sql.replace(/\s+/g," ").trim();
+        if(q.includes("FROM media_upload_sessions")&&q.includes("expires_at <= ?")) return {results:[...db.sessions.values()].filter(x=>(["uploading","completing","failed"].includes(x.state)&&x.expires_at<=args[0])||(x.state==="completed"&&[...db.chunks.values()].some(ch=>ch.session_id===x.id))).slice(0,50).map(x=>({id:x.id,object_key:x.object_key,storage_upload_id:x.storage_upload_id,state:x.state}))};
         if(q.includes("sqlite_master")) return {results:[{name:"media_upload_sessions"},{name:"media_upload_parts"},{name:"media_upload_chunks"}]};
         if(q.includes("FROM media_upload_parts")) return {results:[...db.parts.values()].filter(x=>x.session_id===args[0]).sort((a,b)=>a.part_number-b.part_number).map(x=>({partNumber:x.part_number,etag:x.etag,size:x.size}))};
         if(q.includes("FROM media_upload_chunks")&&q.includes("BETWEEN")) return {results:[...db.chunks.values()].filter(x=>x.session_id===args[0]&&x.chunk_number>=args[1]&&x.chunk_number<=args[2]).sort((a,b)=>a.chunk_number-b.chunk_number).map(x=>({chunkNumber:x.chunk_number,size:x.size}))};
@@ -59,6 +60,7 @@ class FakeD1 {
         if(q.startsWith("UPDATE media_upload_sessions SET updated_at")) return {meta:{changes:1}};
         if(q.startsWith("DELETE FROM media_upload_chunks")&&q.includes("BETWEEN")){for(const [k,r] of db.chunks)if(r.session_id===args[0]&&r.chunk_number>=args[1]&&r.chunk_number<=args[2])db.chunks.delete(k);return {meta:{changes:1}};}
         if(q.startsWith("DELETE FROM media_upload_chunks")){for(const [k,r] of db.chunks)if(r.session_id===args[0])db.chunks.delete(k);return {meta:{changes:1}};}
+        if(q.startsWith("DELETE FROM media_upload_sessions")){const r=db.sessions.get(args[0]);if(r&&r.expires_at<=args[1]&&["uploading","completing","failed"].includes(r.state))db.sessions.delete(args[0]);return {meta:{changes:1}};}
         if(q.startsWith("DELETE FROM media_upload_parts")){for(const [k,r] of db.parts)if(r.session_id===args[0])db.parts.delete(k);return {meta:{changes:1}};}
         return {meta:{changes:1}};
       }
@@ -205,4 +207,21 @@ test("route security: revoked conversation membership blocks further upload and 
   const complete=await f.call("/api/media/uploads/"+id+"/complete","POST",{});
   assert.equal(complete.status,403,"revoked member must not complete an upload");
   assert.equal(f.DB.sessions.get(id).state,"uploading");
+});
+
+
+test("cleanup integration: expired incomplete sessions abort multipart and remove staging only",async t=>{
+  const f=fixture();t.after(f.restore);
+  const created=await f.call("/api/media/uploads","POST",declaration(64,"cleanup-expired-001"));
+  assert.equal(created.status,201);
+  const id=(await created.json()).session.id;
+  const session=f.DB.sessions.get(id);
+  session.expires_at="2000-01-01T00:00:00.000Z";
+  const stagingKey=session.object_key+".barq-staging/"+id+"/1";
+  f.objects.set(stagingKey,Uint8Array.from([1,2,3]));
+  const result=await cleanupExpiredUploadSessions({DB:f.DB,TIGRIS_ACCESS_KEY_ID:"fake-key",TIGRIS_SECRET_ACCESS_KEY:"fake-secret",TIGRIS_BUCKET:"test-bucket"},Date.parse("2001-01-01T00:00:00.000Z"));
+  assert.equal(result.checked,1);assert.equal(result.cleaned,1);
+  assert.equal(f.DB.sessions.has(id),false);
+  assert.equal(f.objects.has(stagingKey),false);
+  assert.equal([...f.objects.keys()].some(k=>k.includes("/chat-media/")),false,"cleanup must not touch final media");
 });
