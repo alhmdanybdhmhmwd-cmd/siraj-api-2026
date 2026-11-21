@@ -5,6 +5,7 @@ import {
   createDatabaseProvider,
   createLibsqlDatabaseProvider,
   createObjectStorageClient,
+  createObjectStorageUrl,
   createPushProvider,
   createBackgroundTaskScheduler
 } from "../src/src/runtime_adapters.js";
