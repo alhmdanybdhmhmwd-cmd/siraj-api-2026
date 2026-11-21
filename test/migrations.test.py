@@ -552,12 +552,12 @@ class RecoveryMigrationTests(unittest.TestCase):
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute(
                 "INSERT INTO media_upload_chunks (session_id, chunk_number, size, sha256) VALUES (?, ?, ?, ?)",
-                ("upload-1", 2, 1, "not-a-sha256"),
+                ("upload-1", 2, 1, "z" * 64),
             )
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute(
                 "INSERT INTO media_upload_parts (session_id, part_number, etag, size, sha256) VALUES (?, ?, ?, ?, ?)",
-                ("upload-1", 2, '"etag12345678"', 1, "not-a-sha256"),
+                ("upload-1", 2, '"etag12345678"', 1, "z" * 64),
             )
 
 
