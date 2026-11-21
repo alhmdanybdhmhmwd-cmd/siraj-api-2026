@@ -11,7 +11,33 @@ test("BARQ account registration, contact creation, and idempotent chat work thro
   const directory = mkdtempSync(join(tmpdir(), "barq-api-libsql-"));
   const client = createClient({ url: `file:${join(directory, "barq-api.db")}` });
   const db = createLibsqlDatabaseProvider(client);
-  const env = { DB: db, JWT_SECRET: "barq-integration-test-secret-not-for-production" };
+  const traceStatement = (statement, sql) => ({
+    bind(...args) { return traceStatement(statement.bind(...args), sql); },
+    async first() {
+      try { return await statement.first(); }
+      catch (error) { console.error("LIBSQL_SQL_ERROR", sql, error?.message); throw error; }
+    },
+    async all() {
+      try { return await statement.all(); }
+      catch (error) { console.error("LIBSQL_SQL_ERROR", sql, error?.message); throw error; }
+    },
+    async run() {
+      try { return await statement.run(); }
+      catch (error) { console.error("LIBSQL_SQL_ERROR", sql, error?.message); throw error; }
+    }
+  });
+  const tracedDb = {
+    prepare(sql) { return traceStatement(db.prepare(sql), sql); },
+    async batch(statements) {
+      try { return await db.batch(statements); }
+      catch (error) {
+        console.error("LIBSQL_BATCH_ERROR", statements.map(item => item.sql), error?.message);
+        throw error;
+      }
+    },
+    exec(sql) { return db.exec(sql); }
+  };
+  const env = { DB: tracedDb, JWT_SECRET: "barq-integration-test-secret-not-for-production" };
   const ctx = { waitUntil() {} };
 
   const request = async (path, method = "GET", body, token) => {
@@ -40,8 +66,9 @@ test("BARQ account registration, contact creation, and idempotent chat work thro
       phone: "+12025550101",
       password: "Barq-Test-Password-1"
     });
-    assert.equal(firstRegistration.status, 201);
-    const first = await firstRegistration.json();
+    const firstRegistrationBody = await firstRegistration.text();
+    assert.equal(firstRegistration.status, 201, `registration failed: ${firstRegistrationBody}`);
+    const first = JSON.parse(firstRegistrationBody);
     assert.ok(first.user.id);
     assert.ok(first.token);
 
