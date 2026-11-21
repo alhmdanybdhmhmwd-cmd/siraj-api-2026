@@ -585,6 +585,22 @@ void main() {
     expect(failures, ['two.png']);
   });
 
+  testWidgets('private memory load error explains retry instead of showing an empty vault', (tester) async {
+    var retried = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PrivateMemoryLoadError(onRetry: () => retried = true),
+        ),
+      ),
+    );
+
+    expect(find.text('تعذر تحميل ذكرياتك'), findsOneWidget);
+    expect(find.text('لم نحذف ذكرياتك المحفوظة.'), findsOneWidget);
+    await tester.tap(find.text('إعادة المحاولة'));
+    expect(retried, isTrue);
+  });
+
   testWidgets('private memory photo gallery shows a safe empty state without paging', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
