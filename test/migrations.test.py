@@ -107,6 +107,25 @@ class RecoveryMigrationTests(unittest.TestCase):
         self.assertEqual(body, "after")
         self.assertTrue(edited_at)
 
+    def test_ephemeral_message_schema_is_separate_and_has_user_foreign_keys(self):
+        columns = {
+            row[1]: row[2]
+            for row in self.db.execute("PRAGMA table_info(ephemeral_messages)")
+        }
+        self.assertEqual(columns["created_at"].upper(), "INTEGER")
+        self.assertIn("read_at", columns)
+        self.assertIn("delete_at", columns)
+        foreign_keys = {
+            (row[3], row[2], row[6])
+            for row in self.db.execute("PRAGMA foreign_key_list(ephemeral_messages)")
+        }
+        self.assertIn(("sender_id", "users", "CASCADE"), foreign_keys)
+        self.assertIn(("receiver_id", "users", "CASCADE"), foreign_keys)
+        regular_columns = {
+            row[1] for row in self.db.execute("PRAGMA table_info(messages)")
+        }
+        self.assertNotIn("delete_at", regular_columns)
+
     def test_migration_creates_recovery_tables_and_index(self):
         tables = {
             row[0] for row in self.db.execute(
