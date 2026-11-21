@@ -5,6 +5,8 @@ import {
   createDatabaseProvider,
   createLibsqlDatabaseProvider,
   createObjectStorageClient,
+  createObjectStorageProvider,
+  createS3ObjectStorageProvider,
   createObjectStorageUrl,
   createPushProvider,
   createBackgroundTaskScheduler
@@ -135,6 +137,53 @@ test("object storage URLs preserve Tigris defaults and support generic S3 endpoi
   assert.throws(() => createObjectStorageUrl({}, "/absolute/key"), /safe relative object key/);
   assert.throws(() => createObjectStorageUrl({}, "../private/file"), /safe relative object key/);
   assert.throws(() => createObjectStorageUrl({}, "folder\\file"), /safe relative object key/);
+});
+
+test("object storage provider exposes neutral get put delete head post and request operations", async () => {
+  const calls = [];
+  const provider = createObjectStorageProvider({
+    urlFor: (key, query = {}) => {
+      const url = new URL("https://objects.example/bucket/" + key);
+      for (const [name, value] of Object.entries(query)) url.searchParams.set(name, String(value));
+      return url.toString();
+    },
+    request: async (url, init) => {
+      calls.push({ url, init });
+      return new Response("ok", { status: 200 });
+    }
+  });
+  await provider.get("a.png");
+  await provider.put("b.png", "bytes", { "Content-Type": "image/png" });
+  await provider.delete("c.png", { uploadId: "upload-1" });
+  await provider.head("d.png");
+  await provider.post("e.png", "<xml>", { "Content-Type": "application/xml" }, { uploads: "" });
+  await provider.request("f.png", { method: "PATCH" }, { versionId: "v1" });
+  assert.deepEqual(calls.map(call => new URL(call.url).pathname), [
+    "/bucket/a.png", "/bucket/b.png", "/bucket/c.png", "/bucket/d.png", "/bucket/e.png", "/bucket/f.png"
+  ]);
+  assert.deepEqual(calls.map(call => call.init.method), ["GET", "PUT", "DELETE", "HEAD", "POST", "PATCH"]);
+  assert.equal(new URL(calls[2].url).searchParams.get("uploadId"), "upload-1");
+  assert.equal(new URL(calls[4].url).searchParams.has("uploads"), true);
+  assert.equal(new URL(calls[5].url).searchParams.get("versionId"), "v1");
+  assert.equal(calls[1].init.body, "bytes");
+});
+
+test("S3 provider adapts the runtime signer behind the neutral storage contract", async () => {
+  const requests = [];
+  class FakeSigner {
+    constructor(config) { this.config = config; }
+    async fetch(url, init) { requests.push({ url, init }); return new Response("stored"); }
+  }
+  const provider = createS3ObjectStorageProvider({
+    TIGRIS_ACCESS_KEY_ID: "access",
+    TIGRIS_SECRET_ACCESS_KEY: "secret",
+    TIGRIS_BUCKET: "barq-media"
+  }, FakeSigner);
+  const response = await provider.put("chat/file.bin", new Uint8Array([1, 2]), { "Content-Type": "application/octet-stream" });
+  assert.equal(await response.text(), "stored");
+  assert.equal(new URL(requests[0].url).hostname, "barq-media.t3.storage.dev");
+  assert.equal(requests[0].init.method, "PUT");
+  assert.equal(provider.delete instanceof Function, true);
 });
 
 test("object storage client uses the common S3-compatible configuration", () => {
