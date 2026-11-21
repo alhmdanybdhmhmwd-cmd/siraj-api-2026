@@ -1192,7 +1192,7 @@ class Api {
     Map<String, String> headers = const {},
     Duration timeout = const Duration(minutes: 2),
   }) async {
-    final bases = <String>{mediaWorkerBase, apiBase};
+    final bases = <String>[mediaWorkerBase, if (apiBase != mediaWorkerBase) apiBase];
     Object? lastError;
     for (final base in bases) {
       try {
@@ -5967,7 +5967,7 @@ class _VideoAttachmentDialogState extends State<_VideoAttachmentDialog> {
       return;
     }
     final headers = {if (Api.token != null) 'Authorization': 'Bearer \${Api.token}'};
-    final bases = <String>{mediaWorkerBase, apiBase}.toList(growable: false);
+    final bases = <String>[mediaWorkerBase, if (apiBase != mediaWorkerBase) apiBase];
     Object? lastError;
     for (final base in bases) {
       VideoPlayerController? candidate;
