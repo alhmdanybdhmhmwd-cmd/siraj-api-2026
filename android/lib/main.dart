@@ -3099,7 +3099,7 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
               SizedBox(
                 height: 52,
                 child: FilledButton(
-                  style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+                  style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary),
                   onPressed: busy ? null : submit,
                   child: busy
                       ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
@@ -3140,7 +3140,7 @@ Future<bool> confirmVoiceTranscription(BuildContext context) async {
       content: const Text('سيُرسل الملف الصوتي إلى خدمة Cloudflare Workers AI لمعالجة الكلام وإرجاع النص. لا يُحفظ الملف في جدول الرسائل، لكن المعالجة تتم عبر الإنترنت وقد تُحتسب عليها تكلفة تشغيل. هل تريد المتابعة؟'),
       actions: [
         TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
-        FilledButton(style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+        FilledButton(style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary),
           onPressed: () => Navigator.pop(dialogContext, true), child: const Text('متابعة')),
       ],
     ),
@@ -3546,7 +3546,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+              style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary),
               onPressed: () async {
                 final content = controller.text.trim();
                 if (content.isEmpty) return;
@@ -3628,7 +3628,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 child: const Text('إلغاء'),
               ),
               FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+                style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary),
                 onPressed: uploading ? null : () async {
                   setDialogState(() => uploading = true);
                   String? statusId;
@@ -3999,7 +3999,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary),
             onPressed: () async {
               if (name.text.trim().length < 2) {
                 showMsg(context, 'اكتب اسماً للمجموعة من حرفين على الأقل.');
@@ -4595,7 +4595,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             TextButton(onPressed: () => Navigator.pop(dialogContext, false),
                 child: const Text('إلغاء')),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+              style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary),
               onPressed: () => Navigator.pop(dialogContext, true),
               child: const Text('اعتماد الصورة'),
             ),
@@ -4655,7 +4655,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               child: const Text('إلغاء'),
             ),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+              style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary),
               onPressed: saving ? null : () async {
                 final name = nameController.text.trim();
                 if (name.isEmpty) {
@@ -4768,7 +4768,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               icon: const Icon(Icons.copy), label: const Text('نسخ الرابط'),
             ),
             FilledButton.icon(
-              style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+              style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary),
               onPressed: () => SharePlus.instance.share(
                 ShareParams(text: 'انضم إلى برق! استخدم رمز الدعوة $code أو افتح الرابط: $link'),
               ),
@@ -4794,13 +4794,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           backgroundColor: Theme.of(context).colorScheme.surface,
           title: const Text('تفضيلات الإشعارات'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
-            SwitchListTile(contentPadding: EdgeInsets.zero, activeThumbColor: gold,
+            SwitchListTile(contentPadding: EdgeInsets.zero, activeThumbColor: Theme.of(context).colorScheme.primary,
               title: const Text('الرسائل الخاصة'), value: messages,
               onChanged: saving ? null : (v) => setDialog(() => messages = v)),
-            SwitchListTile(contentPadding: EdgeInsets.zero, activeThumbColor: gold,
+            SwitchListTile(contentPadding: EdgeInsets.zero, activeThumbColor: Theme.of(context).colorScheme.primary,
               title: const Text('رسائل المجموعات'), value: groupsEnabled,
               onChanged: saving ? null : (v) => setDialog(() => groupsEnabled = v)),
-            SwitchListTile(contentPadding: EdgeInsets.zero, activeThumbColor: gold,
+            SwitchListTile(contentPadding: EdgeInsets.zero, activeThumbColor: Theme.of(context).colorScheme.primary,
               title: const Text('حالات SPARK الجديدة'), value: statusesEnabled,
               onChanged: saving ? null : (v) => setDialog(() => statusesEnabled = v)),
             const SizedBox(height: 8),
@@ -4808,7 +4808,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ]),
           actions: [
             TextButton(onPressed: saving ? null : () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
-            FilledButton(style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+            FilledButton(style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary),
               onPressed: saving ? null : () async {
                 setDialog(() => saving = true);
                 try {
@@ -4843,7 +4843,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             children: [
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                activeThumbColor: gold,
+                activeThumbColor: Theme.of(context).colorScheme.primary,
                 title: const Text('السماح بالعثور علي'),
                 subtitle: const Text('عند الإيقاف لن يظهر حسابك في نتائج البحث عن الأشخاص.'),
                 value: searchable,
@@ -4852,7 +4852,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               const Divider(color: Colors.white24),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                activeThumbColor: gold,
+                activeThumbColor: Theme.of(context).colorScheme.primary,
                 title: const Text('إشعارات قراءة الرسائل'),
                 subtitle: const Text('عند الإيقاف لن يُسجل التطبيق قراءة الرسائل الواردة عند فتح المحادثة.'),
                 value: readReceipts,
@@ -4863,7 +4863,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           actions: [
             TextButton(onPressed: saving ? null : () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+              style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary),
               onPressed: saving ? null : () async {
                 setDialog(() => saving = true);
                 try {
@@ -5013,7 +5013,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             title: const Text('وضع البرق'),
             subtitle: const Text('أولوية للرسائل النصية وتعطيل إرسال الصور والفيديو والملفات لتقليل استهلاك البيانات.'),
             value: BarqFeatures.lightningMode,
-            activeThumbColor: gold,
+            activeThumbColor: Theme.of(context).colorScheme.primary,
             onChanged: (enabled) async {
               try {
                 await BarqFeatures.setLightningMode(enabled);
@@ -5030,7 +5030,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             title: const Text('الترجمة التلقائية عربي / إنجليزي'),
             subtitle: const Text('تعرض ترجمة الرسائل بجانب النص الأصلي باستخدام نموذج محلي على الجهاز. يمكنك إيقافها في أي وقت.'),
             value: BarqFeatures.autoTranslate,
-            activeThumbColor: gold,
+            activeThumbColor: Theme.of(context).colorScheme.primary,
             onChanged: (enabled) async {
               try {
                 await BarqFeatures.setAutoTranslate(enabled);
@@ -5399,7 +5399,7 @@ class _BarqConversationSummaryDialogState extends State<BarqConversationSummaryD
                     textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
                   const SizedBox(height: 14),
                   FilledButton.icon(
-                    style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+                    style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary),
                     onPressed: _startSummary,
                     icon: const Icon(Icons.auto_awesome),
                     label: const Text('إنشاء الملخص'),
@@ -6334,7 +6334,7 @@ class _NearbyDevicesPageState extends State<NearbyDevicesPage> {
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('رفض')),
-          FilledButton(style: FilledButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary),
             onPressed: () => Navigator.pop(dialogContext, true), child: const Text('الرمز متطابق — قبول')),
         ],
       ),
