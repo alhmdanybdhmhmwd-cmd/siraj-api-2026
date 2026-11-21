@@ -51,7 +51,7 @@ class FakeDB {
     this.loginAttempts = new Map();
     this.transcriptionRateLimit = null;
     this.inviteCodes = new Map();
-    this.friendshipPairs = new Set();
+
     this.contactCandidates = [];
     this.privacySettings = null;
     this.notificationSettings = null;
@@ -77,9 +77,6 @@ class FakeDB {
           return db.revokedSessions?.has(this.params[0]) ? { 1: 1 } : null;
         }
         if (sql.includes("SELECT 1 FROM friendships")) {
-          if (sql.includes("WHERE user_id = ? AND friend_id = ?")) {
-            return db.friendshipPairs.has(this.params.join(":")) ? { 1: 1 } : null;
-          }
           return db.friendshipAllowed === false ? null : { 1: 1 };
         }
         if (sql.includes("FROM group_members mine")) {
@@ -350,7 +347,7 @@ test("private invite endpoint creates one stable twelve-character code per accou
 
 test("ephemeral send stores only in its isolated table and requires a friend", async () => {
   const db = new FakeDB();
-  db.friendshipPairs.add(user.id + ":friend-1");
+  db.friendshipAllowed = true;
   const token = await worker.signToken(user, secret, 0);
   const response = await worker.default.fetch(new Request(
     "https://api.example.test/api/ephemeral-messages",
@@ -390,9 +387,10 @@ test("ephemeral send rejects non-friends, self messages and oversized text", asy
     }
   ), { DB: db, JWT_SECRET: secret });
 
+  db.friendshipAllowed = false;
   assert.equal((await post({ receiverId: "stranger", body: "hello" })).status, 403);
+  db.friendshipAllowed = true;
   assert.equal((await post({ receiverId: user.id, body: "hello" })).status, 400);
-  db.friendshipPairs.add(user.id + ":friend-1");
   assert.equal((await post({ receiverId: "friend-1", body: "x".repeat(5001) })).status, 400);
   assert.equal(db.ephemeralRows?.length || 0, 0);
 });
