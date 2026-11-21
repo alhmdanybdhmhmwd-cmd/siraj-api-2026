@@ -1,4 +1,5 @@
 name: BARQ isolated Preview integration verification
+# Re-run isolated media checks after Preview schema migration and Worker redeploy.
 
 on:
   workflow_dispatch:
