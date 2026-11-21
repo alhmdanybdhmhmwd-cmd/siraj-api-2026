@@ -277,6 +277,20 @@ Future<void> main() async {
   runApp(const SirajApp());
 }
 
+/// Normalize an FCM token before sending it to the authenticated API.
+String? normalizeBarqFcmToken(String? token) {
+  final value = token?.trim() ?? '';
+  if (value.isEmpty || value.length > 4096 || RegExp(r'\\s').hasMatch(value)) {
+    return null;
+  }
+  return value;
+}
+
+/// Only authorized or provisional permission states may register an FCM token.
+bool barqCanRegisterFcmToken(AuthorizationStatus status) =>
+    status == AuthorizationStatus.authorized ||
+    status == AuthorizationStatus.provisional;
+
 /// تفعيل إذن الإشعارات وتسجيل رمز الجهاز بعد تسجيل الدخول.
 class SirajPush {
   static bool _listening = false;
@@ -287,18 +301,22 @@ class SirajPush {
       final permission = await messaging.requestPermission(
         alert: true, badge: true, sound: true,
       );
-      if (permission.authorizationStatus == AuthorizationStatus.denied) return;
-      final token = await messaging.getToken();
-      if (token != null && token.isNotEmpty) {
-        await Api.registerDeviceToken(token);
-      }
+      if (!barqCanRegisterFcmToken(permission.authorizationStatus)) return;
+
+      final token = normalizeBarqFcmToken(await messaging.getToken());
+      if (token != null) await Api.registerDeviceToken(token);
+
       if (!_listening) {
-        _listening = true;
         FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
+          final refreshedToken = normalizeBarqFcmToken(newToken);
+          if (Api.token == null || refreshedToken == null) return;
           try {
-            if (Api.token != null) await Api.registerDeviceToken(newToken);
-          } catch (_) {}
+            await Api.registerDeviceToken(refreshedToken);
+          } catch (_) {
+            // A later token refresh or next authenticated startup can retry.
+          }
         });
+        _listening = true;
       }
     } catch (_) {
       // فشل الإشعارات لا يمنع الدخول أو استخدام التطبيق.
