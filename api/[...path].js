@@ -123,6 +123,8 @@ module.exports = async (req, res) => {
     if (req.headers["if-range"]) headers["If-Range"] = req.headers["if-range"];
 
     const upstreams = getUpstreamCandidates();
+    const retryIsSafe = ["GET", "HEAD", "PUT", "DELETE", "OPTIONS"].includes(req.method) ||
+      Boolean(headers["X-Idempotency-Key"]);
     let response = null;
     let lastError = null;
     for (let index = 0; index < upstreams.length; index += 1) {
@@ -132,12 +134,14 @@ module.exports = async (req, res) => {
           headers,
           body: ["GET", "HEAD"].includes(req.method) ? undefined : body,
         });
-        // Retry only gateway/service-unavailable responses. Application errors
-        // (including auth and validation failures) must not be replayed elsewhere.
-        if (![502, 503, 504].includes(response.status) || index === upstreams.length - 1) break;
+        // Never replay non-idempotent writes. Retry only safe requests on
+        // gateway/service-unavailable responses, not application/auth errors.
+        if (![502, 503, 504].includes(response.status) ||
+            index === upstreams.length - 1 || !retryIsSafe) break;
+        if (response.body) await response.body.cancel();
       } catch (error) {
         lastError = error;
-        if (index === upstreams.length - 1) throw error;
+        if (index === upstreams.length - 1 || !retryIsSafe) throw error;
       }
     }
     if (!response) throw lastError || new Error("No BARQ upstream responded");
