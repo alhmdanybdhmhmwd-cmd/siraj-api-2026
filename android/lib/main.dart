@@ -2815,6 +2815,7 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    final identityPrimary = Theme.of(context).colorScheme.primary;
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
@@ -2852,7 +2853,7 @@ class _LoginPageState extends State<LoginPage> {
                         )),
                         const SizedBox(height: 14),
                         Center(child: Text('بَرق', style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary, fontSize: 38, fontWeight: FontWeight.w900, letterSpacing: 1,
+                          color: identityPrimary, fontSize: 38, fontWeight: FontWeight.w900, letterSpacing: 1,
                         ))),
                         const SizedBox(height: 5),
                         Center(child: Text(
