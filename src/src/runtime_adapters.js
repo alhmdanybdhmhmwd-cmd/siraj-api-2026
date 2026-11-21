@@ -176,6 +176,7 @@ export function createObjectStorageProvider({ request, urlFor }) {
   const send = (key, init = {}, query = {}) => request(urlFor(key, query), init);
   return Object.freeze({
     request: send,
+    fetchUrl: (url, init = {}) => request(url, init),
     get: (key, query) => send(key, { method: "GET" }, query),
     put: (key, body, headers = {}, query) => send(key, { method: "PUT", headers, body }, query),
     delete: (key, query) => send(key, { method: "DELETE" }, query),
