@@ -1218,7 +1218,7 @@ class Api {
     }
     // Keep transcription on the public API origin; avoid direct workers.dev
     // fallback so restricted networks use one hostname consistently.
-    final primaryTranscribeBase = apiBase;
+    const primaryTranscribeBase = apiBase;
     const String? fallbackTranscribeBase = null;
     http.Response response;
     try {
