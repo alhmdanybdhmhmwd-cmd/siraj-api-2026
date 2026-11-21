@@ -11,7 +11,7 @@ workerSource = workerSource.replace(
   'import { prepareConversationSummaryTranscript, buildConversationSummaryMessages, extractConversationSummaryText } from "./conversation_summary.js";',
   summarySource
 );
-workerSource = workerSource.replace('import { createAiProvider } from "./runtime_adapters.js";', adapterSource.replace("export function createAiProvider", "function createAiProvider"));
+workerSource = workerSource.replace('import { createObjectStorageClient, createAiProvider } from "./runtime_adapters.js";', adapterSource.replace('import { AwsClient } from "aws4fetch";', "class AwsClient {}").replace("export function createObjectStorageClient", "function createObjectStorageClient").replace("export function createAiProvider", "function createAiProvider"));
 workerSource = workerSource.replace('import { AwsClient } from "aws4fetch";', `
 class AwsClient {
   async fetch(url, options) {
