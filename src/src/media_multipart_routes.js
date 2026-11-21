@@ -1,7 +1,8 @@
 import { AwsClient } from "aws4fetch";
 import {
   MEDIA_MULTIPART_PART_SIZE, MEDIA_MULTIPART_MAX_SIZE, MEDIA_UPLOAD_SESSION_TTL_MS,
-  validateMultipartDeclaration, validateMultipartPart, normalizeMultipartEtag,
+  MEDIA_TRANSPORT_CHUNK_SIZE, validateMultipartDeclaration, validateMultipartPart,
+  validateTransportChunk, normalizeMultipartEtag,
   parseMultipartUploadId, buildCompleteMultipartXml, isUploadSessionExpired
 } from "./media_multipart.js";
 
@@ -46,8 +47,20 @@ async function readLimited(request, limit) {
   return bytes;
 }
 async function ensureSessionSchema(env) {
-  const row = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'media_upload_sessions'").first();
-  if (!row) throw new Error("Resumable media upload migration 0010 is not applied");
+  const rows = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('media_upload_sessions', 'media_upload_parts', 'media_upload_chunks')").all();
+  const names = new Set((rows.results || []).map(row => row.name));
+  if (!names.has("media_upload_sessions") || !names.has("media_upload_parts") || !names.has("media_upload_chunks")) {
+    throw new Error("Resumable media upload migrations 0010 and 0011 are not applied");
+  }
+}
+function stagedChunkKey(session, chunkNumber) {
+  return session.object_key + ".barq-staging/" + session.id + "/" + chunkNumber;
+}
+async function deleteStagedChunks(storage, env, session, chunkNumbers) {
+  for (const number of chunkNumbers) {
+    const response = await storage.fetch(objectUrl(env, stagedChunkKey(session, number)), { method: "DELETE" });
+    if (!response.ok && response.status !== 404) throw new Error("Could not clean a staged upload chunk");
+  }
 }
 async function canUploadToConversation(env, ownerId, recipientId, groupId) {
   if (recipientId) {
