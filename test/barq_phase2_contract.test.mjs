@@ -482,7 +482,7 @@ test("SPARK media expiration cleanup is scheduled and preserves failed deletion 
   const cleanup = worker.slice(cleanupStart, cleanupEnd);
   const successGate = cleanup.indexOf("if (response.ok || response.status === 404)");
   const expirationDelete = cleanup.indexOf('DELETE FROM media_expirations WHERE object_key = ? AND expires_at <= ?');
-  const failureBranch = cleanup.indexOf('else {\n        console.error("Expired media deletion failed:", response.status); }');
+  const failureBranch = cleanup.indexOf('else {\n        console.error("Expired media deletion failed:", response.status);');
   assert.ok(successGate >= 0 && expirationDelete > successGate);
   assert.ok(failureBranch > expirationDelete, "failed storage deletion must retain its expiration row for retry");
   assert.ok(cleanup.includes("Expired media cleanup item failed"));
