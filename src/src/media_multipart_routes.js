@@ -152,7 +152,7 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
           "x-amz-meta-ownerid": currentUser.sub,
           "x-amz-meta-filename": encodeURIComponent(declaration.fileName),
           "x-amz-meta-category": "chat-media" }
-      });
+      }, { uploads: "" });
       if (!initiated.ok) return json({ error: "Could not initiate media upload", storageStatus: initiated.status }, 502);
       let uploadId;
       try { uploadId = parseMultipartUploadId(await initiated.text()); }
