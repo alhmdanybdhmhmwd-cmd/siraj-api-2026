@@ -2763,3 +2763,67 @@ test("successful SPARK media rollback clears its cleanup record", async () => {
   assert.match(statements[0].sql, /^DELETE FROM media_expirations/);
   assert.deepEqual(statements[0].params, ["user-1/spark-object"]);
 });
+
+
+test("private memory photo upload verifies memory ownership before touching storage", async () => {
+  const secret = "private-memory-test-secret";
+  const token = await worker.signToken({ id: "owner-1", username: "owner-1" }, secret);
+  const statements = [];
+  const db = {
+    prepare(sql) {
+      const statement = {
+        sql,
+        params: [],
+        bind(...params) { this.params = params; return this; },
+        async run() {
+          statements.push({ sql: this.sql, params: this.params });
+          return { meta: { changes: 1 } };
+        },
+        async first() {
+          if (this.sql.includes("SELECT session_version FROM account_security")) {
+            return { session_version: 0 };
+          }
+          if (this.sql.includes("SELECT id FROM private_memories WHERE id = ? AND owner_id = ?")) {
+            assert.deepEqual(this.params, ["memory-owned-by-someone-else", "owner-1"]);
+            return null;
+          }
+          return null;
+        },
+        async all() { return { results: [] }; }
+      };
+      return statement;
+    }
+  };
+  let storageCalls = 0;
+  const previousHandler = globalThis.__fakeTigrisHandler;
+  globalThis.__fakeTigrisHandler = async () => {
+    storageCalls++;
+    return new Response(null, { status: 204 });
+  };
+  try {
+    const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const response = await worker.default.fetch(new Request(
+      "https://api.example.test/api/private-memories/memory-owned-by-someone-else/media",
+      {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + token,
+          "Content-Type": "image/png",
+          "X-File-Name": "private.png"
+        },
+        body: png
+      }
+    ), {
+      DB: db,
+      JWT_SECRET: secret,
+      TIGRIS_ACCESS_KEY_ID: "test-access",
+      TIGRIS_SECRET_ACCESS_KEY: "test-secret"
+    });
+    assert.equal(response.status, 404);
+    assert.equal(storageCalls, 0);
+    assert.ok(statements.some(item => item.sql.includes("CREATE TABLE IF NOT EXISTS private_memory_media")));
+  } finally {
+    if (previousHandler === undefined) delete globalThis.__fakeTigrisHandler;
+    else globalThis.__fakeTigrisHandler = previousHandler;
+  }
+});
