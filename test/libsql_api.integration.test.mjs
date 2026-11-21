@@ -109,10 +109,15 @@ test("BARQ account registration, contact creation, and idempotent chat work thro
     const sent = await sentResponse.json();
     assert.equal(sent.id, messagePayload.clientMessageId);
 
-    const retryResponse = await request("/api/messages", "POST", messagePayload, first.token);
-    assert.equal(retryResponse.status, 200);
-    const retry = await retryResponse.json();
-    assert.equal(retry.duplicate, true);
+    const retryResponses = await Promise.all([
+      request("/api/messages", "POST", messagePayload, first.token),
+      request("/api/messages", "POST", messagePayload, first.token)
+    ]);
+    for (const retryResponse of retryResponses) {
+      assert.equal(retryResponse.status, 200);
+      const retry = await retryResponse.json();
+      assert.equal(retry.duplicate, true);
+    }
 
     const historyResponse = await request(
       `/api/messages?with=${encodeURIComponent(first.user.id)}`,
