@@ -11,7 +11,7 @@ function getUpstreamCandidates(env = process.env) {
   if (fallback && fallback !== primary) {
     try {
       const parsed = new URL(fallback);
-      const normalized = fallback.replace(/\\/$/, "");
+      const normalized = fallback.endsWith("/") ? fallback.slice(0, -1) : fallback;
       if (parsed.protocol === "https:" && parsed.origin === normalized) candidates.push(normalized);
     } catch (_) {
       // Ignore malformed fallback configuration; never route to an unsafe URL.
