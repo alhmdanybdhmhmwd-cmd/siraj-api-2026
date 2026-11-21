@@ -7515,7 +7515,8 @@ class _GroupChatPageState extends State<GroupChatPage> {
                                   await Api.pinGroupMessage(groupId, field(m, ['id', 'message_id']), pinned: m['is_pinned'] != true);
                                   if (mounted) await loadMessages(silent: true);
                                 },
-                                onSaveMemory: field(m, ['body', 'content', 'message']).trim().isNotEmpty
+                                onSaveMemory: m['is_ephemeral'] != true && m['is_offline_pending'] != true &&
+                                        field(m, ['body', 'content', 'message']).trim().isNotEmpty
                                     ? () async {
                                         await Api.savePrivateMemory(
                                           title: 'رسالة محفوظة',
