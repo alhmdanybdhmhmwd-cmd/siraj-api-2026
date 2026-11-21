@@ -28,7 +28,6 @@ import 'barq_identity.dart';
 
 const Color gold = Color(0xFFD6AD55);
 const Color dark = Color(0xFF090909);
-const Color panel = Color(0xFF171717);
 const Color electricBlue = Color(0xFF168BFF);
 const Color glass = Color(0xCC171B24);
 // Production remains the safe default. Select isolated preview origins at build time
@@ -3092,7 +3091,7 @@ InputDecoration inputDecoration(String label, IconData icon) => InputDecoration(
       labelText: label,
       prefixIcon: Icon(icon, color: gold),
       filled: true,
-      fillColor: panel,
+      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
     );
 
@@ -6963,7 +6962,7 @@ class _ChatPageState extends State<ChatPage> {
                                 margin: const EdgeInsets.symmetric(vertical: 4),
                                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                                 decoration: BoxDecoration(
-                                  color: mine ? const Color(0xFF46391F) : panel,
+                                  color: mine ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surfaceContainerHighest,
                                   borderRadius: BorderRadius.circular(16),
                                 ),
                                 child: Column(
@@ -8071,7 +8070,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
                         constraints: const BoxConstraints(maxWidth: 310),
                         margin: const EdgeInsets.symmetric(vertical: 4),
                         padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: mine ? const Color(0xFF46391F) : panel,
+                        decoration: BoxDecoration(color: mine ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(15)),
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           if (field(m, ['reply_to_id']).isNotEmpty)
