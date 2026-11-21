@@ -63,13 +63,13 @@ class FakeD1 {
       }
     };return stmt;
   }
-  async batch(statements){return [{meta:{changes:1}},{meta:{changes:1}}];}
+  async batch(statements){const out=[];for(const s of statements)out.push(await s.run());return out;}
 }
 function fixture(){
   const DB=new FakeD1(),objects=new Map(),uploads=new Map(),originalFetch=globalThis.fetch;
   globalThis.fetch=async(input,init={})=>{
     const req=input instanceof Request?input:new Request(input,init),u=new URL(req.url);
-    const key=decodeURIComponent(u.pathname.split("/").slice(2).join("/")),uploadId=u.searchParams.get("uploadId"),part=Number(u.searchParams.get("partNumber"));
+    const key=decodeURIComponent(u.pathname.split("/").slice(1).join("/")),uploadId=u.searchParams.get("uploadId"),part=Number(u.searchParams.get("partNumber"));
     if(req.method==="POST"&&u.searchParams.has("uploads")){const id="upload-"+(uploads.size+1);uploads.set(id,{key,parts:new Map(),aborted:false});return new Response("<UploadId>"+id+"</UploadId>");}
     if(uploadId&&req.method==="PUT"&&part){const up=uploads.get(uploadId);if(!up||up.aborted)return new Response("",{status:404});const b=new Uint8Array(await req.arrayBuffer()),etag=createHash("md5").update(b).digest("hex");up.parts.set(part,{bytes:b,etag});return new Response("",{headers:{ETag:'"'+etag+'"'}});}
     if(uploadId&&req.method==="POST"){const up=uploads.get(uploadId);if(!up)return new Response("",{status:404});const list=[...up.parts.entries()].sort((a,b)=>a[0]-b[0]),len=list.reduce((s,x)=>s+x[1].bytes.length,0),out=new Uint8Array(len);let off=0;for(const [,p] of list){out.set(p.bytes,off);off+=p.bytes.length;}objects.set(up.key,out);return new Response("<CompleteMultipartUploadResult/>");}
