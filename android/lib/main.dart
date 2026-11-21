@@ -2626,6 +2626,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   DateTime? lastPhoneContactsSyncAt;
   List<Map<String, dynamic>> groups = [];
   List<Map<String, dynamic>> statuses = [];
+  List<Map<String, dynamic>> memories = [];
   bool loading = true;
   Map<String, dynamic> privacySettings = {'searchable': true, 'readReceipts': true};
   Map<String, dynamic> notificationPrefs = {'messages': true, 'groups': true, 'statuses': true};
@@ -2700,6 +2701,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         groups = await Api.groups();
       } catch (_) {
         // لا نعطل المحادثات الفردية إذا لم تُنشر واجهة المجموعات على الخادم بعد.
+      }
+      try {
+        memories = await Api.privateMemories();
+      } catch (_) {
+        memories = [];
       }
       try {
         referralStats = await Api.referrals();
@@ -2846,6 +2852,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _statusesPage(),
       _friendsPage(),
       _groupsPage(),
+      _memoriesPage(),
       _accountPage(),
     ];
     return Directionality(
@@ -2860,12 +2867,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         body: loading
             ? const Center(child: CircularProgressIndicator(color: gold))
             : pages[selectedTab],
-        floatingActionButton: selectedTab == 1 || selectedTab == 2 || selectedTab == 3
+        floatingActionButton: selectedTab >= 1 && selectedTab <= 4
             ? FloatingActionButton(
                 backgroundColor: gold,
                 foregroundColor: Colors.black,
-                onPressed: selectedTab == 1 ? publishStatusDialog : (selectedTab == 2 ? searchUsers : createGroupDialog),
-                child: Icon(selectedTab == 1 ? Icons.add : (selectedTab == 2 ? Icons.person_add : Icons.group_add)),
+                onPressed: selectedTab == 1
+                    ? publishStatusDialog
+                    : (selectedTab == 2
+                        ? searchUsers
+                        : (selectedTab == 3 ? createGroupDialog : _showPrivateMemoryDialog)),
+                child: Icon(selectedTab == 1
+                    ? Icons.add
+                    : (selectedTab == 2
+                        ? Icons.person_add
+                        : (selectedTab == 3 ? Icons.group_add : Icons.auto_awesome))),
               )
             : null,
         bottomNavigationBar: NavigationBar(
@@ -2882,6 +2897,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             NavigationDestination(icon: Icon(Icons.circle_outlined), label: 'SPARK'),
             NavigationDestination(icon: Icon(Icons.people_outline), label: 'الأشخاص'),
             NavigationDestination(icon: Icon(Icons.groups_outlined), label: 'المجموعات'),
+            NavigationDestination(icon: Icon(Icons.auto_awesome_outlined), label: 'الذكريات'),
             NavigationDestination(icon: Icon(Icons.person_outline), label: 'حسابي'),
           ],
         ),
@@ -3500,6 +3516,193 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
     );
     controller.dispose();
+  }
+
+  Widget _memoriesPage() {
+    return RefreshIndicator(
+      color: gold,
+      onRefresh: () async {
+        try {
+          final loaded = await Api.privateMemories();
+          if (mounted) setState(() => memories = loaded);
+        } catch (e) {
+          if (mounted) showMsg(context, cleanError(e));
+        }
+      },
+      child: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Text('مساحة ذكرياتك الخاصة', style: TextStyle(color: gold, fontSize: 21)),
+          ),
+          if (memories.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 20),
+              child: Column(
+                children: [
+                  const Icon(Icons.auto_awesome, color: gold, size: 54),
+                  const SizedBox(height: 12),
+                  const Text('احتفظ بلحظاتك المهمة هنا', style: TextStyle(color: gold, fontSize: 18)),
+                  const SizedBox(height: 8),
+                  const Text('هذه المساحة خاصة بك وحدك. أضف ذكرى أو احفظ نصًا من محادثاتك.',
+                    textAlign: TextAlign.center, style: TextStyle(color: Colors.white60)),
+                  const SizedBox(height: 18),
+                  FilledButton.icon(
+                    onPressed: () => _showPrivateMemoryDialog(),
+                    icon: const Icon(Icons.add),
+                    label: const Text('إضافة ذكرى'),
+                  ),
+                ],
+              ),
+            ),
+          for (final memory in memories)
+            Card(
+              color: panel,
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF46391F),
+                  child: Icon(
+                    field(memory, ['sourceType']) == 'message' ? Icons.chat_bubble_outline : Icons.auto_awesome,
+                    color: gold,
+                  ),
+                ),
+                title: Text(field(memory, ['title'], 'ذكرى محفوظة')),
+                subtitle: Text(
+                  field(memory, ['content']),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                onTap: () => _showPrivateMemoryDialog(memory: memory),
+                trailing: PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'edit') _showPrivateMemoryDialog(memory: memory);
+                    if (value == 'delete') _deletePrivateMemory(memory);
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'edit', child: Text('تعديل')),
+                    PopupMenuItem(value: 'delete', child: Text('حذف')),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showPrivateMemoryDialog({
+    Map<String, dynamic>? memory,
+    String initialContent = '',
+    String sourceType = 'text',
+  }) async {
+    final titleController = TextEditingController(text: field(memory ?? {}, ['title']));
+    final contentController = TextEditingController(
+      text: memory == null ? initialContent : field(memory, ['content']),
+    );
+    final editing = memory != null;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: panel,
+        title: Text(editing ? 'تعديل الذكرى' : 'إضافة ذكرى خاصة'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                maxLength: 120,
+                decoration: inputDecoration('عنوان الذكرى (اختياري)', Icons.title),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: contentController,
+                autofocus: true,
+                maxLength: 10000,
+                minLines: 4,
+                maxLines: 8,
+                decoration: inputDecoration('اكتب ما تريد الاحتفاظ به', Icons.edit_note),
+              ),
+              const Align(
+                alignment: Alignment.centerRight,
+                child: Text('لا يراها سواك', style: TextStyle(color: gold, fontSize: 12)),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
+          FilledButton(
+            onPressed: () async {
+              final content = contentController.text.trim();
+              if (content.isEmpty || content.length > 10000 || titleController.text.trim().length > 120) {
+                showMsg(dialogContext, 'اكتب محتوى للذكرى ضمن الحد المسموح.');
+                return;
+              }
+              try {
+                final saved = editing
+                    ? await Api.updatePrivateMemory(
+                        id: field(memory, ['id']),
+                        title: titleController.text,
+                        content: content,
+                      )
+                    : await Api.savePrivateMemory(
+                        title: titleController.text,
+                        content: content,
+                        sourceType: sourceType,
+                      );
+                if (mounted) {
+                  setState(() {
+                    if (editing) {
+                      final index = memories.indexWhere((item) => item['id'] == saved['id']);
+                      if (index >= 0) memories[index] = saved;
+                    } else {
+                      memories.insert(0, saved);
+                    }
+                  });
+                }
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+                if (mounted) showMsg(context, editing ? 'تم تحديث الذكرى.' : 'تم حفظ الذكرى بشكل خاص.');
+              } catch (e) {
+                if (dialogContext.mounted) showMsg(dialogContext, cleanError(e));
+              }
+            },
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+    titleController.dispose();
+    contentController.dispose();
+  }
+
+  Future<void> _deletePrivateMemory(Map<String, dynamic> memory) async {
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: panel,
+        title: const Text('حذف الذكرى؟'),
+        content: const Text('سيتم حذف هذه الذكرى من مساحتك الخاصة.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('حذف'),
+          ),
+        ],
+      ),
+    );
+    if (accepted != true) return;
+    try {
+      await Api.deletePrivateMemory(field(memory, ['id']));
+      if (mounted) {
+        setState(() => memories.removeWhere((item) => item['id'] == memory['id']));
+        showMsg(context, 'تم حذف الذكرى.');
+      }
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    }
   }
 
   Widget _groupsPage() {
