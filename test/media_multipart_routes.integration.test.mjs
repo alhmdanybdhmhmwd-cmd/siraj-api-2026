@@ -28,6 +28,7 @@ class FakeD1 {
           const r=db.sessions.get(args[0]);return r&&r.owner_id===args[1]?{...r}:null;
         }
         if(q.includes("FROM media_upload_parts")&&q.includes("part_number = ?")) return db.parts.get(args[0]+":"+args[1])||null;
+        if(q.includes("FROM media_upload_chunks")&&q.includes("chunk_number = ?")) return db.chunks.get(args[0]+":"+args[1])||null;
         return null;
       },
       async all(){
@@ -95,6 +96,9 @@ test("route integration: interruption, resume, duplicate chunks, exact final byt
   const created=await f.call("/api/media/uploads","POST",declaration(source.length));assert.equal(created.status,201);
   const sessionId=(await created.json()).session.id;
   for(let n=1;n<=3;n++)assert.equal((await f.call("/api/media/uploads/"+sessionId+"/chunks/"+n,"PUT",chunk(source,n))).status,200);
+  const conflicting=chunk(source,2).slice();conflicting[0]^=0xff;
+  assert.equal((await f.call("/api/media/uploads/"+sessionId+"/chunks/2","PUT",conflicting)).status,409);
+  assert.equal((await f.call("/api/media/uploads/"+sessionId+"/chunks/2","PUT",chunk(source,2))).status,200);
   assert.equal((await f.call("/api/media/uploads/"+sessionId+"/complete","POST",{})).status,409);
   const resumed=await f.call("/api/media/uploads","POST",declaration(source.length));assert.equal(resumed.status,200);
   const rb=await resumed.json();assert.equal(rb.resumed,true);assert.equal(rb.session.id,sessionId);
