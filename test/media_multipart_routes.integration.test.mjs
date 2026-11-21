@@ -60,7 +60,7 @@ class FakeD1 {
         if(q.startsWith("UPDATE media_upload_sessions SET updated_at")) return {meta:{changes:1}};
         if(q.startsWith("DELETE FROM media_upload_chunks")&&q.includes("BETWEEN")){for(const [k,r] of db.chunks)if(r.session_id===args[0]&&r.chunk_number>=args[1]&&r.chunk_number<=args[2])db.chunks.delete(k);return {meta:{changes:1}};}
         if(q.startsWith("DELETE FROM media_upload_chunks")){for(const [k,r] of db.chunks)if(r.session_id===args[0])db.chunks.delete(k);return {meta:{changes:1}};}
-        if(q.startsWith("DELETE FROM media_upload_sessions")){const r=db.sessions.get(args[0]);if(r&&r.expires_at<=args[1]&&(["uploading","completing","failed"].includes(r.state)&&r.expires_at<=args[1]||r.state==="aborted"))db.sessions.delete(args[0]);return {meta:{changes:1}};}
+        if(q.startsWith("DELETE FROM media_upload_sessions")){const r=db.sessions.get(args[0]);if(r&&((["uploading","completing","failed"].includes(r.state)&&r.expires_at<=args[1])||r.state==="aborted"))db.sessions.delete(args[0]);return {meta:{changes:1}};}
         if(q.startsWith("DELETE FROM media_upload_parts")){for(const [k,r] of db.parts)if(r.session_id===args[0])db.parts.delete(k);return {meta:{changes:1}};}
         return {meta:{changes:1}};
       }
