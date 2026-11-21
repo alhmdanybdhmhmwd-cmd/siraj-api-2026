@@ -42,3 +42,9 @@
 ## الحالة
 
 أضيف فحص قابلية النقل إلى CI؛ بانتظار نتيجة التشغيل على الفرع. فصل طبقة الخدمات وبناء adapters المستقلة ما زالا عملاً برمجياً متبقياً، وليسا منجزين بمجرد إنشاء هذا الجرد.
+
+## نتيجة CI بعد إضافة الحارس
+
+- نجح Backend CI على commit `2a8efac3dbe3ad85e5306be71fa4b9bbe196e731`، بما في ذلك خطوة `Audit Worker runtime portability dependencies`، واختبارات Backend وفحوص SQL وWrangler config وسلامة إعداد Android.
+- التشغيل: [44948538860](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026/actions/runs/44948538860).
+- هذا يثبت أن جرد bindings الآلي يعمل وأن الاختبارات الحالية اجتازت؛ لا يثبت أن محرك Node/AWS البديل بُني أو أن VPN حُل.
