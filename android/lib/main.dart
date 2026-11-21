@@ -36,12 +36,13 @@ const String apiBase = String.fromEnvironment(
   'BARQ_API_BASE',
   defaultValue: 'https://siraj-api-2026.vercel.app',
 );
-// Vercel Functions have a small request/response payload ceiling; large media
-// files go directly to the Cloudflare Worker while normal API traffic stays
-// on the Vercel proxy for better reachability on restricted mobile networks.
+// Route media through the same public API origin by default. Resumable 1 MiB
+// chunks keep each request below the Vercel Function body limit and avoid a
+// second workers.dev hostname on restricted mobile networks. A separate media
+// origin is opt-in only for isolated diagnostics via BARQ_MEDIA_BASE.
 const String mediaWorkerBase = String.fromEnvironment(
   'BARQ_MEDIA_BASE',
-  defaultValue: 'https://siraj-api.alhmdanybdhmhmwd.workers.dev',
+  defaultValue: 'https://siraj-api-2026.vercel.app',
 );
 const int maxAttachmentBytes = 60 * 1024 * 1024;
 
@@ -349,7 +350,7 @@ class SirajRealtime {
   static final SirajRealtime instance = SirajRealtime._();
   static const String socketUrl = String.fromEnvironment(
     'BARQ_REALTIME_URL',
-    defaultValue: 'wss://siraj-api.alhmdanybdhmhmwd.workers.dev/api/realtime',
+    defaultValue: '',
   );
 
   final StreamController<Map<String, dynamic>> _events =
@@ -374,7 +375,7 @@ class SirajRealtime {
   }
 
   Future<void> _connect() async {
-    if (_stopped || _connecting || _token == null || isConnected) return;
+    if (socketUrl.isEmpty || _stopped || _connecting || _token == null || isConnected) return;
     _connecting = true;
     try {
       final socket = await WebSocket.connect(
@@ -1215,9 +1216,10 @@ class Api {
     if (!isBarqTranscriptionSizeAllowed(audioBytes.length)) {
       throw Exception('تحويل الصوت إلى نص متاح للتسجيلات حتى 2 ميغابايت.');
     }
-    final primaryTranscribeBase = audioBytes.length <= proxyMediaThresholdBytes
-        ? apiBase : mediaWorkerBase;
-    final fallbackTranscribeBase = primaryTranscribeBase == apiBase ? mediaWorkerBase : null;
+    // Keep transcription on the public API origin; avoid direct workers.dev
+    // fallback so restricted networks use one hostname consistently.
+    final primaryTranscribeBase = apiBase;
+    const String? fallbackTranscribeBase = null;
     http.Response response;
     try {
       response = await http.post(
