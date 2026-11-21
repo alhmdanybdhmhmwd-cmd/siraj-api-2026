@@ -119,6 +119,42 @@ test("BARQ account registration, contact creation, and idempotent chat work thro
       assert.equal(retry.duplicate, true);
     }
 
+    const reactionResponse = await request(
+      `/api/messages/${messagePayload.clientMessageId}/reactions`,
+      "POST",
+      { emoji: "👍" },
+      second.token
+    );
+    assert.equal(reactionResponse.status, 200);
+    await request(
+      `/api/messages/${messagePayload.clientMessageId}/reactions`,
+      "POST",
+      { emoji: "👍" },
+      second.token
+    );
+
+    const pinResponse = await request(
+      `/api/messages/${messagePayload.clientMessageId}/pin`,
+      "POST",
+      {},
+      second.token
+    );
+    assert.equal(pinResponse.status, 200);
+    await request(
+      `/api/messages/${messagePayload.clientMessageId}/pin`,
+      "POST",
+      {},
+      second.token
+    );
+
+    const editResponse = await request(
+      `/api/messages/${messagePayload.clientMessageId}`,
+      "PATCH",
+      { body: "Edited through libSQL" },
+      first.token
+    );
+    assert.equal(editResponse.status, 200);
+
     const historyResponse = await request(
       `/api/messages?with=${encodeURIComponent(first.user.id)}`,
       "GET",
@@ -128,7 +164,10 @@ test("BARQ account registration, contact creation, and idempotent chat work thro
     assert.equal(historyResponse.status, 200);
     const history = await historyResponse.json();
     assert.equal(history.messages.length, 1);
-    assert.equal(history.messages[0].body, "Hello through libSQL");
+    assert.equal(history.messages[0].body, "Edited through libSQL");
+    assert.equal(history.messages[0].is_pinned, true);
+    assert.equal(history.messages[0].reactions.length, 1);
+    assert.equal(history.messages[0].reactions[0].emoji, "👍");
     assert.equal(history.messages[0].sender_id, first.user.id);
 
     const stored = await db.prepare(
