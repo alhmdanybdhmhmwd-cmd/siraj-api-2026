@@ -3765,7 +3765,9 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         const suppliedName = safeFileName(request.headers.get("X-File-Name") || "attachment");
         const id = crypto.randomUUID();
         const key = currentUser.sub + "/" + id;
-        const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
+        // Chat attachments are retained until the user explicitly deletes them.
+        // Keep the far-future sentinel consistent with resumable uploads.
+        const expiresAt = "9999-12-31T23:59:59.999Z";
         await env.DB.prepare("CREATE TABLE IF NOT EXISTS media_expirations (object_key TEXT PRIMARY KEY, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
         await env.DB.prepare(`
           CREATE TABLE IF NOT EXISTS media_access (
@@ -3814,9 +3816,6 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         const messageId = crypto.randomUUID();
         try {
           await env.DB.prepare(
-            "INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?)"
-          ).bind(key, expiresAt).run();
-          await env.DB.prepare(
             "INSERT INTO media_access (object_key, owner_id, recipient_id, group_id, file_name, content_type, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
           ).bind(key, currentUser.sub, recipientId || null, groupId || null, suppliedName, contentType, expiresAt).run();
           if (recipientId) {
@@ -3829,8 +3828,8 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
             ).bind(messageId, groupId, currentUser.sub, attachmentBody).run();
           }
         } catch (error) {
-          // Revoke access immediately. Keep the expiration record unless storage confirms
-          // deletion so the scheduled cleanup can retry an object that could not be removed.
+          // Revoke access immediately. If storage deletion fails, schedule a near-immediate
+          // retry; successful chat attachments never enter the automatic expiry queue.
           let objectDeleted = false;
           try {
             const deleteResponse = await storage.fetch(storageUrl, { method: "DELETE" });
@@ -3840,6 +3839,10 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
             await env.DB.prepare("DELETE FROM media_access WHERE object_key = ?").bind(key).run();
             if (objectDeleted) {
               await env.DB.prepare("DELETE FROM media_expirations WHERE object_key = ?").bind(key).run();
+            } else {
+              await env.DB.prepare(
+                "INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?) ON CONFLICT(object_key) DO UPDATE SET expires_at = excluded.expires_at"
+              ).bind(key, new Date().toISOString()).run();
             }
           } catch (_) {}
           throw error;
