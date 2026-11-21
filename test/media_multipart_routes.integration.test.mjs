@@ -33,7 +33,7 @@ class FakeD1 {
       async all(){
         const q=sql.replace(/\s+/g," ").trim();
         if(q.includes("sqlite_master")) return {results:[{name:"media_upload_sessions"},{name:"media_upload_parts"},{name:"media_upload_chunks"}]};
-        if(q.includes("FROM media_upload_parts")) return {results:[...db.parts.values()].filter(x=>x.session_id===args[0]).sort((a,b)=>a.part_number-b.part_number).map(x=>({...x}))};
+        if(q.includes("FROM media_upload_parts")) return {results:[...db.parts.values()].filter(x=>x.session_id===args[0]).sort((a,b)=>a.part_number-b.part_number).map(x=>({partNumber:x.part_number,etag:x.etag,size:x.size}))};
         if(q.includes("FROM media_upload_chunks")&&q.includes("BETWEEN")) return {results:[...db.chunks.values()].filter(x=>x.session_id===args[0]&&x.chunk_number>=args[1]&&x.chunk_number<=args[2]).sort((a,b)=>a.chunk_number-b.chunk_number).map(x=>({chunkNumber:x.chunk_number,size:x.size}))};
         if(q.includes("FROM media_upload_chunks")) return {results:[...db.chunks.values()].filter(x=>x.session_id===args[0]).map(x=>({chunkNumber:x.chunk_number}))};
         return {results:[]};
