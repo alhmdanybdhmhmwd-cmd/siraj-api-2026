@@ -535,4 +535,26 @@ void main() {
     expect(isBarqTranscriptionSizeAllowed(2 * 1024 * 1024 + 1), isFalse);
   });
 
+
+  test('SPARK media extensions map to exact supported MIME types', () {
+    expect(barqSparkMediaContentType('jpg'), 'image/jpeg');
+    expect(barqSparkMediaContentType('.JPEG'), 'image/jpeg');
+    expect(barqSparkMediaContentType('png'), 'image/png');
+    expect(barqSparkMediaContentType('webp'), 'image/webp');
+    expect(barqSparkMediaContentType('gif'), 'image/gif');
+    expect(barqSparkMediaContentType('mp4'), 'video/mp4');
+    expect(barqSparkMediaContentType('webm'), 'video/webm');
+    expect(barqSparkMediaContentType('MOV'), 'video/quicktime');
+    expect(barqSparkMediaContentType('exe'), isNull);
+    expect(barqSparkMediaContentType(''), isNull);
+  });
+
+  test('SPARK media client size limit rejects empty and oversized files', () {
+    expect(isBarqSparkMediaSizeAllowed(0), isFalse);
+    expect(isBarqSparkMediaSizeAllowed(1), isTrue);
+    expect(isBarqSparkMediaSizeAllowed(60 * 1024 * 1024), isTrue);
+    expect(isBarqSparkMediaSizeAllowed(60 * 1024 * 1024 + 1), isFalse);
+  });
+
+
 }
