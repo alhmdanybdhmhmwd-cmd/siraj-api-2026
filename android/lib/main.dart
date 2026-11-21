@@ -4936,7 +4936,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       right: -5,
                       bottom: -5,
                       child: Material(
-                        color: electricBlue,
+                        color: Theme.of(context).colorScheme.primary,
                         shape: const CircleBorder(),
                         child: InkWell(
                           customBorder: const CircleBorder(),
@@ -5740,8 +5740,8 @@ class _BarqMessageBodyState extends State<BarqMessageBody> {
                   padding: const EdgeInsets.all(10),
                   child: Row(children: [
                     Container(width: 38, height: 38,
-                      decoration: BoxDecoration(color: electricBlue.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(9)),
-                      child: const Icon(Icons.link, color: electricBlue)),
+                      decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(9)),
+                      child: Icon(Icons.link, color: Theme.of(context).colorScheme.primary)),
                     const SizedBox(width: 10),
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(uri.host, maxLines: 1, overflow: TextOverflow.ellipsis,
@@ -6480,9 +6480,9 @@ class PublicProfilePage extends StatelessWidget {
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: electricBlue.withValues(alpha: 0.75), width: 2),
+                  border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.75), width: 2),
                   boxShadow: [
-                    BoxShadow(color: electricBlue.withValues(alpha: 0.18), blurRadius: 24),
+                    BoxShadow(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.18), blurRadius: 24),
                   ],
                 ),
                 child: CircleAvatar(
@@ -6547,7 +6547,7 @@ class PublicProfilePage extends StatelessWidget {
             if (canMessage)
               FilledButton.icon(
                 style: FilledButton.styleFrom(
-                  backgroundColor: electricBlue,
+                  backgroundColor: Theme.of(context).colorScheme.primary,
                   foregroundColor: Colors.white,
                   minimumSize: const Size.fromHeight(50),
                 ),
