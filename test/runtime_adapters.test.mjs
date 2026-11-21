@@ -38,7 +38,8 @@ test("database provider exposes the supported SQL operations", async () => {
   const alternateCalls = [];
   const alternate = createDatabaseProvider({
     prepare(sql) {
-      return {
+      const statement = {
+        first: async () => ({ barq_ready: 1 }),
         bind(...params) {
           alternateCalls.push({ sql, params });
           return {
@@ -48,6 +49,7 @@ test("database provider exposes the supported SQL operations", async () => {
           };
         }
       };
+      return statement;
     },
     batch: async statements => statements.map(() => ({ success: true })),
     exec: async sql => ({ success: true, sql })
