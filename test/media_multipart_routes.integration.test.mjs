@@ -69,13 +69,14 @@ class FakeD1 {
   async batch(statements){const out=[];for(const s of statements)out.push(await s.run());return out;}
 }
 function fixture(){
-  const DB=new FakeD1(),objects=new Map(),uploads=new Map(),originalFetch=globalThis.fetch;
+  const DB=new FakeD1(),objects=new Map(),uploads=new Map(),originalFetch=globalThis.fetch; let failDeletes=false;
   globalThis.fetch=async(input,init={})=>{
     const req=input instanceof Request?input:new Request(input,init),u=new URL(req.url);
     const key=decodeURIComponent(u.pathname.split("/").slice(1).join("/")),uploadId=u.searchParams.get("uploadId"),part=Number(u.searchParams.get("partNumber"));
     if(req.method==="POST"&&u.searchParams.has("uploads")){const id="upload-"+(uploads.size+1);uploads.set(id,{key,parts:new Map(),aborted:false});return new Response("<UploadId>"+id+"</UploadId>");}
     if(uploadId&&req.method==="PUT"&&part){const up=uploads.get(uploadId);if(!up||up.aborted)return new Response("",{status:404});const b=new Uint8Array(await req.arrayBuffer()),etag=createHash("md5").update(b).digest("hex");up.parts.set(part,{bytes:b,etag});return new Response("",{headers:{ETag:'"'+etag+'"'}});}
     if(uploadId&&req.method==="POST"){const up=uploads.get(uploadId);if(!up)return new Response("",{status:404});const list=[...up.parts.entries()].sort((a,b)=>a[0]-b[0]),len=list.reduce((s,x)=>s+x[1].bytes.length,0),out=new Uint8Array(len);let off=0;for(const [,p] of list){out.set(p.bytes,off);off+=p.bytes.length;}objects.set(up.key,out);return new Response("<CompleteMultipartUploadResult/>");}
+    if(req.method==="DELETE"&&failDeletes)return new Response("storage unavailable",{status:503});
     if(uploadId&&req.method==="DELETE"){const up=uploads.get(uploadId);if(up)up.aborted=true;return new Response(null,{status:204});}
     if(req.method==="PUT"){objects.set(key,new Uint8Array(await req.arrayBuffer()));return new Response("",{status:200});}
     if(req.method==="GET"){const b=objects.get(key);return b?new Response(b):new Response("",{status:404});}
@@ -87,7 +88,7 @@ function fixture(){
     const request=new Request("https://preview.invalid"+path,{method,headers:{"Content-Type":"application/json"},body:body===null?undefined:(body instanceof Uint8Array?body:JSON.stringify(body))});
     return handleResumableMediaUpload(request,env,user,new URL(request.url),path,method);
   }
-  return {DB,objects,uploads,call,restore(){globalThis.fetch=originalFetch;}};
+  return {DB,objects,uploads,call,setFailDeletes(value){failDeletes=value;},restore(){globalThis.fetch=originalFetch;}};
 }
 const declaration=(size,key="idem-key-0001",extra={})=>({size,contentType:"application/octet-stream",fileName:"payload.bin",recipientId:"friend-1",idempotencyKey:key,...extra});
 const chunk=(data,n)=>data.slice((n-1)*MiB,Math.min(n*MiB,data.length));
@@ -239,4 +240,22 @@ test("cleanup integration: aborted session metadata and staging are eventually r
   const result=await cleanupExpiredUploadSessions({DB:f.DB,TIGRIS_ACCESS_KEY_ID:"fake-key",TIGRIS_SECRET_ACCESS_KEY:"fake-secret",TIGRIS_BUCKET:"test-bucket"},Date.now());
   assert.equal(result.cleaned,1);assert.equal(f.DB.sessions.has(id),false);
   assert.equal(f.objects.has(key),false);
+});
+
+
+test("cleanup integration: storage failure retains session and chunk metadata for retry",async t=>{
+  const f=fixture();t.after(f.restore);
+  const created=await f.call("/api/media/uploads","POST",declaration(64,"cleanup-retry-001"));
+  const id=(await created.json()).session.id,session=f.DB.sessions.get(id);
+  session.expires_at="2000-01-01T00:00:00.000Z";
+  const key=session.object_key+".barq-staging/"+id+"/1";
+  f.objects.set(key,Uint8Array.from([7]));
+  f.DB.chunks.set(id+":1",{session_id:id,chunk_number:1,size:1});
+  f.setFailDeletes(true);
+  const env={DB:f.DB,TIGRIS_ACCESS_KEY_ID:"fake-key",TIGRIS_SECRET_ACCESS_KEY:"fake-secret",TIGRIS_BUCKET:"test-bucket"};
+  const failed=await cleanupExpiredUploadSessions(env,Date.parse("2001-01-01T00:00:00.000Z"));
+  assert.equal(failed.cleaned,0);assert.equal(f.DB.sessions.has(id),true);assert.equal(f.DB.chunks.has(id+":1"),true);
+  f.setFailDeletes(false);
+  const retried=await cleanupExpiredUploadSessions(env,Date.parse("2001-01-01T00:00:00.000Z"));
+  assert.equal(retried.cleaned,1);assert.equal(f.DB.sessions.has(id),false);assert.equal(f.objects.has(key),false);
 });
