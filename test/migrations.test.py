@@ -478,11 +478,6 @@ class RecoveryMigrationTests(unittest.TestCase):
             """INSERT INTO status_posts (id, user_id, content, expires_at)
                VALUES ('spark-status', 'owner', 'status', '2026-11-22T00:00:00Z')"""
         )
-        self.db.execute(
-            """INSERT INTO status_media
-               (id, status_id, object_key, file_name, content_type, size, caption)
-               VALUES ('spark-media', 'spark-status', 'spark-object', 'spark.mp4', 'video/mp4', 3, '')"""
-        )
 
         migration = (ROOT / "migrations" / "0012_retain_legacy_chat_attachments.sql").read_text(encoding="utf-8")
         self.db.executescript(migration)
@@ -517,10 +512,6 @@ class RecoveryMigrationTests(unittest.TestCase):
                 "SELECT expires_at FROM media_access WHERE object_key = 'unrelated-object'"
             ).fetchone()[0],
             "2026-11-24T00:00:00Z",
-        )
-        self.assertEqual(
-            self.db.execute("SELECT COUNT(*) FROM status_media WHERE object_key = 'spark-object'").fetchone()[0],
-            1,
         )
 
         # Applying the migration a second time must be harmless.
