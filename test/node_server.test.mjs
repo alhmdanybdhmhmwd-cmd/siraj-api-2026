@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createNodeApiServer, createNodeEnvironment, startNodeApiServer } from "../node_server.mjs";
 
 const silentLogger = { log() {}, error() {} };
@@ -100,4 +103,33 @@ test("standalone HTTP adapter can serve the real Worker liveness route", async (
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { status: "alive", service: "barq-api" });
   });
+});
+
+
+test("standalone Node API serves real Worker readiness over a local libSQL database", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "barq-node-api-"));
+  let instance;
+  try {
+    const env = createNodeEnvironment({
+      LIBSQL_URL: "file:" + join(directory, "barq-test.db"),
+      JWT_SECRET: "isolated-node-api-test-secret"
+    });
+    instance = await startNodeApiServer({
+      env,
+      port: 0,
+      host: "127.0.0.1",
+      disableScheduler: true,
+      logger: silentLogger
+    });
+    const base = "http://127.0.0.1:" + instance.port;
+    const live = await fetch(base + "/health/live");
+    const ready = await fetch(base + "/health/ready");
+    assert.equal(live.status, 200);
+    assert.deepEqual(await live.json(), { status: "alive", service: "barq-api" });
+    assert.equal(ready.status, 200);
+    assert.deepEqual(await ready.json(), { status: "ready", service: "barq-api" });
+  } finally {
+    await instance?.close();
+    await rm(directory, { recursive: true, force: true });
+  }
 });
