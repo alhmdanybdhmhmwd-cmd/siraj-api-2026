@@ -2846,8 +2846,8 @@ class _LoginPageState extends State<LoginPage> {
                           width: 86, height: 86,
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(27),
-                            gradient: const LinearGradient(colors: [Color(0xFFFFE08A), gold, Color(0xFF986B20)]),
-                            boxShadow: [BoxShadow(color: gold.withValues(alpha: .24), blurRadius: 28, spreadRadius: 2)],
+                            gradient: LinearGradient(colors: [Theme.of(context).colorScheme.primary, Theme.of(context).colorScheme.secondary]),
+                            boxShadow: [BoxShadow(color: Theme.of(context).colorScheme.primary.withValues(alpha: .24), blurRadius: 28, spreadRadius: 2)],
                           ),
                           child: const Icon(Icons.bolt_rounded, color: Colors.black, size: 54),
                         )),
@@ -3697,7 +3697,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           child: ListView(
             shrinkWrap: true,
             children: [
-              const ListTile(title: Text('مشاهدو SPARK', style: TextStyle(color: gold))),
+              ListTile(title: Text('مشاهدو SPARK', style: TextStyle(color: Theme.of(context).colorScheme.primary))),
               if (viewers.isEmpty)
                 const ListTile(title: Text('لم يشاهدها أحد بعد', style: TextStyle(color: Colors.white60))),
               for (final viewer in viewers)
@@ -3757,7 +3757,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   onPressed: publishStatusDialog,
                   icon: const Icon(Icons.edit_note_rounded),
                   label: const Text('نشر نص'),
-                  style: OutlinedButton.styleFrom(foregroundColor: gold, side: const BorderSide(color: gold)),
+                  style: OutlinedButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.primary, side: BorderSide(color: Theme.of(context).colorScheme.primary)),
                 ),
               ),
               const SizedBox(width: 8),
@@ -3791,7 +3791,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   padding: const EdgeInsets.all(2),
                   decoration: const BoxDecoration(
                     shape: BoxShape.circle,
-                    gradient: LinearGradient(colors: [electricBlue, gold]),
+                    gradient: LinearGradient(colors: [Theme.of(context).colorScheme.primary, Theme.of(context).colorScheme.secondary]),
                   ),
                   child: CircleAvatar(
                     radius: 22,
@@ -4098,7 +4098,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       backgroundColor: const Color(0xFF46391F),
       child: Icon(
         field(memory, ['sourceType']) == 'message' ? Icons.chat_bubble_outline : Icons.auto_awesome,
-        color: gold,
+        color: Theme.of(context).colorScheme.primary,
       ),
     );
   }
@@ -7025,7 +7025,7 @@ class _ChatPageState extends State<ChatPage> {
                                         margin: const EdgeInsets.only(bottom: 7),
                                         padding: const EdgeInsets.all(8),
                                         decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8),
-                                          border: const Border(right: BorderSide(color: gold, width: 3))),
+                                          border: Border(right: BorderSide(color: Theme.of(context).colorScheme.primary, width: 3))),
                                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                           Text(field(m, ['reply_to_sender_id']) == widget.currentUserId ? 'رد على رسالتك' : 'رد على رسالة',
                                             style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 10, fontWeight: FontWeight.bold)),
