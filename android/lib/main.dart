@@ -114,6 +114,42 @@ const int proxyMediaThresholdBytes = 4 * 1024 * 1024;
 
 const storage = FlutterSecureStorage();
 
+final GlobalKey<ScaffoldMessengerState> barqScaffoldMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
+
+/// Known push categories only; never expose sender names or message bodies.
+String? barqForegroundPushLabel(
+  Map<String, dynamic> data,
+  Map<String, dynamic> preferences,
+) {
+  switch (data['type']?.toString()) {
+    case 'direct_message':
+      return preferences['messages'] == false ? null : 'وصلتك رسالة جديدة';
+    case 'group_message':
+      return preferences['groups'] == false ? null : 'وصلتك رسالة جديدة في مجموعة';
+    case 'status_update':
+      return preferences['statuses'] == false ? null : 'هناك لحظة جديدة في SPARK';
+    default:
+      return null;
+  }
+}
+
+Future<bool> revokeBarqFcmTokenSafely({
+  required String? authToken,
+  required String? fcmToken,
+  required Future<void> Function(String token) revoke,
+}) async {
+  final token = normalizeBarqFcmToken(fcmToken);
+  if ((authToken ?? '').isEmpty || token == null) return false;
+  try {
+    await revoke(token);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+
 /// إعدادات الميزات المحلية التي لا تحتاج إلى اتصال بالخادم.
 class BarqFeatures {
   static bool lightningMode = false;
@@ -294,6 +330,31 @@ bool barqCanRegisterFcmToken(AuthorizationStatus status) =>
 /// تفعيل إذن الإشعارات وتسجيل رمز الجهاز بعد تسجيل الدخول.
 class SirajPush {
   static bool _listening = false;
+  static Map<String, dynamic> _preferences = {
+    'messages': true, 'groups': true, 'statuses': true,
+  };
+
+  static void updatePreferences(Map<String, dynamic> preferences) {
+    _preferences = {
+      'messages': preferences['messages'] != false,
+      'groups': preferences['groups'] != false,
+      'statuses': preferences['statuses'] != false,
+    };
+  }
+
+  static void _handleForegroundMessage(RemoteMessage message) {
+    final label = barqForegroundPushLabel(message.data, _preferences);
+    if (label == null) return;
+    final messenger = barqScaffoldMessengerKey.currentState;
+    if (messenger == null) return;
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+        content: Text(label),
+      ));
+  }
 
   static Future<void> register() async {
     try {
@@ -303,17 +364,14 @@ class SirajPush {
       );
       if (!barqCanRegisterFcmToken(permission.authorizationStatus)) return;
 
-      // Attach refresh handling before the first network registration. If the
-      // initial POST fails, the next Firebase token refresh can still recover.
       if (!_listening) {
+        messaging.onMessage.listen(_handleForegroundMessage);
         messaging.onTokenRefresh.listen((newToken) async {
           final refreshedToken = normalizeBarqFcmToken(newToken);
           if (Api.token == null || refreshedToken == null) return;
           try {
             await Api.registerDeviceToken(refreshedToken);
-          } catch (_) {
-            // A later token refresh or next authenticated startup can retry.
-          }
+          } catch (_) {}
         });
         _listening = true;
       }
@@ -336,6 +394,7 @@ class SirajApp extends StatelessWidget {
       builder: (context, identity, _) {
         final palette = BarqIdentityPalette.forIdentity(identity);
         return MaterialApp(
+          scaffoldMessengerKey: barqScaffoldMessengerKey,
           debugShowCheckedModeBanner: false,
           title: 'برق',
           theme: ThemeData(
@@ -1424,12 +1483,15 @@ class Api {
   static Future<void> logout() async {
     // Revoke this installation's push token before clearing the auth session.
     // A network failure must never trap the user in the account.
-    try {
-      final fcmToken = await FirebaseMessaging.instance.getToken();
-      if (token != null && fcmToken != null && fcmToken.isNotEmpty) {
-        await request('DELETE', '/api/devices/token', body: {'fcmToken': fcmToken});
-      }
-    } catch (_) {}
+    String? fcmToken;
+    try { fcmToken = await FirebaseMessaging.instance.getToken(); } catch (_) {}
+    await revokeBarqFcmTokenSafely(
+      authToken: token,
+      fcmToken: fcmToken,
+      revoke: (value) async {
+        await request('DELETE', '/api/devices/token', body: {'fcmToken': value});
+      },
+    );
     if (token != null) {
       try { await request('POST', '/api/logout'); } catch (_) {}
     }
@@ -3302,6 +3364,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       }
       try {
         notificationPrefs = await Api.notificationSettings();
+        SirajPush.updatePreferences(notificationPrefs);
       } catch (_) {
         // يبقى التطبيق متاحاً إذا لم يُنشر مسار إعدادات الإشعارات بعد.
       }
@@ -4874,6 +4937,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   final saved = await Api.saveNotificationSettings(messages: messages, groups: groupsEnabled, statuses: statusesEnabled);
                   if (!mounted || !dialogContext.mounted) return;
                   setState(() => notificationPrefs = saved);
+                  SirajPush.updatePreferences(saved);
                   Navigator.pop(dialogContext);
                   showMsg(this.context, 'تم حفظ تفضيلات الإشعارات في حسابك.');
                 } catch (e) {
