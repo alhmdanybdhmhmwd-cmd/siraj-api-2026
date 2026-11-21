@@ -456,6 +456,7 @@ test("Android SPARK viewer records up to 60-second AAC voice replies and plays a
   assert.ok(flutterApp.includes("AudioRecorder"));
   assert.ok(flutterApp.includes("AudioEncoder.aacLc"));
   assert.ok(flutterApp.includes("_finishAudioReplyRecording"));
+  assert.ok(flutterApp.includes("_recordingClock"));
   assert.ok(flutterApp.includes("uploadSparkAudioReply"));
   assert.ok(flutterApp.includes("fetchSparkAudioReplyBytes"));
   assert.ok(flutterApp.includes("_SparkAudioReplyTile"));

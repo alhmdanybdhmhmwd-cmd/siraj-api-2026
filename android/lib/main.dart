@@ -6062,6 +6062,11 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
     }
   }
 
+  String _recordingClock(int seconds) {
+    final safeSeconds = seconds.clamp(0, 60).toInt();
+    return '${(safeSeconds ~/ 60).toString().padLeft(2, '0')}:${(safeSeconds % 60).toString().padLeft(2, '0')}';
+  }
+
   Future<void> _finishAudioReplyRecording() async {
     if (!_recordingAudioReply || _uploadingAudioReply) return;
     _audioRecordingTimer?.cancel();
@@ -6185,7 +6190,7 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
               if (_recordingAudioReply)
                 Align(
                   alignment: Alignment.centerRight,
-                  child: Text('جارٍ التسجيل 00:${_recordingSeconds.toString().padLeft(2, '0')} / 01:00',
+                  child: Text('جارٍ التسجيل ${_recordingClock(_recordingSeconds)} / 01:00',
                     style: const TextStyle(color: Colors.white70, fontSize: 12)),
                 ),
               Row(children: [
