@@ -1198,6 +1198,22 @@ String newBarqMessageId() {
 bool barqOfflineSyncShouldPause(Object error) =>
     error.toString().contains('NETWORK_DIAGNOSTIC');
 
+List<Map<String, dynamic>> decodeBarqOfflineQueue(String? raw) {
+  if (raw == null || raw.isEmpty) return [];
+  final decoded = jsonDecode(raw);
+  if (decoded is! List) {
+    throw const FormatException('بيانات صندوق الرسائل المحلي ليست قائمة صالحة.');
+  }
+  final items = <Map<String, dynamic>>[];
+  for (final entry in decoded) {
+    if (entry is! Map || entry.keys.any((key) => key is! String)) {
+      throw const FormatException('توجد رسالة تالفة في صندوق الرسائل المحلي؛ أُوقف التحميل لحماية بقية الرسائل.');
+    }
+    items.add(Map<String, dynamic>.from(entry));
+  }
+  return items;
+}
+
 bool barqOfflineIncomingMessageMatches(
   Map<String, dynamic> existing,
   Map<String, dynamic> incoming,
@@ -1228,15 +1244,8 @@ class BarqOfflineQueue {
   static bool _syncing = false;
 
   static Future<List<Map<String, dynamic>>> _read(String key) async {
-    try {
-      final raw = await storage.read(key: key);
-      if (raw == null || raw.isEmpty) return [];
-      final decoded = jsonDecode(raw);
-      if (decoded is! List) return [];
-      return decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
-    } catch (_) {
-      return [];
-    }
+    final raw = await storage.read(key: key);
+    return decodeBarqOfflineQueue(raw);
   }
 
   static Future<void> _write(String key, List<Map<String, dynamic>> items) async {
