@@ -13,7 +13,7 @@ const previousEnv = {
   BARQ_API_UPSTREAM: process.env.BARQ_API_UPSTREAM
 };
 process.env.VERCEL_ENV = "preview";
-process.env.BARQ_API_UPSTREAM = "https://preview-worker.example.workers.dev";
+process.env.BARQ_API_UPSTREAM = "https://siraj-api.alhmdanybdhmhmwd.workers.dev";
 const proxyModule = await import(pathToFileURL(modulePath).href);
 const handler = proxyModule.default || proxyModule;
 process.env.VERCEL_ENV = previousEnv.VERCEL_ENV;
@@ -53,7 +53,7 @@ test("preview proxy selects the isolated Preview upstream", async () => {
     };
     const res = makeResponse();
     await handler(makeRequest({ url: "/health/live?probe=1" }), res);
-    assert.equal(calledUrl, "https://preview-worker.example.workers.dev/health/live?probe=1");
+    assert.equal(calledUrl, "https://barq-api-phase2-test.alhmdanybdhmhmwd.workers.dev/health/live?probe=1");
     assert.equal(res.statusCode, 200);
     assert.deepEqual(JSON.parse(res.body.toString()), { status: "alive" });
   } finally {
@@ -81,7 +81,7 @@ test("preview proxy forwards only supported request headers and body", async () 
       },
       chunks: [Buffer.from([1, 2]), Buffer.from([3, 4])]
     }), res);
-    assert.equal(captured.url, "https://preview-worker.example.workers.dev/api/media?target=preview");
+    assert.equal(captured.url, "https://barq-api-phase2-test.alhmdanybdhmhmwd.workers.dev/api/media?target=preview");
     assert.equal(captured.options.method, "POST");
     assert.equal(captured.options.headers.Authorization, "Bearer preview-token");
     assert.equal(captured.options.headers["X-File-Name"], "sample.bin");
@@ -144,7 +144,7 @@ test("preview proxy preserves byte-range download headers and partial response m
       url: "/api/media/file-1",
       headers: { range: "bytes=7-9", "if-range": '"sample-v1"' }
     }), res);
-    assert.equal(captured.url, "https://preview-worker.example.workers.dev/api/media/file-1");
+    assert.equal(captured.url, "https://barq-api-phase2-test.alhmdanybdhmhmwd.workers.dev/api/media/file-1");
     assert.equal(captured.headers.Range, "bytes=7-9");
     assert.equal(captured.headers["If-Range"], '"sample-v1"');
     assert.equal(res.statusCode, 206);
@@ -198,4 +198,15 @@ test("preview proxy streams partial media without buffering the full response", 
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+
+test("preview proxy ignores a production upstream override", async () => {
+  const originalFetch = globalThis.fetch;
+  let calledUrl;
+  try {
+    globalThis.fetch = async (url) => { calledUrl = String(url); return new Response("ok"); };
+    await handler(makeRequest({ url: "/health/live" }), makeResponse());
+    assert.equal(calledUrl, "https://barq-api-phase2-test-2026-11-20.workers.dev/health/live");
+  } finally { globalThis.fetch = originalFetch; }
 });
