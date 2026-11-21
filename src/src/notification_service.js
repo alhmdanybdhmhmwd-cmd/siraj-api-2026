@@ -127,8 +127,9 @@ export async function sendBarqPushNotification(
       );
       if (!response.ok) {
         const detail = await response.clone().text().catch(() => "");
-        if ((response.status === 404 || response.status === 400) &&
-            /UNREGISTERED|INVALID_ARGUMENT/i.test(detail)) {
+        // INVALID_ARGUMENT can describe a malformed message payload, not
+        // necessarily a dead registration token. Revoke only explicit UNREGISTERED.
+        if (response.status === 404 && /UNREGISTERED/i.test(detail)) {
           await env.DB.prepare("DELETE FROM device_tokens WHERE fcm_token = ?")
             .bind(device.fcm_token).run();
         } else {
