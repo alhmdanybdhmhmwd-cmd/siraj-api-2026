@@ -118,7 +118,9 @@ export async function sendBarqPushNotification(
               data: {
                 type: pushType,
                 senderId: String(senderId || ""),
-                ...(category === "groups" ? { groupId: String(options.groupId || "") } : {})
+                ...(category === "groups" ? { groupId: String(options.groupId || "") } : {}),
+                ...(category === "statuses" && options.statusId
+                  ? { statusId: String(options.statusId) } : {})
               },
               android: { priority: "HIGH", notification: { channel_id: category === "groups" ? "barq_groups" : category === "statuses" ? "barq_statuses" : "barq_messages" } }
             }
