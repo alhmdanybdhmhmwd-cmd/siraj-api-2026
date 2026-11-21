@@ -132,19 +132,49 @@ export function createLibsqlDatabaseProvider(client) {
 }
 
 /**
+ * Build a provider-neutral S3 object URL. The default preserves the existing
+ * Tigris virtual-host URL; OBJECT_STORAGE_ENDPOINT can select another S3
+ * endpoint, using {bucket} substitution or path-style bucket addressing.
+ */
+export function createObjectStorageUrl(env, objectKey, query = {}) {
+  if (typeof objectKey !== "string" || !objectKey || objectKey.startsWith("/")) {
+    throw new TypeError("A relative object key is required");
+  }
+  const bucket = String(env?.OBJECT_STORAGE_BUCKET || env?.TIGRIS_BUCKET || "siraj-media");
+  const encodedKey = objectKey.split("/").map(encodeURIComponent).join("/");
+  const configuredEndpoint = String(env?.OBJECT_STORAGE_ENDPOINT || "").trim();
+  let base;
+  if (!configuredEndpoint) {
+    base = `https://${encodeURIComponent(bucket)}.t3.storage.dev`;
+  } else if (configuredEndpoint.includes("{bucket}")) {
+    base = configuredEndpoint.replaceAll("{bucket}", encodeURIComponent(bucket));
+  } else {
+    base = configuredEndpoint.replace(/\\/+$/, "") + "/" + encodeURIComponent(bucket);
+  }
+  const url = new URL(base);
+  url.pathname = url.pathname.replace(/\\/+$/, "") + "/" + encodedKey;
+  for (const [name, value] of Object.entries(query || {})) {
+    if (value !== undefined && value !== null) url.searchParams.set(name, String(value));
+  }
+  return url.toString();
+}
+
+/**
  * S3-compatible object storage client factory. The runtime supplies its
  * transport client, allowing another runtime to inject a compatible client.
  */
 export function createObjectStorageClient(env, Client) {
   if (typeof Client !== "function") throw new TypeError("Storage client implementation is required");
-  if (!env?.TIGRIS_ACCESS_KEY_ID || !env?.TIGRIS_SECRET_ACCESS_KEY) {
+  const accessKeyId = env?.OBJECT_STORAGE_ACCESS_KEY_ID || env?.TIGRIS_ACCESS_KEY_ID;
+  const secretAccessKey = env?.OBJECT_STORAGE_SECRET_ACCESS_KEY || env?.TIGRIS_SECRET_ACCESS_KEY;
+  if (!accessKeyId || !secretAccessKey) {
     throw new Error("Object storage credentials are not configured");
   }
   return new Client({
-    accessKeyId: env.TIGRIS_ACCESS_KEY_ID,
-    secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY,
+    accessKeyId,
+    secretAccessKey,
     service: "s3",
-    region: "auto",
+    region: env.OBJECT_STORAGE_REGION || "auto",
     retries: 2
   });
 }
