@@ -3559,6 +3559,37 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     controller.dispose();
   }
 
+  Widget _privateMemoryLeading(Map<String, dynamic> memory) {
+    final rawMedia = memory['media'];
+    if (rawMedia is List && rawMedia.isNotEmpty && rawMedia.first is Map) {
+      final media = Map<String, dynamic>.from(rawMedia.first as Map);
+      final attachmentId = field(media, ['attachmentId']);
+      if (attachmentId.isNotEmpty) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.network(
+            Api.sparkMediaUri(attachmentId).toString(),
+            headers: {if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'},
+            width: 52,
+            height: 52,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => const CircleAvatar(
+              backgroundColor: Color(0xFF46391F),
+              child: Icon(Icons.broken_image_outlined, color: gold),
+            ),
+          ),
+        );
+      }
+    }
+    return CircleAvatar(
+      backgroundColor: const Color(0xFF46391F),
+      child: Icon(
+        field(memory, ['sourceType']) == 'message' ? Icons.chat_bubble_outline : Icons.auto_awesome,
+        color: gold,
+      ),
+    );
+  }
+
   Widget _memoriesPage() {
     return RefreshIndicator(
       color: gold,
@@ -3601,16 +3632,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             Card(
               color: panel,
               child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: const Color(0xFF46391F),
-                  child: Icon(
-                    field(memory, ['sourceType']) == 'message' ? Icons.chat_bubble_outline : Icons.auto_awesome,
-                    color: gold,
-                  ),
-                ),
+                leading: _privateMemoryLeading(memory),
                 title: Text(field(memory, ['title'], 'ذكرى محفوظة')),
                 subtitle: Text(
-                  field(memory, ['content']),
+                  field(memory, ['content'], 'صورة محفوظة'),
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                 ),
