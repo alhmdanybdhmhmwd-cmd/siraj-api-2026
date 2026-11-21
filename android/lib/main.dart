@@ -5107,20 +5107,42 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       children: [
                         Container(
                           width: 44,
-                          height: 32,
+                          height: 44,
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(9),
-                            gradient: LinearGradient(colors: [palette.primary, palette.secondary]),
+                            borderRadius: BorderRadius.circular(12),
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [palette.primary, palette.secondary],
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: palette.glow.withValues(alpha: .24),
+                                blurRadius: 12,
+                                spreadRadius: 1,
+                              ),
+                            ],
                           ),
+                          child: Icon(palette.motif, color: palette.onPrimary, size: 24),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: Text(
-                            BarqIdentity.label(identity),
-                            style: TextStyle(
-                              color: palette.text,
-                              fontWeight: FontWeight.w700,
-                            ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                BarqIdentity.label(identity),
+                                style: TextStyle(
+                                  color: palette.text,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                palette.tagline,
+                                style: TextStyle(color: palette.mutedText, fontSize: 11),
+                              ),
+                            ],
                           ),
                         ),
                         if (selected == identity)
