@@ -3968,6 +3968,9 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           } catch (_) {
             return json({ error: "Invalid photo filename" }, 400);
           }
+          await env.DB.prepare(
+            "CREATE TABLE IF NOT EXISTS media_expirations (object_key TEXT PRIMARY KEY, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+          ).run();
           const objectKey = currentUser.sub + "/private-memories/" + crypto.randomUUID();
           const bucket = env.TIGRIS_BUCKET || "siraj-media";
           const objectPath = objectKey.split("/").map(encodeURIComponent).join("/");
