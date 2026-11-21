@@ -32,6 +32,37 @@ test("database provider exposes the supported SQL operations", async () => {
   assert.equal(await db.exec("SELECT 1"), "SELECT 1");
   assert.equal(calls[0][0], "prepare");
   assert.equal(createDatabaseProvider(null), null);
+  assert.throws(() => db.prepare(""), /SQL statement is required/);
+
+  // An alternate runtime can inject the same narrow SQL capability contract.
+  const alternateCalls = [];
+  const alternate = createDatabaseProvider({
+    prepare(sql) {
+      return {
+        bind(...params) {
+          alternateCalls.push({ sql, params });
+          return {
+            first: async () => ({ barq_ready: 1 }),
+            all: async () => ({ results: [] }),
+            run: async () => ({ success: true })
+          };
+        }
+      };
+    },
+    batch: async statements => statements.map(() => ({ success: true })),
+    exec: async sql => ({ success: true, sql })
+  });
+  assert.equal(await alternate.healthCheck(), true);
+  const statement = alternate.prepare("SELECT ? AS value").bind(7);
+  assert.deepEqual(await statement.first(), { barq_ready: 1 });
+  assert.deepEqual(await statement.all(), { results: [] });
+  assert.deepEqual(await statement.run(), { success: true });
+  assert.equal(alternateCalls[0].sql, "SELECT ? AS value");
+  assert.deepEqual(alternateCalls[0].params, [7]);
+
+  const limited = createDatabaseProvider({ prepare: sql => ({ sql }) });
+  await assert.rejects(() => limited.batch([]), /not supported/);
+  await assert.rejects(() => limited.exec("SELECT 1"), /not supported/);
 });
 
 test("object storage client uses the common S3-compatible configuration", () => {
