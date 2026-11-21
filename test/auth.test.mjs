@@ -1506,6 +1506,75 @@ class PrivateMessageFailureDB extends FakeDB {
   }
 }
 
+class IdempotentPrivateMessageDB extends FakeDB {
+  constructor() {
+    super();
+    this.messagesById = new Map();
+    this.messageInsertAttempts = 0;
+  }
+  prepare(sql) {
+    const statement = super.prepare(sql);
+    const first = statement.first.bind(statement);
+    const run = statement.run.bind(statement);
+    statement.first = async () => {
+      if (sql.includes("SELECT sender_id, receiver_id, body, reply_to_id FROM messages WHERE id = ?")) {
+        return this.messagesById.get(statement.params[0]) || null;
+      }
+      if (sql.includes("SELECT 1 FROM friendships")) return { 1: 1 };
+      if (sql.includes("SELECT display_name FROM users")) throw new Error("sender lookup unavailable");
+      return first();
+    };
+    statement.run = async () => {
+      if (sql.includes("INSERT INTO messages")) {
+        this.messageInsertAttempts++;
+        const [id, senderId, receiverId, body, replyToId] = statement.params;
+        if (this.messagesById.has(id)) return { meta: { changes: 0 } };
+        this.messagesById.set(id, {
+          sender_id: senderId,
+          receiver_id: receiverId,
+          body,
+          reply_to_id: replyToId || null,
+        });
+        return { meta: { changes: 1 } };
+      }
+      return run();
+    };
+    return statement;
+  }
+}
+
+test("offline outbox retries are idempotent and reject client ID conflicts", async () => {
+  const db = new IdempotentPrivateMessageDB();
+  const token = await worker.signToken(user, secret, 0);
+  const clientMessageId = "a1b2c3d4e5f60708a1b2c3d4e5f60708";
+  const send = body => worker.default.fetch(new Request("https://api.example.test/api/messages", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ receiverId: "friend-1", body, clientMessageId })
+  }), { DB: db, JWT_SECRET: secret });
+
+  const first = await send("Persist once");
+  assert.equal(first.status, 201);
+  assert.equal((await first.json()).id, clientMessageId);
+
+  const retry = await send("Persist once");
+  assert.equal(retry.status, 200);
+  assert.deepEqual(await retry.json(), {
+    message: "Message already accepted",
+    id: clientMessageId,
+    duplicate: true
+  });
+  assert.equal(db.messagesById.size, 1);
+
+  const conflict = await send("Different content with the same ID");
+  assert.equal(conflict.status, 409);
+  assert.equal(db.messagesById.size, 1);
+  assert.equal(db.messageInsertAttempts, 3);
+});
+
 class FakeReadReceiptDB extends FakeDB {
   constructor(readReceipts) {
     super();
