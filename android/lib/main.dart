@@ -650,6 +650,37 @@ class Api {
     await request('DELETE', '/api/private-memories/${Uri.encodeComponent(id)}');
   }
 
+  static Future<void> uploadPrivateMemoryPhoto({
+    required String memoryId,
+    required List<int> bytes,
+    required String fileName,
+    required String contentType,
+  }) async {
+    if (bytes.isEmpty || bytes.length > 4 * 1024 * 1024) {
+      throw Exception('حجم صورة الذكرى يجب ألا يتجاوز 4 ميجابايت.');
+    }
+    if (!['image/jpeg', 'image/png', 'image/webp'].contains(contentType)) {
+      throw Exception('صيغة صورة الذكرى غير مدعومة.');
+    }
+    final response = await http.post(
+      Uri.parse('$mediaWorkerBase/api/private-memories/${Uri.encodeComponent(memoryId)}/media'),
+      headers: {
+        if (token != null) 'Authorization': 'Bearer $token',
+        'Content-Type': contentType,
+        'X-File-Name': Uri.encodeComponent(fileName),
+      },
+      body: bytes,
+    ).timeout(const Duration(minutes: 2));
+    Map<String, dynamic> data = {};
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) data = decoded;
+    } catch (_) {}
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception((data['error'] ?? 'تعذر حفظ صورة الذكرى.').toString());
+    }
+  }
+
   static Future<List<Map<String, dynamic>>> statuses() async =>
       _list((await request('GET', '/api/statuses'))['statuses']);
 
