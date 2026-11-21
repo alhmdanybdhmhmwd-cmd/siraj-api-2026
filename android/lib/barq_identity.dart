@@ -1,5 +1,4 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// الهويات الأربع المعتمدة لتطبيق برق. لا تتغير أسماء SPARK أو التطبيق هنا.
@@ -54,6 +53,9 @@ class BarqIdentityPalette {
   final Color onPrimary;
   final Color onSecondary;
   final Color border;
+  final Color glow;
+  final String tagline;
+  final IconData motif;
 
   const BarqIdentityPalette({
     required this.primary,
@@ -65,6 +67,9 @@ class BarqIdentityPalette {
     required this.onPrimary,
     required this.onSecondary,
     required this.border,
+    required this.glow,
+    required this.tagline,
+    required this.motif,
   });
 
   static BarqIdentityPalette forIdentity(BarqIdentity identity) {
@@ -81,19 +86,25 @@ class BarqIdentityPalette {
           onPrimary: Color(0xFF090909),
           onSecondary: Color(0xFFFFFFFF),
           border: Color(0x553F91E8),
+          glow: Color(0xFF168BFF),
+          tagline: 'الهوية الرسمية',
+          motif: Icons.flash_on_rounded,
         );
       // Soft, luminous butterfly direction: pearl, rose and lilac.
       case BarqIdentity.butterfly:
         return const BarqIdentityPalette(
-          primary: Color(0xFFF0A8C8),
-          secondary: Color(0xFFB9A0F5),
-          background: Color(0xFF100D18),
-          surface: Color(0xFF211A2B),
-          text: Color(0xFFFFF7FC),
-          mutedText: Color(0xFFC9BFD0),
-          onPrimary: Color(0xFF241322),
-          onSecondary: Color(0xFF21152C),
-          border: Color(0x668F70C8),
+          primary: Color(0xFFE15BFF),
+          secondary: Color(0xFF8E24FF),
+          background: Color(0xFF100719),
+          surface: Color(0xFF21102B),
+          text: Color(0xFFFFF5FF),
+          mutedText: Color(0xFFD1B6DE),
+          onPrimary: Color(0xFF250D30),
+          onSecondary: Color(0xFFFFFFFF),
+          border: Color(0x66D34BFF),
+          glow: Color(0xFFD83DFF),
+          tagline: 'أناقة بلا حدود',
+          motif: Icons.flutter_dash_rounded,
         );
       // Deep, bold violet with restrained silver highlights.
       case BarqIdentity.purpleShadow:
@@ -107,19 +118,25 @@ class BarqIdentityPalette {
           onPrimary: Color(0xFF160D25),
           onSecondary: Color(0xFF21152C),
           border: Color(0x667A55C7),
+          glow: Color(0xFF9B35FF),
+          tagline: 'قوة في التفاصيل',
+          motif: Icons.diamond_outlined,
         );
       // Cool crystal identity: sky cyan, ice and deep blue.
       case BarqIdentity.skyJewel:
         return const BarqIdentityPalette(
-          primary: Color(0xFF75DFFF),
-          secondary: Color(0xFF55AFFF),
-          background: Color(0xFF07121B),
-          surface: Color(0xFF102332),
+          primary: Color(0xFFA9E8FF),
+          secondary: Color(0xFF398DFF),
+          background: Color(0xFF06111D),
+          surface: Color(0xFF10243B),
           text: Color(0xFFF2FBFF),
           mutedText: Color(0xFFB7D0DD),
           onPrimary: Color(0xFF06202B),
-          onSecondary: Color(0xFF061A2B),
+          onSecondary: Color(0xFFFFFFFF),
           border: Color(0x6658C8E8),
+          glow: Color(0xFF6ECFFF),
+          tagline: 'صفاء يلامس النجوم',
+          motif: Icons.diamond_rounded,
         );
     }
   }
