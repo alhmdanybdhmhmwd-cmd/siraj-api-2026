@@ -102,3 +102,11 @@ export function validateTransportChunk(totalSize, chunkNumber, receivedSize) {
   }
   return bounds;
 }
+
+export function matchesUploadDeclaration(existing, declaration, recipientId, groupId) {
+  return Number(existing?.size) === declaration.size &&
+    existing?.recipientId === recipientId &&
+    existing?.groupId === groupId &&
+    existing?.contentType === declaration.contentType &&
+    existing?.fileName === declaration.fileName;
+}
