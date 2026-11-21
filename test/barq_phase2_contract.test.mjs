@@ -685,3 +685,28 @@ test("private memories are owner-scoped with bounded create, edit, and delete op
   assert.ok(route.includes("DELETE FROM private_memories WHERE id = ? AND owner_id = ?"));
   assert.ok(worker.includes('"Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS"'));
 });
+
+
+test("private memory photos are owner-only, size-limited, and scheduled for cleanup on memory deletion", () => {
+  const start = worker.indexOf("const memoryMediaMatch = path.match");
+  const end = worker.indexOf("const memoryMatch = path.match", start);
+  const upload = worker.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  assert.ok(upload.includes("WHERE id = ? AND owner_id = ?"));
+  assert.ok(upload.includes('["image/jpeg", "image/png", "image/webp"]'));
+  assert.ok(upload.includes("const maxPhotoBytes = 4 * 1024 * 1024"));
+  assert.ok(upload.includes("readRequestBodyLimited(request, maxPhotoBytes)"));
+  assert.ok(upload.includes("detectProfileImageType(bytes) !== contentType"));
+  assert.ok(upload.includes("INSERT INTO private_memory_media"));
+  assert.ok(upload.includes("INSERT INTO media_access"));
+  assert.ok(upload.includes("rollbackSparkMediaUpload(env, storage, storageUrl, objectKey)"));
+
+  const routeStart = worker.indexOf("if (path === \"/api/private-memories\" || path.startsWith(\"/api/private-memories/\"))");
+  const routeEnd = worker.indexOf("// Explicitly requested speech transcription", routeStart);
+  const route = worker.slice(routeStart, routeEnd);
+  assert.ok(route.includes("WHERE owner_id = ? ORDER BY updated_at DESC"));
+  assert.ok(route.includes("FROM private_memory_media WHERE owner_id = ?"));
+  assert.ok(route.includes("INSERT INTO media_expirations (object_key, expires_at)"));
+  assert.ok(route.includes("DELETE FROM media_access WHERE object_key = ?"));
+  assert.ok(route.includes("DELETE FROM private_memory_media WHERE memory_id = ? AND owner_id = ?"));
+});
