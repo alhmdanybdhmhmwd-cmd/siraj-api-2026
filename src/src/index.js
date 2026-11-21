@@ -1,4 +1,5 @@
-import { createObjectStorageClient, createAiProvider } from "./runtime_adapters.js";
+import { AwsClient } from "aws4fetch";
+import { createAiProvider } from "./runtime_adapters.js";
 import { prepareConversationSummaryTranscript, buildConversationSummaryMessages, extractConversationSummaryText } from "./conversation_summary.js";
 import { handleResumableMediaUpload, cleanupExpiredUploadSessions } from "./media_multipart_routes.js";
 
@@ -685,7 +686,7 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
     "SELECT object_key FROM media_expirations WHERE expires_at <= ? ORDER BY expires_at ASC LIMIT 100"
   ).bind(cutoff).all();
   const bucket = env.TIGRIS_BUCKET || "siraj-media";
-  const storage = createObjectStorageClient(env);
+  const storage = new AwsClient({ accessKeyId: env.TIGRIS_ACCESS_KEY_ID, secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY, service: "s3", region: "auto", retries: 2 });
   let deleted = 0;
   for (const item of expired.results || []) {
     const key = String(item.object_key || "");
@@ -1318,7 +1319,7 @@ export default {
           const bucket = env.TIGRIS_BUCKET || "siraj-media";
           const objectPath = objectKey.split("/").map(encodeURIComponent).join("/");
           const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
-          const storage = createObjectStorageClient(env);
+          const storage = new AwsClient({ accessKeyId: env.TIGRIS_ACCESS_KEY_ID, secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY, service: "s3", region: "auto", retries: 2 });
           const expiresAt = "9999-12-31T23:59:59.999Z";
           const putResponse = await storage.fetch(storageUrl, {
             method: "PUT",
@@ -1680,7 +1681,7 @@ export default {
           const bucket = env.TIGRIS_BUCKET || "siraj-media";
           const objectPath = objectKey.split("/").map(encodeURIComponent).join("/");
           const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
-          const storage = createObjectStorageClient(env);
+          const storage = new AwsClient({ accessKeyId: env.TIGRIS_ACCESS_KEY_ID, secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY, service: "s3", region: "auto", retries: 2 });
           const putResponse = await storage.fetch(storageUrl, {
             method: "PUT",
             headers: {
@@ -1766,7 +1767,7 @@ export default {
         if (!photo?.object_key) return json({ error: "Profile photo not found" }, 404);
         const objectPath = String(photo.object_key).split("/").map(encodeURIComponent).join("/");
         const storageUrl = "https://" + encodeURIComponent(env.TIGRIS_BUCKET || "siraj-media") + ".t3.storage.dev/" + objectPath;
-        const storage = createObjectStorageClient(env);
+        const storage = new AwsClient({ accessKeyId: env.TIGRIS_ACCESS_KEY_ID, secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY, service: "s3", region: "auto", retries: 2 });
         const stored = await storage.fetch(storageUrl, { method: "GET" });
         if (stored.status === 404) return json({ error: "Profile photo not found" }, 404);
         if (!stored.ok) return json({ error: "Profile photo could not be loaded" }, 502);
@@ -2047,7 +2048,7 @@ export default {
         const bucket = env.TIGRIS_BUCKET || "siraj-media";
         const objectPath = objectKey.split("/").map(encodeURIComponent).join("/");
         const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
-        const storage = createObjectStorageClient(env);
+        const storage = new AwsClient({ accessKeyId: env.TIGRIS_ACCESS_KEY_ID, secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY, service: "s3", region: "auto", retries: 2 });
         const putResponse = await storage.fetch(storageUrl, {
           method: "PUT",
           headers: {
@@ -2408,7 +2409,7 @@ export default {
           const bucket = env.TIGRIS_BUCKET || "siraj-media";
           const objectPath = objectKey.split("/").map(encodeURIComponent).join("/");
           const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
-          const storage = createObjectStorageClient(env);
+          const storage = new AwsClient({ accessKeyId: env.TIGRIS_ACCESS_KEY_ID, secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY, service: "s3", region: "auto", retries: 2 });
           const putResponse = await storage.fetch(storageUrl, {
             method: "PUT",
             headers: {
@@ -2475,7 +2476,7 @@ export default {
           const bucket = env.TIGRIS_BUCKET || "siraj-media";
           const objectPath = row.objectKey.split("/").map(encodeURIComponent).join("/");
           const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
-          const storage = createObjectStorageClient(env);
+          const storage = new AwsClient({ accessKeyId: env.TIGRIS_ACCESS_KEY_ID, secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY, service: "s3", region: "auto", retries: 2 });
           const media = await storage.fetch(storageUrl);
           if (!media.ok) return json({ error: "SPARK audio reply media unavailable" }, media.status === 404 ? 404 : 502);
           return new Response(media.body, {
@@ -3747,7 +3748,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         const bucket = env.TIGRIS_BUCKET || "siraj-media";
         const objectPath = key.split("/").map(encodeURIComponent).join("/");
         const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
-        const storage = createObjectStorageClient(env);
+        const storage = new AwsClient({ accessKeyId: env.TIGRIS_ACCESS_KEY_ID, secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY, service: "s3", region: "auto", retries: 2 });
         const putResponse = await storage.fetch(storageUrl, {
           method: "PUT",
           headers: {
@@ -3852,7 +3853,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         const bucket = env.TIGRIS_BUCKET || "siraj-media";
         const objectPath = key.split("/").map(encodeURIComponent).join("/");
         const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
-        const storage = createObjectStorageClient(env);
+        const storage = new AwsClient({ accessKeyId: env.TIGRIS_ACCESS_KEY_ID, secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY, service: "s3", region: "auto", retries: 2 });
         // New uploads have an authorization record in D1, allowing access checks
         // before any request is made to object storage. Legacy objects fall back
         // to their existing signed metadata until they naturally expire.
