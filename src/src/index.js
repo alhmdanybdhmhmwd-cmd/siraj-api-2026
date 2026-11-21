@@ -280,16 +280,20 @@ function phoneConflictCondition(column, phone) {
   const variants = [...new Set(phoneVariants(phone))];
   if (!variants.length) return { sql: "0", bindings: [] };
 
+  // Compute the expensive Unicode/format normalization expression once.
+  // Repeating the deeply nested SQLite replace() expression in every OR branch
+  // can overflow the parser stack in libSQL even though D1 accepts the query.
   const normalized = normalizedPhoneSql(column);
+  const value = "phone_lookup.normalized_phone";
   const placeholders = variants.map(() => "?").join(", ");
   const conditions = [
-    `${normalized} IN (${placeholders})`,
-    `(substr(${normalized}, 1, 2) = '00' AND substr(${normalized}, 3) IN (${placeholders}))`,
-    `(substr(${normalized}, 1, 3) = '967' AND length(${normalized}) >= 10 AND substr(${normalized}, 4) IN (${placeholders}))`,
-    `(substr(${normalized}, 1, 1) = '0' AND length(${normalized}) >= 8 AND substr(${normalized}, 2) IN (${placeholders}))`
+    `${value} IN (${placeholders})`,
+    `(substr(${value}, 1, 2) = '00' AND substr(${value}, 3) IN (${placeholders}))`,
+    `(substr(${value}, 1, 3) = '967' AND length(${value}) >= 10 AND substr(${value}, 4) IN (${placeholders}))`,
+    `(substr(${value}, 1, 1) = '0' AND length(${value}) >= 8 AND substr(${value}, 2) IN (${placeholders}))`
   ];
   return {
-    sql: "(" + conditions.join(" OR ") + ")",
+    sql: `EXISTS (SELECT 1 FROM (SELECT ${normalized} AS normalized_phone) AS phone_lookup WHERE ${conditions.join(" OR ")})`,
     bindings: [...variants, ...variants, ...variants, ...variants]
   };
 }
