@@ -3740,9 +3740,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       text: memory == null ? initialContent : field(memory, ['content']),
     );
     final editing = memory != null;
-    List<int>? photoBytes;
-    String? photoFileName;
-    String? photoContentType;
+    final photos = <Map<String, dynamic>>[];
     await showDialog<void>(
       context: pageContext,
       barrierDismissible: false,
@@ -3777,51 +3775,70 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       onPressed: saving ? null : () async {
                         final result = await FilePicker.platform.pickFiles(
                           type: FileType.image,
-                          allowMultiple: false,
+                          allowMultiple: true,
                           withData: true,
                         );
                         if (result == null || result.files.isEmpty || !dialogContext.mounted) return;
-                        final file = result.files.single;
-                        final extension = (file.extension ?? '').toLowerCase();
-                        final contentType = switch (extension) {
-                          'jpg' || 'jpeg' => 'image/jpeg',
-                          'png' => 'image/png',
-                          'webp' => 'image/webp',
-                          _ => '',
-                        };
-                        final bytes = file.bytes;
-                        if (contentType.isEmpty || bytes == null || bytes.isEmpty || bytes.length > 4 * 1024 * 1024) {
-                          showMsg(dialogContext, 'اختر صورة JPG أو PNG أو WebP لا يتجاوز حجمها 4 ميجابايت.');
+                        final selected = <Map<String, dynamic>>[];
+                        String? error;
+                        for (final file in result.files) {
+                          final extension = (file.extension ?? '').toLowerCase();
+                          final contentType = switch (extension) {
+                            'jpg' || 'jpeg' => 'image/jpeg',
+                            'png' => 'image/png',
+                            'webp' => 'image/webp',
+                            _ => '',
+                          };
+                          final bytes = file.bytes;
+                          if (contentType.isEmpty || bytes == null || bytes.isEmpty || bytes.length > 4 * 1024 * 1024) {
+                            error = 'كل صورة يجب أن تكون JPG أو PNG أو WebP وألا يتجاوز حجمها 4 ميجابايت.';
+                            break;
+                          }
+                          selected.add({'bytes': bytes, 'name': file.name, 'contentType': contentType});
+                        }
+                        if (error != null) {
+                          showMsg(dialogContext, error);
                           return;
                         }
-                        setDialogState(() {
-                          photoBytes = bytes;
-                          photoFileName = file.name;
-                          photoContentType = contentType;
-                        });
+                        setDialogState(() => photos.addAll(selected));
                       },
                       icon: const Icon(Icons.add_photo_alternate_outlined),
-                      label: Text(photoFileName ?? 'إرفاق صورة خاصة'),
+                      label: Text(photos.isEmpty ? 'إرفاق صور خاصة' : 'إضافة صور (${photos.length})'),
                     ),
-                    if (photoBytes != null) ...[
+                    if (photos.isNotEmpty) ...[
                       const SizedBox(height: 8),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.memory(
-                          Uint8List.fromList(photoBytes!),
-                          height: 130,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                      TextButton.icon(
-                        onPressed: saving ? null : () => setDialogState(() {
-                          photoBytes = null;
-                          photoFileName = null;
-                          photoContentType = null;
-                        }),
-                        icon: const Icon(Icons.close),
-                        label: const Text('إزالة الصورة المختارة'),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (var index = 0; index < photos.length; index++)
+                            Stack(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Image.memory(
+                                    Uint8List.fromList(photos[index]['bytes'] as List<int>),
+                                    width: 88,
+                                    height: 88,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                                Positioned(
+                                  top: 0,
+                                  right: 0,
+                                  child: IconButton(
+                                    visualDensity: VisualDensity.compact,
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: Colors.black87,
+                                      foregroundColor: Colors.white,
+                                    ),
+                                    onPressed: saving ? null : () => setDialogState(() => photos.removeAt(index)),
+                                    icon: const Icon(Icons.close, size: 16),
+                                  ),
+                                ),
+                              ],
+                            ),
+                        ],
                       ),
                     ],
                     if (saving) ...[
@@ -3844,10 +3861,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   onPressed: saving ? null : () async {
                     final content = contentController.text.trim();
                     final title = titleController.text.trim();
-                    final effectiveTitle = title.isEmpty && content.isEmpty && photoBytes != null
-                        ? 'صورة محفوظة'
+                    final effectiveTitle = title.isEmpty && content.isEmpty && photos.isNotEmpty
+                        ? 'صور محفوظة'
                         : title;
-                    if ((content.isEmpty && effectiveTitle.isEmpty) ||
+                    if ((content.isEmpty && effectiveTitle.isEmpty && photos.isEmpty) ||
                         content.length > 10000 || effectiveTitle.length > 120) {
                       showMsg(dialogContext, 'أضف عنوانًا أو محتوى أو صورة للذكرى.');
                       return;
@@ -3866,12 +3883,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                               content: content,
                               sourceType: sourceType,
                             );
-                      if (photoBytes != null && photoContentType != null) {
+                      for (final photo in photos) {
                         await Api.uploadPrivateMemoryPhoto(
                           memoryId: field(saved, ['id']),
-                          bytes: photoBytes!,
-                          fileName: photoFileName ?? 'memory-photo',
-                          contentType: photoContentType!,
+                          bytes: photo['bytes'] as List<int>,
+                          fileName: photo['name'] as String,
+                          contentType: photo['contentType'] as String,
                         );
                       }
                     } catch (e) {
