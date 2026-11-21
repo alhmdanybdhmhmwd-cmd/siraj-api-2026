@@ -61,12 +61,16 @@ export function createNodeApiServer({ env, fetchHandler = worker.fetch, logger =
   if (!env?.DB || typeof fetchHandler !== "function") {
     throw new TypeError("A database environment and Worker-compatible fetch handler are required");
   }
-  return http.createServer(async (incoming, outgoing) => {
+  const pendingTasks = new Set();
+  const server = http.createServer(async (incoming, outgoing) => {
     try {
       const request = toWebRequest(incoming);
       const response = await fetchHandler(request, env, {
         waitUntil(promise) {
-          Promise.resolve(promise).catch(error => logger.error("BARQ background task failed:", error));
+          const task = Promise.resolve(promise)
+            .catch(error => logger.error("BARQ background task failed:", error))
+            .finally(() => pendingTasks.delete(task));
+          pendingTasks.add(task);
         }
       });
       outgoing.writeHead(response.status, Object.fromEntries(response.headers.entries()));
@@ -88,23 +92,25 @@ export function createNodeApiServer({ env, fetchHandler = worker.fetch, logger =
       }
     }
   });
+  server.barqDrainBackgroundTasks = async () => {
+    while (pendingTasks.size) await Promise.allSettled([...pendingTasks]);
+  };
+  return server;
 }
 
 export function startScheduledMaintenance(env, intervalMs = 15 * 60 * 1000, logger = console) {
-  let running = false;
-  const timer = setInterval(async () => {
-    if (running) return;
-    running = true;
-    try {
-      await worker.scheduled({ cron: "standalone-interval" }, env);
-    } catch (error) {
-      logger.error("BARQ scheduled maintenance failed:", error);
-    } finally {
-      running = false;
-    }
+  let runningTask = null;
+  const timer = setInterval(() => {
+    if (runningTask) return;
+    runningTask = worker.scheduled({ cron: "standalone-interval" }, env)
+      .catch(error => logger.error("BARQ scheduled maintenance failed:", error))
+      .finally(() => { runningTask = null; });
   }, intervalMs);
   timer.unref?.();
-  return () => clearInterval(timer);
+  return async () => {
+    clearInterval(timer);
+    if (runningTask) await runningTask;
+  };
 }
 
 export async function startNodeApiServer(options = {}) {
@@ -128,15 +134,14 @@ export async function startNodeApiServer(options = {}) {
   let closing;
   const close = () => {
     if (closing) return closing;
-    closing = new Promise(resolve => {
-      stopMaintenance();
-      server.close(async () => {
-        try { await env.__databaseClient?.close?.(); } catch (error) {
-          (options.logger || console).error("BARQ database close failed:", error);
-        }
-        resolve();
-      });
-    });
+    closing = (async () => {
+      await stopMaintenance();
+      await new Promise(resolve => server.close(resolve));
+      await server.barqDrainBackgroundTasks();
+      try { await env.__databaseClient?.close?.(); } catch (error) {
+        (options.logger || console).error("BARQ database close failed:", error);
+      }
+    })();
     return closing;
   };
   return { server, env, port: address.port, close };
