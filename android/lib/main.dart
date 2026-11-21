@@ -1156,13 +1156,14 @@ class Api {
     }
     // Preserve the existing fast path for files up to 4 MiB.
     if (bytes.length > proxyMediaThresholdBytes) {
-      return _uploadAttachmentResumable(
+      await _uploadAttachmentResumable(
         bytes: bytes,
         fileName: fileName,
         contentType: contentType,
         recipientId: recipientId,
         groupId: groupId,
       );
+      return;
     }
     final uri = Uri.parse('$apiBase/api/media');
     final response = await http.post(uri, headers: {
