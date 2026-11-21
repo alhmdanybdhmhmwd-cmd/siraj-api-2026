@@ -2,9 +2,10 @@
 // and remains inert until a separately provisioned HTTPS upstream is configured.
 const PREVIEW_UPSTREAM = "https://barq-api-phase2-test.alhmdanybdhmhmwd.workers.dev";
 const DEFAULT_PRODUCTION_UPSTREAM = "https://siraj-api.alhmdanybdhmhmwd.workers.dev";
+const IS_PREVIEW_DEPLOYMENT = process.env.VERCEL_ENV === "preview";
 
 function getUpstreamCandidates(env = process.env) {
-  if (env.VERCEL_ENV === "preview") return [PREVIEW_UPSTREAM];
+  if (IS_PREVIEW_DEPLOYMENT || env.VERCEL_ENV === "preview") return [PREVIEW_UPSTREAM];
   const primary = env.BARQ_API_UPSTREAM || DEFAULT_PRODUCTION_UPSTREAM;
   const candidates = [primary];
   const fallback = env.BARQ_API_FALLBACK_UPSTREAM;
