@@ -18,6 +18,7 @@ const headers = {
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "no-referrer",
   "X-Permitted-Cross-Domain-Policies": "none",
+  "Content-Security-Policy": "default-src 'none'; base-uri 'none'; frame-ancestors 'none'",
   "Strict-Transport-Security": "max-age=31536000"
 };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers });
