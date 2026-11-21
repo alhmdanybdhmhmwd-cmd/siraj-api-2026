@@ -727,6 +727,7 @@ test("authorized friends receive private profile photo bytes with safe cache hea
     assert.equal(response.headers.get("vary"), "Authorization");
     assert.equal(response.headers.get("x-content-type-options"), "nosniff");
     assert.equal(response.headers.get("x-frame-options"), "DENY");
+    assert.equal(response.headers.get("content-security-policy"), "default-src 'none'; base-uri 'none'; frame-ancestors 'none'");
     assert.equal(response.headers.get("referrer-policy"), "no-referrer");
     assert.equal(response.headers.get("strict-transport-security"), "max-age=31536000");
     assert.equal(response.headers.get("x-permitted-cross-domain-policies"), "none");
