@@ -73,7 +73,11 @@ async function deleteStagedChunks(storage, env, session, chunkNumbers) {
 async function canUploadToConversation(env, ownerId, recipientId, groupId) {
   if (recipientId) {
     const friendship = await env.DB.prepare("SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?").bind(ownerId, recipientId).first();
-    return Boolean(friendship);
+    if (!friendship) return false;
+    const blocked = await env.DB.prepare(
+      "SELECT 1 FROM blocked_users WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?) LIMIT 1"
+    ).bind(ownerId, recipientId, recipientId, ownerId).first();
+    return !blocked;
   }
   const membership = await env.DB.prepare("SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?").bind(groupId, ownerId).first();
   return Boolean(membership);
