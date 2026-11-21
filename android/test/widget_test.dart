@@ -911,6 +911,8 @@ void main() {
     expect(barqForegroundPushLabel({'type': 'direct_message'}, {'messages': false}), isNull);
     expect(barqForegroundPushLabel({'type': 'group_message'}, {'groups': false}), isNull);
     expect(barqForegroundPushLabel({'type': 'status_update'}, {'statuses': false}), isNull);
+    expect(barqForegroundPushLabel({'type': 'direct_message', 'ephemeral': true}, {'messages': true}), isNull);
+    expect(barqForegroundPushLabel({'type': 'group_message', 'temporary': 'true'}, {'groups': true}), isNull);
     expect(barqForegroundPushLabel({'type': 'unknown'}, {}), isNull);
   });
 
