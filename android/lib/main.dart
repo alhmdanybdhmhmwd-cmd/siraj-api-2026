@@ -1933,7 +1933,7 @@ Widget personAvatar(Map<String, dynamic> person, {double radius = 22}) {
   );
 }
 
-class PrivateMemoryPhotoGallery extends StatelessWidget {
+class PrivateMemoryPhotoGallery extends StatefulWidget {
   final List<Map<String, dynamic>> media;
   final ValueChanged<int>? onPageChanged;
 
@@ -1944,18 +1944,59 @@ class PrivateMemoryPhotoGallery extends StatelessWidget {
   });
 
   @override
+  State<PrivateMemoryPhotoGallery> createState() => _PrivateMemoryPhotoGalleryState();
+}
+
+class _PrivateMemoryPhotoGalleryState extends State<PrivateMemoryPhotoGallery> {
+  int currentPage = 0;
+
+  @override
   Widget build(BuildContext context) {
-    return PageView(
-      onPageChanged: onPageChanged,
+    if (widget.media.isEmpty) {
+      return const Center(child: Icon(Icons.photo_library_outlined, color: gold, size: 42));
+    }
+    return Stack(
+      fit: StackFit.expand,
       children: [
-        for (final item in media)
-          InteractiveViewer(
-            child: Image.network(
-              Api.sparkMediaUri(field(item, ['attachmentId'])).toString(),
-              headers: {if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'},
-              fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => const Center(
-                child: Icon(Icons.broken_image_outlined, color: gold, size: 48),
+        PageView(
+          onPageChanged: (page) {
+            setState(() => currentPage = page);
+            widget.onPageChanged?.call(page);
+          },
+          children: [
+            for (final item in widget.media)
+              InteractiveViewer(
+                minScale: 1,
+                maxScale: 4,
+                child: Image.network(
+                  Api.sparkMediaUri(field(item, ['attachmentId'])).toString(),
+                  headers: {if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'},
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const Center(
+                    child: Icon(Icons.broken_image_outlined, color: gold, size: 48),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        if (widget.media.length > 1)
+          Positioned(
+            bottom: 10,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.black87,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  child: Text(
+                    '${currentPage + 1} / ${widget.media.length}',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                  ),
+                ),
               ),
             ),
           ),
