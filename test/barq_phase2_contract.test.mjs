@@ -607,3 +607,26 @@ test("SPARK media uploads validate file signatures and enforce the ten-item serv
   assert.ok(uploadRoute.includes("savedRows?.[mediaInsertIndex]?.meta?.changes || 0) !== 1"));
   assert.ok(uploadRoute.includes("at most 10 media files"));
 });
+
+
+test("SPARK audio replies enforce active-status friendship, duration, size, and cleanup contracts", () => {
+  const routeStart = worker.indexOf("sparkAudioReplyMatch = path.match");
+  const routeEnd = worker.indexOf("// SPARK replies and reactions are available only while the status is active and visible.", routeStart);
+  const route = worker.slice(routeStart, routeEnd);
+  assert.ok(routeStart >= 0 && routeEnd > routeStart);
+  assert.ok(route.includes("expires_at > CURRENT_TIMESTAMP"));
+  assert.ok(route.includes("reciprocal.user_id = ? AND reciprocal.friend_id = ?"));
+  assert.ok(route.includes('contentType !== "audio/mp4"'));
+  assert.ok(route.includes("durationMs < 1000 || durationMs > 60000"));
+  assert.ok(route.includes("const maxAudioReplyBytes = 5 * 1024 * 1024"));
+  assert.ok(route.includes("readRequestBodyLimited(request, maxAudioReplyBytes)"));
+  assert.ok(route.includes('audioSignature !== "ftyp"'));
+  assert.ok(route.includes("rollbackSparkMediaUpload(env, storage, storageUrl, objectKey)"));
+  assert.ok(route.includes("WHERE r.id = ? AND r.status_id = ? AND s.expires_at > CURRENT_TIMESTAMP"));
+  assert.ok(route.includes('if (method === "GET" && !audioReplyId)'));
+  assert.ok(route.includes('if (method === "GET" && audioReplyId)'));
+  assert.ok(flutterApp.includes("AudioEncoder.aacLc"));
+  assert.ok(flutterApp.includes("seconds >= 60"));
+  assert.ok(flutterApp.includes("durationMs < 1000"));
+  assert.ok(flutterApp.includes("bytes.length > 5 * 1024 * 1024"));
+});
