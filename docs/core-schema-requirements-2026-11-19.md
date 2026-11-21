@@ -1,10 +1,10 @@
-# Core D1 schema requirements recovered from Worker SQL
+# Core D1 schema contract and isolated Preview fixture
 
 Date: 2026-11-19
 
 ## Purpose and safety
 
-This document records the minimum schema contract implied by the current Worker source. It is a recovery aid, **not an authoritative schema export and not a migration**. It intentionally does not invent column types, nullability, indexes, uniqueness constraints, or foreign-key actions where the source does not establish them. Do not apply inferred DDL to any database.
+This document records the minimum schema contract implied by the current Worker source. No authoritative production D1 export or base migration exists in the repository. A separate **Preview-only fixture migration** (`migrations/0003_preview_core_schema.sql`) has now been added and applied to the dedicated test database. It exists only to exercise the Worker contract and is **not an export or replica of production D1**. Never apply it through `wrangler.toml` or to production.
 
 ## `users`
 
@@ -57,15 +57,13 @@ Whether the deployed schema uses a composite primary key or unique constraint, F
 ### Still unknown
 Exact types, defaults for `created_at`, whether `read_at` is nullable, message ordering/indexes, retention rules, and any other columns present in the deployed schema. Do not assume that the six observed columns are the complete table definition.
 
-## Verification needed before migration authoring
+## Preview-only fixture migration and verification
 
-Obtain a read-only schema export from an isolated non-production D1 database or a verified backup, including:
-- `sqlite_master` definitions for tables and indexes;
-- `PRAGMA table_info(...)` for these three tables;
-- `PRAGMA foreign_key_list(...)`;
-- `PRAGMA index_list(...)` and `PRAGMA index_info(...)`.
+`migrations/0003_preview_core_schema.sql` creates the minimum `users`, `friendships`, and `messages` tables required by the current Worker SQL contract. Its types, `username` case-insensitive uniqueness, directed friendship-pair uniqueness, foreign keys, and query indexes are explicit test-fixture decisions. In particular, the fixture deliberately does **not** put a simple UNIQUE constraint on `phone`; equivalent local/international forms are checked by Worker normalization logic.
 
-Then compare the exported schema against this contract and the current Worker source. Only after that comparison should a versioned migration or integration test be written.
+The migration was applied successfully to the dedicated isolated D1 database `barq-phase2-test-2026-11-20` (ID `5bfada32-4f9b-4edb-85dd-3b3b30ab73b0`) by workflow run `44804926838`. The workflow inspected `sqlite_master`, columns, and indexes without reading account rows. Backend SQLite migration tests now execute all three versioned migrations and verify registration-compatible user columns, duplicate username rejection, non-unique phone storage, duplicate directed-contact prevention, message insertion/read receipts, and core foreign keys.
+
+This enables functional testing against a coherent Preview fixture, but it does **not** prove that production D1 uses identical types, indexes, or constraints. If production parity is required later, obtain a read-only schema export from a verified backup or an authorized isolated clone and compare it separately. Never inspect or mutate production as part of this phase.
 
 ## Source locations inspected
 
@@ -82,7 +80,7 @@ Historical branches inspected:
 
 ## Explicit non-goals
 
-- This document does not claim the inferred contract is the production schema.
-- It does not create or modify any database.
-- It does not authorize applying old `groups`/`media_assets` migrations.
+- This document does not claim the Preview fixture is the production schema.
+- The Preview-only migration modifies only the dedicated isolated test D1 database.
+- It does not authorize applying the fixture migration or old `groups`/`media_assets` migrations to production.
 - It does not change production, merge the draft PR, deploy, or build an APK.

@@ -4,7 +4,12 @@ import { readFile } from "node:fs/promises";
 
 const workerPath = new URL("../src/src/index.js", import.meta.url);
 let workerSource = await readFile(workerPath, "utf8");
+const summarySource = await readFile(new URL("../src/src/conversation_summary.js", import.meta.url), "utf8");
 workerSource = workerSource.replace('import { AwsClient } from "aws4fetch";', 'class AwsClient {}');
+workerSource = workerSource.replace(
+  'import { prepareConversationSummaryTranscript, buildConversationSummaryMessages, extractConversationSummaryText } from "./conversation_summary.js";',
+  summarySource
+);
 const workerModule = await import(
   "data:text/javascript;base64," + Buffer.from(workerSource).toString("base64")
 );
@@ -58,4 +63,30 @@ test("GET /health/ready returns 503 when the database probe fails", async () => 
   const response = await fetchWorker(request("/health/ready"), env);
   assert.equal(response.status, 503);
   assert.deepEqual(await response.json(), { status: "not_ready" });
+});
+
+
+test("scheduled rate-limit cleanup also removes expired transcription limiter rows", async () => {
+  const statements = [];
+  const env = {
+    DB: {
+      prepare(sql) {
+        statements.push(sql);
+        return {
+          bind(cutoff) {
+            assert.equal(cutoff, 1_700_000_000 - 86_400);
+            return { async run() { return { meta: { changes: 2 } }; } };
+          }
+        };
+      }
+    }
+  };
+  const result = await workerModule.cleanupExpiredRateLimits(env, 1_700_000_000_000);
+  assert.deepEqual(result, {
+    login_rate_limits: 2,
+    recovery_rate_limits: 2,
+    transcription_rate_limits: 2
+  });
+  assert.equal(statements.length, 3);
+  assert.ok(statements.some(sql => sql.includes("DELETE FROM transcription_rate_limits")));
 });

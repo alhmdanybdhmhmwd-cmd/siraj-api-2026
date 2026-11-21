@@ -1,4 +1,10 @@
-const UPSTREAM = "https://siraj-api.alhmdanybdhmhmwd.workers.dev";
+// Keep production isolated on its existing upstream. Preview deployments
+// route through the isolated BARQ test Worker so reachability can be verified
+// without changing production traffic or data.
+const UPSTREAM = process.env.BARQ_API_UPSTREAM ||
+  (process.env.VERCEL_ENV === "preview"
+    ? "https://barq-api-phase2-test.alhmdanybdhmhmwd.workers.dev"
+    : "https://siraj-api.alhmdanybdhmhmwd.workers.dev");
 
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -14,12 +20,18 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const isMediaUpload = req.method === "POST" &&
-      new URL(req.url, "https://vercel.invalid").pathname === "/api/media";
+    const requestPath = new URL(req.url, "https://vercel.invalid").pathname;
+    const isMediaUpload = req.method === "POST" && requestPath === "/api/media";
+    const isProfilePhotoUpload = req.method === "POST" &&
+      requestPath.startsWith("/api/profile/photo/");
     const maxMediaBytes = 60 * 1024 * 1024;
+    const maxProfilePhotoBytes = 4 * 1024 * 1024;
     const declaredLength = Number(req.headers["content-length"]);
     if (isMediaUpload && Number.isFinite(declaredLength) && declaredLength > maxMediaBytes) {
       return res.status(413).json({ error: "File must be between 1 byte and 60 MB" });
+    }
+    if (isProfilePhotoUpload && Number.isFinite(declaredLength) && declaredLength > maxProfilePhotoBytes) {
+      return res.status(413).json({ error: "Profile photo must not exceed 4 MiB" });
     }
 
     const chunks = [];
@@ -30,6 +42,9 @@ module.exports = async (req, res) => {
       receivedBytes += buffer.length;
       if (isMediaUpload && receivedBytes > maxMediaBytes) {
         return res.status(413).json({ error: "File must be between 1 byte and 60 MB" });
+      }
+      if (isProfilePhotoUpload && receivedBytes > maxProfilePhotoBytes) {
+        return res.status(413).json({ error: "Profile photo must not exceed 4 MiB" });
       }
       chunks.push(buffer);
     }

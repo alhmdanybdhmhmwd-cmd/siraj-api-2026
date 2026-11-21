@@ -1,76 +1,57 @@
 # BARQ Phase 2 — Application Foundation and API Security
 
-Status: IN PROGRESS
-Working branch: barq/phase-2-foundation-2026-11-20
-Base branch: barq/development-2026-11-19
+Status: IN PROGRESS — source/CI foundation verified; isolated live integration remains open.  
+Working branch: `barq/phase-2-android-ci-2026-11-20`  
+Latest verified source commit before this documentation update: `f6ff468ce7a1614b3861fa448c8c9476f059e98a`
 
-## Scope
-This phase establishes a safe development foundation and verifies the existing authentication/session contract. It does not authorize production deployment, database migrations against production, merging, or release.
+> This status supersedes older statements in this file that Android source was outside the repository or that Flutter CI had not yet run.
 
-## Confirmed source facts
-- Android package namespace and applicationId are both `com.barq.app`.
-- The checked-in Firebase Android configuration uses package name `com.barq.app`.
-- Flutter REST traffic currently targets `https://siraj-api-2026.vercel.app`.
-- Large-media fallback and the realtime WebSocket target `siraj-api.alhmdanybdhmhmwd.workers.dev`.
-- Flutter stores the bearer token with `flutter_secure_storage`; it validates a saved token with `GET /api/me` at startup.
-- The Worker issues HS256 JWTs with a 30-day expiry and a session-version claim (`sv`).
-- The Worker checks the JWT signature, expiry, and current account session version on authenticated requests.
-- Password recovery increments the account session version, invalidating prior tokens.
-- Login and registration have rate-limit checks; registration validates password length (8–128 chars) and uses PBKDF2-HMAC-SHA256 with 100,000 iterations.
-- Android release signing currently points to the debug signing configuration and is not production-ready.
+## Verified implementation
 
-## Blocking safety findings
-1. The Wrangler development branch currently binds `DB` to the same D1 database ID as the production configuration. No schema change, migration, destructive test, or deployment is permitted until a separate preview D1 database is provisioned and its ID is independently verified.
-2. The Android source hardcodes the production Vercel API origin. A separate preview API origin and build-time environment selection are needed before end-to-end development tests can safely use non-production accounts.
-3. The app and Worker use different origins for REST, media, and realtime. Their route ownership, authentication behavior, and deployment mapping must be verified before changing endpoints.
-4. The Worker token model has account-level session-version invalidation, but the reviewed route set does not establish a per-device logout/revocation contract. Do not add a logout route that revokes every device without deciding and testing the intended semantics.
-5. Flutter tooling is not installed in the current execution environment. Flutter analyze, unit tests, Android build, and device tests remain unverified here.
-6. Release signing must be configured using a user-controlled keystore in a secure environment. Never commit keystore files or passwords.
+- Flutter Android source is checked into `android/`.
+- Android package namespace/application ID: `com.barq.app`; Firebase Android config is present in the source tree.
+- REST, media, and realtime origins are build-time selectable with `BARQ_API_BASE`, `BARQ_MEDIA_BASE`, and `BARQ_REALTIME_URL`. Production values remain defaults; preview values must be supplied explicitly for isolated testing.
+- Flutter stores the bearer token with `flutter_secure_storage` and validates saved sessions through `GET /api/me` at startup.
+- Worker validates JWT signature/expiry and session version; recovery rotates the session version.
+- Worker has read-only liveness/readiness probes: `GET /health/live`, `GET /health/ready`; readiness uses `SELECT 1 AS ok`.
+- Test Wrangler config points to the verified isolated D1 `barq-phase2-test-2026-11-20`, ID `5bfada32-4f9b-4edb-85dd-3b3b30ab73b0`, distinct from production ID `0db93afd-4bf5-4423-9e25-7a2f4f4bdbe0`. Provisioning workflow re-verified this existing database without creating a duplicate.
+- Worker source contains `POST /api/contacts/match`; a route-not-found error from an older deployed origin does not prove the current source lacks the route. Verify it against Preview before considering deployment.
+- Worker source contains the current ephemeral-message, private-invite-code, transcription, and profile-photo routes. Presence in source is not equivalent to live Preview verification.
+- Android logout unregisters the current installation's FCM token, calls `POST /api/logout` while the bearer token is still available, stops realtime/Nearby services, then clears local session and offline queues. Server revocation stores only a SHA-256 token hash in the versioned D1 migration `migrations/0002_revoked_sessions.sql`, records the token expiry, and is scoped to that exact bearer token; it does not invalidate another device's token. If the network is unavailable, local logout still completes but server-side revocation is best-effort.
 
-## Phase 2 completion criteria
-- A separately provisioned preview D1 database is configured and verified not to equal the production database ID.
-- A preview API deployment/origin is established and Android can select it without changing production defaults.
-- Existing `test/auth.test.mjs` contains 65 Node test cases. The new `test/health.test.mjs` adds 4 probe tests. GitHub Actions run `44637999231` completed successfully on commit `87460f7693af8787131e51319b1647bd404f3bd7`: all 72 Node tests passed, both Python migration/schema test scripts passed (3 + 1 tests), and `node --check src/src/index.js` passed.
-- Token persistence, offline startup behavior, and logout semantics are explicitly tested.
-- The Android package ID and Firebase configuration are verified together; no package rename is made without migration planning.
-- No secrets are embedded in the APK or repository.
-- Flutter analyze/tests and an Android debug build pass in a capable Flutter environment.
+## CI verification on the current branch
 
-## Product decisions retained
-- The invite feature is a private invite link only.
-- No “Lightning” badge, no five-friends threshold, and no gold frame.
-- The six-feature list must not reintroduce the removed badge/reward condition.
-- The user must explicitly approve completion of each phase before work starts on the next phase.
+- Android quality gate run `44779226464`: fully successful — dependency install, Dart analysis, Flutter tests, ARM64 debug build/upload, optimized ARM64 release test build/upload.
+- ARM64 release test APK artifact: **16,545,069 bytes** (about 15.77 MiB); debug diagnostic artifact: **82,173,540 bytes**. These are CI test artifacts, not a signed production release.
+- Latest Backend CI run `44782123958` on commit `f6ff468ce7a1614b3861fa448c8c9476f059e98a`: **98/98 Node tests passed**, **4/4 SQLite migration tests passed**, D1 schema inspection passed, test-vs-production target guard passed, Worker syntax check passed, and Android Firebase/signing-safety check passed.
+- The Android Firebase config package, Gradle namespace, and application ID all match `com.barq.app`. No JKS/keystore/P12/PFX signing file is tracked in the repository. Current Gradle release build uses the debug signing config for test builds; a final production signing key must remain user-controlled and must not be committed.
+- Isolated D1 provisioning verification run `44781345825`: passed; it recognized the existing test database, skipped duplicate creation, and verified the database ID differs from production.
+- Repeated isolated D1 verification run `44784829013`: passed on the current phase branch; it re-identified the existing test database `barq-phase2-test-2026-11-20` (`5bfada32-4f9b-4edb-85dd-3b3b30ab73b0`), skipped duplicate creation, and re-verified the ID is not the production database. Production remained untouched.
+- Remote test-only migration run `44781701391`: passed; Wrangler applied `0002_revoked_sessions.sql` to D1 `5bfada32-4f9b-4edb-85dd-3b3b30ab73b0`. A later verification run `44782008447` also successfully executed a read-only `SELECT ... LIMIT 0` against all four revocation columns on that remote test database. The production database was not targeted.
+- Local Worker HTTP health probe run `44781710942`: passed for both `/health/live` and `/health/ready`, using local isolated D1 state.
+- Scheduled cleanup now deletes expired revoked-session token hashes; a unit test verifies the expiry cutoff. Logout authentication tests also assert expiry-aware revocation lookup and that raw bearer tokens are never stored. The cron schedule remains every 15 minutes in both production and isolated test Wrangler configs.
 
-## Safety boundary
-Until the preview D1 database and preview API are available, work is limited to source review, isolated branch changes, local/static tests, and documentation. Do not point development traffic at production data.
+## Deferred by user to final beta device-testing window
 
-## Implemented on the isolated phase branch
-- Added `GET /health/live`, which reports Worker liveness without requiring D1 or secrets.
-- Added `GET /health/ready`, which checks required configuration and executes only `SELECT 1 AS ok` against the configured D1 binding. It returns HTTP 503 when configuration or the read-only probe is unavailable.
-- These probes do not create tables, write rows, or run migrations.
-- The changes are source-only and have not been deployed. Runtime verification remains pending until an isolated preview environment is available.
+The cross-network reachability issue involving the `workers.dev` hostname and the Vercel Preview proxy is intentionally deferred. Do not block progress on later product phases because of this item. Revisit it only during the final beta test on the user's own phone, test the result together, fix any reproduced issue, and repeat verification before final release. No claim of global reachability is allowed before that test passes. This deferral does not authorize production deployment or production changes.
 
-## Additional client foundation work
+## Still required to close Phase 2
 
-- Android source snapshot: API, media, and realtime origins now support build-time `--dart-define` values (`BARQ_API_BASE`, `BARQ_MEDIA_BASE`, `BARQ_REALTIME_URL`) while retaining production defaults. This source snapshot is packaged separately because the Android project is not part of this GitHub repository.
-- Flutter compilation and tests have not yet been run; this environment does not currently provide Flutter/Dart tooling.
+1. Backend CI recheck completed on `1aee039df3300ad928046df49db41c329640027e` (97/97 Node tests plus 4/4 SQLite migration tests passing). Android quality gate run `44779226464` passed Dart analysis, Flutter tests, ARM64 debug APK build, and debug artifact upload (82,173,540 bytes). The optimized ARM64 release test APK build/upload also completed successfully; artifacts are available in run `44779226464`.
+2. Establish or verify an isolated Preview Worker/API origin and configure its REST, media, and realtime endpoints; do not use production D1 for testing.
+3. Run authenticated Android-to-Preview integration tests for registration/login, session restore, `/api/me`, contacts, messages, groups, media, and realtime.
+4. Server-side bearer-token revocation is implemented through migration `0002_revoked_sessions.sql` and unit-tested as device/token-scoped; apply the migration only to isolated Preview, then confirm it on two actual devices. Offline logout remains locally effective, while server revocation requires network access.
+5. Confirm no production secrets or signing credentials are committed; configure release signing only in a user-controlled secure environment.
+6. Record Preview test evidence and close any contract mismatch before marking Phase 2 complete.
 
-## Remaining work before phase completion
-- Provision and verify a distinct preview D1 database ID; the current Wrangler binding still points at the production database.
-- Establish a preview Worker/API URL and supply the verified values to the Android build-time environment selectors.
-- Added isolated Node tests for `/health/live` and `/health/ready`, including missing configuration, successful read-only `SELECT 1`, and database failure paths (`test/health.test.mjs`). The repository's `npm test` command discovers this file automatically. All 72 Node tests passed in GitHub Actions run `44637999231`.
-- Flutter analyze/tests/build remain unrun because Flutter/Dart tooling is unavailable in the current execution environment; run them in a Flutter-enabled environment before closing this phase.
-- Verify API, media, and realtime origin routing and the Android package/Firebase identity.
+## Safety boundaries
 
+- No production Worker deployment, production D1 migration/write, or production data test.
+- No PR merge or promotion without explicit user approval.
+- Never request signing credentials or Cloudflare secrets in chat.
+- No final APK release before all agreed features and phases are complete.
+- Do not repeat work already verified; investigate only new failures or uncovered gaps.
 
-## CI verification record
+## Related phase ledger
 
-- Workflow: `Backend tests`, run `44637999231`.
-- Commit: `87460f7693af8787131e51319b1647bd404f3bd7`.
-- Result: success.
-- Node test runner: 72 passed, 0 failed, 0 skipped.
-- Migration SQL tests: 3 passed.
-- D1 schema inspection tests: 1 passed.
-- Worker JavaScript syntax check: passed.
-- This CI run uses SQLite-based migration/schema tests and mocked health-probe bindings; it does not connect to or validate a live D1 database or deployed Worker.
+See `docs/BARQ_12_PHASE_MASTER_PLAN_AR.md` for the authoritative 12-phase scope and completion status. Phase 1 (audit/inventory) is complete and must not be repeated. Phase 2 remains in progress.

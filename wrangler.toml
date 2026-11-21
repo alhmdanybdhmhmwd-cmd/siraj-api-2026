@@ -12,5 +12,8 @@ migrations_dir = "migrations"
 [vars]
 TIGRIS_BUCKET = "siraj-media"
 
+[ai]
+binding = "AI"
+
 [triggers]
 crons = ["*/15 * * * *"]
