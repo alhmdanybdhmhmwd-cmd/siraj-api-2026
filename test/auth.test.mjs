@@ -3173,6 +3173,55 @@ test("private memories list only the owner’s records and PATCH rejects another
   assert.equal(updateForeign.status, 404);
 });
 
+test("private memory DELETE is owner-scoped and revokes photo access before cleanup", async () => {
+  const secret = "private-memory-delete-owner-test-secret";
+  const token = await worker.signToken({ id: "owner-1", username: "owner-1" }, secret);
+  const batches = [];
+  const db = {
+    prepare(sql) {
+      const statement = {
+        sql, params: [],
+        bind(...params) { this.params = params; return this; },
+        async run() { return { meta: { changes: 1 } }; },
+        async first() {
+          if (this.sql.includes("SELECT session_version FROM account_security")) return { session_version: 0 };
+          if (this.sql.includes("SELECT id FROM private_memories WHERE id = ? AND owner_id = ?")) {
+            assert.deepEqual(this.params, ["memory-1", "owner-1"]);
+            return { id: "memory-1" };
+          }
+          return null;
+        },
+        async all() {
+          if (this.sql.includes("SELECT object_key FROM private_memory_media WHERE memory_id = ? AND owner_id = ?")) {
+            assert.deepEqual(this.params, ["memory-1", "owner-1"]);
+            return { results: [{ object_key: "owner-1/private-memories/photo-1" }] };
+          }
+          return { results: [] };
+        }
+      };
+      return statement;
+    },
+    async batch(statements) {
+      batches.push(statements.map(item => ({ sql: item.sql, params: item.params })));
+      return statements.map(() => ({ meta: { changes: 1 } }));
+    }
+  };
+  const response = await worker.default.fetch(new Request(
+    "https://api.example.test/api/private-memories/memory-1",
+    { method: "DELETE", headers: { Authorization: "Bearer " + token } }
+  ), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).message, "Memory deleted");
+  assert.equal(batches.length, 1);
+  const statements = batches[0];
+  assert.ok(statements.some(item => item.sql.includes("DELETE FROM media_access") &&
+    item.params[0] === "owner-1/private-memories/photo-1"));
+  assert.ok(statements.some(item => item.sql.includes("DELETE FROM private_memory_media") &&
+    item.params[1] === "owner-1"));
+  assert.ok(statements.some(item => item.sql.includes("DELETE FROM private_memories") &&
+    item.params[1] === "owner-1"));
+});
+
 test("private memory creation accepts a title-only photo note and rejects unsupported source types", async () => {
   const secret = "private-memory-create-test-secret";
   const token = await worker.signToken({ id: "owner-1", username: "owner-1" }, secret);
