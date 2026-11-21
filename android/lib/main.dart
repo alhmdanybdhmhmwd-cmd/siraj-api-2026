@@ -6216,7 +6216,7 @@ class _ChatPageState extends State<ChatPage> {
                                                     content: field(m, ['body', 'content', 'message']),
                                                     sourceType: 'message',
                                                   );
-                                                  if (mounted) showMsg(context, 'تم حفظ الرسالة في ذكرياتك الخاصة.');
+                                                  if (context.mounted) showMsg(context, 'تم حفظ الرسالة في ذكرياتك الخاصة.');
                                                 }
                                               : null,
                                           isPinned: m['is_pinned'] == true,
@@ -7313,7 +7313,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
                                           content: field(m, ['body', 'content', 'message']),
                                           sourceType: 'message',
                                         );
-                                        if (mounted) showMsg(context, 'تم حفظ الرسالة في ذكرياتك الخاصة.');
+                                        if (context.mounted) showMsg(context, 'تم حفظ الرسالة في ذكرياتك الخاصة.');
                                       }
                                     : null,
                                 isPinned: m['is_pinned'] == true,
