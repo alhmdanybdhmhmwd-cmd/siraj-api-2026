@@ -469,6 +469,25 @@ test("SPARK text formatting is applied only to text-only status viewing, not med
   assert.ok(!mediaBranch.includes("widget.fontKey"));
 });
 
+test("SPARK media expiration cleanup is scheduled and preserves failed deletion retries", () => {
+  assert.ok(productionConfig.includes('crons = ["*/15 * * * *"]'));
+  const scheduledStart = worker.indexOf("async scheduled(_controller, env)");
+  const scheduledEnd = worker.indexOf("async fetch(request, env, ctx)", scheduledStart);
+  const scheduled = worker.slice(scheduledStart, scheduledEnd);
+  assert.ok(scheduledStart >= 0 && scheduledEnd > scheduledStart);
+  assert.ok(scheduled.includes("await cleanupExpiredMedia(env)"));
+
+  const cleanupStart = worker.indexOf("async function cleanupExpiredMedia");
+  const cleanupEnd = worker.indexOf("async function cleanupExpiredEphemeralMessages", cleanupStart);
+  const cleanup = worker.slice(cleanupStart, cleanupEnd);
+  const successGate = cleanup.indexOf("if (response.ok || response.status === 404)");
+  const expirationDelete = cleanup.indexOf('DELETE FROM media_expirations WHERE object_key = ? AND expires_at <= ?');
+  const failureBranch = cleanup.indexOf('else {\n        console.error("Expired media deletion failed:", response.status); }');
+  assert.ok(successGate >= 0 && expirationDelete > successGate);
+  assert.ok(failureBranch > expirationDelete, "failed storage deletion must retain its expiration row for retry");
+  assert.ok(cleanup.includes("Expired media cleanup item failed"));
+});
+
 test("SPARK voice replies are private, limited, tied to status expiry, and cleaned from Tigris", () => {
   const start = worker.indexOf("const sparkAudioReplyMatch");
   const end = worker.indexOf("// SPARK replies and reactions", start);
