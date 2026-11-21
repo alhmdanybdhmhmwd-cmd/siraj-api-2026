@@ -1,5 +1,5 @@
 import { AwsClient } from "aws4fetch";
-import { createAiProvider, createDatabaseProvider, createObjectStorageClient, createPushProvider, createBackgroundTaskScheduler } from "./runtime_adapters.js";
+import { createAiProvider, createDatabaseProvider, createObjectStorageClient, createObjectStorageUrl, createPushProvider, createBackgroundTaskScheduler } from "./runtime_adapters.js";
 import { prepareConversationSummaryTranscript, buildConversationSummaryMessages, extractConversationSummaryText } from "./conversation_summary.js";
 import { handleResumableMediaUpload, cleanupExpiredUploadSessions } from "./media_multipart_routes.js";
 
@@ -688,7 +688,6 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
   const expired = await env.DB.prepare(
     "SELECT object_key FROM media_expirations WHERE expires_at <= ? ORDER BY expires_at ASC LIMIT 100"
   ).bind(cutoff).all();
-  const bucket = env.TIGRIS_BUCKET || "siraj-media";
   const storage = createObjectStorageClient(env, AwsClient);
   let deleted = 0;
   for (const item of expired.results || []) {
@@ -698,8 +697,7 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
       console.error("Skipping invalid media expiration key");
       continue;
     }
-    const objectPath = key.split("/").map(encodeURIComponent).join("/");
-    const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
+      const storageUrl = createObjectStorageUrl(env, key);
     try {
       const response = await storage.fetch(storageUrl, { method: "DELETE" });
       if (response.ok || response.status === 404) {
@@ -1321,9 +1319,7 @@ export default {
             "CREATE TABLE IF NOT EXISTS media_expirations (object_key TEXT PRIMARY KEY, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
           ).run();
           const objectKey = currentUser.sub + "/private-memories/" + crypto.randomUUID();
-          const bucket = env.TIGRIS_BUCKET || "siraj-media";
-          const objectPath = objectKey.split("/").map(encodeURIComponent).join("/");
-          const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
+                  const storageUrl = createObjectStorageUrl(env, objectKey);
           const storage = createObjectStorageClient(env, AwsClient);
           const expiresAt = "9999-12-31T23:59:59.999Z";
           const putResponse = await storage.fetch(storageUrl, {
@@ -1684,9 +1680,7 @@ export default {
             "SELECT object_key FROM profile_photos WHERE user_id = ?"
           ).bind(currentUser.sub).first();
           const objectKey = "profiles/" + currentUser.sub + "/" + crypto.randomUUID();
-          const bucket = env.TIGRIS_BUCKET || "siraj-media";
-          const objectPath = objectKey.split("/").map(encodeURIComponent).join("/");
-          const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
+                  const storageUrl = createObjectStorageUrl(env, objectKey);
           const storage = createObjectStorageClient(env, AwsClient);
           const putResponse = await storage.fetch(storageUrl, {
             method: "PUT",
@@ -1772,7 +1766,7 @@ export default {
         ).bind(targetUserId).first();
         if (!photo?.object_key) return json({ error: "Profile photo not found" }, 404);
         const objectPath = String(photo.object_key).split("/").map(encodeURIComponent).join("/");
-        const storageUrl = "https://" + encodeURIComponent(env.TIGRIS_BUCKET || "siraj-media") + ".t3.storage.dev/" + objectPath;
+        const storageUrl = createObjectStorageUrl(env, photo.object_key);
         const storage = createObjectStorageClient(env, AwsClient);
         const stored = await storage.fetch(storageUrl, { method: "GET" });
         if (stored.status === 404) return json({ error: "Profile photo not found" }, 404);
@@ -2051,9 +2045,7 @@ export default {
         const objectKey = currentUser.sub + "/" + crypto.randomUUID();
         const suppliedName = safeFileName(request.headers.get("X-File-Name") || "spark-media");
         const expiresAt = existingStatusExpiry || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-        const bucket = env.TIGRIS_BUCKET || "siraj-media";
-        const objectPath = objectKey.split("/").map(encodeURIComponent).join("/");
-        const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
+            const storageUrl = createObjectStorageUrl(env, objectKey);
         const storage = createObjectStorageClient(env, AwsClient);
         const putResponse = await storage.fetch(storageUrl, {
           method: "PUT",
@@ -2412,9 +2404,7 @@ export default {
           const audioReplyId = crypto.randomUUID();
           const objectKey = currentUser.sub + "/spark-audio/" + crypto.randomUUID();
           const expiresAt = status.expires_at;
-          const bucket = env.TIGRIS_BUCKET || "siraj-media";
-          const objectPath = objectKey.split("/").map(encodeURIComponent).join("/");
-          const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
+                  const storageUrl = createObjectStorageUrl(env, objectKey);
           const storage = createObjectStorageClient(env, AwsClient);
           const putResponse = await storage.fetch(storageUrl, {
             method: "PUT",
@@ -2479,9 +2469,7 @@ export default {
              WHERE r.id = ? AND r.status_id = ? AND s.expires_at > CURRENT_TIMESTAMP LIMIT 1`
           ).bind(audioReplyId, statusId).first();
           if (!row) return json({ error: "SPARK audio reply not found or expired" }, 404);
-          const bucket = env.TIGRIS_BUCKET || "siraj-media";
-          const objectPath = row.objectKey.split("/").map(encodeURIComponent).join("/");
-          const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
+                  const storageUrl = createObjectStorageUrl(env, row.objectKey);
           const storage = createObjectStorageClient(env, AwsClient);
           const media = await storage.fetch(storageUrl);
           if (!media.ok) return json({ error: "SPARK audio reply media unavailable" }, media.status === 404 ? 404 : 502);
@@ -3751,9 +3739,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
             expires_at TEXT NOT NULL
           )
         `).run();
-        const bucket = env.TIGRIS_BUCKET || "siraj-media";
-        const objectPath = key.split("/").map(encodeURIComponent).join("/");
-        const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
+                    const storageUrl = createObjectStorageUrl(env, key);
         const storage = createObjectStorageClient(env, AwsClient);
         const putResponse = await storage.fetch(storageUrl, {
           method: "PUT",
@@ -3856,9 +3842,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
             key.split("/").some(part => !part || part === "." || part === "..")) {
           return json({ error: "Invalid attachment identifier" }, 400);
         }
-        const bucket = env.TIGRIS_BUCKET || "siraj-media";
-        const objectPath = key.split("/").map(encodeURIComponent).join("/");
-        const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
+                    const storageUrl = createObjectStorageUrl(env, key);
         const storage = createObjectStorageClient(env, AwsClient);
         // New uploads have an authorization record in D1, allowing access checks
         // before any request is made to object storage. Legacy objects fall back
