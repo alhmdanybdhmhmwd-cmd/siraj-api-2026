@@ -103,3 +103,92 @@ test("real libSQL applies every isolated Preview migration and supports BARQ dat
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+
+test("real libSQL upgrades an existing chat database without losing account or attachment records", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "barq-libsql-upgrade-"));
+  const client = createClient({ url: `file:${join(directory, "barq-upgrade.db")}` });
+  const db = createLibsqlDatabaseProvider(client);
+
+  try {
+    const migrationsDirectory = resolve("migrations");
+    const migrations = readdirSync(migrationsDirectory)
+      .filter(name => name.endsWith(".sql"))
+      .sort();
+
+    // Build the original core schema and seed pre-upgrade application data.
+    for (const migration of migrations.slice(0, 3)) {
+      await db.exec(readFileSync(join(migrationsDirectory, migration), "utf8"));
+    }
+    await client.execute("PRAGMA foreign_keys = ON");
+
+    await db.batch([
+      db.prepare("INSERT INTO users (id, username, display_name, password_hash, password_salt) VALUES (?, ?, ?, ?, ?)")
+        .bind("legacy-u1", "legacy_one", "Legacy One", "hash1", "salt1"),
+      db.prepare("INSERT INTO users (id, username, display_name, password_hash, password_salt) VALUES (?, ?, ?, ?, ?)")
+        .bind("legacy-u2", "legacy_two", "Legacy Two", "hash2", "salt2")
+    ]);
+
+    const attachmentBody = JSON.stringify({
+      type: "attachment",
+      attachmentId: "legacy-object-1",
+      fileName: "legacy.png"
+    });
+    await db.prepare(
+      "INSERT INTO messages (id, sender_id, receiver_id, body) VALUES (?, ?, ?, ?)"
+    ).bind("legacy-msg-1", "legacy-u1", "legacy-u2", attachmentBody).run();
+
+    // These two tables represent the pre-existing attachment authorization
+    // records consumed by migration 0012.
+    await db.exec(`
+      CREATE TABLE media_expirations (
+        object_key TEXT PRIMARY KEY,
+        expires_at TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE media_access (
+        object_key TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        recipient_id TEXT,
+        group_id TEXT,
+        file_name TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      );
+    `);
+    await db.prepare(
+      "INSERT INTO media_access (object_key, owner_id, recipient_id, file_name, content_type, expires_at) VALUES (?, ?, ?, ?, ?, ?)"
+    ).bind("legacy-object-1", "legacy-u1", "legacy-u2", "legacy.png", "image/png", "2026-12-01T00:00:00.000Z").run();
+    await db.prepare(
+      "INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?)"
+    ).bind("legacy-object-1", "2026-12-01T00:00:00.000Z").run();
+
+    // Apply all remaining schema upgrades in order.
+    for (const migration of migrations.slice(3)) {
+      await db.exec(readFileSync(join(migrationsDirectory, migration), "utf8"));
+    }
+
+    const preserved = await db.prepare(
+      "SELECT m.body, u.username FROM messages m JOIN users u ON u.id = m.sender_id WHERE m.id = ?"
+    ).bind("legacy-msg-1").first();
+    assert.equal(preserved.username, "legacy_one");
+    assert.equal(JSON.parse(preserved.body).attachmentId, "legacy-object-1");
+
+    const access = await db.prepare(
+      "SELECT expires_at FROM media_access WHERE object_key = ?"
+    ).bind("legacy-object-1").first();
+    assert.equal(access.expires_at, "9999-12-31T23:59:59.999Z");
+
+    const expiry = await db.prepare(
+      "SELECT COUNT(*) AS count FROM media_expirations WHERE object_key = ?"
+    ).bind("legacy-object-1").first();
+    assert.equal(Number(expiry.count), 0);
+
+    const editColumns = await client.execute("PRAGMA table_info(messages)");
+    assert.ok(editColumns.rows.some(row => row.name === "edited_at"));
+    assert.ok(editColumns.rows.some(row => row.name === "reply_to_id"));
+  } finally {
+    client.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
