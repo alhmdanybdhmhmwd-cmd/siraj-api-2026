@@ -559,6 +559,32 @@ void main() {
   });
 
 
+  test('private memory photo uploads continue after an individual failure', () async {
+    final attempted = <String>[];
+    final photos = [
+      {'name': 'one.jpg', 'bytes': <int>[1], 'contentType': 'image/jpeg'},
+      {'name': 'two.png', 'bytes': <int>[2], 'contentType': 'image/png'},
+      {'name': 'three.webp', 'bytes': <int>[3], 'contentType': 'image/webp'},
+    ];
+
+    final failures = await uploadPrivateMemoryPhotosSequentially(
+      memoryId: 'memory-1',
+      photos: photos,
+      upload: ({
+        required String memoryId,
+        required List<int> bytes,
+        required String fileName,
+        required String contentType,
+      }) async {
+        attempted.add(fileName);
+        if (fileName == 'two.png') throw Exception('simulated upload failure');
+      },
+    );
+
+    expect(attempted, ['one.jpg', 'two.png', 'three.webp']);
+    expect(failures, ['two.png']);
+  });
+
   testWidgets('private memory photo gallery shows a safe empty state without paging', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
