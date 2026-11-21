@@ -1245,11 +1245,17 @@ class BarqOfflineQueue {
 
   static Future<void> enqueueOutgoing(Map<String, dynamic> message) async {
     final items = await _read(_outboxKey);
-    if (!items.any((item) => item['id'] == message['id'])) {
-      if (items.length >= 200) throw Exception('صندوق الرسائل دون إنترنت ممتلئ؛ اتصل بالإنترنت لمزامنة الرسائل أولاً.');
-      items.add(message);
-      await _write(_outboxKey, items);
+    final messageId = field(message, ['id', 'message_id']);
+    final existingIndex = items.indexWhere((item) => field(item, ['id', 'message_id']) == messageId);
+    if (existingIndex >= 0) {
+      if (!barqOfflineIncomingMessageMatches(items[existingIndex], message)) {
+        throw Exception('تعارض في معرّف رسالة الصادر؛ تم رفض إعادة استخدام المعرّف بمحتوى أو أطراف مختلفة.');
+      }
+      return;
     }
+    if (items.length >= 200) throw Exception('صندوق الرسائل دون إنترنت ممتلئ؛ اتصل بالإنترنت لمزامنة الرسائل أولاً.');
+    items.add(message);
+    await _write(_outboxKey, items);
   }
 
   static Future<void> enqueueIncoming(Map<String, dynamic> message) async {
