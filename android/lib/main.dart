@@ -23,6 +23,7 @@ import 'package:nearby_connections/nearby_connections.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:http/http.dart' as http;
+import 'package:crypto/crypto.dart' as crypto;
 
 const Color gold = Color(0xFFD6AD55);
 const Color dark = Color(0xFF090909);
@@ -1063,7 +1064,12 @@ class Api {
     String? recipientId,
     String? groupId,
   }) async {
-    final idempotencyKey = newBarqMessageId();
+    final fingerprintInput = utf8.encode(
+      '${recipientId ?? ''}|${groupId ?? ''}|$fileName|$contentType|${crypto.sha256.convert(bytes)}',
+    );
+    final resumeStorageKey = 'barq_upload_resume_${crypto.sha256.convert(fingerprintInput)}';
+    final idempotencyKey = await storage.read(key: resumeStorageKey) ?? newBarqMessageId();
+    await storage.write(key: resumeStorageKey, value: idempotencyKey);
     final start = await request('POST', '/api/media/uploads', body: {
       'size': bytes.length,
       'fileName': fileName,
@@ -1124,6 +1130,7 @@ class Api {
     if (attachment is! Map || attachment['attachmentId'] == null) {
       throw Exception('اكتمل الرفع دون تأكيد بيانات المرفق.');
     }
+    await storage.delete(key: resumeStorageKey);
   }
 
   static Future<void> uploadAttachment({
