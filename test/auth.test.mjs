@@ -3084,6 +3084,95 @@ test("private memory photo upload stores the owner-scoped record and access meta
 });
 
 
+test("private memories list only the owner’s records and PATCH rejects another owner’s memory", async () => {
+  const secret = "private-memory-read-edit-test-secret";
+  const token = await worker.signToken({ id: "owner-1", username: "owner-1" }, secret);
+  const reads = [];
+  const db = {
+    prepare(sql) {
+      const statement = {
+        sql,
+        params: [],
+        bind(...params) { this.params = params; return this; },
+        async run() {
+          if (this.sql.includes("UPDATE private_memories")) {
+            return { meta: { changes: this.params[2] === "memory-1" && this.params[3] === "owner-1" ? 1 : 0 } };
+          }
+          return { meta: { changes: 1 } };
+        },
+        async first() {
+          if (this.sql.includes("SELECT session_version FROM account_security")) return { session_version: 0 };
+          if (this.sql.includes("SELECT id, title, content, source_type AS sourceType")) {
+            return {
+              id: this.params[0],
+              title: "Updated memory",
+              content: "Updated private note",
+              sourceType: "text",
+              createdAt: "2026-11-21 10:00:00",
+              updatedAt: "2026-11-21 10:01:00"
+            };
+          }
+          return null;
+        },
+        async all() {
+          reads.push({ sql: this.sql, params: this.params });
+          if (this.sql.includes("FROM private_memories WHERE owner_id = ?")) {
+            return { results: [{
+              id: "memory-1",
+              title: "My memory",
+              content: "Only visible to owner",
+              sourceType: "text",
+              media: undefined
+            }] };
+          }
+          if (this.sql.includes("FROM private_memory_media WHERE owner_id = ?")) {
+            return { results: [
+              { id: "photo-1", memoryId: "memory-1", attachmentId: "owner-1/private-memories/photo-1" },
+              { id: "photo-2", memoryId: "memory-1", attachmentId: "owner-1/private-memories/photo-2" }
+            ] };
+          }
+          return { results: [] };
+        }
+      };
+      return statement;
+    }
+  };
+  const env = { DB: db, JWT_SECRET: secret };
+  const listResponse = await worker.default.fetch(new Request(
+    "https://api.example.test/api/private-memories",
+    { headers: { Authorization: "Bearer " + token } }
+  ), env);
+  assert.equal(listResponse.status, 200);
+  const listed = await listResponse.json();
+  assert.equal(listed.memories.length, 1);
+  assert.equal(listed.memories[0].id, "memory-1");
+  assert.deepEqual(listed.memories[0].media.map(item => item.id), ["photo-1", "photo-2"]);
+  assert.equal(reads.length, 2);
+  assert.ok(reads.every(item => item.params[0] === "owner-1"));
+
+  const updateOwned = await worker.default.fetch(new Request(
+    "https://api.example.test/api/private-memories/memory-1",
+    {
+      method: "PATCH",
+      headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Updated memory", content: "Updated private note" })
+    }
+  ), env);
+  assert.equal(updateOwned.status, 200);
+  const updated = await updateOwned.json();
+  assert.equal(updated.memory.content, "Updated private note");
+
+  const updateForeign = await worker.default.fetch(new Request(
+    "https://api.example.test/api/private-memories/other-owner-memory",
+    {
+      method: "PATCH",
+      headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Intrusion", content: "Must not change" })
+    }
+  ), env);
+  assert.equal(updateForeign.status, 404);
+});
+
 test("private memory creation accepts a title-only photo note and rejects unsupported source types", async () => {
   const secret = "private-memory-create-test-secret";
   const token = await worker.signToken({ id: "owner-1", username: "owner-1" }, secret);
