@@ -61,6 +61,28 @@ async function sessionForOwner(env, id, ownerId) {
   return env.DB.prepare("SELECT * FROM media_upload_sessions WHERE id = ? AND owner_id = ?").bind(id, ownerId).first();
 }
 
+export async function cleanupExpiredUploadSessions(env, now = Date.now()) {
+  await env.DB.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'media_upload_sessions'").first();
+  const cutoff = new Date(now).toISOString();
+  const rows = await env.DB.prepare(
+    "SELECT id, object_key, storage_upload_id FROM media_upload_sessions WHERE state IN ('uploading', 'completing', 'failed') AND expires_at <= ? ORDER BY expires_at LIMIT 50"
+  ).bind(cutoff).all();
+  const storage = storageClient(env);
+  let cleaned = 0;
+  for (const row of rows.results || []) {
+    try {
+      const response = await storage.fetch(objectUrl(env, row.object_key, row.storage_upload_id), { method: "DELETE" });
+      if (!response.ok && response.status !== 404) continue;
+      await env.DB.prepare("DELETE FROM media_upload_sessions WHERE id = ? AND state IN ('uploading', 'completing', 'failed') AND expires_at <= ?")
+        .bind(row.id, cutoff).run();
+      cleaned++;
+    } catch (error) {
+      console.error("Expired multipart upload cleanup failed:", error?.name || "Error");
+    }
+  }
+  return { checked: (rows.results || []).length, cleaned };
+}
+
 export async function handleResumableMediaUpload(request, env, currentUser, url, path, method) {
   const prefix = "/api/media/uploads";
   if (path !== prefix && !path.startsWith(prefix + "/")) return null;
@@ -184,6 +206,15 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
         await env.DB.prepare("UPDATE media_upload_sessions SET state = 'uploading', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND owner_id = ?").bind(sessionId, currentUser.sub).run();
         return json({ error: "Storage could not complete the media upload", storageStatus: completed.status }, 502);
       }
+      const completionXml = await completed.text();
+      if (/<Error[>\\s]/i.test(completionXml)) {
+        await env.DB.prepare("UPDATE media_upload_sessions SET state = 'uploading', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND owner_id = ?").bind(sessionId, currentUser.sub).run();
+        return json({ error: "Storage reported a multipart completion error" }, 502);
+      }
+      await env.DB.prepare(`CREATE TABLE IF NOT EXISTS media_access (
+        object_key TEXT PRIMARY KEY, owner_id TEXT NOT NULL, recipient_id TEXT,
+        group_id TEXT, file_name TEXT NOT NULL, content_type TEXT NOT NULL, expires_at TEXT NOT NULL
+      )`).run();
       const permanentExpiry = "9999-12-31T23:59:59.999Z";
       const results = await env.DB.batch([
         env.DB.prepare(
