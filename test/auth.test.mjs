@@ -2692,6 +2692,29 @@ test("JWT verification rejects unsupported algorithms and oversized tokens", asy
   assert.ok(await worker.verifyToken(token, secret));
 });
 
+test("JWT verification rejects malformed identity and expiry claim types", async () => {
+  const valid = await worker.signToken(user, secret, 0);
+  const [header] = valid.split(".");
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const signPayload = async payload => {
+    const unsigned = header + "." + Buffer.from(JSON.stringify(payload)).toString("base64url");
+    const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(unsigned));
+    return unsigned + "." + Buffer.from(signature).toString("base64url");
+  };
+  const payload = JSON.parse(Buffer.from(valid.split(".")[1], "base64url").toString("utf8"));
+  for (const invalid of [
+    { ...payload, sub: 42 },
+    { ...payload, sub: "   " },
+    { ...payload, exp: String(payload.exp) },
+    { ...payload, exp: payload.exp + 0.5 },
+    { ...payload, exp: Math.floor(Date.now() / 1000) }
+  ]) {
+    assert.equal(await worker.verifyToken(await signPayload(invalid), secret), null);
+  }
+  assert.ok(await worker.verifyToken(valid, secret));
+});
+
 
 test("password recovery also limits attempts across many identifiers from one client", async () => {
   const db = new FakeDB();
