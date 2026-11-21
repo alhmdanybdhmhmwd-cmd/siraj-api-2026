@@ -86,6 +86,9 @@ export async function cleanupExpiredUploadSessions(env, now = Date.now()) {
     try {
       const response = await storage.fetch(objectUrl(env, row.object_key, row.storage_upload_id), { method: "DELETE" });
       if (!response.ok && response.status !== 404) continue;
+      const staged = await env.DB.prepare("SELECT chunk_number AS chunkNumber FROM media_upload_chunks WHERE session_id = ?").bind(row.id).all();
+      const cleanupSession = { id: row.id, object_key: row.object_key };
+      await deleteStagedChunks(storage, env, cleanupSession, (staged.results || []).map(item => Number(item.chunkNumber)));
       await env.DB.prepare("DELETE FROM media_upload_sessions WHERE id = ? AND state IN ('uploading', 'completing', 'failed') AND expires_at <= ?")
         .bind(row.id, cutoff).run();
       cleaned++;
@@ -164,9 +167,10 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
         partSize: MEDIA_MULTIPART_PART_SIZE, expectedParts, expiresAt }, uploadedParts: [], resumed: false }, 201);
     }
 
-    const match = suffix.match(/^([A-Za-z0-9-]{1,128})(?:\/parts\/(\d+)|\/(complete))?$/);
+    const match = suffix.match(/^([A-Za-z0-9-]{1,128})(?:\/chunks\/(\d+)|\/parts\/(\d+)|\/(complete))?$/);
     if (!match) return json({ error: "Invalid upload session route" }, 404);
-    const sessionId = match[1], partNumber = match[2] ? Number(match[2]) : null, action = match[3] || null;
+    const sessionId = match[1], chunkNumber = match[2] ? Number(match[2]) : null,
+      partNumber = match[3] ? Number(match[3]) : null, action = match[4] || null;
     const session = await sessionForOwner(env, sessionId, currentUser.sub);
     if (!session) return json({ error: "Upload session not found" }, 404);
     if (isUploadSessionExpired(session.expires_at) && session.state !== "completed") {
