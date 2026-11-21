@@ -1891,7 +1891,7 @@ Widget messageReactionBar({
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
               backgroundColor: entry.value.any((item) => field(item, ['user_id']) == currentUserId)
-                  ? const Color(0x554A8DFF) : Colors.black26,
+                  ? Theme.of(context).colorScheme.primary.withValues(alpha: .16) : Theme.of(context).colorScheme.surfaceContainerHighest,
               label: Text('${entry.key} ${entry.value.length}', style: const TextStyle(fontSize: 11)),
               onPressed: () => onReaction(
                 entry.key,
@@ -2862,7 +2862,7 @@ class _LoginPageState extends State<LoginPage> {
                         Container(
                           padding: const EdgeInsets.all(18),
                           decoration: BoxDecoration(
-                            color: const Color(0xAA11151D),
+                            color: Theme.of(context).colorScheme.surface.withValues(alpha: .94),
                             borderRadius: BorderRadius.circular(28),
                             border: Border.all(color: Colors.white.withValues(alpha: .10)),
                             boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: .30), blurRadius: 28, offset: const Offset(0, 12))],
@@ -3793,7 +3793,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   ),
                   child: CircleAvatar(
                     radius: 22,
-                    backgroundColor: const Color(0xFF46391F),
+                    backgroundColor: Theme.of(context).colorScheme.surface,
                     child: ClipOval(
                       child: field(status, ['photoUrl', 'photo_url']).isEmpty
                           ? const Icon(Icons.person)
@@ -4085,7 +4085,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             height: 52,
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => const CircleAvatar(
-              backgroundColor: Color(0xFF46391F),
+              backgroundColor: Theme.of(context).colorScheme.surface,
               child: Icon(Icons.broken_image_outlined),
             ),
           ),
@@ -4289,7 +4289,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                 errorBuilder: (_, __, ___) => Container(
                                   width: 72,
                                   height: 72,
-                                  color: const Color(0xFF292929),
+                                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
                                   alignment: Alignment.center,
                                   child: const Icon(Icons.broken_image_outlined),
                                 ),
@@ -4898,7 +4898,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [Color(0xFF302719), Color(0xFF17130D)]),
+            gradient: LinearGradient(colors: [Theme.of(context).colorScheme.surface, Theme.of(context).scaffoldBackgroundColor]),
             borderRadius: BorderRadius.circular(22),
             border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4)),
           ),
