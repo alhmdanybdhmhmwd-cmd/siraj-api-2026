@@ -346,6 +346,35 @@ class SirajRealtime {
   }
 }
 
+typedef PrivateMemoryPhotoUploader = Future<void> Function({
+  required String memoryId,
+  required List<int> bytes,
+  required String fileName,
+  required String contentType,
+});
+
+Future<List<String>> uploadPrivateMemoryPhotosSequentially({
+  required String memoryId,
+  required List<Map<String, dynamic>> photos,
+  required PrivateMemoryPhotoUploader upload,
+}) async {
+  final failedFiles = <String>[];
+  for (final photo in photos) {
+    final fileName = photo['name'] as String? ?? 'صورة بدون اسم';
+    try {
+      await upload(
+        memoryId: memoryId,
+        bytes: photo['bytes'] as List<int>,
+        fileName: fileName,
+        contentType: photo['contentType'] as String,
+      );
+    } catch (_) {
+      failedFiles.add(fileName);
+    }
+  }
+  return failedFiles;
+}
+
 class Api {
   static String? token;
   static String? lastRecoveryCode;
@@ -3924,14 +3953,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                               content: content,
                               sourceType: sourceType,
                             );
-                      for (final photo in photos) {
-                        await Api.uploadPrivateMemoryPhoto(
-                          memoryId: field(saved, ['id']),
-                          bytes: photo['bytes'] as List<int>,
-                          fileName: photo['name'] as String,
-                          contentType: photo['contentType'] as String,
-                        );
-                      }
                     } catch (e) {
                       if (saved != null) {
                         try {
@@ -3948,6 +3969,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       }
                       return;
                     }
+                    final failedPhotoNames = await uploadPrivateMemoryPhotosSequentially(
+                      memoryId: field(saved, ['id']),
+                      photos: photos,
+                      upload: Api.uploadPrivateMemoryPhoto,
+                    );
                     try {
                       final loaded = await Api.privateMemories();
                       if (mounted) setState(() => memories = loaded);
@@ -3956,7 +3982,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     }
                     if (dialogContext.mounted) Navigator.pop(dialogContext);
                     if (pageContext.mounted) {
-                      showMsg(pageContext, editing ? 'تم تحديث الذكرى.' : 'تم حفظ الذكرى بشكل خاص.');
+                      if (failedPhotoNames.isEmpty) {
+                        showMsg(pageContext, editing ? 'تم تحديث الذكرى.' : 'تم حفظ الذكرى بشكل خاص.');
+                      } else {
+                        final uploadedCount = photos.length - failedPhotoNames.length;
+                        showMsg(
+                          pageContext,
+                          'تم حفظ الذكرى ورفع $uploadedCount من ${photos.length} صور. تعذر رفع: ${failedPhotoNames.join('، ')}',
+                        );
+                      }
                     }
                   },
                   child: const Text('حفظ'),
