@@ -162,7 +162,7 @@ test("object storage provider exposes neutral get put delete head post and reque
   assert.equal(calls[6].url, "https://signed.example/existing-object?signature=kept");
   assert.equal(calls[6].init.method, "GET");
   assert.deepEqual(calls.map(call => new URL(call.url).pathname), [
-    "/bucket/a.png", "/bucket/b.png", "/bucket/c.png", "/bucket/d.png", "/bucket/e.png", "/bucket/f.png"
+    "/bucket/a.png", "/bucket/b.png", "/bucket/c.png", "/bucket/d.png", "/bucket/e.png", "/bucket/f.png", "/existing-object"
   ]);
   assert.deepEqual(calls.map(call => call.init.method), ["GET", "PUT", "DELETE", "HEAD", "POST", "PATCH"]);
   assert.equal(new URL(calls[2].url).searchParams.get("uploadId"), "upload-1");
