@@ -119,3 +119,16 @@
 - لم يتم أي نقل بيانات أو تغيير في D1 الإنتاجي.
 
 **الحالة الحالية:** موائم libSQL واختباراته العقدية جاهزان برمجياً؛ الخطوة الثانية ما زالت مفتوحة حتى اجتياز اختبار المحرك الفعلي والترحيلات وتكامل بيانات التطبيق في Preview معزول. لا تغيير إنتاجي.
+
+
+### مراجعة واجهة عميل libSQL الرسمية
+
+تمت مراجعة مرجع `@libsql/client` الرسمي بتاريخ 2026-11-22:
+
+- توقيع `batch(stmts, mode?)` يقبل كائنات `{ sql, args }` ويضمن تنفيذ الدفعة كوحدة ذرية؛ وضع `write` صالح للدفعات التي قد تحتوي كتابة.
+- `execute(stmt)` يقبل SQL string أو كائن statement مع args، لذا فتمرير `{ sql, args }` في prepared statements صحيح.
+- `executeMultiple(sql)` مخصص لتسلسل أوامر SQL مفصولة بفواصل منقوطة، وهو المسار الصحيح لملفات migrations.
+
+تم إصلاح موائم libSQL بحيث لا يعود إلى `execute({ sql })` عند غياب `executeMultiple`؛ ذلك المسار قد ينفذ أمراً منفرداً ولا يفي بعقد تشغيل ملفات SQL المتعددة. أصبح الموائم يفشل بوضوح عند غياب هذه القدرة، وأضيف اختبار يمنع التراجع إلى السلوك المضلل.
+
+المراجع الرسمية: [Client API](https://tursodatabase.github.io/libsql-client-ts/interfaces/Client.html) و[Transaction modes](https://tursodatabase.github.io/libsql-client-ts/types/TransactionMode.html).
