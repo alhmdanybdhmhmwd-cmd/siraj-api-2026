@@ -2,7 +2,10 @@ import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 
 const files = ["src/src/index.js", "src/src/media_multipart_routes.js"];
-const source = (await Promise.all(files.map(path => readFile(new URL(`../${path}`, import.meta.url), "utf8")))).join("\n");
+const [source, adapterSource] = await Promise.all([
+  Promise.all(files.map(path => readFile(new URL(`../${path}`, import.meta.url), "utf8"))).then(parts => parts.join("\\n")),
+  readFile(new URL("../src/src/runtime_adapters.js", import.meta.url), "utf8")
+]);
 const references = [...source.matchAll(/\benv\.([A-Za-z_$][\w$]*)/g)].reduce((counts, match) => {
   counts[match[1]] = (counts[match[1]] || 0) + 1;
   return counts;
@@ -24,7 +27,11 @@ assert.deepEqual(
   approvedBindings,
   "A new or removed Worker binding needs an explicit portability/security review."
 );
-assert.match(source, /env\.DB\.prepare\(/, "D1 access should remain visible to the portability audit.");
+assert.match(source, /env\.DB\.prepare\(/, "SQL access should remain visible to the portability audit.");
+assert.equal((source.match(/createDatabaseProvider\(env\.DB\)/g) || []).length, 2, "HTTP and scheduled entrypoints must both receive the database adapter.");
+assert.match(adapterSource, /export function createDatabaseProvider\(binding\)/, "The provider-neutral SQL adapter must remain available.");
+assert.match(adapterSource, /prepare\(sql\)/, "The SQL adapter must expose prepared statements.");
+assert.match(adapterSource, /async batch\(statements\)/, "The SQL adapter must expose batched statements.");
 assert.match(source, /createAiProvider\(env\.AI\)/, "Workers AI should flow through the provider-neutral adapter.");
 assert.match(source, /AwsClient/, "Tigris/S3-compatible storage adapter should remain visible to the portability audit.");
 
@@ -34,6 +41,7 @@ const report = {
   bindings: Object.fromEntries(actualBindings.map(name => [name, references[name]])),
   directD1References: references.DB,
   directWorkersAIReferences: references.AI,
+  databaseAdapter: "SQL capability adapter is wired at HTTP and scheduled entrypoints; current implementation still wraps D1.",
   note: "Static dependency inventory only; it does not prove a Node/AWS runtime implementation or VPN reachability."
 };
 process.stdout.write(JSON.stringify(report, null, 2) + "\n");
