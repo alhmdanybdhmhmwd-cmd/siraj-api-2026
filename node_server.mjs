@@ -109,6 +109,9 @@ export function startScheduledMaintenance(env, intervalMs = 15 * 60 * 1000, logg
 
 export async function startNodeApiServer(options = {}) {
   const env = options.env || createNodeEnvironment();
+  if (typeof env.DB.healthCheck === "function" && !(await env.DB.healthCheck())) {
+    throw new Error("Standalone BARQ database readiness check failed");
+  }
   const server = createNodeApiServer({ env, logger: options.logger || console });
   const port = Number(options.port ?? process.env.PORT ?? 8787);
   const host = options.host || process.env.HOST || "0.0.0.0";
@@ -117,6 +120,9 @@ export async function startNodeApiServer(options = {}) {
     server.once("error", reject);
     server.listen(port, host, resolve);
   });
+  server.requestTimeout = 120_000;
+  server.headersTimeout = 30_000;
+  server.keepAliveTimeout = 5_000;
   const address = server.address();
   (options.logger || console).log("BARQ standalone API listening on " + host + ":" + address.port);
   let closing;
