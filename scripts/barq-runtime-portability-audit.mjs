@@ -6,7 +6,7 @@ const [source, adapterSource] = await Promise.all([
   Promise.all(files.map(path => readFile(new URL(`../${path}`, import.meta.url), "utf8"))).then(parts => parts.join("\n")),
   readFile(new URL("../src/src/runtime_adapters.js", import.meta.url), "utf8")
 ]);
-const references = [...source.matchAll(/\benv(?:\?\.)?\.([A-Za-z_$][\w$]*)/g)].reduce((counts, match) => {
+const references = [...source.matchAll(/\benv(?:\?\.|\.)([A-Za-z_$][\w$]*)/g)].reduce((counts, match) => {
   counts[match[1]] = (counts[match[1]] || 0) + 1;
   return counts;
 }, {});
