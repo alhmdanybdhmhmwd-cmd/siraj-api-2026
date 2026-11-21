@@ -337,7 +337,7 @@ Future<void> barqFcmBackgroundHandler(RemoteMessage message) async {
 
 /// Converts only supported notification payloads into safe navigation intents.
 Map<String, String>? barqNotificationRouteFromData(Map<String, dynamic> data) {
-  final type = data['type']?.toString();
+  final type = data['type']?.toString().trim() ?? '';
   if (type == 'direct_message') {
     final senderId = data['senderId']?.toString().trim() ?? '';
     if (senderId.isEmpty) return null;
