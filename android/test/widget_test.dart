@@ -104,6 +104,18 @@ void main() {
     expect(barqOfflineIncomingMessageMatches(original, {...original, 'receiver_id': 'other'}), isFalse);
   });
 
+  test('offline queue decoding preserves empty queues and rejects corrupted data', () {
+    expect(decodeBarqOfflineQueue(null), isEmpty);
+    expect(decodeBarqOfflineQueue(''), isEmpty);
+    expect(decodeBarqOfflineQueue('[{"id":"m1","body":"hello"}]'), [
+      {'id': 'm1', 'body': 'hello'},
+    ]);
+    expect(() => decodeBarqOfflineQueue('{bad json'), throwsFormatException);
+    expect(() => decodeBarqOfflineQueue('{"id":"m1"}'), throwsFormatException);
+    expect(() => decodeBarqOfflineQueue('[{"id":"m1"}, null]'), throwsFormatException);
+    expect(() => decodeBarqOfflineQueue('[{"id":"m1"}, "bad-entry"]'), throwsFormatException);
+  });
+
   test('Nearby outbox duplicate IDs must match sender, receiver, and body', () {
     final original = <String, dynamic>{
       'id': 'a1b2c3d4e5f60708a1b2c3d4e5f60708',
