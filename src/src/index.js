@@ -1533,6 +1533,7 @@ export default {
 
         const friendId = (url.searchParams.get("with") || "").trim();
         if (!friendId) return json({ error: "Friend ID is required" }, 400);
+        if (await isBlockedPair(currentUser.sub, friendId)) return json({ error: "Private communication is unavailable" }, 403);
         const friendship = await env.DB.prepare(
           "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
         ).bind(currentUser.sub, friendId).first();
@@ -3410,7 +3411,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         const friendship = await env.DB.prepare(
           "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
         ).bind(currentUser.sub, friendId).first();
-        if (!friendship) return json({ error: "Conversation access denied" }, 403);
+        if (!friendship || await isBlockedPair(currentUser.sub, friendId)) return json({ error: "Conversation access denied" }, 403);
         if (!(await consumeLoginAttempt(env, "conversation-summary", currentUser.sub, 5))) {
           return json({ error: "تم بلوغ حد الملخصات؛ حاول بعد 15 دقيقة." }, 429);
         }
@@ -3576,6 +3577,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
             error: "You can only view chats with friends"
           }, 403);
         }
+        if (await isBlockedPair(currentUser.sub, friendId)) return json({ error: "Private communication is unavailable" }, 403);
 
         const requestedLimit = Number(url.searchParams.get("limit") || 100);
         const limit = Number.isInteger(requestedLimit)
