@@ -395,6 +395,18 @@ test("ephemeral send rejects non-friends, self messages and oversized text", asy
   assert.equal(db.ephemeralRows?.length || 0, 0);
 });
 
+test("ephemeral history requires an existing friend relationship", async () => {
+  const db = new FakeDB();
+  db.friendshipAllowed = false;
+  const token = await worker.signToken(user, secret, 0);
+  const response = await worker.default.fetch(new Request(
+    "https://api.example.test/api/ephemeral-messages?with=stranger",
+    { headers: { Authorization: "Bearer " + token } }
+  ), { DB: db, JWT_SECRET: secret });
+  assert.equal(response.status, 403);
+  assert.equal(db.ephemeralRows, undefined);
+});
+
 test("ephemeral messages start the ten-second TTL on recipient read and schedule physical deletion", async () => {
   const db = new FakeDB();
   db.ephemeralRows = [{
