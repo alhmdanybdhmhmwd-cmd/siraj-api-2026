@@ -20,7 +20,7 @@ test("monthly usage cost estimator converts bytes and operation counts without a
     storageGiBMonths: 2, egressGiB: 3, requestsMillions: 2,
     databaseReadsMillions: 4, databaseWritesMillions: 1
   });
-  assert.equal(estimate.total, 1.89);
+  assert.ok(Math.abs(estimate.total - 1.89) < 1e-9);
 });
 
 test("budget monitor warns at 80 percent and marks exceeded budgets without blocking", () => {
