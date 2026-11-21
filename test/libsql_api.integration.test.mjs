@@ -81,6 +81,16 @@ test("BARQ account registration, contact creation, and idempotent chat work thro
     assert.equal(loggedIn.user.id, first.user.id);
     assert.ok(loggedIn.token);
 
+    const searchResponse = await request(
+      "/api/users/search?q=api_barq_two",
+      "GET",
+      undefined,
+      first.token
+    );
+    assert.equal(searchResponse.status, 200);
+    const search = await searchResponse.json();
+    assert.ok(search.users.some(user => user.id === second.user.id));
+
     const contactResponse = await request(
       "/api/contacts",
       "POST",
