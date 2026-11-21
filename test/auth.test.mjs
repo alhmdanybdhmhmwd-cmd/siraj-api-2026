@@ -2938,3 +2938,76 @@ test("deleting a private memory atomically revokes photo access and queues stora
     sql.findIndex(value => value.includes("DELETE FROM media_access"))
   );
 });
+
+
+test("private memories list is owner-scoped and updates cannot cross owners", async () => {
+  const secret = "private-memory-scope-test-secret";
+  const token = await worker.signToken({ id: "owner-1", username: "owner-1" }, secret);
+  const queries = [];
+  const db = {
+    prepare(sql) {
+      const statement = {
+        sql,
+        params: [],
+        bind(...params) { this.params = params; return this; },
+        async run() {
+          queries.push({ sql: this.sql, params: this.params });
+          return { meta: { changes: this.sql.startsWith("UPDATE private_memories") ? 0 : 1 } };
+        },
+        async first() {
+          if (this.sql.includes("SELECT session_version FROM account_security")) return { session_version: 0 };
+          return null;
+        },
+        async all() {
+          queries.push({ sql: this.sql, params: this.params });
+          if (this.sql.includes("FROM private_memories WHERE owner_id = ?")) {
+            assert.deepEqual(this.params, ["owner-1"]);
+            return { results: [{
+              id: "memory-1",
+              title: "My private note",
+              content: "Only the owner should see this",
+              sourceType: "text"
+            }] };
+          }
+          if (this.sql.includes("FROM private_memory_media WHERE owner_id = ?")) {
+            assert.deepEqual(this.params, ["owner-1"]);
+            return { results: [{
+              id: "photo-1",
+              memoryId: "memory-1",
+              attachmentId: "owner-1/private-memories/photo-1",
+              fileName: "note.png",
+              contentType: "image/png",
+              size: 128
+            }] };
+          }
+          return { results: [] };
+        }
+      };
+      return statement;
+    }
+  };
+  const listResponse = await worker.default.fetch(new Request(
+    "https://api.example.test/api/private-memories",
+    { headers: { Authorization: "Bearer " + token } }
+  ), { DB: db, JWT_SECRET: secret });
+  assert.equal(listResponse.status, 200);
+  const listBody = await listResponse.json();
+  assert.equal(listBody.memories.length, 1);
+  assert.equal(listBody.memories[0].id, "memory-1");
+  assert.equal(listBody.memories[0].media[0].attachmentId, "owner-1/private-memories/photo-1");
+
+  const updateResponse = await worker.default.fetch(new Request(
+    "https://api.example.test/api/private-memories/not-owned",
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: "Bearer " + token,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ title: "Attempted edit", content: "Should not update" })
+    }
+  ), { DB: db, JWT_SECRET: secret });
+  assert.equal(updateResponse.status, 404);
+  assert.ok(queries.some(item => item.sql.includes("UPDATE private_memories") &&
+    item.params[2] === "not-owned" && item.params[3] === "owner-1"));
+});
