@@ -1,0 +1,96 @@
+name: BARQ isolated Preview Worker deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_preview:
+        description: "Explicitly approve deploying the isolated BARQ Preview Worker (never production)"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-preview:
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_preview == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.BARQ_CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.BARQ_CLOUDFLARE_ACCOUNT_ID }}
+      BARQ_PREVIEW_JWT_SECRET: ${{ secrets.BARQ_PREVIEW_JWT_SECRET }}
+      BARQ_PREVIEW_TIGRIS_ACCESS_KEY_ID: ${{ secrets.BARQ_PREVIEW_TIGRIS_ACCESS_KEY_ID }}
+      BARQ_PREVIEW_TIGRIS_SECRET_ACCESS_KEY: ${{ secrets.BARQ_PREVIEW_TIGRIS_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Worker dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Verify isolated Preview target and required secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$BARQ_PREVIEW_JWT_SECRET"
+          python3 - <<'PY'
+          import tomllib
+          from pathlib import Path
+          test = tomllib.loads(Path("wrangler.test.toml").read_text())
+          prod = tomllib.loads(Path("wrangler.toml").read_text())
+          assert test["name"] == "barq-api-phase2-test"
+          assert test["d1_databases"][0]["database_name"] == "barq-phase2-test-2026-11-20"
+          assert test["d1_databases"][0]["database_id"] == "5bfada32-4f9b-4edb-85dd-3b3b30ab73b0"
+          assert test["d1_databases"][0]["database_id"] != prod["d1_databases"][0]["database_id"]
+          assert test["d1_databases"][0]["database_id"] != "0db93afd-4bf5-4423-9e25-7a2f4f4bdbe0"
+          assert test["vars"]["TIGRIS_BUCKET"] == "barq-preview-media"
+          assert test["vars"]["TIGRIS_BUCKET"] != prod["vars"]["TIGRIS_BUCKET"]
+          assert "routes" not in test
+          assert test["workers_dev"] is True
+          assert test["name"] != prod["name"]
+          print("Preview target guard passed: dedicated Worker + isolated D1/media namespace, no production routes.")
+          PY
+          npx --yes wrangler@4 whoami
+      - name: Deploy isolated Preview Worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 deploy --config wrangler.test.toml 2>&1 | tee deploy.log
+          URL="$(grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' deploy.log | head -n 1 || true)"
+          test -n "$URL"
+          echo "BARQ_PREVIEW_URL=$URL" >> "$GITHUB_ENV"
+      - name: Install Preview-only secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$BARQ_PREVIEW_JWT_SECRET" | npx --yes wrangler@4 secret put JWT_SECRET --config wrangler.test.toml
+          if [ -n "$BARQ_PREVIEW_TIGRIS_ACCESS_KEY_ID" ] && [ -n "$BARQ_PREVIEW_TIGRIS_SECRET_ACCESS_KEY" ]; then
+            printf '%s' "$BARQ_PREVIEW_TIGRIS_ACCESS_KEY_ID" | npx --yes wrangler@4 secret put TIGRIS_ACCESS_KEY_ID --config wrangler.test.toml
+            printf '%s' "$BARQ_PREVIEW_TIGRIS_SECRET_ACCESS_KEY" | npx --yes wrangler@4 secret put TIGRIS_SECRET_ACCESS_KEY --config wrangler.test.toml
+          else
+            echo "Preview media storage credentials are not configured; media routes remain unavailable in this Preview deployment."
+          fi
+      - name: Verify deployed Preview health endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --connect-timeout 5 --max-time 15 --silent --show-error --fail "$BARQ_PREVIEW_URL/health/live" > live.json
+          curl --connect-timeout 5 --max-time 15 --silent --show-error --fail "$BARQ_PREVIEW_URL/health/ready" > ready.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const live = JSON.parse(fs.readFileSync('live.json', 'utf8'));
+          const ready = JSON.parse(fs.readFileSync('ready.json', 'utf8'));
+          if (live.status !== 'alive' || live.service !== 'barq-api') throw new Error('Preview liveness verification failed');
+          if (ready.status !== 'ready' || ready.service !== 'barq-api') throw new Error('Preview D1 readiness verification failed');
+          console.log('Isolated Preview Worker is live and its test D1 is ready.');
+          NODE
+          echo "Preview Worker URL: $BARQ_PREVIEW_URL" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Exercise deployed Preview account, profile, privacy, and contacts APIs
+        env:
+          BARQ_PREVIEW_URL: ${{ env.BARQ_PREVIEW_URL }}
+        run: node test/barq_preview_integration.mjs

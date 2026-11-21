@@ -1,0 +1,86 @@
+name: BARQ isolated D1 test database
+# Provisioning is restricted to the dedicated test database name; production ID is guarded.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - barq/phase-2-d1-isolated-2026-11-20
+      - barq/phase-2-android-ci-2026-11-20
+    paths:
+      - .github/workflows/barq-create-isolated-d1.yml
+
+permissions:
+  contents: read
+
+jobs:
+  create-isolated-d1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.BARQ_CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.BARQ_CLOUDFLARE_ACCOUNT_ID }}
+      DB_NAME: barq-phase2-test-2026-11-20
+      PRODUCTION_DB_ID: 0db93afd-4bf5-4423-9e25-7a2f4f4bdbe0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate account and isolate production
+        id: validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          mkdir -p "$RUNNER_TEMP/barq-d1"
+          cd "$RUNNER_TEMP/barq-d1"
+          npx --yes wrangler@4 whoami
+          npx --yes wrangler@4 d1 list --json > before.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const rows = JSON.parse(fs.readFileSync('before.json', 'utf8'));
+          const list = Array.isArray(rows) ? rows : (rows.result ?? rows.databases ?? []);
+          const prod = list.find(x => x.uuid === process.env.PRODUCTION_DB_ID);
+          if (!prod || prod.name !== 'siraj-db') throw new Error('Production DB identity check failed; refusing to create anything.');
+          const existing = list.find(x => x.name === process.env.DB_NAME);
+          if (existing) {
+            if (!existing.uuid || existing.uuid === process.env.PRODUCTION_DB_ID) throw new Error('Existing test DB identity is unsafe; refusing to continue.');
+            fs.writeFileSync('created-db-id.txt', existing.uuid);
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, 'exists=true\n');
+            console.log('Verified existing isolated test DB; no duplicate will be created:', existing.uuid);
+          } else {
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, 'exists=false\n');
+            console.log('Safety check passed: production DB identified and target name unused.');
+          }
+          NODE
+      - name: Create dedicated test database
+        if: steps.validate.outputs.exists != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/barq-d1"
+          npx --yes wrangler@4 d1 create "$DB_NAME" 2>&1 | tee create.log
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const output = fs.readFileSync('create.log', 'utf8');
+          const match = output.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+          if (!match || match[0] === process.env.PRODUCTION_DB_ID) throw new Error('Could not safely identify a distinct D1 database ID.');
+          fs.writeFileSync('created-db-id.txt', match[0]);
+          console.log('Created isolated D1 database ID:', match[0]);
+          NODE
+      - name: Verify isolated database and report ID
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/barq-d1"
+          npx --yes wrangler@4 d1 list --json > after.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const rows = JSON.parse(fs.readFileSync('after.json', 'utf8'));
+          const list = Array.isArray(rows) ? rows : (rows.result ?? rows.databases ?? []);
+          const id = fs.readFileSync('created-db-id.txt', 'utf8').trim();
+          const found = list.find(x => x.name === process.env.DB_NAME && x.uuid === id);
+          if (!found || id === process.env.PRODUCTION_DB_ID) throw new Error('Post-create isolation verification failed.');
+          console.log('Verified isolated test DB:', found.name, found.uuid);
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, '## BARQ isolated D1 database\n\n- Name: `' + found.name + '`\n- ID: `' + found.uuid + '`\n- Production database was not modified.\n');
+          NODE
