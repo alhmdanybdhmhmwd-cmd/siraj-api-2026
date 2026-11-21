@@ -7,6 +7,10 @@ compatibility_date = "2026-11-16"
 binding = "DB"
 database_name = "siraj-db"
 database_id = "0db93afd-4bf5-4423-9e25-7a2f4f4bdbe0"
+migrations_dir = "migrations"
 
 [vars]
 TIGRIS_BUCKET = "siraj-media"
+
+[triggers]
+crons = ["*/15 * * * *"]
