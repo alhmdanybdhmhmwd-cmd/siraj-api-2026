@@ -1,6 +1,6 @@
 import { AwsClient } from "aws4fetch";
 import { prepareConversationSummaryTranscript, buildConversationSummaryMessages, extractConversationSummaryText } from "./conversation_summary.js";
-import { handleResumableMediaUpload } from "./media_multipart_routes.js";
+import { handleResumableMediaUpload, cleanupExpiredUploadSessions } from "./media_multipart_routes.js";
 
 
 const corsHeaders = {
@@ -838,6 +838,14 @@ export default {
       console.log("Media expiration cleanup:", result);
     } catch (error) {
       console.error("Media expiration cleanup failed:", error);
+    }
+
+    // Expired upload sessions are temporary control records; completed media is untouched.
+    try {
+      const result = await cleanupExpiredUploadSessions(env);
+      console.log("Expired multipart session cleanup:", result);
+    } catch (error) {
+      console.error("Expired multipart session cleanup failed:", error);
     }
     try {
       const result = await cleanupExpiredEphemeralMessages(env);
