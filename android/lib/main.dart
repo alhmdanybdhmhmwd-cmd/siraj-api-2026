@@ -1291,14 +1291,19 @@ List<Map<String, dynamic>> barqOfflineItemsNotOnServerPage(
   List<Map<String, dynamic>> queuedItems,
   List<Map<String, dynamic>> serverMessages,
 ) {
-  final serverIds = serverMessages
-      .map((item) => field(item, ['id', 'message_id']))
-      .where((id) => id.isNotEmpty)
-      .toSet();
-  if (serverIds.isEmpty) return queuedItems;
-  return queuedItems
-      .where((item) => !serverIds.contains(field(item, ['id', 'message_id'])))
-      .toList();
+  if (serverMessages.isEmpty) return queuedItems;
+  return queuedItems.where((queued) {
+    final id = field(queued, ['id', 'message_id']);
+    if (id.isEmpty) return true;
+    final matchingServerMessage = serverMessages.where(
+      (server) => field(server, ['id', 'message_id']) == id,
+    );
+    // لا نحذف نسخة الطابور لمجرد تطابق المعرّف؛ نتحقق أيضاً من
+    // المرسل والمستلم والمحتوى حتى لا نفقد رسالة عند تعارض/انتحال ID.
+    return !matchingServerMessage.any(
+      (server) => barqOfflineIncomingMessageMatches(queued, server),
+    );
+  }).toList();
 }
 
 class BarqOfflineQueue {
