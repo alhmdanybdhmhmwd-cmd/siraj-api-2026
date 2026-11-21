@@ -785,7 +785,7 @@ async function cleanupExpiredRateLimits(env, now = Date.now()) {
   return results;
 }
 
-export { phoneVariants, safeFileName, cleanupExpiredMedia, cleanupExpiredRateLimits, cleanupExpiredEphemeralMessages, cleanupExpiredRevokedSessions };
+export { phoneVariants, safeFileName, cleanupExpiredMedia, cleanupExpiredRateLimits, cleanupExpiredEphemeralMessages, cleanupExpiredRevokedSessions, signToken, verifyToken, authenticate, hashPassword, sendSirajPush, detectProfileImageType, readRequestBodyLimited, rollbackSparkMediaUpload };
 
 
 async function createConversationSummary(env, messages, conversationType) {
