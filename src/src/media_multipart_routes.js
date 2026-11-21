@@ -78,19 +78,27 @@ export async function cleanupExpiredUploadSessions(env, now = Date.now()) {
   await env.DB.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'media_upload_sessions'").first();
   const cutoff = new Date(now).toISOString();
   const rows = await env.DB.prepare(
-    "SELECT id, object_key, storage_upload_id FROM media_upload_sessions WHERE state IN ('uploading', 'completing', 'failed') AND expires_at <= ? ORDER BY expires_at LIMIT 50"
+    "SELECT id, object_key, storage_upload_id, state FROM media_upload_sessions " +
+    "WHERE (state IN ('uploading', 'completing', 'failed') AND expires_at <= ?) " +
+    "OR (state = 'completed' AND EXISTS (SELECT 1 FROM media_upload_chunks c WHERE c.session_id = media_upload_sessions.id)) " +
+    "ORDER BY expires_at LIMIT 50"
   ).bind(cutoff).all();
   const storage = storageClient(env);
   let cleaned = 0;
   for (const row of rows.results || []) {
     try {
-      const response = await storage.fetch(objectUrl(env, row.object_key, row.storage_upload_id), { method: "DELETE" });
-      if (!response.ok && response.status !== 404) continue;
+      if (row.state !== "completed") {
+        const response = await storage.fetch(objectUrl(env, row.object_key, row.storage_upload_id), { method: "DELETE" });
+        if (!response.ok && response.status !== 404) continue;
+      }
       const staged = await env.DB.prepare("SELECT chunk_number AS chunkNumber FROM media_upload_chunks WHERE session_id = ?").bind(row.id).all();
       const cleanupSession = { id: row.id, object_key: row.object_key };
       await deleteStagedChunks(storage, env, cleanupSession, (staged.results || []).map(item => Number(item.chunkNumber)));
-      await env.DB.prepare("DELETE FROM media_upload_sessions WHERE id = ? AND state IN ('uploading', 'completing', 'failed') AND expires_at <= ?")
-        .bind(row.id, cutoff).run();
+      await env.DB.prepare("DELETE FROM media_upload_chunks WHERE session_id = ?").bind(row.id).run();
+      if (row.state !== "completed") {
+        await env.DB.prepare("DELETE FROM media_upload_sessions WHERE id = ? AND state IN ('uploading', 'completing', 'failed') AND expires_at <= ?")
+          .bind(row.id, cutoff).run();
+      }
       cleaned++;
     } catch (error) {
       console.error("Expired multipart upload cleanup failed:", error?.name || "Error");
@@ -193,10 +201,15 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
         method: "PUT", headers: { "Content-Length": String(bytes.byteLength), "Content-Type": "application/octet-stream" }, body: bytes
       });
       if (!stagedUpload.ok) return json({ error: "Could not stage transport chunk", storageStatus: stagedUpload.status }, 502);
-      await env.DB.prepare(
-        "INSERT INTO media_upload_chunks (session_id, chunk_number, size) VALUES (?, ?, ?) " +
-        "ON CONFLICT(session_id, chunk_number) DO UPDATE SET size = excluded.size, uploaded_at = CURRENT_TIMESTAMP"
-      ).bind(sessionId, chunkNumber, bytes.byteLength).run();
+      try {
+        await env.DB.prepare(
+          "INSERT INTO media_upload_chunks (session_id, chunk_number, size) VALUES (?, ?, ?) " +
+          "ON CONFLICT(session_id, chunk_number) DO UPDATE SET size = excluded.size, uploaded_at = CURRENT_TIMESTAMP"
+        ).bind(sessionId, chunkNumber, bytes.byteLength).run();
+      } catch (error) {
+        await storage.fetch(objectUrl(env, stagedKey), { method: "DELETE" }).catch(() => {});
+        throw error;
+      }
       const firstChunk = (targetPart - 1) * chunksPerPart + 1;
       const expectedChunks = Math.ceil(Number(session.total_size) / MEDIA_TRANSPORT_CHUNK_SIZE);
       const lastChunk = Math.min(targetPart * chunksPerPart, expectedChunks);
@@ -231,8 +244,12 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
         "INSERT INTO media_upload_parts (session_id, part_number, etag, size) VALUES (?, ?, ?, ?) " +
         "ON CONFLICT(session_id, part_number) DO UPDATE SET etag = excluded.etag, size = excluded.size, uploaded_at = CURRENT_TIMESTAMP"
       ).bind(sessionId, targetPart, etag, partBytes.byteLength).run();
-      await deleteStagedChunks(storage, env, session, Array.from({ length: lastChunk - firstChunk + 1 }, (_, index) => firstChunk + index));
-      await env.DB.prepare("DELETE FROM media_upload_chunks WHERE session_id = ? AND chunk_number BETWEEN ? AND ?").bind(sessionId, firstChunk, lastChunk).run();
+      try {
+        await deleteStagedChunks(storage, env, session, Array.from({ length: lastChunk - firstChunk + 1 }, (_, index) => firstChunk + index));
+        await env.DB.prepare("DELETE FROM media_upload_chunks WHERE session_id = ? AND chunk_number BETWEEN ? AND ?").bind(sessionId, firstChunk, lastChunk).run();
+      } catch (cleanupError) {
+        console.error("Completed multipart staging cleanup deferred:", cleanupError?.name || "Error");
+      }
       await env.DB.prepare("UPDATE media_upload_sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = ? AND owner_id = ? AND state = 'uploading'").bind(sessionId, currentUser.sub).run();
       return json({ sessionId, chunkNumber, partNumber: targetPart, etag, size: partBytes.byteLength, partReady: true });
     }
