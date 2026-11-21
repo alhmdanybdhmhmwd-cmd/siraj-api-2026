@@ -3821,7 +3821,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               child: Column(children: [
                 const Icon(Icons.circle_outlined, size: 54),
                 const SizedBox(height: 12),
-                Text('لا توجد حالات نشطة', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 18)),
+                Text('لا توجد لحظات نشطة في SPARK', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 18)),
                 const SizedBox(height: 6),
                 const Text('انشر أول لحظة في SPARK أو اسحب للأسفل للتحديث.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60)),
               ]),
@@ -4840,7 +4840,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               title: const Text('رسائل المجموعات'), value: groupsEnabled,
               onChanged: saving ? null : (v) => setDialog(() => groupsEnabled = v)),
             SwitchListTile(contentPadding: EdgeInsets.zero, activeThumbColor: Theme.of(context).colorScheme.primary,
-              title: const Text('حالات SPARK الجديدة'), value: statusesEnabled,
+              title: const Text('لحظات SPARK الجديدة'), value: statusesEnabled,
               onChanged: saving ? null : (v) => setDialog(() => statusesEnabled = v)),
             const SizedBox(height: 8),
             const Text('هذه تفضيلات محفوظة في حسابك؛ وصول إشعارات الهاتف الفعلية يتطلب استكمال ربط خدمة الإرسال.', style: TextStyle(color: Colors.white60, fontSize: 12)),
