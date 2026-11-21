@@ -13,7 +13,7 @@ module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
   res.setHeader(
     "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, X-File-Name, X-Recipient-Id, X-Group-Id, X-Idempotency-Key"
+    "Content-Type, Authorization, X-File-Name, X-Recipient-Id, X-Group-Id, X-Idempotency-Key, X-Status-Caption, X-Status-Id, X-Audio-Duration-Ms"
   );
   res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
 
@@ -88,6 +88,20 @@ module.exports = async (req, res) => {
     }
     if (req.headers["x-group-id"]) {
       headers["X-Group-Id"] = req.headers["x-group-id"];
+    }
+    // Preserve BARQ media metadata headers across the public API gateway.
+    // These are required by SPARK publishing and voice-reply validation.
+    if (req.headers["x-idempotency-key"]) {
+      headers["X-Idempotency-Key"] = req.headers["x-idempotency-key"];
+    }
+    if (req.headers["x-status-caption"]) {
+      headers["X-Status-Caption"] = req.headers["x-status-caption"];
+    }
+    if (req.headers["x-status-id"]) {
+      headers["X-Status-Id"] = req.headers["x-status-id"];
+    }
+    if (req.headers["x-audio-duration-ms"]) {
+      headers["X-Audio-Duration-Ms"] = req.headers["x-audio-duration-ms"];
     }
     // Preserve byte-range semantics for resumable/large media downloads.
     if (req.headers.range) headers.Range = req.headers.range;
