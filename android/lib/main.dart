@@ -331,6 +331,39 @@ class SirajApp extends StatelessWidget {
               onPrimary: palette.onPrimary,
               onSecondary: palette.onSecondary,
             ),
+            iconTheme: IconThemeData(color: palette.primary),
+            progressIndicatorTheme: ProgressIndicatorThemeData(color: palette.primary),
+            dialogTheme: DialogThemeData(
+              backgroundColor: palette.surface,
+              surfaceTintColor: Colors.transparent,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            ),
+            bottomSheetTheme: BottomSheetThemeData(
+              backgroundColor: palette.surface,
+              modalBackgroundColor: palette.surface,
+              surfaceTintColor: Colors.transparent,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+              ),
+            ),
+            inputDecorationTheme: InputDecorationTheme(
+              filled: true,
+              fillColor: palette.surface,
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: palette.primary, width: 1.5),
+              ),
+            ),
+            filledButtonTheme: FilledButtonThemeData(
+              style: FilledButton.styleFrom(
+                backgroundColor: palette.primary,
+                foregroundColor: palette.onPrimary,
+              ),
+            ),
+            floatingActionButtonTheme: FloatingActionButtonThemeData(
+              backgroundColor: palette.primary,
+              foregroundColor: palette.onPrimary,
+            ),
             appBarTheme: AppBarTheme(
               backgroundColor: palette.surface,
               foregroundColor: palette.text,
