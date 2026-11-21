@@ -851,15 +851,28 @@ void main() {
   });
 
   test('BARQ identity palettes keep four distinct readable theme foundations', () {
+    double contrastRatio(Color first, Color second) {
+      final a = first.computeLuminance();
+      final b = second.computeLuminance();
+      final lighter = a > b ? a : b;
+      final darker = a > b ? b : a;
+      return (lighter + 0.05) / (darker + 0.05);
+    }
+
     final palettes = BarqIdentity.values
         .map(BarqIdentityPalette.forIdentity)
         .toList();
+    expect(BarqIdentity.values, hasLength(4));
     expect(palettes.map((p) => p.background).toSet().length, 4);
     expect(palettes.map((p) => p.primary).toSet().length, 4);
     for (final palette in palettes) {
       expect(palette.text, isNot(palette.background));
       expect(palette.primary, isNot(palette.background));
       expect(palette.secondary, isNot(palette.surface));
+      expect(contrastRatio(palette.text, palette.background), greaterThanOrEqualTo(7));
+      expect(contrastRatio(palette.text, palette.surface), greaterThanOrEqualTo(7));
+      expect(contrastRatio(palette.mutedText, palette.surface), greaterThanOrEqualTo(4.5));
+      expect(contrastRatio(palette.primary, palette.surface), greaterThanOrEqualTo(4.5));
     }
     final blue = BarqIdentityPalette.forIdentity(BarqIdentity.blueLightning);
     expect(blue.primary, const Color(0xFFD6AD55));
