@@ -299,6 +299,7 @@ function phoneConflictCondition(column, phone) {
     sql: `${column} IN (${values.map(() => "?").join(", ")})`,
     bindings: values
   };
+}
 
 async function phoneAlreadyInUse(env, phone, excludeUserId = "") {
   const requested = [...new Set(phoneVariants(phone))];
