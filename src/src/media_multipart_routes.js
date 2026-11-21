@@ -3,7 +3,8 @@ import {
   MEDIA_MULTIPART_PART_SIZE, MEDIA_MULTIPART_MAX_SIZE, MEDIA_UPLOAD_SESSION_TTL_MS,
   MEDIA_TRANSPORT_CHUNK_SIZE, validateMultipartDeclaration, validateMultipartPart,
   validateTransportChunk, normalizeMultipartEtag,
-  parseMultipartUploadId, buildCompleteMultipartXml, isUploadSessionExpired
+  parseMultipartUploadId, buildCompleteMultipartXml, isUploadSessionExpired,
+  matchesUploadDeclaration
 } from "./media_multipart.js";
 
 const headers = {
@@ -137,12 +138,8 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
         "SELECT id, state, total_size AS size, expected_parts AS expectedParts, expires_at AS expiresAt, recipient_id AS recipientId, group_id AS groupId, content_type AS contentType, file_name AS fileName FROM media_upload_sessions WHERE owner_id = ? AND idempotency_key = ?"
       ).bind(currentUser.sub, idempotencyKey).first();
       if (existing && !isUploadSessionExpired(existing.expiresAt) && ["uploading", "completing", "completed"].includes(existing.state)) {
-        if (Number(existing.size) !== declaration.size ||
-            Number(existing.expectedParts) !== expectedParts ||
-            existing.recipientId !== recipientId ||
-            existing.groupId !== groupId ||
-            existing.contentType !== declaration.contentType ||
-            existing.fileName !== declaration.fileName) {
+        if (!matchesUploadDeclaration(existing, declaration, recipientId, groupId) ||
+            Number(existing.expectedParts) !== expectedParts) {
           return json({ error: "Idempotency key was already used for a different upload" }, 409);
         }
         const parts = await env.DB.prepare("SELECT part_number AS partNumber, etag, size FROM media_upload_parts WHERE session_id = ? ORDER BY part_number").bind(existing.id).all();
