@@ -3769,10 +3769,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       onRefresh: () async {
         try {
           final loaded = await Api.privateMemories();
-          if (mounted) setState(() {
-            memories = loaded;
-            memoriesLoadFailed = false;
-          });
+          if (mounted) {
+            setState(() {
+              memories = loaded;
+              memoriesLoadFailed = false;
+            });
+          }
         } catch (e) {
           if (mounted) setState(() => memoriesLoadFailed = true);
           if (mounted) showMsg(context, cleanError(e));
@@ -3790,10 +3792,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               onRetry: () async {
                 try {
                   final loaded = await Api.privateMemories();
-                  if (mounted) setState(() {
-                    memories = loaded;
-                    memoriesLoadFailed = false;
-                  });
+                  if (mounted) {
+                    setState(() {
+                      memories = loaded;
+                      memoriesLoadFailed = false;
+                    });
+                  }
                 } catch (e) {
                   if (mounted) showMsg(context, cleanError(e));
                 }
@@ -4057,10 +4061,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     );
                     try {
                       final loaded = await Api.privateMemories();
-                      if (mounted) setState(() {
-                        memories = loaded;
-                        memoriesLoadFailed = false;
-                      });
+                      if (mounted) {
+                        setState(() {
+                          memories = loaded;
+                          memoriesLoadFailed = false;
+                        });
+                      }
                     } catch (_) {
                       if (mounted) setState(() => memoriesLoadFailed = true);
                       // The save/upload succeeded; a list refresh failure is not a save failure.
