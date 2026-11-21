@@ -1284,7 +1284,8 @@ bool barqOfflineIncomingMessageMatches(
   return field(existing, ['id', 'message_id']) == field(incoming, ['id', 'message_id']) &&
       field(existing, ['sender_id', 'senderId']) == field(incoming, ['sender_id', 'senderId']) &&
       field(existing, ['receiver_id', 'receiverId']) == field(incoming, ['receiver_id', 'receiverId']) &&
-      field(existing, ['body', 'content', 'message']) == field(incoming, ['body', 'content', 'message']);
+      field(existing, ['body', 'content', 'message']) == field(incoming, ['body', 'content', 'message']) &&
+      field(existing, ['reply_to_id', 'replyToId']) == field(incoming, ['reply_to_id', 'replyToId']);
 }
 
 List<Map<String, dynamic>> barqOfflineItemsNotOnServerPage(
@@ -1306,10 +1307,37 @@ List<Map<String, dynamic>> barqOfflineItemsNotOnServerPage(
   }).toList();
 }
 
+List<Map<String, dynamic>> barqOfflineQueueWithoutExactMessage(
+  List<Map<String, dynamic>> queuedItems,
+  Map<String, dynamic> acceptedMessage,
+) => queuedItems
+    .where((item) => !barqOfflineIncomingMessageMatches(item, acceptedMessage))
+    .toList();
+
 class BarqOfflineQueue {
   static const String _outboxKey = 'barq_offline_outbox_v1';
   static const String _inboxKey = 'barq_offline_inbox_v1';
   static bool _syncing = false;
+  static Future<void> _mutationTail = Future<void>.value();
+
+  static Future<void> _mutate(
+    String key,
+    FutureOr<List<Map<String, dynamic>>> Function(
+      List<Map<String, dynamic>> items,
+    ) update,
+  ) async {
+    final previous = _mutationTail;
+    final completed = Completer<void>();
+    _mutationTail = completed.future;
+    await previous;
+    try {
+      final current = await _read(key);
+      final next = await update(current);
+      await _write(key, next);
+    } finally {
+      completed.complete();
+    }
+  }
 
   static Future<List<Map<String, dynamic>>> _read(String key) async {
     final raw = await storage.read(key: key);
@@ -1321,36 +1349,40 @@ class BarqOfflineQueue {
   }
 
   static Future<void> enqueueOutgoing(Map<String, dynamic> message) async {
-    final items = await _read(_outboxKey);
-    final messageId = field(message, ['id', 'message_id']);
-    final existingIndex = items.indexWhere((item) => field(item, ['id', 'message_id']) == messageId);
-    if (existingIndex >= 0) {
-      if (!barqOfflineIncomingMessageMatches(items[existingIndex], message)) {
-        throw Exception('تعارض في معرّف رسالة الصادر؛ تم رفض إعادة استخدام المعرّف بمحتوى أو أطراف مختلفة.');
+    await _mutate(_outboxKey, (items) {
+      final messageId = field(message, ['id', 'message_id']);
+      final existingIndex = items.indexWhere(
+        (item) => field(item, ['id', 'message_id']) == messageId,
+      );
+      if (existingIndex >= 0) {
+        if (!barqOfflineIncomingMessageMatches(items[existingIndex], message)) {
+          throw Exception('تعارض في معرّف رسالة الصادر؛ تم رفض إعادة استخدام المعرّف بمحتوى أو أطراف مختلفة.');
+        }
+        return items;
       }
-      return;
-    }
-    if (barqOfflineQueueIsFull(items.length)) {
-      throw Exception('صندوق الرسائل دون إنترنت ممتلئ؛ اتصل بالإنترنت لمزامنة الرسائل أولاً.');
-    }
-    items.add(message);
-    await _write(_outboxKey, items);
+      if (barqOfflineQueueIsFull(items.length)) {
+        throw Exception('صندوق الرسائل دون إنترنت ممتلئ؛ اتصل بالإنترنت لمزامنة الرسائل أولاً.');
+      }
+      return [...items, message];
+    });
   }
 
   static Future<void> enqueueIncoming(Map<String, dynamic> message) async {
-    final items = await _read(_inboxKey);
-    final existingIndex = items.indexWhere((item) => item['id'] == message['id']);
-    if (existingIndex >= 0) {
-      if (!barqOfflineIncomingMessageMatches(items[existingIndex], message)) {
-        throw Exception('تعارض في معرّف رسالة Nearby؛ تم رفض الرسالة المكررة غير المطابقة.');
+    await _mutate(_inboxKey, (items) {
+      final existingIndex = items.indexWhere(
+        (item) => field(item, ['id', 'message_id']) == field(message, ['id', 'message_id']),
+      );
+      if (existingIndex >= 0) {
+        if (!barqOfflineIncomingMessageMatches(items[existingIndex], message)) {
+          throw Exception('تعارض في معرّف رسالة Nearby؛ تم رفض الرسالة المكررة غير المطابقة.');
+        }
+        return items;
       }
-      return;
-    }
-    if (barqOfflineQueueIsFull(items.length)) {
-      throw Exception('صندوق الرسائل الواردة دون إنترنت ممتلئ؛ افتح الإنترنت لمزامنة الرسائل أولاً.');
-    }
-    items.add(message);
-    await _write(_inboxKey, items);
+      if (barqOfflineQueueIsFull(items.length)) {
+        throw Exception('صندوق الرسائل الواردة دون إنترنت ممتلئ؛ افتح الإنترنت لمزامنة الرسائل أولاً.');
+      }
+      return [...items, message];
+    });
   }
 
   static Future<List<Map<String, dynamic>>> conversation(String friendId, String currentUserId) async {
@@ -1366,10 +1398,10 @@ class BarqOfflineQueue {
 
   static Future<void> reconcile(List<Map<String, dynamic>> serverMessages) async {
     if (serverMessages.isEmpty) return;
-    final outbox = await _read(_outboxKey);
-    final inbox = await _read(_inboxKey);
-    await _write(_outboxKey, barqOfflineItemsNotOnServerPage(outbox, serverMessages));
-    await _write(_inboxKey, barqOfflineItemsNotOnServerPage(inbox, serverMessages));
+    await _mutate(_outboxKey, (items) =>
+        barqOfflineItemsNotOnServerPage(items, serverMessages));
+    await _mutate(_inboxKey, (items) =>
+        barqOfflineItemsNotOnServerPage(items, serverMessages));
   }
 
   static Future<void> syncOutbox() async {
@@ -1385,8 +1417,8 @@ class BarqOfflineQueue {
             clientMessageId: field(item, ['id']),
             replyToId: field(item, ['reply_to_id']).isEmpty ? null : field(item, ['reply_to_id']),
           );
-          final remaining = await _read(_outboxKey);
-          await _write(_outboxKey, remaining.where((entry) => entry['id'] != item['id']).toList());
+          await _mutate(_outboxKey, (remaining) =>
+              barqOfflineQueueWithoutExactMessage(remaining, item));
         } catch (error) {
           // توقف عند انقطاع الشبكة؛ أما الرفض الخاص برسالة واحدة فلا ينبغي
           // أن يمنع إرسال بقية الرسائل المعلقة في الطابور.
