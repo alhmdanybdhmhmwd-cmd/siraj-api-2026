@@ -15,7 +15,7 @@ void main() {
   test('Nearby accepts only bounded text messages from the verified peer', () {
     final valid = <String, dynamic>{
       'kind': 'barq_text_message',
-      'id': 'a1b2c3d4e5f60708',
+      'id': 'a1b2c3d4e5f60708a1b2c3d4e5f60708',
       'senderId': 'friend-1',
       'receiverId': 'me',
       'body': 'رسالة قريبة',
@@ -25,6 +25,8 @@ void main() {
     expect(isValidBarqNearbyTextPayload({...valid, 'receiverId': 'other'}, peerId: 'friend-1', currentUserId: 'me'), isFalse);
     expect(isValidBarqNearbyTextPayload({...valid, 'id': 'x'.padRight(129, 'x')}, peerId: 'friend-1', currentUserId: 'me'), isFalse);
     expect(isValidBarqNearbyTextPayload({...valid, 'id': 'bad id'}, peerId: 'friend-1', currentUserId: 'me'), isFalse);
+    expect(isValidBarqNearbyTextPayload({...valid, 'id': 'a1b2c3d4e5f60708'}, peerId: 'friend-1', currentUserId: 'me'), isFalse);
+    expect(isValidBarqNearbyTextPayload({...valid, 'id': 'A1B2C3D4E5F60708A1B2C3D4E5F60708'}, peerId: 'friend-1', currentUserId: 'me'), isFalse);
     expect(isValidBarqNearbyTextPayload({...valid, 'body': '   '}, peerId: 'friend-1', currentUserId: 'me'), isFalse);
     expect(isValidBarqNearbyTextPayload({...valid, 'body': List<String>.filled(5001, 'x').join()}, peerId: 'friend-1', currentUserId: 'me'), isFalse);
     expect(isValidBarqNearbyTextPayload({...valid, 'kind': 'media'}, peerId: 'friend-1', currentUserId: 'me'), isFalse);
@@ -87,6 +89,19 @@ void main() {
     expect(barqOfflineSyncShouldPause(Exception('NETWORK_DIAGNOSTIC: SocketException')), isTrue);
     expect(barqOfflineSyncShouldPause(Exception('Reply target not found')), isFalse);
     expect(barqOfflineSyncShouldPause(Exception('Message is too long')), isFalse);
+  });
+
+  test('Nearby inbox duplicate IDs must match sender, receiver, and body', () {
+    final original = <String, dynamic>{
+      'id': 'a1b2c3d4e5f60708a1b2c3d4e5f60708',
+      'sender_id': 'friend-1',
+      'receiver_id': 'me',
+      'body': 'hello',
+    };
+    expect(barqOfflineIncomingMessageMatches(original, Map<String, dynamic>.from(original)), isTrue);
+    expect(barqOfflineIncomingMessageMatches(original, {...original, 'body': 'tampered'}), isFalse);
+    expect(barqOfflineIncomingMessageMatches(original, {...original, 'sender_id': 'other'}), isFalse);
+    expect(barqOfflineIncomingMessageMatches(original, {...original, 'receiver_id': 'other'}), isFalse);
   });
 
   test('offline queue reconciliation removes IDs found on any server page only', () {
