@@ -3497,6 +3497,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (mounted) showMsg(context, 'تعذر فتح وجهة الإشعار. يمكنك الوصول إليها من برق.');
     } finally {
       _handlingNotificationTap = false;
+      if (mounted && barqPendingNotificationTap.value != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _handlePendingNotificationTap();
+        });
+      }
     }
   }
 
