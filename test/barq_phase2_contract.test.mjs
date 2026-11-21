@@ -178,6 +178,9 @@ test("Android API, media, and realtime origins are selectable for isolated previ
   assert.ok((flutterApp.match(/defaultValue: 'https:\/\/siraj-api-2026\.vercel\.app'/g) || []).length >= 2);
   assert.ok(!flutterApp.includes("defaultValue: 'https://siraj-api.alhmdanybdhmhmwd.workers.dev'"));
   assert.ok(!flutterApp.includes("defaultValue: 'wss://siraj-api.alhmdanybdhmhmwd.workers.dev/api/realtime'"));
+  assert.ok(!flutterApp.includes("siraj-api.alhmdanybdhmhmwd.workers.dev"));
+  assert.ok(!flutterApp.includes(".t3.storage.dev"));
+  assert.ok(flutterApp.includes("const String? fallbackTranscribeBase = null;"));
 });
 
 
