@@ -6,6 +6,14 @@ import 'package:barq/main.dart';
 import 'package:barq/barq_identity.dart';
 
 void main() {
+  test('optional realtime connects only with a session, endpoint and resumed app', () {
+    expect(barqRealtimeCanConnect(authToken: 'session', appResumed: true, socketUrl: 'wss://example.test'), isTrue);
+    expect(barqRealtimeCanConnect(authToken: null, appResumed: true, socketUrl: 'wss://example.test'), isFalse);
+    expect(barqRealtimeCanConnect(authToken: '', appResumed: true, socketUrl: 'wss://example.test'), isFalse);
+    expect(barqRealtimeCanConnect(authToken: 'session', appResumed: false, socketUrl: 'wss://example.test'), isFalse);
+    expect(barqRealtimeCanConnect(authToken: 'session', appResumed: true, socketUrl: ''), isFalse);
+  });
+
   test('notification tap routing validates private chat, group and SPARK destinations', () {
     expect(
       barqNotificationRouteFromData({'type': 'direct_message', 'senderId': 'user-7'}),
