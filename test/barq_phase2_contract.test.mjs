@@ -387,6 +387,9 @@ test("SPARK media reads enforce active friend visibility and expire with their s
   assert.ok(mediaRoute.indexOf("sparkExpiry <= Date.now()") < mediaRoute.indexOf("permitted = sparkMedia.ownerId === currentUser.sub"));
   assert.ok(mediaRoute.includes("if (!accessRow && !sparkMedia)"));
   assert.ok(mediaRoute.includes("SPARK media access denied"));
+  const sparkDeniedAt = mediaRoute.indexOf('if (!permitted) return json({ error: "SPARK media access denied" }, 403)');
+  const storageHeadAt = mediaRoute.indexOf('storage.fetch(storageUrl, { method: "HEAD" })');
+  assert.ok(sparkDeniedAt >= 0 && storageHeadAt > sparkDeniedAt, "SPARK authorization must finish before storage HEAD");
 
   const cleanupStart = worker.indexOf("async function cleanupExpiredMedia");
   const cleanupEnd = worker.indexOf("async function cleanupExpiredEphemeralMessages", cleanupStart);
@@ -484,6 +487,11 @@ test("SPARK voice replies are private, limited, tied to status expiry, and clean
   assert.ok(route.includes("statusId.length > 128"));
   assert.ok(route.includes("audioReplyId.length > 128"));
   assert.ok(route.includes("rollbackSparkMediaUpload(env, storage, storageUrl, objectKey)"));
+  const friendshipDeniedAt = route.indexOf("if (!friendship) return json({ error: \"SPARK status access denied\" }, 403)");
+  const firstStorageWriteAt = route.indexOf('storage.fetch(storageUrl, {');
+  assert.ok(friendshipDeniedAt >= 0 && firstStorageWriteAt > friendshipDeniedAt, "SPARK audio access must be authorized before storage operations");
+  const audioReadAt = route.indexOf("const media = await storage.fetch(storageUrl)");
+  assert.ok(audioReadAt > friendshipDeniedAt, "SPARK audio download must follow reciprocal-friend authorization");
   assert.ok(worker.includes("INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?) ON CONFLICT(object_key) DO UPDATE SET expires_at = excluded.expires_at"));
   assert.ok(route.includes('"Cache-Control": "private, no-store"'));
   const cleanupStart = worker.indexOf("async function cleanupExpiredMedia");
