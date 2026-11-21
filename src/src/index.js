@@ -1,5 +1,5 @@
 import { AwsClient } from "aws4fetch";
-import { createAiProvider, createDatabaseProvider, createObjectStorageClient, createObjectStorageUrl, createPushProvider, createBackgroundTaskScheduler } from "./runtime_adapters.js";
+import { createAiProvider, createDatabaseProvider, createS3ObjectStorageProvider, createObjectStorageUrl, createPushProvider, createBackgroundTaskScheduler } from "./runtime_adapters.js";
 import { prepareConversationSummaryTranscript, buildConversationSummaryMessages, extractConversationSummaryText } from "./conversation_summary.js";
 import { handleResumableMediaUpload, cleanupExpiredUploadSessions } from "./media_multipart_routes.js";
 
@@ -25,7 +25,7 @@ const SPARK_STATUS_FONTS = new Set(["modern", "classic", "mono"]);
 async function rollbackSparkMediaUpload(env, storage, storageUrl, objectKey) {
   let objectDeleted = false;
   try {
-    const response = await storage.fetch(storageUrl, { method: "DELETE" });
+    const response = await storage.fetchUrl(storageUrl, { method: "DELETE" });
     objectDeleted = response.ok || response.status === 404;
   } catch (error) {
     console.error("SPARK media rollback delete failed:", error);
@@ -688,7 +688,7 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
   const expired = await env.DB.prepare(
     "SELECT object_key FROM media_expirations WHERE expires_at <= ? ORDER BY expires_at ASC LIMIT 100"
   ).bind(cutoff).all();
-  const storage = createObjectStorageClient(env, AwsClient);
+  const storage = createS3ObjectStorageProvider(env, AwsClient);
   let deleted = 0;
   for (const item of expired.results || []) {
     const key = String(item.object_key || "");
@@ -699,7 +699,7 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
     }
       const storageUrl = createObjectStorageUrl(env, key);
     try {
-      const response = await storage.fetch(storageUrl, { method: "DELETE" });
+      const response = await storage.fetchUrl(storageUrl, { method: "DELETE" });
       if (response.ok || response.status === 404) {
         await env.DB.prepare("DELETE FROM status_media WHERE object_key = ?").bind(key).run();
         await env.DB.prepare("DELETE FROM status_audio_replies WHERE object_key = ?").bind(key).run();
@@ -1320,9 +1320,9 @@ export default {
           ).run();
           const objectKey = currentUser.sub + "/private-memories/" + crypto.randomUUID();
                   const storageUrl = createObjectStorageUrl(env, objectKey);
-          const storage = createObjectStorageClient(env, AwsClient);
+          const storage = createS3ObjectStorageProvider(env, AwsClient);
           const expiresAt = "9999-12-31T23:59:59.999Z";
-          const putResponse = await storage.fetch(storageUrl, {
+          const putResponse = await storage.fetchUrl(storageUrl, {
             method: "PUT",
             headers: {
               "Content-Type": contentType,
@@ -1681,8 +1681,8 @@ export default {
           ).bind(currentUser.sub).first();
           const objectKey = "profiles/" + currentUser.sub + "/" + crypto.randomUUID();
                   const storageUrl = createObjectStorageUrl(env, objectKey);
-          const storage = createObjectStorageClient(env, AwsClient);
-          const putResponse = await storage.fetch(storageUrl, {
+          const storage = createS3ObjectStorageProvider(env, AwsClient);
+          const putResponse = await storage.fetchUrl(storageUrl, {
             method: "PUT",
             headers: {
               "Content-Type": contentType,
@@ -1704,13 +1704,13 @@ export default {
                 updated_at = CURRENT_TIMESTAMP
             `).bind(currentUser.sub, objectKey, contentType).run();
           } catch (error) {
-            try { await storage.fetch(storageUrl, { method: "DELETE" }); } catch (_) {}
+            try { await storage.fetchUrl(storageUrl, { method: "DELETE" }); } catch (_) {}
             throw error;
           }
           if (previous?.object_key && previous.object_key !== objectKey) {
             const oldPath = String(previous.object_key).split("/").map(encodeURIComponent).join("/");
             try {
-              await storage.fetch("https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + oldPath, { method: "DELETE" });
+              await storage.fetchUrl("https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + oldPath, { method: "DELETE" });
             } catch (error) {
               console.error("Previous profile photo cleanup failed:", error?.name || "Error");
             }
@@ -1767,8 +1767,8 @@ export default {
         if (!photo?.object_key) return json({ error: "Profile photo not found" }, 404);
         const objectPath = String(photo.object_key).split("/").map(encodeURIComponent).join("/");
         const storageUrl = createObjectStorageUrl(env, photo.object_key);
-        const storage = createObjectStorageClient(env, AwsClient);
-        const stored = await storage.fetch(storageUrl, { method: "GET" });
+        const storage = createS3ObjectStorageProvider(env, AwsClient);
+        const stored = await storage.fetchUrl(storageUrl, { method: "GET" });
         if (stored.status === 404) return json({ error: "Profile photo not found" }, 404);
         if (!stored.ok) return json({ error: "Profile photo could not be loaded" }, 502);
         return new Response(await stored.arrayBuffer(), {
@@ -2046,8 +2046,8 @@ export default {
         const suppliedName = safeFileName(request.headers.get("X-File-Name") || "spark-media");
         const expiresAt = existingStatusExpiry || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
             const storageUrl = createObjectStorageUrl(env, objectKey);
-        const storage = createObjectStorageClient(env, AwsClient);
-        const putResponse = await storage.fetch(storageUrl, {
+        const storage = createS3ObjectStorageProvider(env, AwsClient);
+        const putResponse = await storage.fetchUrl(storageUrl, {
           method: "PUT",
           headers: {
             "Content-Type": contentType,
@@ -2405,8 +2405,8 @@ export default {
           const objectKey = currentUser.sub + "/spark-audio/" + crypto.randomUUID();
           const expiresAt = status.expires_at;
                   const storageUrl = createObjectStorageUrl(env, objectKey);
-          const storage = createObjectStorageClient(env, AwsClient);
-          const putResponse = await storage.fetch(storageUrl, {
+          const storage = createS3ObjectStorageProvider(env, AwsClient);
+          const putResponse = await storage.fetchUrl(storageUrl, {
             method: "PUT",
             headers: {
               "Content-Type": contentType,
@@ -2470,8 +2470,8 @@ export default {
           ).bind(audioReplyId, statusId).first();
           if (!row) return json({ error: "SPARK audio reply not found or expired" }, 404);
                   const storageUrl = createObjectStorageUrl(env, row.objectKey);
-          const storage = createObjectStorageClient(env, AwsClient);
-          const media = await storage.fetch(storageUrl);
+          const storage = createS3ObjectStorageProvider(env, AwsClient);
+          const media = await storage.fetchUrl(storageUrl);
           if (!media.ok) return json({ error: "SPARK audio reply media unavailable" }, media.status === 404 ? 404 : 502);
           return new Response(media.body, {
             status: 200,
@@ -3740,8 +3740,8 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           )
         `).run();
                     const storageUrl = createObjectStorageUrl(env, key);
-        const storage = createObjectStorageClient(env, AwsClient);
-        const putResponse = await storage.fetch(storageUrl, {
+        const storage = createS3ObjectStorageProvider(env, AwsClient);
+        const putResponse = await storage.fetchUrl(storageUrl, {
           method: "PUT",
           headers: {
             "Content-Type": contentType,
@@ -3783,7 +3783,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           // retry; successful chat attachments never enter the automatic expiry queue.
           let objectDeleted = false;
           try {
-            const deleteResponse = await storage.fetch(storageUrl, { method: "DELETE" });
+            const deleteResponse = await storage.fetchUrl(storageUrl, { method: "DELETE" });
             objectDeleted = deleteResponse.ok || deleteResponse.status === 404;
           } catch (_) {}
           try {
@@ -3843,7 +3843,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           return json({ error: "Invalid attachment identifier" }, 400);
         }
                     const storageUrl = createObjectStorageUrl(env, key);
-        const storage = createObjectStorageClient(env, AwsClient);
+        const storage = createS3ObjectStorageProvider(env, AwsClient);
         // New uploads have an authorization record in D1, allowing access checks
         // before any request is made to object storage. Legacy objects fall back
         // to their existing signed metadata until they naturally expire.
@@ -3942,7 +3942,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           }
           if (!permitted) return json({ error: "Attachment access denied" }, 403);
         }
-        const headResponse = await storage.fetch(storageUrl, { method: "HEAD" });
+        const headResponse = await storage.fetchUrl(storageUrl, { method: "HEAD" });
         if (headResponse.status === 404) return json({ error: "Attachment not found" }, 404);
         if (!headResponse.ok) return json({ error: "Media storage lookup failed", storageStatus: headResponse.status }, 502);
         if (!accessRow && !sparkMedia) {
@@ -3969,7 +3969,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         const expiresAt = sparkMedia?.expiresAt || accessRow?.expires_at || headResponse.headers.get("x-amz-meta-expiresat");
         if (expiresAt && Number.isFinite(Date.parse(expiresAt)) && Date.parse(expiresAt) <= Date.now()) {
           try {
-            const deletion = await storage.fetch(storageUrl, { method: "DELETE" });
+            const deletion = await storage.fetchUrl(storageUrl, { method: "DELETE" });
             // Keep the expiration row when storage deletion fails so the scheduled
             // cleanup can retry instead of permanently orphaning the object.
             if (deletion.ok || deletion.status === 404) {
@@ -3989,7 +3989,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         const downloadHeaders = {};
         if (range) downloadHeaders.Range = range;
         if (ifRange) downloadHeaders["If-Range"] = ifRange;
-        const storageResponse = await storage.fetch(storageUrl, {
+        const storageResponse = await storage.fetchUrl(storageUrl, {
           method: "GET",
           headers: downloadHeaders
         });
