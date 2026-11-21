@@ -47,6 +47,17 @@ test("real libSQL applies every isolated Preview migration and supports BARQ dat
         .bind("u2", "barq_two", "BARQ Two", "hash2", "salt2")
     ]);
 
+    await assert.rejects(() => db.batch([
+      db.prepare("INSERT INTO users (id, username, display_name, password_hash, password_salt) VALUES (?, ?, ?, ?, ?)")
+        .bind("atomic-temp", "atomic_temp", "Atomic Temp", "hash", "salt"),
+      db.prepare("INSERT INTO users (id, username, display_name, password_hash, password_salt) VALUES (?, ?, ?, ?, ?)")
+        .bind("u1", "another_username", "Duplicate ID", "hash", "salt")
+    ]));
+    const rolledBack = await db.prepare(
+      "SELECT COUNT(*) AS count FROM users WHERE id = ?"
+    ).bind("atomic-temp").first();
+    assert.equal(Number(rolledBack.count), 0, "failed write batches must roll back earlier statements");
+
     await db.prepare(
       "INSERT INTO friendships (user_id, friend_id) VALUES (?, ?)"
     ).bind("u1", "u2").run();
