@@ -240,3 +240,26 @@ export function createBackgroundTaskScheduler(context) {
     }
   });
 }
+
+/**
+ * Execute independent scheduled maintenance jobs in order. One failure is
+ * logged and isolated so it cannot prevent later cleanup jobs from running.
+ */
+export async function runScheduledTasks(tasks, logger = console) {
+  if (!Array.isArray(tasks)) throw new TypeError("Scheduled tasks must be an array");
+  const results = [];
+  for (const entry of tasks) {
+    if (!entry || typeof entry.name !== "string" || typeof entry.run !== "function") {
+      throw new TypeError("Each scheduled task requires a name and run function");
+    }
+    try {
+      const result = await entry.run();
+      logger?.log?.(entry.successMessage || entry.name + ":", result);
+      results.push({ name: entry.name, ok: true, result });
+    } catch (error) {
+      logger?.error?.(entry.failureMessage || entry.name + " failed:", error);
+      results.push({ name: entry.name, ok: false, error });
+    }
+  }
+  return results;
+}
