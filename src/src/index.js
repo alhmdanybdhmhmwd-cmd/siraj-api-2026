@@ -384,7 +384,10 @@ function detectSparkMediaType(bytes) {
       b[4] === 0x0d && b[5] === 0x0a && b[6] === 0x1a && b[7] === 0x0a) return "image/png";
   if (b.length >= 12 && ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP") return "image/webp";
   if (b.length >= 6 && (ascii(0, 6) === "GIF87a" || ascii(0, 6) === "GIF89a")) return "image/gif";
-  if (b.length >= 12 && ascii(4, 8) === "ftyp") return "video/mp4";
+  if (b.length >= 12 && ascii(4, 8) === "ftyp") {
+    // QuickTime MOV uses the qt\u0020\u0020 major brand; other ISO-BMFF brands remain MP4.
+    return ascii(8, 12) === "qt  " ? "video/quicktime" : "video/mp4";
+  }
   if (b.length >= 4 && b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) return "video/webm";
   return null;
 }
