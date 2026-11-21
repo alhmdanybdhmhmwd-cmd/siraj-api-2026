@@ -2827,3 +2827,58 @@ test("private memory photo upload verifies memory ownership before touching stor
     else globalThis.__fakeTigrisHandler = previousHandler;
   }
 });
+
+
+test("deleted private memory photos cannot be read while storage cleanup is pending", async () => {
+  const secret = "private-memory-read-test-secret";
+  const token = await worker.signToken({ id: "owner-1", username: "owner-1" }, secret);
+  const db = {
+    prepare(sql) {
+      const statement = {
+        sql,
+        params: [],
+        bind(...params) { this.params = params; return this; },
+        async run() { return { meta: { changes: 1 } }; },
+        async first() {
+          if (this.sql.includes("SELECT session_version FROM account_security")) {
+            return { session_version: 0 };
+          }
+          if (this.sql.includes("SELECT owner_id, recipient_id, group_id, file_name, content_type, expires_at FROM media_access")) {
+            return null;
+          }
+          if (this.sql.includes("SELECT sm.status_id AS statusId")) return null;
+          if (this.sql.includes("SELECT id FROM private_memory_media WHERE object_key = ? AND owner_id = ?")) {
+            assert.deepEqual(this.params, ["owner-1/private-memories/deleted-photo", "owner-1"]);
+            return null;
+          }
+          return null;
+        },
+        async all() { return { results: [] }; }
+      };
+      return statement;
+    }
+  };
+  let storageCalls = 0;
+  const previousHandler = globalThis.__fakeTigrisHandler;
+  globalThis.__fakeTigrisHandler = async () => {
+    storageCalls++;
+    return new Response(null, { status: 200 });
+  };
+  try {
+    const key = encodeURIComponent("owner-1/private-memories/deleted-photo");
+    const response = await worker.default.fetch(new Request(
+      "https://api.example.test/api/media/" + key,
+      { headers: { Authorization: "Bearer " + token } }
+    ), {
+      DB: db,
+      JWT_SECRET: secret,
+      TIGRIS_ACCESS_KEY_ID: "test-access",
+      TIGRIS_SECRET_ACCESS_KEY: "test-secret"
+    });
+    assert.equal(response.status, 404);
+    assert.equal(storageCalls, 0);
+  } finally {
+    if (previousHandler === undefined) delete globalThis.__fakeTigrisHandler;
+    else globalThis.__fakeTigrisHandler = previousHandler;
+  }
+});
