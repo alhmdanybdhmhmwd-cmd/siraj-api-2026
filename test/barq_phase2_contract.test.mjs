@@ -485,7 +485,15 @@ test("SPARK media expiration cleanup is scheduled and preserves failed deletion 
   const failureBranch = cleanup.indexOf('else {\n        console.error("Expired media deletion failed:", response.status);');
   assert.ok(successGate >= 0 && expirationDelete > successGate);
   assert.ok(failureBranch > expirationDelete, "failed storage deletion must retain its expiration row for retry");
-  assert.ok(cleanup.includes("Expired media cleanup item failed"));
+  const retryCatchStart = cleanup.indexOf("} catch (error) {", failureBranch);
+  const retryCatchEnd = cleanup.indexOf("\n    }", retryCatchStart);
+  const retryCatch = cleanup.slice(retryCatchStart, retryCatchEnd);
+  assert.ok(retryCatch.includes("Expired media cleanup item failed"));
+  assert.ok(!retryCatch.includes("DELETE FROM media_expirations"), "network/storage exceptions must preserve the retry record");
+  assert.ok(cleanup.includes("response.status === 404"), "already-missing objects must be treated as successfully cleaned");
+  assert.ok(cleanup.includes("LIMIT 100"), "scheduled cleanup must process a bounded batch");
+  assert.ok(cleanup.includes("Skipping invalid media expiration key"), "invalid object keys must never reach storage");
+  assert.ok(cleanup.includes("deleted++;"), "only successfully deleted or already-missing objects count as deleted");
 });
 
 test("SPARK voice replies are private, limited, tied to status expiry, and cleaned from Tigris", () => {
