@@ -2851,7 +2851,7 @@ class _LoginPageState extends State<LoginPage> {
                           child: const Icon(Icons.bolt_rounded, color: Colors.black, size: 54),
                         )),
                         const SizedBox(height: 14),
-                        const Center(child: Text('بَرق', style: TextStyle(
+                        Center(child: Text('بَرق', style: TextStyle(
                           color: Theme.of(context).colorScheme.primary, fontSize: 38, fontWeight: FontWeight.w900, letterSpacing: 1,
                         ))),
                         const SizedBox(height: 5),
