@@ -1920,7 +1920,7 @@ Widget messageReactionBar({
             padding: EdgeInsets.zero,
             tooltip: isPinned ? 'إلغاء تثبيت الرسالة' : 'تثبيت الرسالة',
             icon: Icon(isPinned ? Icons.push_pin : Icons.push_pin_outlined,
-              size: 17, color: isPinned ? gold : Colors.white60),
+              size: 17, color: isPinned ? Theme.of(context).colorScheme.primary : Colors.white60),
             onPressed: onPin,
           ),
       ],
@@ -1948,37 +1948,37 @@ Future<void> showMessageActions(
         mainAxisSize: MainAxisSize.min,
         children: [
           ListTile(
-            leading: const Icon(Icons.copy_rounded, color: gold),
+            leading: const Icon(Icons.copy_rounded),
             title: const Text('نسخ الرسالة'),
             onTap: () => Navigator.pop(sheetContext, 'copy'),
           ),
           if (onReact != null)
             ListTile(
-              leading: const Icon(Icons.add_reaction_outlined, color: gold),
+              leading: const Icon(Icons.add_reaction_outlined),
               title: const Text('إضافة تفاعل'),
               onTap: () => Navigator.pop(sheetContext, 'react'),
             ),
           if (onPin != null)
             ListTile(
-              leading: Icon(isPinned ? Icons.push_pin : Icons.push_pin_outlined, color: gold),
+              leading: Icon(isPinned ? Icons.push_pin : Icons.push_pin_outlined),
               title: Text(isPinned ? 'إلغاء تثبيت الرسالة' : 'تثبيت الرسالة'),
               onTap: () => Navigator.pop(sheetContext, 'pin'),
             ),
           if (onSaveMemory != null)
             ListTile(
-              leading: const Icon(Icons.bookmark_add_outlined, color: gold),
+              leading: const Icon(Icons.bookmark_add_outlined),
               title: const Text('حفظ في الذكريات الخاصة'),
               onTap: () => Navigator.pop(sheetContext, 'save_memory'),
             ),
           if (onReply != null)
             ListTile(
-              leading: const Icon(Icons.reply_rounded, color: gold),
+              leading: const Icon(Icons.reply_rounded),
               title: const Text('الرد على الرسالة'),
               onTap: () => Navigator.pop(sheetContext, 'reply'),
             ),
           if (onEdit != null)
             ListTile(
-              leading: const Icon(Icons.edit_rounded, color: gold),
+              leading: const Icon(Icons.edit_rounded),
               title: const Text('تعديل الرسالة'),
               onTap: () => Navigator.pop(sheetContext, 'edit'),
             ),
@@ -2352,7 +2352,7 @@ class _PrivateMemoryPhotoGalleryState extends State<PrivateMemoryPhotoGallery> {
   @override
   Widget build(BuildContext context) {
     if (widget.media.isEmpty) {
-      return const Center(child: Icon(Icons.photo_library_outlined, color: gold, size: 42));
+      return const Center(child: Icon(Icons.photo_library_outlined, size: 42));
     }
     return Stack(
       fit: StackFit.expand,
@@ -2372,7 +2372,7 @@ class _PrivateMemoryPhotoGalleryState extends State<PrivateMemoryPhotoGallery> {
                   headers: {if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'},
                   fit: BoxFit.contain,
                   errorBuilder: (_, __, ___) => const Center(
-                    child: Icon(Icons.broken_image_outlined, color: gold, size: 48),
+                    child: Icon(Icons.broken_image_outlined, size: 48),
                   ),
                 ),
               ),
@@ -2415,7 +2415,7 @@ class PrivateMemoryLoadError extends StatelessWidget {
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(Icons.cloud_off_outlined, color: gold, size: 48),
+        const Icon(Icons.cloud_off_outlined, size: 48),
         const SizedBox(height: 12),
         const Text('تعذر تحميل ذكرياتك', style: TextStyle(color: gold, fontSize: 18)),
         const SizedBox(height: 8),
@@ -2785,7 +2785,7 @@ class _LoginPageState extends State<LoginPage> {
   InputDecoration _barqDecoration(String label, IconData icon, {String? prefix}) => InputDecoration(
     labelText: label,
     prefixText: prefix,
-    prefixIcon: Icon(icon, color: gold),
+    prefixIcon: Icon(icon),
     filled: true,
     fillColor: glass,
     labelStyle: const TextStyle(color: Colors.white70),
@@ -2852,7 +2852,7 @@ class _LoginPageState extends State<LoginPage> {
                         )),
                         const SizedBox(height: 14),
                         const Center(child: Text('بَرق', style: TextStyle(
-                          color: gold, fontSize: 38, fontWeight: FontWeight.w900, letterSpacing: 1,
+                          color: Theme.of(context).colorScheme.primary, fontSize: 38, fontWeight: FontWeight.w900, letterSpacing: 1,
                         ))),
                         const SizedBox(height: 5),
                         Center(child: Text(
@@ -3053,7 +3053,7 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
           child: ListView(
             padding: const EdgeInsets.all(22),
             children: [
-              const Icon(Icons.shield_outlined, color: gold, size: 58),
+              const Icon(Icons.shield_outlined, size: 58),
               const SizedBox(height: 12),
               const Text(
                 'استعد الوصول إلى حسابك',
@@ -3078,7 +3078,7 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
                 decoration: inputDecoration('رمز الاسترداد', Icons.key).copyWith(
                   suffixIcon: IconButton(
                     onPressed: () => setState(() => obscureCode = !obscureCode),
-                    icon: Icon(obscureCode ? Icons.visibility : Icons.visibility_off, color: gold),
+                    icon: Icon(obscureCode ? Icons.visibility : Icons.visibility_off),
                   ),
                 ),
                 obscureText: obscureCode,
@@ -3364,7 +3364,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                           builder: (_) => PublicProfilePage(person: person, currentUserId: myId, canMessage: true),
                         )),
                         trailing: IconButton(
-                          icon: const Icon(Icons.person_add_alt_1, color: gold),
+                          icon: const Icon(Icons.person_add_alt_1),
                           onPressed: id.isEmpty ? null : () async {
                             try {
                               await Api.addContact(id);
@@ -3739,14 +3739,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Widget _statusesPage() {
     return RefreshIndicator(
-      color: gold,
+      color: Theme.of(context).colorScheme.primary,
       onRefresh: refreshAll,
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          const Padding(
-            padding: EdgeInsets.all(8),
-            child: Text('SPARK', style: TextStyle(color: gold, fontSize: 21, fontWeight: FontWeight.bold)),
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Text('SPARK', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 21, fontWeight: FontWeight.bold)),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -3774,7 +3774,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 45, horizontal: 18),
               child: Column(children: [
-                Icon(Icons.circle_outlined, color: gold, size: 54),
+                Icon(Icons.circle_outlined, size: 54),
                 SizedBox(height: 12),
                 Text('لا توجد حالات نشطة', style: TextStyle(color: gold, fontSize: 18)),
                 SizedBox(height: 6),
@@ -3797,14 +3797,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     backgroundColor: const Color(0xFF46391F),
                     child: ClipOval(
                       child: field(status, ['photoUrl', 'photo_url']).isEmpty
-                          ? const Icon(Icons.person, color: gold)
+                          ? const Icon(Icons.person)
                           : Image.network(
                               '$apiBase${field(status, ['photoUrl', 'photo_url'])}?v=${Uri.encodeComponent(field(status, ['photoUpdatedAt', 'photo_updated_at']))}',
                               width: 44,
                               height: 44,
                               fit: BoxFit.cover,
                               headers: {'Authorization': 'Bearer ${Api.token}'},
-                              errorBuilder: (_, __, ___) => const Icon(Icons.person, color: gold),
+                              errorBuilder: (_, __, ___) => const Icon(Icons.person),
                             ),
                     ),
                   ),
@@ -3827,11 +3827,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                         IconButton(
                           tooltip: 'المشاهدون',
                           onPressed: () => _showSparkViewers(field(status, ['id'])),
-                          icon: const Icon(Icons.visibility_outlined, color: gold),
+                          icon: const Icon(Icons.visibility_outlined),
                         ),
                         Text((status['viewCount'] ?? 0).toString(), style: const TextStyle(color: Colors.white70)),
                       ])
-                    : const Icon(Icons.play_circle_outline, color: gold, size: 24),
+                    : const Icon(Icons.play_circle_outline, size: 24),
               ),
             ),
         ],
@@ -3870,7 +3870,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               subtitle: Text('@${_personUsername(friend)}'),
               trailing: IconButton(
                 tooltip: 'فتح المحادثة',
-                icon: const Icon(Icons.chat_bubble_outline, color: gold),
+                icon: const Icon(Icons.chat_bubble_outline),
                 onPressed: () => Navigator.push(context, MaterialPageRoute(
                   builder: (_) => ChatPage(friend: friend, currentUserId: myId),
                 )),
@@ -3897,22 +3897,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       children: [
         Row(
           children: [
-            const Expanded(child: Text('جهات الاتصال', style: TextStyle(color: gold, fontSize: 21))),
+            Expanded(child: Text('جهات الاتصال', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 21))),
             IconButton(onPressed: searchUsers, icon: const Icon(Icons.search), tooltip: 'البحث والإضافة'),
             IconButton(
               onPressed: matchingContacts ? null : () => matchPhoneContacts(force: true),
               icon: matchingContacts
                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.contacts_outlined, color: gold),
+                  : const Icon(Icons.contacts_outlined),
               tooltip: 'مطابقة جهات الهاتف',
             ),
           ],
         ),
         const SizedBox(height: 8),
         if (matchedContacts.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Text('أشخاص من جهات هاتفك على برق', style: TextStyle(color: gold, fontWeight: FontWeight.bold)),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text('أشخاص من جهات هاتفك على برق', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
           ),
           for (final person in matchedContacts)
             Card(
@@ -3925,7 +3925,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   builder: (_) => PublicProfilePage(person: person, currentUserId: myId, canMessage: true),
                 )),
                 trailing: IconButton(
-                  icon: const Icon(Icons.person_add_alt_1, color: gold),
+                  icon: const Icon(Icons.person_add_alt_1),
                   tooltip: 'إضافة مباشرة',
                   onPressed: () async {
                     try {
@@ -3968,7 +3968,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ),
               subtitle: Text('@${_personUsername(person)}'),
               trailing: IconButton(
-                icon: const Icon(Icons.chat, color: gold),
+                icon: const Icon(Icons.chat),
                 onPressed: () => Navigator.push(context, MaterialPageRoute(
                   builder: (_) => ChatPage(friend: person, currentUserId: myId),
                 )),
@@ -4052,7 +4052,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 return ListTile(
                   title: Text(field(person, ['displayName', 'display_name'], uname)),
                   subtitle: Text('@$uname'),
-                  trailing: IconButton(icon: const Icon(Icons.person_add_alt_1, color: gold),
+                  trailing: IconButton(icon: const Icon(Icons.person_add_alt_1),
                     onPressed: id.isEmpty ? null : () async {
                       try {
                         await Api.addGroupMember(field(group, ['id']), id);
@@ -4087,7 +4087,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => const CircleAvatar(
               backgroundColor: Color(0xFF46391F),
-              child: Icon(Icons.broken_image_outlined, color: gold),
+              child: Icon(Icons.broken_image_outlined),
             ),
           ),
         );
@@ -4133,7 +4133,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Widget _memoriesPage() {
     return RefreshIndicator(
-      color: gold,
+      color: Theme.of(context).colorScheme.primary,
       onRefresh: () async {
         try {
           final loaded = await Api.privateMemories();
@@ -4151,9 +4151,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          const Padding(
-            padding: EdgeInsets.all(12),
-            child: Text('مساحة ذكرياتك الخاصة', style: TextStyle(color: gold, fontSize: 21)),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text('مساحة ذكرياتك الخاصة', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 21)),
           ),
           if (memoriesLoadFailed)
             PrivateMemoryLoadError(
@@ -4176,7 +4176,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 20),
               child: Column(
                 children: [
-                  const Icon(Icons.auto_awesome, color: gold, size: 54),
+                  const Icon(Icons.auto_awesome, size: 54),
                   const SizedBox(height: 12),
                   const Text('احتفظ بلحظاتك المهمة هنا', style: TextStyle(color: gold, fontSize: 18)),
                   const SizedBox(height: 8),
@@ -4295,7 +4295,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                   height: 72,
                                   color: const Color(0xFF292929),
                                   alignment: Alignment.center,
-                                  child: const Icon(Icons.broken_image_outlined, color: gold),
+                                  child: const Icon(Icons.broken_image_outlined),
                                 ),
                               ),
                             ),
@@ -4494,20 +4494,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Widget _groupsPage() {
     return RefreshIndicator(
-      color: gold,
+      color: Theme.of(context).colorScheme.primary,
       onRefresh: refreshAll,
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          const Padding(padding: EdgeInsets.all(12),
-            child: Text('مجموعاتك', style: TextStyle(color: gold, fontSize: 21))),
+          Padding(padding: const EdgeInsets.all(12),
+            child: Text('مجموعاتك', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 21))),
           if (groups.isEmpty)
             const Padding(padding: EdgeInsets.all(20), child: Text(
               'لا توجد مجموعات بعد. أنشئ مجموعة وابدأ بإضافة الأشخاص مباشرة.',
               textAlign: TextAlign.center, style: TextStyle(color: Colors.white60))),
           for (final group in groups)
             Card(color: Theme.of(context).colorScheme.surface, child: ListTile(
-              leading: const CircleAvatar(backgroundColor: Color(0xFF46391F), child: Icon(Icons.groups, color: gold)),
+              leading: const CircleAvatar(backgroundColor: Color(0xFF46391F), child: Icon(Icons.groups)),
               title: Text(field(group, ['name'], 'مجموعة')),
               subtitle: Text('${field(group, ['description'], 'مجموعة برق')} • ${field(group, ['member_count'], '1')} أعضاء'),
               trailing: const Icon(Icons.chevron_left),
@@ -4529,7 +4529,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: gold, size: 56),
+            Icon(icon, size: 56),
             const SizedBox(height: 12),
             Text(title, style: const TextStyle(color: gold, fontSize: 22)),
             Padding(
@@ -4751,7 +4751,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             const Text('هذا رابط دعوتك الخاص لمشاركة برق مع من تختار.'),
             const SizedBox(height: 14),
-            const Text('رمز الدعوة', style: TextStyle(color: gold)),
+            Text('رمز الدعوة', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
             SelectableText(code, textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: 2)),
             const SizedBox(height: 10),
             SelectableText(link, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
@@ -4957,7 +4957,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ),
               const SizedBox(height: 12),
               Text(displayName, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold)),
-              Text('@$username', style: const TextStyle(color: gold)),
+              Text('@$username', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
               const SizedBox(height: 8),
               Text(phone, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
             ],
@@ -4966,14 +4966,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         const SizedBox(height: 14),
         const Card(
                     child: ListTile(
-            leading: Icon(Icons.info_outline, color: gold),
+            leading: Icon(Icons.info_outline),
             title: Text('حالة الاتصال'),
             subtitle: Text('متصل بخادم برق'),
           ),
         ),
         Card(
                     child: ListTile(
-            leading: const Icon(Icons.edit_outlined, color: gold),
+            leading: const Icon(Icons.edit_outlined),
             title: const Text('تعديل الملف الشخصي'),
             subtitle: const Text('تغيير الاسم الظاهر ورقم الهاتف'),
             trailing: const Icon(Icons.chevron_left),
@@ -4982,7 +4982,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
         Card(
                     child: ListTile(
-            leading: const Icon(Icons.key_rounded, color: gold),
+            leading: const Icon(Icons.key_rounded),
             title: const Text('رمز استرداد الحساب'),
             subtitle: const Text('إنشاء رمز جديد بعد تأكيد كلمة المرور'),
             trailing: const Icon(Icons.chevron_left),
@@ -4991,7 +4991,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
         Card(
                     child: ListTile(
-            leading: const Icon(Icons.lock_outline, color: gold),
+            leading: const Icon(Icons.lock_outline),
             title: const Text('إعدادات الخصوصية'),
             subtitle: const Text('الظهور في البحث وإشعارات قراءة الرسائل'),
             trailing: const Icon(Icons.chevron_left),
@@ -5000,7 +5000,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
         Card(
                     child: ListTile(
-            leading: const Icon(Icons.notifications_outlined, color: gold),
+            leading: const Icon(Icons.notifications_outlined),
             title: const Text('تفضيلات الإشعارات'),
             subtitle: const Text('الرسائل الخاصة والمجموعات وSPARK'),
             trailing: const Icon(Icons.chevron_left),
@@ -5009,7 +5009,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
         Card(
                     child: SwitchListTile(
-            secondary: const Icon(Icons.flash_on_rounded, color: gold),
+            secondary: const Icon(Icons.flash_on_rounded),
             title: const Text('وضع البرق'),
             subtitle: const Text('أولوية للرسائل النصية وتعطيل إرسال الصور والفيديو والملفات لتقليل استهلاك البيانات.'),
             value: BarqFeatures.lightningMode,
@@ -5026,7 +5026,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
         Card(
                     child: SwitchListTile(
-            secondary: const Icon(Icons.translate_rounded, color: gold),
+            secondary: const Icon(Icons.translate_rounded),
             title: const Text('الترجمة التلقائية عربي / إنجليزي'),
             subtitle: const Text('تعرض ترجمة الرسائل بجانب النص الأصلي باستخدام نموذج محلي على الجهاز. يمكنك إيقافها في أي وقت.'),
             value: BarqFeatures.autoTranslate,
@@ -5043,7 +5043,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
         Card(
                     child: ListTile(
-            leading: const Icon(Icons.wifi_tethering, color: gold),
+            leading: const Icon(Icons.wifi_tethering),
             title: const Text('المراسلة دون إنترنت — الأجهزة القريبة'),
             subtitle: const Text('اكتشاف هاتف صديق قريب ونقل الرسائل النصية دون إنترنت.'),
             trailing: const Icon(Icons.chevron_left),
@@ -5052,7 +5052,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
         Card(
                     child: ListTile(
-            leading: const Icon(Icons.bolt, color: gold),
+            leading: const Icon(Icons.bolt),
             title: const Text('رابط الدعوة الخاص'),
             subtitle: const Text('شارك رابطك الخاص للانضمام إلى برق.'),
             trailing: const Icon(Icons.chevron_left),
@@ -5061,7 +5061,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
         Card(
                     child: ListTile(
-            leading: const Icon(Icons.refresh, color: gold),
+            leading: const Icon(Icons.refresh),
             title: const Text('تحديث البيانات'),
             onTap: refreshAll,
           ),
@@ -5069,7 +5069,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         const SizedBox(height: 12),
         const Card(
                     child: ListTile(
-            leading: Icon(Icons.info_outline, color: gold),
+            leading: Icon(Icons.info_outline),
             title: Text('حول برق'),
             subtitle: Text('المطور: يحيى المهدي'),
           ),
@@ -5247,7 +5247,7 @@ Future<void> showBarqConversationTools(
           mainAxisSize: MainAxisSize.min,
           children: [
             Row(children: [
-              const Icon(Icons.build_circle_outlined, color: gold),
+              const Icon(Icons.build_circle_outlined),
               const SizedBox(width: 9),
               const Expanded(child: Text('أدوات المحادثة',
                 style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold))),
@@ -5260,7 +5260,7 @@ Future<void> showBarqConversationTools(
             const Divider(color: Colors.white24),
             for (final tool in tools)
               ListTile(
-                leading: Icon(tool.icon, color: gold),
+                leading: Icon(tool.icon),
                 title: Text(tool.title),
                 subtitle: Text(tool.subtitle, style: const TextStyle(color: Colors.white54, fontSize: 11)),
                 onTap: () {
@@ -5327,7 +5327,6 @@ Future<void> showBarqMessageCollectionDialog(
                   return ListTile(
                     leading: Icon(
                       attachmentsOnly ? Icons.attach_file : Icons.push_pin_outlined,
-                      color: gold,
                     ),
                     title: Text(preview, maxLines: 2, overflow: TextOverflow.ellipsis),
                     subtitle: Text(field(message, ['display_name', 'username'], 'مستخدم'),
@@ -5377,7 +5376,7 @@ class _BarqConversationSummaryDialogState extends State<BarqConversationSummaryD
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(children: [
-                const Icon(Icons.auto_awesome, color: gold),
+                const Icon(Icons.auto_awesome),
                 const SizedBox(width: 9),
                 const Expanded(child: Text('ملخص المحادثة',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
@@ -5647,7 +5646,7 @@ class _BarqVoiceRecordButtonState extends State<BarqVoiceRecordButton> {
           onPressed: _busy || (widget.disabled && !_recording) ? null : _toggleRecording,
           icon: _busy
               ? const SizedBox(width: 20, height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: gold))
+                  child: CircularProgressIndicator(strokeWidth: 2))
               : Icon(_recording ? Icons.stop_circle_rounded : Icons.mic_none_rounded,
                   color: _recording ? Colors.redAccent : gold),
         ),
@@ -5984,7 +5983,7 @@ class _AttachmentTileState extends State<_AttachmentTile> {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: Image.memory(snapshot.data!, width: 76, height: 76, fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const SizedBox(width: 76, height: 76, child: Icon(Icons.broken_image_outlined, color: gold))),
+                    errorBuilder: (_, __, ___) => const SizedBox(width: 76, height: 76, child: Icon(Icons.broken_image_outlined))),
                 ),
               );
             }
@@ -5996,7 +5995,7 @@ class _AttachmentTileState extends State<_AttachmentTile> {
                 child: InkWell(
                   borderRadius: BorderRadius.circular(8),
                   onTap: () => _openDocument(snapshot.data!),
-                  child: Icon(_isPdf ? Icons.picture_as_pdf_outlined : Icons.description_outlined, color: gold, size: 34),
+                  child: Icon(_isPdf ? Icons.picture_as_pdf_outlined : Icons.description_outlined, size: 34),
                 ),
               ),
             );
@@ -6004,10 +6003,10 @@ class _AttachmentTileState extends State<_AttachmentTile> {
           if (snapshot.hasError) {
             return IconButton(tooltip: 'إعادة تحميل المعاينة',
               onPressed: () => setState(() => _loadPreview()),
-              icon: const Icon(Icons.refresh, color: gold));
+              icon: const Icon(Icons.refresh));
           }
           return const SizedBox(width: 76, height: 76,
-            child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: gold)));
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)));
         },
       );
     } else if (_isAudio) {
@@ -6015,17 +6014,17 @@ class _AttachmentTileState extends State<_AttachmentTile> {
         tooltip: _audioPlaying ? 'إيقاف مؤقت' : 'تشغيل التسجيل الصوتي',
         onPressed: _audioLoading ? null : _toggleAudio,
         icon: _audioLoading
-            ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: gold))
-            : Icon(_audioPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill, color: gold, size: 34),
+            ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
+            : Icon(_audioPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill, size: 34),
       );
     } else if (_isVideo) {
       leading = IconButton(
         tooltip: 'تشغيل الفيديو',
         onPressed: _openVideo,
-        icon: const Icon(Icons.play_circle_fill, color: gold, size: 34),
+        icon: const Icon(Icons.play_circle_fill, size: 34),
       );
     } else {
-      leading = Icon(icon, color: gold, size: 28);
+      leading = Icon(icon, size: 28);
     }
 
     return Container(
@@ -6043,7 +6042,7 @@ class _AttachmentTileState extends State<_AttachmentTile> {
               constraints: const BoxConstraints(maxWidth: 150),
               child: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
             )),
-            IconButton(onPressed: widget.onDownload, icon: const Icon(Icons.download, color: gold), tooltip: 'تنزيل الملف'),
+            IconButton(onPressed: widget.onDownload, icon: const Icon(Icons.download), tooltip: 'تنزيل الملف'),
           ]),
           if (_isAudio) ...[
             Row(children: [
@@ -6377,7 +6376,7 @@ class _NearbyDevicesPageState extends State<NearbyDevicesPage> {
         appBar: AppBar(title: const Text('الأجهزة القريبة')),
         body: ListView(padding: const EdgeInsets.all(16), children: [
           Card(color: Theme.of(context).colorScheme.surface, child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Row(children: [Icon(Icons.wifi_tethering, color: gold), SizedBox(width: 8), Text('مراسلة محلية دون إنترنت', style: TextStyle(fontWeight: FontWeight.bold))]),
+            const Row(children: [Icon(Icons.wifi_tethering), SizedBox(width: 8), Text('مراسلة محلية دون إنترنت', style: TextStyle(fontWeight: FontWeight.bold))]),
             const SizedBox(height: 8),
             Text(statusText),
             const SizedBox(height: 8),
@@ -6392,15 +6391,15 @@ class _NearbyDevicesPageState extends State<NearbyDevicesPage> {
           const SizedBox(height: 12),
           Text('الأجهزة المتصلة (${connected.length})', style: const TextStyle(color: gold, fontWeight: FontWeight.bold)),
           if (connected.isEmpty) const ListTile(title: Text('لا توجد أجهزة متصلة بعد.')),
-          ...connected.map((entry) => ListTile(leading: const Icon(Icons.link, color: gold), title: Text(_friendName(entry.value)), subtitle: const Text('متصل وجاهز للرسائل النصية'))),
+          ...connected.map((entry) => ListTile(leading: const Icon(Icons.link), title: Text(_friendName(entry.value)), subtitle: const Text('متصل وجاهز للرسائل النصية'))),
           const SizedBox(height: 12),
           Text('الأصدقاء القريبون (${discovered.length})', style: const TextStyle(color: gold, fontWeight: FontWeight.bold)),
           if (discovered.isEmpty) const ListTile(title: Text('لا يظهر أصدقاؤك الآن. افتح الشاشة نفسها على هاتف صديقك وتأكد من تشغيل Bluetooth والموقع.'), dense: true),
           ...discovered.entries.map((entry) => Card(color: Theme.of(context).colorScheme.surface, child: ListTile(
-            leading: const Icon(Icons.phone_android, color: gold),
+            leading: const Icon(Icons.phone_android),
             title: Text(_friendName(entry.value)),
             subtitle: const Text('قريب — لم يتم الاتصال بعد'),
-            trailing: IconButton(icon: const Icon(Icons.link, color: gold), tooltip: 'طلب اتصال', onPressed: () async {
+            trailing: IconButton(icon: const Icon(Icons.link), tooltip: 'طلب اتصال', onPressed: () async {
               try { await BarqNearbyService.instance.requestConnection(entry.key); }
               catch (e) {
                 if (!context.mounted) return;
@@ -6515,27 +6514,27 @@ class PublicProfilePage extends StatelessWidget {
                 style: const TextStyle(fontSize: 25, fontWeight: FontWeight.bold)),
             const SizedBox(height: 5),
             Text('@$username', textAlign: TextAlign.center,
-                style: const TextStyle(color: gold, fontSize: 16)),
+                style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 16)),
             const SizedBox(height: 26),
             Card(
               color: Theme.of(context).colorScheme.surface,
               child: Column(
                 children: [
                   ListTile(
-                    leading: const Icon(Icons.badge_outlined, color: gold),
+                    leading: const Icon(Icons.badge_outlined),
                     title: const Text('اسم المستخدم'),
                     subtitle: Text('@$username'),
                   ),
                   if (phone.isNotEmpty) const Divider(height: 1, indent: 16, endIndent: 16),
                   if (phone.isNotEmpty)
                     ListTile(
-                      leading: const Icon(Icons.phone_outlined, color: gold),
+                      leading: const Icon(Icons.phone_outlined),
                       title: const Text('رقم الهاتف'),
                       subtitle: Text(phone, textDirection: TextDirection.ltr),
                     ),
                   const Divider(height: 1, indent: 16, endIndent: 16),
                   const ListTile(
-                    leading: Icon(Icons.flash_on_rounded, color: gold),
+                    leading: Icon(Icons.flash_on_rounded),
                     title: Text('على برق'),
                     subtitle: Text('التواصل بنبض الضوء'),
                   ),
@@ -6919,7 +6918,7 @@ class _ChatPageState extends State<ChatPage> {
               Flexible(child: Text(name, overflow: TextOverflow.ellipsis)),
               if (BarqFeatures.lightningMode) ...[
                 const SizedBox(width: 6),
-                const Icon(Icons.flash_on_rounded, color: gold, size: 18),
+                const Icon(Icons.flash_on_rounded, size: 18),
               ],
             ]),
           ),
@@ -6958,10 +6957,10 @@ class _ChatPageState extends State<ChatPage> {
                     title: 'الوسائط والملفات', messages: messages, attachmentsOnly: true),
                 ),
               ]),
-              icon: const Icon(Icons.build_circle_outlined, color: gold),
+              icon: const Icon(Icons.build_circle_outlined),
               tooltip: 'أدوات المحادثة',
             ),
-            IconButton(onPressed: loadMessages, icon: const Icon(Icons.refresh, color: gold)),
+            IconButton(onPressed: loadMessages, icon: const Icon(Icons.refresh)),
           ],
         ),
         body: Column(
@@ -7014,7 +7013,7 @@ class _ChatPageState extends State<ChatPage> {
                                       const Padding(
                                         padding: EdgeInsets.only(bottom: 5),
                                         child: Row(mainAxisSize: MainAxisSize.min, children: [
-                                          Icon(Icons.timer_outlined, size: 13, color: gold),
+                                          Icon(Icons.timer_outlined, size: 13),
                                           SizedBox(width: 4),
                                           Text('رسالة مؤقتة', style: TextStyle(color: gold, fontSize: 10)),
                                         ]),
@@ -7131,7 +7130,7 @@ class _ChatPageState extends State<ChatPage> {
                                       const Padding(
                                         padding: EdgeInsets.only(top: 4),
                                         child: Row(mainAxisSize: MainAxisSize.min, children: [
-                                          Icon(Icons.push_pin, size: 12, color: gold),
+                                          Icon(Icons.push_pin, size: 12),
                                           SizedBox(width: 3),
                                           Text('مثبتة', style: TextStyle(color: gold, fontSize: 10)),
                                         ]),
@@ -7174,7 +7173,7 @@ class _ChatPageState extends State<ChatPage> {
                     if (!BarqFeatures.lightningMode)
                       IconButton(
                         onPressed: sending ? null : pickAndSendFile,
-                        icon: const Icon(Icons.attach_file, color: gold),
+                        icon: const Icon(Icons.attach_file),
                         tooltip: 'إرسال ملف أو صورة أو فيديو',
                       ),
                     if (!BarqFeatures.lightningMode && !ephemeralMode)
@@ -7199,7 +7198,7 @@ class _ChatPageState extends State<ChatPage> {
                       IconButton(onPressed: sending ? null : () => setState(() => replyToMessage = null),
                         icon: const Icon(Icons.close, color: Colors.white70), tooltip: 'إلغاء الرد'),
                     IconButton.filled(
-                      style: IconButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+                      style: IconButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary),
                       onPressed: sending ? null : send,
                       icon: sending
                           ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
@@ -7493,15 +7492,15 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
                   tooltip: _recordingAudioReply ? 'إيقاف وإرسال الرد الصوتي' : 'تسجيل رد صوتي',
                   onPressed: _uploadingAudioReply ? null : _toggleAudioReplyRecording,
                   icon: _uploadingAudioReply
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: gold))
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                       : Icon(_recordingAudioReply ? Icons.stop_circle_rounded : Icons.mic_rounded,
                           color: _recordingAudioReply ? Colors.redAccent : gold),
                 ),
                 IconButton(
                   onPressed: _sendingReply ? null : _sendReply,
                   icon: _sendingReply
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: gold))
-                      : const Icon(Icons.send_rounded, color: gold),
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.send_rounded),
                 ),
               ]),
             ]),
@@ -7597,8 +7596,8 @@ class _SparkAudioReplyTileState extends State<_SparkAudioReplyTile> {
           visualDensity: VisualDensity.compact,
           onPressed: _toggle,
           icon: _loading
-              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: gold))
-              : Icon(_playing ? Icons.pause_circle_filled : Icons.play_circle_fill, color: gold),
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              : Icon(_playing ? Icons.pause_circle_filled : Icons.play_circle_fill),
         ),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
           Text(widget.author, style: const TextStyle(color: Colors.white70, fontSize: 11)),
@@ -8030,7 +8029,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
             Flexible(child: Text(field(widget.group, ['name'], 'مجموعة'), overflow: TextOverflow.ellipsis)),
             if (BarqFeatures.lightningMode) ...[
               const SizedBox(width: 6),
-              const Icon(Icons.flash_on_rounded, color: gold, size: 18),
+              const Icon(Icons.flash_on_rounded, size: 18),
             ],
           ]),
           actions: [
@@ -8068,13 +8067,13 @@ class _GroupChatPageState extends State<GroupChatPage> {
                     title: 'الوسائط والملفات', messages: messages, attachmentsOnly: true),
                 ),
               ]),
-              icon: const Icon(Icons.build_circle_outlined, color: gold),
+              icon: const Icon(Icons.build_circle_outlined),
               tooltip: 'أدوات المحادثة',
             ),
-            IconButton(onPressed: showGroupMembers, icon: const Icon(Icons.people_alt_outlined, color: gold), tooltip: 'أعضاء المجموعة'),
+            IconButton(onPressed: showGroupMembers, icon: const Icon(Icons.people_alt_outlined), tooltip: 'أعضاء المجموعة'),
             if (['owner', 'admin'].contains(field(widget.group, ['current_role'], 'member')))
-              IconButton(onPressed: widget.onAddMember, icon: const Icon(Icons.person_add_alt_1, color: gold), tooltip: 'إضافة عضو'),
-            IconButton(onPressed: loadMessages, icon: const Icon(Icons.refresh, color: gold)),
+              IconButton(onPressed: widget.onAddMember, icon: const Icon(Icons.person_add_alt_1), tooltip: 'إضافة عضو'),
+            IconButton(onPressed: loadMessages, icon: const Icon(Icons.refresh)),
           ],
         ),
         body: Column(children: [
@@ -8229,7 +8228,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
                             const Padding(
                               padding: EdgeInsets.only(top: 4),
                               child: Row(mainAxisSize: MainAxisSize.min, children: [
-                                Icon(Icons.push_pin, size: 12, color: gold),
+                                Icon(Icons.push_pin, size: 12),
                                 SizedBox(width: 3),
                                 Text('مثبتة', style: TextStyle(color: gold, fontSize: 10)),
                               ]),
@@ -8258,7 +8257,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
             child: Row(children: [
               if (!BarqFeatures.lightningMode)
                 IconButton(onPressed: sending ? null : pickAndSendFile,
-                  icon: const Icon(Icons.attach_file, color: gold), tooltip: 'إرسال ملف أو صورة أو فيديو'),
+                  icon: const Icon(Icons.attach_file), tooltip: 'إرسال ملف أو صورة أو فيديو'),
               if (!BarqFeatures.lightningMode)
                 BarqVoiceRecordButton(disabled: sending, onSend: _sendVoiceRecording),
               Expanded(child: TextField(controller: controller, minLines: 1, maxLines: 4,
