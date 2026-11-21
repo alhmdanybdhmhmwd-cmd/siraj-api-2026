@@ -5081,102 +5081,143 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
   Future<void> _showBarqIdentityPicker(BuildContext context) async {
+    var draftIdentity = BarqIdentity.selected.value;
+    var saving = false;
     await showDialog<void>(
       context: context,
-      builder: (dialogContext) => ValueListenableBuilder<BarqIdentity>(
-        valueListenable: BarqIdentity.selected,
-        builder: (context, selected, _) => AlertDialog(
-          title: const Text('اختر هوية برق'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: BarqIdentity.values.map((identity) {
-              final palette = BarqIdentityPalette.forIdentity(identity);
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(14),
-                  onTap: () async {
-                    try {
-                      await BarqIdentity.set(identity);
-                      if (dialogContext.mounted) Navigator.pop(dialogContext);
-                    } catch (e) {
-                      if (dialogContext.mounted) {
-                        showMsg(dialogContext, 'تعذر حفظ الهوية: ${cleanError(e)}');
-                      }
-                    }
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: selected == identity ? palette.primary : palette.border,
-                        width: selected == identity ? 2 : 1,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final draftPalette = BarqIdentityPalette.forIdentity(draftIdentity);
+          return AlertDialog(
+            title: const Text('اختر هوية برق'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: draftPalette.surface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: draftPalette.primary.withValues(alpha: .65)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(colors: [draftPalette.primary, draftPalette.secondary]),
+                          boxShadow: [BoxShadow(color: draftPalette.glow.withValues(alpha: .25), blurRadius: 12)],
+                        ),
+                        child: Icon(draftPalette.motif, color: draftPalette.onPrimary),
                       ),
-                      color: palette.surface,
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [palette.primary, palette.secondary],
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: palette.glow.withValues(alpha: .24),
-                                blurRadius: 12,
-                                spreadRadius: 1,
-                              ),
-                            ],
-                          ),
-                          child: Icon(palette.motif, color: palette.onPrimary, size: 24),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(BarqIdentity.label(draftIdentity),
+                              style: TextStyle(color: draftPalette.text, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 3),
+                            Text(draftPalette.tagline,
+                              style: TextStyle(color: draftPalette.mutedText, fontSize: 11)),
+                          ],
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                BarqIdentity.label(identity),
-                                style: TextStyle(
-                                  color: palette.text,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                palette.tagline,
-                                style: TextStyle(color: palette.mutedText, fontSize: 11),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (selected == identity)
-                          Icon(Icons.check_circle_rounded, color: palette.primary),
-                      ],
-                    ),
+                      ),
+                      Icon(Icons.visibility_outlined, color: draftPalette.primary),
+                    ],
                   ),
                 ),
-              );
-            }).toList(),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('إغلاق'),
+                ...BarqIdentity.values.map((identity) {
+                  final palette = BarqIdentityPalette.forIdentity(identity);
+                  final isDraft = draftIdentity == identity;
+                  final isCurrent = BarqIdentity.selected.value == identity;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: saving ? null : () => setDialogState(() => draftIdentity = identity),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isDraft ? palette.primary : palette.border,
+                            width: isDraft ? 2 : 1,
+                          ),
+                          color: palette.surface,
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 42,
+                              height: 42,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                gradient: LinearGradient(colors: [palette.primary, palette.secondary]),
+                              ),
+                              child: Icon(palette.motif, color: palette.onPrimary, size: 23),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(BarqIdentity.label(identity),
+                                    style: TextStyle(color: palette.text, fontWeight: FontWeight.w700)),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    identity == BarqIdentity.purpleShadow || identity == BarqIdentity.skyJewel
+                                      ? 'هوية إضافية'
+                                      : palette.tagline,
+                                    style: TextStyle(color: palette.mutedText, fontSize: 11),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (isCurrent && !isDraft)
+                              Icon(Icons.check_circle_outline, color: palette.mutedText, size: 19),
+                            if (isDraft)
+                              Icon(Icons.radio_button_checked, color: palette.primary),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ],
             ),
-          ],
-        ),
+            actions: [
+              TextButton(
+                onPressed: saving ? null : () => Navigator.pop(dialogContext),
+                child: const Text('إلغاء'),
+              ),
+              FilledButton(
+                onPressed: saving ? null : () async {
+                  setDialogState(() => saving = true);
+                  try {
+                    await BarqIdentity.set(draftIdentity);
+                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                  } catch (e) {
+                    if (dialogContext.mounted) {
+                      setDialogState(() => saving = false);
+                      showMsg(dialogContext, 'تعذر حفظ الهوية: ${cleanError(e)}');
+                    }
+                  }
+                },
+                child: saving
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('معاينة وتطبيق الهوية'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
-
 }
 
 String _messageTime(String raw) {
