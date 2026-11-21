@@ -192,3 +192,17 @@ test("route security: expired sessions reject chunk upload and completion",async
   const complete=await f.call("/api/media/uploads/"+id+"/complete","POST",{});
   assert.equal(complete.status,410);
 });
+
+
+test("route security: revoked conversation membership blocks further upload and completion",async t=>{
+  const f=fixture();t.after(f.restore);
+  const created=await f.call("/api/media/uploads","POST",declaration(32,"revoked-member-001"));
+  assert.equal(created.status,201);
+  const id=(await created.json()).session.id;
+  f.DB.friendships.delete("user-1:friend-1");
+  const chunk=await f.call("/api/media/uploads/"+id+"/chunks/1","PUT",new Uint8Array(32));
+  assert.equal(chunk.status,403,"revoked member must not upload more bytes");
+  const complete=await f.call("/api/media/uploads/"+id+"/complete","POST",{});
+  assert.equal(complete.status,403,"revoked member must not complete an upload");
+  assert.equal(f.DB.sessions.get(id).state,"uploading");
+});
