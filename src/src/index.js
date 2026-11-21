@@ -168,10 +168,13 @@ async function verifyToken(token, secret) {
       new TextDecoder().decode(decodeBase64url(parts[1]))
     );
 
+    // Treat JWT claims as typed security data, not JavaScript-coercible values.
+    // This rejects numeric/string confusion, empty subjects and fractional expiries.
     if (
-      !payload.sub ||
-      !payload.exp ||
-      payload.exp < Math.floor(Date.now() / 1000)
+      typeof payload.sub !== "string" ||
+      payload.sub.trim().length === 0 ||
+      !Number.isSafeInteger(payload.exp) ||
+      payload.exp <= Math.floor(Date.now() / 1000)
     ) {
       return null;
     }
