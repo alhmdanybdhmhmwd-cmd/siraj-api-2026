@@ -1419,7 +1419,24 @@ export default {
                 updated_at = CURRENT_TIMESTAMP
             `).bind(currentUser.sub, objectKey, contentType).run();
           } catch (error) {
-            try { await storage.fetch(storageUrl, { method: "DELETE" }); } catch (_) {}
+            let objectRemoved = false;
+            try {
+              const deletion = await storage.fetch(storageUrl, { method: "DELETE" });
+              objectRemoved = deletion.ok || deletion.status === 404;
+            } catch (cleanupError) {
+              console.error("SPARK audio rollback delete failed:", cleanupError);
+            }
+            // If Tigris cannot delete the orphan immediately, preserve a retry
+            // record so the scheduled cleanup can remove it after status expiry.
+            if (!objectRemoved) {
+              try {
+                await env.DB.prepare(
+                  "INSERT OR IGNORE INTO media_expirations (object_key, expires_at) VALUES (?, ?)"
+                ).bind(objectKey, expiresAt).run();
+              } catch (cleanupError) {
+                console.error("SPARK audio rollback retry record failed:", cleanupError);
+              }
+            }
             throw error;
           }
           if (previous?.object_key && previous.object_key !== objectKey) {
@@ -2063,6 +2080,9 @@ export default {
           statusId = decodeURIComponent(sparkAudioReplyMatch[1]);
           audioReplyId = sparkAudioReplyMatch[2] ? decodeURIComponent(sparkAudioReplyMatch[2]) : null;
         } catch (_) {
+          return json({ error: "Invalid SPARK audio reply identifier" }, 400);
+        }
+        if (!statusId || statusId.length > 128 || (audioReplyId && audioReplyId.length > 128)) {
           return json({ error: "Invalid SPARK audio reply identifier" }, 400);
         }
         const status = await env.DB.prepare(
