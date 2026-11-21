@@ -303,11 +303,10 @@ class SirajPush {
       );
       if (!barqCanRegisterFcmToken(permission.authorizationStatus)) return;
 
-      final token = normalizeBarqFcmToken(await messaging.getToken());
-      if (token != null) await Api.registerDeviceToken(token);
-
+      // Attach refresh handling before the first network registration. If the
+      // initial POST fails, the next Firebase token refresh can still recover.
       if (!_listening) {
-        FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
+        messaging.onTokenRefresh.listen((newToken) async {
           final refreshedToken = normalizeBarqFcmToken(newToken);
           if (Api.token == null || refreshedToken == null) return;
           try {
@@ -318,6 +317,9 @@ class SirajPush {
         });
         _listening = true;
       }
+
+      final token = normalizeBarqFcmToken(await messaging.getToken());
+      if (token != null) await Api.registerDeviceToken(token);
     } catch (_) {
       // فشل الإشعارات لا يمنع الدخول أو استخدام التطبيق.
     }
