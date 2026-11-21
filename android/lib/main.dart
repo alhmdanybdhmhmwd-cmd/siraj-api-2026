@@ -2034,6 +2034,37 @@ class _PrivateMemoryPhotoGalleryState extends State<PrivateMemoryPhotoGallery> {
   }
 }
 
+class PrivateMemoryLoadError extends StatelessWidget {
+  final VoidCallback onRetry;
+
+  const PrivateMemoryLoadError({super.key, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 20),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.cloud_off_outlined, color: gold, size: 48),
+        const SizedBox(height: 12),
+        const Text('تعذر تحميل ذكرياتك', style: TextStyle(color: gold, fontSize: 18)),
+        const SizedBox(height: 8),
+        const Text(
+          'تحقق من اتصالك وحاول التحديث. لم نحذف ذكرياتك المحفوظة.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.white60),
+        ),
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          onPressed: onRetry,
+          icon: const Icon(Icons.refresh),
+          label: const Text('إعادة المحاولة'),
+        ),
+      ],
+    ),
+  );
+}
+
 class StartupPage extends StatefulWidget {
   const StartupPage({super.key});
 
@@ -3755,34 +3786,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             child: Text('مساحة ذكرياتك الخاصة', style: TextStyle(color: gold, fontSize: 21)),
           ),
           if (memoriesLoadFailed)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 20),
-              child: Column(
-                children: [
-                  const Icon(Icons.cloud_off_outlined, color: gold, size: 48),
-                  const SizedBox(height: 12),
-                  const Text('تعذر تحميل ذكرياتك', style: TextStyle(color: gold, fontSize: 18)),
-                  const SizedBox(height: 8),
-                  const Text('تحقق من اتصالك وحاول التحديث. لم نحذف ذكرياتك المحفوظة.', textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white60)),
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    onPressed: () async {
-                      try {
-                        final loaded = await Api.privateMemories();
-                        if (mounted) setState(() {
-                          memories = loaded;
-                          memoriesLoadFailed = false;
-                        });
-                      } catch (e) {
-                        if (mounted) showMsg(context, cleanError(e));
-                      }
-                    },
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('إعادة المحاولة'),
-                  ),
-                ],
-              ),
+            PrivateMemoryLoadError(
+              onRetry: () async {
+                try {
+                  final loaded = await Api.privateMemories();
+                  if (mounted) setState(() {
+                    memories = loaded;
+                    memoriesLoadFailed = false;
+                  });
+                } catch (e) {
+                  if (mounted) showMsg(context, cleanError(e));
+                }
+              },
             )
           else if (memories.isEmpty)
             Padding(
