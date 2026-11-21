@@ -3033,9 +3033,22 @@ export default {
           ).bind(message, messageId, groupId, currentUser.sub).run();
           return json({ message: "Message updated", id: messageId, body: message, editedAt: true });
         }
-        await env.DB.prepare(
-          "DELETE FROM group_messages WHERE id = ? AND group_id = ? AND sender_id = ?"
-        ).bind(messageId, groupId, currentUser.sub).run();
+        // Remove per-message interaction metadata in the same D1 batch as the
+        // owned message deletion; these tables intentionally have no message FK.
+        const deletion = await env.DB.batch([
+          env.DB.prepare(
+            "DELETE FROM message_reactions WHERE scope_type = 'group' AND scope_id = ? AND message_id = ?"
+          ).bind(groupId, messageId),
+          env.DB.prepare(
+            "DELETE FROM pinned_messages WHERE scope_type = 'group' AND scope_id = ? AND message_id = ?"
+          ).bind(groupId, messageId),
+          env.DB.prepare(
+            "DELETE FROM group_messages WHERE id = ? AND group_id = ? AND sender_id = ?"
+          ).bind(messageId, groupId, currentUser.sub)
+        ]);
+        if (Number(deletion?.[2]?.meta?.changes || 0) !== 1) {
+          return json({ error: "Message not found or cannot be changed" }, 404);
+        }
         return json({ message: "Message deleted", id: messageId });
       }
 
@@ -3395,7 +3408,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
       if ((method === "DELETE" || method === "PATCH") && privateMessageActionMatch) {
         const messageId = privateMessageActionMatch[1];
         const owned = await env.DB.prepare(
-          "SELECT id FROM messages WHERE id = ? AND sender_id = ?"
+          "SELECT id, sender_id, receiver_id FROM messages WHERE id = ? AND sender_id = ?"
         ).bind(messageId, currentUser.sub).first();
         if (!owned) return json({ error: "Message not found or cannot be changed" }, 404);
         if (method === "PATCH") {
@@ -3407,9 +3420,22 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           ).bind(message, messageId, currentUser.sub).run();
           return json({ message: "Message updated", id: messageId, body: message, editedAt: true });
         }
-        await env.DB.prepare(
-          "DELETE FROM messages WHERE id = ? AND sender_id = ?"
-        ).bind(messageId, currentUser.sub).run();
+        const scopeId = [owned.sender_id, owned.receiver_id].sort().join(":");
+        // Keep deleted content from leaving orphan reactions or personal pins.
+        const deletion = await env.DB.batch([
+          env.DB.prepare(
+            "DELETE FROM message_reactions WHERE scope_type = 'private' AND scope_id = ? AND message_id = ?"
+          ).bind(scopeId, messageId),
+          env.DB.prepare(
+            "DELETE FROM pinned_messages WHERE scope_type = 'private' AND scope_id = ? AND message_id = ?"
+          ).bind(scopeId, messageId),
+          env.DB.prepare(
+            "DELETE FROM messages WHERE id = ? AND sender_id = ?"
+          ).bind(messageId, currentUser.sub)
+        ]);
+        if (Number(deletion?.[2]?.meta?.changes || 0) !== 1) {
+          return json({ error: "Message not found or cannot be changed" }, 404);
+        }
         return json({ message: "Message deleted", id: messageId });
       }
 
