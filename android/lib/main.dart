@@ -2635,6 +2635,8 @@ class _StartupPageState extends State<StartupPage> {
             if (decoded is Map) {
               final cachedUser = Map<String, dynamic>.from(decoded);
               if (cachedUser.isNotEmpty && mounted) {
+                await SirajPush.loadCachedPreferences();
+                await SirajPush.register();
                 Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomePage(user: cachedUser)));
                 return;
               }
