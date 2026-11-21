@@ -567,3 +567,11 @@
 - Backend CI نجح على commit `76bdb26d7435cea0fc76917b6f816afb5148ee61`: **229/229 اختباراً، صفر فشل**، مع نجاح تدقيق قابلية النقل وفحوص SQL migrations وD1 schema وWrangler وAndroid release safety. التشغيل: [44949926332](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026/actions/runs/44949926332).
 - **حدود الإنجاز:** موائم SQL الحالي يغلّف D1 ولا يشغّل قاعدة مستقلة بعد. لم يُفصل التخزين أو Push أو الجدولة إلى مزودين مستقلين، ولم يُبنَ API مستقل. لا تغيير في Production أو DNS أو تخزين الإنتاج، ولا إثبات بعد لحل VPN من اليمن.
 
+
+
+## تحديث المرحلة 8 — موائم عميل التخزين (2026-11-22)
+- أضيف `createObjectStorageClient(env, Client)` لحقن تنفيذ S3-compatible، وتم تحويل تسعة مواضع لإنشاء عميل التخزين في الخادم إلى المصنع الموحد.
+- أضيف اختبار لخيارات العميل والتحقق من بيانات الاعتماد.
+- Backend CI نجح على commit `16ee1a6475bf0d62e380f9ab8a28ec6ae1351690`: **229/229 اختباراً، صفر فشل** — run [44950023580](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026/actions/runs/44950023580).
+- ما زال التنفيذ الحالي يستخدم Tigris/S3 وD1؛ لم يُبنَ مزود مستقل أو تُنقل بيانات الإنتاج. لا تغيير DNS أو Production ولا إثبات لحل VPN.
+
