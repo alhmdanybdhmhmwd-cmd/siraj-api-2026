@@ -3100,10 +3100,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final captionController = TextEditingController();
     await showDialog<void>(
       context: pageContext,
+      barrierDismissible: false,
       builder: (dialogContext) {
         var uploading = false;
         return StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
+          builder: (context, setDialogState) => PopScope(
+            canPop: !uploading,
+            child: AlertDialog(
             backgroundColor: panel,
             title: Text('نشر ${prepared.length} وسائط في SPARK'),
             content: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -3146,14 +3149,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       uploaded++;
                     }
                     if (dialogContext.mounted) Navigator.pop(dialogContext);
-                    await refreshAll();
+                    try { await refreshAll(); } catch (_) {
+                      // The upload is already committed; a refresh failure must not
+                      // misreport the published media as an upload failure.
+                    }
                     if (pageContext.mounted) {
                       showMsg(pageContext, 'نُشرت $uploaded وسائط في لحظة SPARK واحدة لمدة 24 ساعة.');
                     }
                   } catch (e) {
                     if (uploaded > 0) {
                       if (dialogContext.mounted) Navigator.pop(dialogContext);
-                      await refreshAll();
+                      try { await refreshAll(); } catch (_) {
+                        // Keep the partial-upload result truthful even if refresh fails.
+                      }
                       if (pageContext.mounted) {
                         showMsg(pageContext, 'نُشر $uploaded من ${prepared.length} وسائط. تعذر إكمال البقية: ${cleanError(e)}');
                       }
@@ -3166,6 +3174,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 child: const Text('نشر في SPARK'),
               ),
             ],
+          ),
           ),
         );
       },
