@@ -1082,6 +1082,11 @@ class Api {
     if (session is! Map) throw Exception('استجابة بدء رفع الملف غير صالحة.');
     final sessionId = session['id']?.toString() ?? '';
     if (sessionId.isEmpty) throw Exception('لم يُرجع الخادم معرّف جلسة الرفع.');
+    if (session['state'] == 'completed') {
+      await request('POST', '/api/media/uploads/${Uri.encodeComponent(sessionId)}/complete');
+      await storage.delete(key: resumeStorageKey);
+      return;
+    }
     final totalChunks = (bytes.length + 1024 * 1024 - 1) ~/ (1024 * 1024);
 
     for (var chunkNumber = 1; chunkNumber <= totalChunks; chunkNumber++) {
