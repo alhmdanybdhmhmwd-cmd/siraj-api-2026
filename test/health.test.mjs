@@ -10,9 +10,15 @@ workerSource = workerSource.replace(
   'import { prepareConversationSummaryTranscript, buildConversationSummaryMessages, extractConversationSummaryText } from "./conversation_summary.js";',
   summarySource
 );
-const workerModule = await import(
-  "data:text/javascript;base64," + Buffer.from(workerSource).toString("base64")
-);
+let workerModule;
+try {
+  workerModule = await import(
+    "data:text/javascript;base64," + Buffer.from(workerSource).toString("base64")
+  );
+} catch (error) {
+  console.error("Worker health test module import failed:", error?.stack || error);
+  throw error;
+}
 const fetchWorker = workerModule.default.fetch;
 
 function request(path) {
