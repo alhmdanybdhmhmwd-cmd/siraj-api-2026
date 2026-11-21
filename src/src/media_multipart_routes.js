@@ -1,5 +1,5 @@
 import { AwsClient } from "aws4fetch";
-import { createObjectStorageClient, createObjectStorageUrl } from "./runtime_adapters.js";
+import { createS3ObjectStorageProvider } from "./runtime_adapters.js";
 import {
   MEDIA_MULTIPART_PART_SIZE, MEDIA_MULTIPART_MAX_SIZE, MEDIA_UPLOAD_SESSION_TTL_MS,
   MEDIA_TRANSPORT_CHUNK_SIZE, validateMultipartDeclaration, validateMultipartPart,
@@ -18,16 +18,13 @@ const json = (data, status = 200) => new Response(JSON.stringify(data), { status
 
 function storageClient(env) {
   try {
-    return createObjectStorageClient(env, AwsClient);
+    return createS3ObjectStorageProvider(env, AwsClient);
   } catch (error) {
     if (error instanceof Error && error.message === "Object storage credentials are not configured") {
       throw new Error("Media storage credentials are not configured");
     }
     throw error;
   }
-}
-function objectUrl(env, objectKey, uploadId, partNumber) {
-  return createObjectStorageUrl(env, objectKey, { uploadId, partNumber });
 }
 async function readLimited(request, limit) {
   const declared = Number(request.headers.get("Content-Length"));
@@ -61,7 +58,7 @@ function stagedChunkKey(session, chunkNumber) {
 }
 async function deleteStagedChunks(storage, env, session, chunkNumbers) {
   for (const number of chunkNumbers) {
-    const response = await storage.fetch(objectUrl(env, stagedChunkKey(session, number)), { method: "DELETE" });
+    const response = await storage.delete(stagedChunkKey(session, number));
     if (!response.ok && response.status !== 404) throw new Error("Could not clean a staged upload chunk");
   }
 }
@@ -92,7 +89,7 @@ export async function cleanupExpiredUploadSessions(env, now = Date.now()) {
   for (const row of rows.results || []) {
     try {
       if (row.state !== "completed") {
-        const response = await storage.fetch(objectUrl(env, row.object_key, row.storage_upload_id), { method: "DELETE" });
+        const response = await storage.delete(row.object_key, { uploadId: row.storage_upload_id });
         if (!response.ok && response.status !== 404) continue;
       }
       const staged = await env.DB.prepare("SELECT chunk_number AS chunkNumber FROM media_upload_chunks WHERE session_id = ?").bind(row.id).all();
@@ -149,7 +146,7 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
         return json({ session: existing, uploadedParts: parts.results || [], resumed: true });
       }
       const objectKey = currentUser.sub + "/chat-media/" + crypto.randomUUID();
-      const initiated = await storage.fetch(objectUrl(env, objectKey) + "?uploads", {
+      const initiated = await storage.request(objectKey, {
         method: "POST",
         headers: { "Content-Type": declaration.contentType,
           "x-amz-meta-ownerid": currentUser.sub,
@@ -173,7 +170,7 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
           declaration.fileName, declaration.contentType, declaration.size,
           MEDIA_MULTIPART_PART_SIZE, expectedParts, idempotencyKey, expiresAt).run();
       } catch (error) {
-        await storage.fetch(objectUrl(env, objectKey, uploadId), { method: "DELETE" }).catch(() => {});
+        await storage.delete(objectKey, { uploadId }).catch(() => {});
         throw error;
       }
       return json({ session: { id, state: "uploading", size: declaration.size,
@@ -214,7 +211,7 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
         "SELECT size FROM media_upload_chunks WHERE session_id = ? AND chunk_number = ?"
       ).bind(sessionId, chunkNumber).first();
       if (existingChunk) {
-        const previous = await storage.fetch(objectUrl(env, stagedKey));
+        const previous = await storage.get(stagedKey);
         if (!previous.ok) return json({ error: "Previously staged chunk is temporarily unavailable" }, 503);
         const previousBytes = new Uint8Array(await previous.arrayBuffer());
         if (Number(existingChunk.size) !== bytes.byteLength || previousBytes.byteLength !== bytes.byteLength) {
@@ -226,7 +223,7 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
           }
         }
       } else {
-        const stagedUpload = await storage.fetch(objectUrl(env, stagedKey), {
+        const stagedUpload = await storage.request(stagedKey, {
           method: "PUT", headers: { "Content-Length": String(bytes.byteLength), "Content-Type": "application/octet-stream" }, body: bytes
         });
         if (!stagedUpload.ok) return json({ error: "Could not stage transport chunk", storageStatus: stagedUpload.status }, 502);
@@ -236,7 +233,7 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
             "ON CONFLICT(session_id, chunk_number) DO UPDATE SET size = excluded.size, uploaded_at = CURRENT_TIMESTAMP"
           ).bind(sessionId, chunkNumber, bytes.byteLength).run();
         } catch (error) {
-          await storage.fetch(objectUrl(env, stagedKey), { method: "DELETE" }).catch(() => {});
+          await storage.request(stagedKey, { method: "DELETE" }).catch(() => {});
           throw error;
         }
       }
@@ -251,7 +248,7 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
       const buffers = [];
       let totalBytes = 0;
       for (let number = firstChunk; number <= lastChunk; number++) {
-        const response = await storage.fetch(objectUrl(env, stagedChunkKey(session, number)));
+        const response = await storage.get(stagedChunkKey(session, number));
         if (!response.ok) return json({ error: "A staged chunk is temporarily unavailable; retry this chunk" }, 503);
         const chunkBytes = new Uint8Array(await response.arrayBuffer());
         const recorded = readyRows.find(item => Number(item.chunkNumber) === number);
@@ -263,9 +260,9 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
       for (const buffer of buffers) { partBytes.set(buffer, offset); offset += buffer.byteLength; }
       try { validateMultipartPart(Number(session.total_size), targetPart, partBytes.byteLength); }
       catch (error) { return json({ error: error.message }, 409); }
-      const uploaded = await storage.fetch(objectUrl(env, session.object_key, session.storage_upload_id, targetPart), {
+      const uploaded = await storage.request(session.object_key, {
         method: "PUT", headers: { "Content-Length": String(partBytes.byteLength) }, body: partBytes
-      });
+      }, { uploadId: session.storage_upload_id, partNumber: targetPart });
       if (!uploaded.ok) return json({ error: "Media storage part assembly failed", storageStatus: uploaded.status }, 502);
       let etag;
       try { etag = normalizeMultipartEtag(uploaded.headers.get("ETag")); }
@@ -291,9 +288,9 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
       if (!bytes?.byteLength) return json({ error: "Part is empty or exceeds the maximum part size" }, 413);
       try { validateMultipartPart(Number(session.total_size), partNumber, bytes.byteLength); }
       catch (error) { return json({ error: error.message }, 400); }
-      const uploaded = await storage.fetch(objectUrl(env, session.object_key, session.storage_upload_id, partNumber), {
+      const uploaded = await storage.request(session.object_key, {
         method: "PUT", headers: { "Content-Length": String(bytes.byteLength) }, body: bytes
-      });
+      }, { uploadId: session.storage_upload_id, partNumber });
       if (!uploaded.ok) return json({ error: "Media part upload failed", storageStatus: uploaded.status }, 502);
       let etag;
       try { etag = normalizeMultipartEtag(uploaded.headers.get("ETag")); }
@@ -323,9 +320,9 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
       try { xml = buildCompleteMultipartXml(parts); }
       catch (error) { return json({ error: error.message }, 409); }
       await env.DB.prepare("UPDATE media_upload_sessions SET state = 'completing', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND owner_id = ?").bind(sessionId, currentUser.sub).run();
-      const completed = await storage.fetch(objectUrl(env, session.object_key, session.storage_upload_id), {
+      const completed = await storage.request(session.object_key, {
         method: "POST", headers: { "Content-Type": "application/xml" }, body: xml
-      });
+      }, { uploadId: session.storage_upload_id });
       if (!completed.ok) {
         await env.DB.prepare("UPDATE media_upload_sessions SET state = 'uploading', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND owner_id = ?").bind(sessionId, currentUser.sub).run();
         return json({ error: "Storage could not complete the media upload", storageStatus: completed.status }, 502);
@@ -360,7 +357,7 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
     if (method === "DELETE" && !action && partNumber === null) {
       if (session.state === "completed") return json({ error: "Completed media cannot be aborted through its upload session" }, 409);
       const staged = await env.DB.prepare("SELECT chunk_number AS chunkNumber FROM media_upload_chunks WHERE session_id = ?").bind(sessionId).all();
-      const aborted = await storage.fetch(objectUrl(env, session.object_key, session.storage_upload_id), { method: "DELETE" });
+      const aborted = await storage.delete(session.object_key, { uploadId: session.storage_upload_id });
       if (!aborted.ok && aborted.status !== 404) return json({ error: "Storage could not abort the upload", storageStatus: aborted.status }, 502);
       await deleteStagedChunks(storage, env, session, (staged.results || []).map(item => Number(item.chunkNumber)));
       await env.DB.prepare("DELETE FROM media_upload_chunks WHERE session_id = ?").bind(sessionId).run();
