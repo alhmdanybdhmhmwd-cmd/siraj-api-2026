@@ -28,7 +28,6 @@ import 'barq_identity.dart';
 
 const Color gold = Color(0xFFD6AD55);
 const Color dark = Color(0xFF090909);
-const Color electricBlue = Color(0xFF168BFF);
 const Color glass = Color(0xCC171B24);
 // Production remains the safe default. Select isolated preview origins at build time
 // without editing source: --dart-define=BARQ_API_BASE=https://<preview-api>.example
