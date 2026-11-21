@@ -2,8 +2,8 @@
 
 تاريخ التحقق: 2026-11-21  
 الفرع: `barq/phase-2-android-ci-2026-11-20`  
-Commit التحقق: `82ab256a3e92123cd90d227cdf16c83683e7e704`  
-Backend CI: [44936527444](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026/actions/runs/44936527444)
+Commit التحقق الأحدث: `b7d0fdf9dba0790c77c611076aaec6ab5161a9f6`  
+Backend CI: [44936605295](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026/actions/runs/44936605295) — [تشغيل التأكيد 44936601104](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026/actions/runs/44936601104)
 
 ## نتائج مراجعة التنظيف
 
@@ -21,7 +21,7 @@ Backend CI: [44936527444](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026
 - جلسة ملغاة: تنظيف staging وإزالة metadata.
 - فشل التخزين: الاحتفاظ بسجل الجلسة والقطع حتى إعادة المحاولة؛ ثم التنظيف عند عودة التخزين.
 - حماية الكائن النهائي: مسار تنظيف الجلسات المكتملة لا يحذف final object أو `media_access`.
-- Backend CI run `44936527444`: **209/209 اختباراً ناجحاً، صفر فشل**، مع نجاح فحوص migrations وschema وWrangler وAndroid safety.
+- Backend CI runs `44936605295` و`44936601104`: **209/209 اختباراً ناجحاً في كل تشغيل، صفر فشل**، مع نجاح فحوص migrations وschema وWrangler وAndroid safety.
 
 ## سياسة انتهاء المرفقات بعد 72 ساعة
 
