@@ -7,8 +7,15 @@ const workerPath = new URL("../src/src/index.js", import.meta.url);
 let workerSource = await readFile(workerPath, "utf8");
 const summarySource = await readFile(new URL("../src/src/conversation_summary.js", import.meta.url), "utf8");
 const adapterSource = await readFile(new URL("../src/src/runtime_adapters.js", import.meta.url), "utf8");
+const notificationSource = await readFile(new URL("../src/src/notification_service.js", import.meta.url), "utf8");
 const runtimeAdapterImport = workerSource.split("\n").find(line => line.includes("runtime_adapters.js"));
 workerSource = workerSource.replace(runtimeAdapterImport, adapterSource.replaceAll("export function ", "function "));
+workerSource = workerSource.replace(
+  'import { sendBarqPushNotification } from "./notification_service.js";',
+  notificationSource
+    .replace('import { createPushProvider } from "./runtime_adapters.js";', '')
+    .replaceAll("export async function ", "async function ")
+);
 workerSource = workerSource.replace('import { AwsClient } from "aws4fetch";', "class AwsClient {}");
 workerSource = workerSource.replace(
   'import { prepareConversationSummaryTranscript, buildConversationSummaryMessages, extractConversationSummaryText } from "./conversation_summary.js";',
