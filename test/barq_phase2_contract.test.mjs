@@ -630,3 +630,15 @@ test("SPARK audio replies enforce active-status friendship, duration, size, and 
   assert.ok(flutterApp.includes("durationMs < 1000"));
   assert.ok(flutterApp.includes("bytes.length > 5 * 1024 * 1024"));
 });
+
+
+test("SPARK scheduled cleanup removes expired audio reply metadata with its media object", () => {
+  const cleanupStart = worker.indexOf("async function cleanupExpiredMedia");
+  const cleanupEnd = worker.indexOf("async function cleanupExpiredEphemeralMessages", cleanupStart);
+  const cleanup = worker.slice(cleanupStart, cleanupEnd);
+  assert.ok(cleanupStart >= 0 && cleanupEnd > cleanupStart);
+  assert.ok(cleanup.includes('DELETE FROM status_audio_replies WHERE object_key = ?'));
+  assert.ok(cleanup.includes('DELETE FROM status_audio_replies WHERE status_id IN (SELECT id FROM status_posts WHERE expires_at <= ?)'));
+  assert.ok(cleanup.includes('DELETE FROM media_expirations WHERE object_key = ? AND expires_at <= ?'));
+  assert.ok(cleanup.includes('if (response.ok || response.status === 404)'));
+});
