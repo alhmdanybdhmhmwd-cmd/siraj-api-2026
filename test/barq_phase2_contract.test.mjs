@@ -716,3 +716,9 @@ test("private memory photos are owner-only, size-limited, and scheduled for clea
   assert.ok(route.includes("DELETE FROM media_access WHERE object_key = ?"));
   assert.ok(route.includes("DELETE FROM private_memory_media WHERE memory_id = ? AND owner_id = ? AND object_key = ?"));
 });
+
+test("Worker CORS matches the public gateway for resumable media and range downloads", () => {
+  assert.match(worker, /"Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS"/);
+  assert.match(worker, /"Access-Control-Allow-Headers": "[^"]*Range[^"]*X-Idempotency-Key/);
+  assert.match(worker, /"Access-Control-Expose-Headers": "[^"]*Content-Range[^"]*Accept-Ranges/);
+});
