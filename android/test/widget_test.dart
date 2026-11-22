@@ -940,8 +940,8 @@ void main() {
       expect(contrastRatio(palette.primary, palette.surface), greaterThanOrEqualTo(4.5));
     }
     final blue = BarqIdentityPalette.forIdentity(BarqIdentity.blueLightning);
-    expect(blue.primary, const Color(0xFFD6AD55));
-    expect(blue.secondary, const Color(0xFF168BFF));
+    expect(blue.primary, const Color(0xFF168BFF));
+    expect(blue.secondary, const Color(0xFFD6AD55));
     expect(blue.background, const Color(0xFF090909));
     expect(blue.surface, const Color(0xFF171717));
   });
