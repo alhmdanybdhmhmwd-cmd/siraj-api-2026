@@ -241,6 +241,9 @@ const friendPhoto = await fetch(new URL(profilePhoto.photoUrl, base), {
 });
 assert.equal(friendPhoto.status, 200, "mutual contact must be allowed to view profile photo");
 assert.ok((await friendPhoto.arrayBuffer()).byteLength > 0);
+await call("/api/privacy", {
+  method: "POST", token: a.token, body: { searchable: false, readReceipts: true }
+});
 const privatePhoto = await fetch(new URL(profilePhoto.photoUrl, base), {
   headers: { Authorization: `Bearer ${legacyLogin.token}` }
 });
