@@ -7773,13 +7773,51 @@ class _ChatPageState extends State<ChatPage> {
                                 margin: const EdgeInsets.symmetric(vertical: 4),
                                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                                 decoration: BoxDecoration(
-                                  color: mine ? Theme.of(context).colorScheme.primary.withValues(alpha: .18) : Theme.of(context).colorScheme.surfaceContainerHighest,
-                                  borderRadius: BorderRadius.circular(16),
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topRight,
+                                    end: Alignment.bottomLeft,
+                                    colors: mine
+                                        ? [
+                                            Theme.of(context).colorScheme.primary.withValues(alpha: .24),
+                                            Theme.of(context).colorScheme.secondary.withValues(alpha: .09),
+                                          ]
+                                        : [
+                                            Theme.of(context).colorScheme.surfaceContainerHighest,
+                                            Theme.of(context).colorScheme.surface,
+                                          ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(18),
+                                  border: Border.all(
+                                    color: mine
+                                        ? Theme.of(context).colorScheme.primary.withValues(alpha: .24)
+                                        : Theme.of(context).colorScheme.outline.withValues(alpha: .12),
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: mine
+                                          ? Theme.of(context).colorScheme.primary.withValues(alpha: .08)
+                                          : Colors.black.withValues(alpha: .08),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
+                                    if (m['is_pinned'] == true)
+                                      Padding(
+                                        padding: const EdgeInsets.only(bottom: 5),
+                                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                          Icon(Icons.push_pin_rounded,
+                                            size: 12, color: Theme.of(context).colorScheme.secondary),
+                                          const SizedBox(width: 4),
+                                          Text('رسالة مثبتة', style: TextStyle(
+                                            color: Theme.of(context).colorScheme.secondary,
+                                            fontSize: 10, fontWeight: FontWeight.w700)),
+                                        ]),
+                                      ),
                                     if (m['is_offline_pending'] == true)
                                       const Padding(
                                         padding: EdgeInsets.only(bottom: 5),
