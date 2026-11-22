@@ -242,7 +242,86 @@ Future<FilePickerResult?> showBarqMediaPicker(
   if (selectedFiles.isEmpty) {
     throw Exception('تعذر قراءة الوسائط المختارة من الجهاز.');
   }
+  if (!context.mounted) return null;
+  final confirmed = await _showBarqMediaPreview(context, selectedFiles);
+  if (confirmed != true) return null;
   return FilePickerResult(selectedFiles);
+}
+
+Future<bool?> _showBarqMediaPreview(
+  BuildContext context,
+  List<PlatformFile> files,
+) {
+  const videoExtensions = {'mp4', 'mov', 'm4v', 'webm', '3gp', 'mkv'};
+  final palette = Theme.of(context).colorScheme;
+  return showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      backgroundColor: palette.surface,
+      title: Text('معاينة ${files.length} ${files.length == 1 ? 'وسيط' : 'وسائط'}'),
+      content: SizedBox(
+        width: 360,
+        height: 280,
+        child: GridView.builder(
+          itemCount: files.length,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+          ),
+          itemBuilder: (context, index) {
+            final file = files[index];
+            final extension = (file.extension ?? '').toLowerCase();
+            final isVideo = videoExtensions.contains(extension);
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (!isVideo && file.path != null)
+                    Image.file(
+                      File(file.path!),
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => ColoredBox(
+                        color: palette.surfaceContainerHighest,
+                        child: Icon(Icons.broken_image_outlined, color: palette.onSurfaceVariant),
+                      ),
+                    )
+                  else
+                    ColoredBox(
+                      color: palette.surfaceContainerHighest,
+                      child: Icon(
+                        isVideo ? Icons.play_circle_fill_rounded : Icons.insert_drive_file_rounded,
+                        size: 38,
+                        color: palette.primary,
+                      ),
+                    ),
+                  if (isVideo)
+                    Align(
+                      alignment: Alignment.bottomRight,
+                      child: Padding(
+                        padding: const EdgeInsets.all(5),
+                        child: Icon(Icons.play_arrow_rounded, color: palette.onPrimary),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('إلغاء'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: const Text('متابعة'),
+        ),
+      ],
+    ),
+  );
 }
 
 class _BarqMediaChoice extends StatelessWidget {
