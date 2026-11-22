@@ -213,6 +213,20 @@ const textStatus = await call("/api/statuses", {
 const bStatusesAfterText = await call("/api/statuses", { token: b.token });
 assert.ok(bStatusesAfterText.statuses.some(status => status.id === textStatus.status.id),
   "mutual contact must see published text SPARK status");
+const sparkReplyText = "SPARK reply " + suffix;
+const sparkReply = await call("/api/statuses/" + encodeURIComponent(textStatus.status.id) + "/replies", {
+  method: "POST", token: b.token, body: { body: sparkReplyText }, expected: 201
+});
+assert.equal(sparkReply.reply?.body, sparkReplyText, "SPARK reply must be persisted");
+await call("/api/statuses/" + encodeURIComponent(textStatus.status.id) + "/reactions", {
+  method: "POST", token: b.token, body: { emoji: "🔥" }
+});
+const sparkReplies = await call("/api/statuses/" + encodeURIComponent(textStatus.status.id) + "/replies", { token: a.token });
+assert.ok(sparkReplies.replies.some(reply => reply.id === sparkReply.reply.id),
+  "status owner must see replies in the same SPARK viewer");
+await call("/api/statuses/" + encodeURIComponent(textStatus.status.id) + "/replies", {
+  method: "POST", token: legacyLogin.token, body: { body: "unauthorized reply" }, expected: 403
+});
 
 const tinyPng = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6j8AAAAASUVORK5CYII=",
@@ -250,6 +264,6 @@ assert.equal(mediaFetch.status, 200, "authorized mutual contact must be able to 
 assert.match(mediaFetch.headers.get("content-type") || "", /^image\/png/i);
 assert.ok((await mediaFetch.arrayBuffer()).byteLength > 0, "SPARK media response must contain bytes");
 
-console.log("Preview integration passed: two registrations, phone login, authenticated profile read/update, privacy enforcement, Arabic-digit contact matching, direct reciprocal contact addition, and authorization/validation guards.");
+console.log("Preview integration passed: legacy/current signup and phone login, profile/privacy/contacts, private message edit/pin/reactions, SPARK text replies/reactions, captioned media upload/feed/download, and access guards.");
 
 }
