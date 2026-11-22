@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:video_player/video_player.dart';
 import 'package:record/record.dart';
@@ -41,6 +42,11 @@ const String mediaWorkerBase = String.fromEnvironment(
   'BARQ_MEDIA_BASE',
   defaultValue: 'https://siraj-api.alhmdanybdhmhmwd.workers.dev',
 );
+const String barqPlayStoreUrl = 'https://play.google.com/store/apps/details?id=com.barq.app';
+
+String get barqInviteMessage =>
+    'جرّب تطبيق برق — BARQ للتواصل السريع مع الأصدقاء. حمّل التطبيق من هنا: $barqPlayStoreUrl';
+
 const int maxAttachmentBytes = 60 * 1024 * 1024;
 
 String? barqSparkMediaContentType(String extension) {
@@ -5138,6 +5144,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return field(nested, ['username'], 'user');
   }
 
+  Future<void> _inviteFriend() async {
+    try {
+      await SharePlus.instance.share(ShareParams(
+        text: barqInviteMessage,
+        subject: 'دعوة لتجربة برق',
+      ));
+    } catch (error) {
+      if (mounted) showMsg(context, 'تعذر فتح المشاركة: ${cleanError(error)}');
+    }
+  }
+
   Widget _friendsPage() {
     return ListView(
       padding: const EdgeInsets.all(12),
@@ -5154,6 +5171,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               tooltip: 'مطابقة جهات الهاتف',
             ),
           ],
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _inviteFriend,
+            icon: const Icon(Icons.person_add_alt_1_rounded),
+            label: const Text('دعوة صديق لتنزيل برق'),
+          ),
         ),
         const SizedBox(height: 8),
         if (matchedContacts.isNotEmpty) ...[
