@@ -71,11 +71,14 @@ for (const identity of ["purpleShadow", "skyJewel"]) {
 }
 await call("/api/identity-packages/blueLightning", { token: a.token, expected: 404 });
 const updatedName = "Preview Updated " + suffix;
+const attemptedPhoneChange = accountA.phone.slice(0, -1) + (accountA.phone.endsWith("0") ? "1" : "0");
 const profile = await call("/api/profile", {
   method: "POST", token: a.token,
-  body: { displayName: updatedName, phone: accountA.phone }
+  body: { displayName: updatedName, phone: attemptedPhoneChange }
 });
 assert.equal(profile.user.displayName, updatedName);
+assert.equal(profile.user.phone, accountA.phone,
+  "profile edits must ignore attempts to change the immutable registration phone number");
 
 const privacyOff = await call("/api/privacy", {
   method: "POST", token: b.token, body: { searchable: false, readReceipts: false }
