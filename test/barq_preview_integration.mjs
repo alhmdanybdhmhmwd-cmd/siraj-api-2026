@@ -192,6 +192,24 @@ const groupInteractionMessage = await call("/api/groups/" + encodeURIComponent(g
   method: "POST", token: a.token, body: { body: "group-search-needle-" + suffix }, expected: 201
 });
 assert.ok(groupInteractionMessage.id, "group message must return its ID");
+const groupReply = await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages", {
+  method: "POST", token: b.token,
+  body: { body: "group reply fixture " + suffix, replyToId: groupInteractionMessage.id }, expected: 201
+});
+const groupReplyPage = await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages", { token: a.token });
+const persistedGroupReply = groupReplyPage.messages.find(message => message.id === groupReply.id);
+assert.equal(persistedGroupReply?.reply_to_id, groupInteractionMessage.id,
+  "group reply must remain attached to its target message");
+assert.equal(persistedGroupReply?.reply_to_body, "group-search-needle-" + suffix,
+  "group reply preview must preserve the target text");
+await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages/" +
+  encodeURIComponent(groupInteractionMessage.id), {
+    method: "PATCH", token: a.token, body: { body: "edited group root " + suffix }
+  });
+await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages/" +
+  encodeURIComponent(groupInteractionMessage.id), {
+    method: "PATCH", token: b.token, body: { body: "unauthorized group edit" }, expected: 404
+  });
 await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages/" +
   encodeURIComponent(groupInteractionMessage.id) + "/reactions", {
     method: "POST", token: b.token, body: { emoji: "❤️" }
