@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nearby_connections/nearby_connections.dart';
-import 'package:flutter_test/ft.dart' as ft;
+import 'package:flutter_test/flutter_test.dart' as ft;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:barq/main.dart';
 import 'package:barq/barq_identity.dart';
