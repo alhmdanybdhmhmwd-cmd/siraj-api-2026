@@ -7128,10 +7128,9 @@ class _AttachmentTileState extends State<_AttachmentTile> {
             : Icon(_audioPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill, size: 34),
       );
     } else if (_isVideo) {
-      leading = IconButton(
-        tooltip: 'تشغيل الفيديو',
-        onPressed: _openVideo,
-        icon: const Icon(Icons.play_circle_fill, size: 34),
+      leading = _BarqRemoteVideoThumbnail(
+        attachment: widget.attachment,
+        onTap: _openVideo,
       );
     } else {
       leading = Icon(icon, size: 28);
@@ -7192,6 +7191,101 @@ String formatBarqMediaDuration(Duration duration) {
     return '$hours:$remainingMinutes:$seconds';
   }
   return '$minutes:$seconds';
+}
+
+class _BarqRemoteVideoThumbnail extends StatefulWidget {
+  final Map<String, dynamic> attachment;
+  final VoidCallback onTap;
+  const _BarqRemoteVideoThumbnail({required this.attachment, required this.onTap});
+
+  @override
+  State<_BarqRemoteVideoThumbnail> createState() => _BarqRemoteVideoThumbnailState();
+}
+
+class _BarqRemoteVideoThumbnailState extends State<_BarqRemoteVideoThumbnail> {
+  VideoPlayerController? _controller;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    final id = field(widget.attachment, ['attachmentId']);
+    if (id.isEmpty) {
+      if (mounted) setState(() => _failed = true);
+      return;
+    }
+    final controller = VideoPlayerController.networkUrl(
+      Api.sparkMediaUri(id),
+      httpHeaders: {if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'},
+    );
+    try {
+      await controller.initialize().timeout(const Duration(seconds: 35));
+      await controller.setVolume(0);
+      await controller.pause();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      setState(() => _controller = controller);
+    } catch (_) {
+      await controller.dispose();
+      if (mounted) setState(() => _failed = true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    return InkWell(
+      onTap: widget.onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(
+          width: 76,
+          height: 76,
+          child: Stack(
+            fit: StackFit.expand,
+            alignment: Alignment.center,
+            children: [
+              if (controller != null)
+                FittedBox(
+                  fit: BoxFit.cover,
+                  clipBehavior: Clip.hardEdge,
+                  child: SizedBox(
+                    width: controller.value.size.width,
+                    height: controller.value.size.height,
+                    child: VideoPlayer(controller),
+                  ),
+                )
+              else
+                ColoredBox(
+                  color: Colors.white.withValues(alpha: .06),
+                  child: Center(
+                    child: _failed
+                        ? const Icon(Icons.video_file_outlined, size: 32)
+                        : const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+                  ),
+                ),
+              const Center(
+                child: Icon(Icons.play_circle_fill_rounded, color: Colors.white, size: 34),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _BarqMediaViewer extends StatefulWidget {
