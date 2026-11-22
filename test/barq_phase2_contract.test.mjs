@@ -62,6 +62,18 @@ test("message deletion is authenticated and limited to the author in private and
   assert.ok(flutterApp.includes("canDelete: mine"));
 });
 
+test("private chat exposes the authenticated block and unblock API controls", () => {
+  assert.ok(worker.includes('path === "/api/blocks" && method === "GET"'));
+  assert.ok(worker.includes('path === "/api/blocks" && (method === "POST" || method === "DELETE")'));
+  assert.ok(flutterApp.includes("static Future<List<Map<String, dynamic>>> blockedUsers()"));
+  assert.ok(flutterApp.includes("static Future<void> blockUser(String userId)"));
+  assert.ok(flutterApp.includes("static Future<void> unblockUser(String userId)"));
+  assert.ok(flutterApp.includes("blockedByMe ? 'إلغاء حظر المستخدم' : 'حظر المستخدم'"));
+  assert.ok(flutterApp.includes("await Api.blockUser(friendId)"));
+  assert.ok(flutterApp.includes("await Api.unblockUser(friendId)"));
+  assert.ok(flutterApp.includes("if (blockedByMe)"));
+});
+
 test("message editing is PATCH-only for the authenticated author in private and group chats", () => {
   const privateStart = worker.indexOf("privateMessageActionMatch");
   const privateEnd = worker.indexOf("// Get conversation messages", privateStart);
