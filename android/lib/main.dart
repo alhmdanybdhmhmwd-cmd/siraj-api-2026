@@ -4260,26 +4260,87 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ),
             ]),
           ),
-          Row(children: [
-            Icon(Icons.groups_rounded, color: palette.primary),
-            const SizedBox(width: 8),
-            Text('المجموعات', style: TextStyle(color: palette.primary, fontWeight: FontWeight.w700)),
-            const Spacer(),
-            Text('${groups.length}', style: TextStyle(color: palette.onSurface.withValues(alpha: .65))),
-            const SizedBox(width: 8),
-            OutlinedButton.icon(
-              onPressed: () => showDialog<void>(
-                context: context,
-                builder: (dialogContext) => AlertDialog(
-                  title: const Text('المكالمات'),
-                  content: const Text('سيظهر هنا سجل المكالمات الصوتية والمرئية. واجهة المكالمات أُضيفت إلى المحادثات، ويتبقى ربط خدمة الاتصال واختبارها قبل تفعيل إجراء الاتصال.'),
-                  actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('حسناً'))],
+          Row(
+            children: [
+              Expanded(
+                child: Card(
+                  margin: EdgeInsets.zero,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () => createGroupDialog(),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                      child: Row(children: [
+                        CircleAvatar(
+                          backgroundColor: palette.primary.withValues(alpha: .14),
+                          child: Icon(Icons.groups_rounded, color: palette.primary),
+                        ),
+                        const SizedBox(width: 9),
+                        Expanded(child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('المجموعات', style: TextStyle(fontWeight: FontWeight.w700)),
+                            Text('${groups.length} مجموعة', style: TextStyle(
+                              color: palette.onSurface.withValues(alpha: .65), fontSize: 11)),
+                          ],
+                        )),
+                        Icon(Icons.chevron_left_rounded, color: palette.primary),
+                      ]),
+                    ),
+                  ),
                 ),
               ),
-              icon: const Icon(Icons.call_outlined, size: 18),
-              label: const Text('المكالمات'),
-            ),
-          ]),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Card(
+                  margin: EdgeInsets.zero,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () => Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => Scaffold(
+                        appBar: AppBar(title: const Text('المكالمات')),
+                        body: Center(child: Padding(
+                          padding: const EdgeInsets.all(28),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircleAvatar(
+                                radius: 38,
+                                backgroundColor: palette.primary.withValues(alpha: .14),
+                                child: Icon(Icons.call_outlined, size: 38, color: palette.primary),
+                              ),
+                              const SizedBox(height: 18),
+                              const Text('سجل المكالمات', style: TextStyle(
+                                fontSize: 19, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'لا توجد مكالمات لعرضها حالياً. ستظهر هنا المكالمات الواردة والصادرة والفائتة بعد ربط خدمة الاتصال.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.white70, height: 1.5),
+                              ),
+                            ],
+                          ),
+                        )),
+                      ),
+                    )),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                      child: Row(children: [
+                        CircleAvatar(
+                          backgroundColor: palette.primary.withValues(alpha: .14),
+                          child: Icon(Icons.call_outlined, color: palette.primary),
+                        ),
+                        const SizedBox(width: 9),
+                        const Expanded(child: Text('المكالمات',
+                          style: TextStyle(fontWeight: FontWeight.w700))),
+                        Icon(Icons.chevron_left_rounded, color: palette.primary),
+                      ]),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
           if (groups.isEmpty)
             Card(child: ListTile(
               leading: const Icon(Icons.group_add_outlined),
