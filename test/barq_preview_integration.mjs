@@ -515,6 +515,12 @@ assert.ok(!clearedForA.messages.some(message => message.id === clearFixtureId ||
 assert.ok(retainedForB.messages.some(message => message.id === clearFixtureId) &&
   retainedForB.messages.some(message => message.id === otherSideFixtureId),
   "clear history must not delete the other participant's messages");
+await call("/api/messages/" + encodeURIComponent(clearFixtureId), {
+  method: "PATCH", token: a.token, body: { body: "stale edit after clear" }, expected: 404
+});
+await call("/api/messages/" + encodeURIComponent(clearFixtureId), {
+  method: "DELETE", token: a.token, expected: 404
+});
 let friendsAfterClear = await call("/api/friends", { token: a.token });
 assert.equal(friendsAfterClear.friends.find(user => user.id === b.user.id)?.chatHidden, false,
   "clear history must keep the conversation visible");
