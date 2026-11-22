@@ -37,6 +37,13 @@ jobs:
       - name: Run live media upload, download, range, and recipient checks when Preview storage is configured
         id: media
         run: node test/barq_preview_media_integration.mjs
+      - name: Run full account and media integration suite through Vercel Preview proxy
+        env:
+          BARQ_PREVIEW_URL: https://siraj-api-2026-git-barq-fix-approved-menus-20-0ffa73-siraj-01fc.vercel.app
+        run: |
+          set -euo pipefail
+          node test/barq_preview_integration.mjs
+          node test/barq_preview_media_integration.mjs
       - name: Report Preview media verification status
         if: always()
         env:
