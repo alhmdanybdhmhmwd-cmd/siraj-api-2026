@@ -1495,6 +1495,16 @@ class Api {
     await request('DELETE', '/api/messages/${Uri.encodeComponent(messageId)}');
   }
 
+  static Future<void> clearPrivateConversation(String friendId) async {
+    await request('POST',
+      '/api/conversations/${Uri.encodeComponent(friendId)}/clear');
+  }
+
+  static Future<void> deletePrivateConversation(String friendId) async {
+    await request('DELETE',
+      '/api/conversations/${Uri.encodeComponent(friendId)}');
+  }
+
   static Future<void> deleteGroupMessage(String groupId, String messageId) async {
     await request(
       'DELETE',
@@ -4669,6 +4679,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _personName(person).toLowerCase().contains(query) ||
       _personUsername(person).toLowerCase().contains(query) ||
       field(person, ['phone']).toLowerCase().contains(query)).toList();
+    final visibleChats = visibleFriends.where((person) => person['chatHidden'] != true).toList();
     final visibleGroups = groups.where((group) => query.isEmpty ||
       field(group, ['name']).toLowerCase().contains(query) ||
       field(group, ['description']).toLowerCase().contains(query)).toList();
@@ -4729,7 +4740,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             onChanged: (value) => setState(() => conversationQuery = value),
             textInputAction: TextInputAction.search,
             decoration: InputDecoration(
-              hintText: 'ابحث في المحادثات والمجموعات...',
+              hintText: 'ابحث في المحادثات وجهات الاتصال والمجموعات...',
               prefixIcon: const Icon(Icons.search_rounded),
               suffixIcon: conversationQuery.isEmpty ? null : IconButton(
                 tooltip: 'مسح البحث', icon: const Icon(Icons.close_rounded),
@@ -4743,31 +4754,39 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           Row(
             children: [
               sectionTile(index: 0, icon: Icons.chat_bubble_outline_rounded,
-                label: 'المحادثات', count: '${friends.length}'),
+                label: 'المحادثات', count: '${friends.where((person) => person['chatHidden'] != true).length}'),
               const SizedBox(width: 7),
               sectionTile(index: 1, icon: Icons.groups_rounded,
                 label: 'المجموعات', count: '${groups.length}'),
               const SizedBox(width: 7),
               sectionTile(index: 2, icon: Icons.call_outlined,
                 label: 'المكالمات', count: 'السجل'),
+              const SizedBox(width: 7),
+              sectionTile(index: 3, icon: Icons.contacts_outlined,
+                label: 'جهات الاتصال', count: '${friends.length}'),
             ],
           ),
           const SizedBox(height: 14),
-          if (selectedConversationSection == 0) ...[
+          if (selectedConversationSection == 0 || selectedConversationSection == 3) ...[
             Row(children: [
-              Icon(Icons.chat_bubble_outline_rounded, color: palette.primary),
+              Icon(selectedConversationSection == 0 ? Icons.chat_bubble_outline_rounded : Icons.contacts_outlined,
+                color: palette.primary),
               const SizedBox(width: 8),
-              Text('المحادثات الفردية',
+              Text(selectedConversationSection == 0 ? 'المحادثات الفردية' : 'جهات الاتصال',
                 style: TextStyle(color: palette.primary, fontWeight: FontWeight.w700)),
             ]),
-            if (visibleFriends.isEmpty)
+            if ((selectedConversationSection == 0 ? visibleChats : visibleFriends).isEmpty)
               Card(child: ListTile(
                 leading: Icon(query.isEmpty ? Icons.person_search_outlined : Icons.search_off_rounded),
-                title: Text(query.isEmpty ? 'لا توجد محادثات بعد' : 'لا توجد نتائج مطابقة'),
-                subtitle: Text(query.isEmpty ? 'ابحث عن شخص من جهات الاتصال لتبدأ المراسلة.' : 'جرّب اسماً أو اسم مستخدم أو رقم هاتف آخر.'),
+                title: Text(query.isEmpty
+                  ? (selectedConversationSection == 0 ? 'لا توجد محادثات بعد' : 'لا توجد جهات اتصال')
+                  : 'لا توجد نتائج مطابقة'),
+                subtitle: Text(query.isEmpty
+                  ? (selectedConversationSection == 0 ? 'ابدأ محادثة مع أحد جهات اتصالك.' : 'أضف أشخاصاً من البحث لتظهر جهات اتصالك هنا.')
+                  : 'جرّب اسماً أو اسم مستخدم أو رقم هاتف آخر.'),
               ))
             else
-              for (final friend in visibleFriends)
+              for (final friend in (selectedConversationSection == 0 ? visibleChats : visibleFriends))
                 Card(
                   color: palette.surface,
                   child: ListTile(
@@ -4790,7 +4809,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       icon: const Icon(Icons.chat_bubble_outline),
                       onPressed: () => Navigator.push(context, MaterialPageRoute(
                         builder: (_) => ChatPage(friend: friend, currentUserId: myId),
-                      )),
+                      )).then((_) { if (mounted) refreshAll(); }),
                     ),
                   ),
                 ),
@@ -7596,6 +7615,63 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _clearConversationHistory() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('مسح سجل المحادثة؟'),
+        content: const Text('سيُمسح سجل الرسائل من حسابك فقط. ستبقى جهة الاتصال والمحادثة في قائمتك، ولن تتأثر نسخة الطرف الآخر.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('مسح السجل')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await Api.clearPrivateConversation(friendId);
+      if (!mounted) return;
+      setState(() {
+        messages = [];
+        olderMessageCursor = null;
+        hasOlderMessages = false;
+        replyToMessage = null;
+      });
+      showMsg(context, 'تم مسح سجل المحادثة من حسابك فقط.');
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    }
+  }
+
+  Future<void> _deleteConversation() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('حذف المحادثة؟'),
+        content: const Text('ستختفي المحادثة ورسائلها من قائمتك وحسابك فقط. ستبقى جهة الاتصال، ولن تُحذف الرسائل من حساب الطرف الآخر. عند وصول رسالة جديدة ستظهر المحادثة مجدداً.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('إلغاء')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(dialogContext).colorScheme.error),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('حذف المحادثة'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await Api.deletePrivateConversation(friendId);
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    }
+  }
+
   void _startRefreshTimer() {
     refreshTimer?.cancel();
     refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
@@ -8010,6 +8086,18 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   title: 'البحث في المحادثة',
                   subtitle: 'ابحث داخل الرسائل المحمّلة',
                   onTap: () => showConversationSearch(context, (query, before) => Api.searchPrivateMessages(friendId, query, before: before)),
+                ),
+                BarqConversationTool(
+                  icon: Icons.cleaning_services_outlined,
+                  title: 'مسح سجل المحادثة',
+                  subtitle: 'مسح رسائلك مع إبقاء جهة الاتصال والمحادثة',
+                  onTap: _clearConversationHistory,
+                ),
+                BarqConversationTool(
+                  icon: Icons.delete_outline_rounded,
+                  title: 'حذف المحادثة',
+                  subtitle: 'حذفها من حسابك فقط مع إبقاء جهة الاتصال',
+                  onTap: _deleteConversation,
                 ),
                 BarqConversationTool(
                   icon: blockedByMe ? Icons.lock_open_rounded : Icons.block_rounded,
