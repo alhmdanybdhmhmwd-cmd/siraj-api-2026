@@ -1998,6 +1998,19 @@ class BarqOfflineQueue {
     }).map((item) => {...item, 'is_offline_pending': true}).toList();
   }
 
+  static Future<void> clearConversation(String friendId, String currentUserId) async {
+    bool belongsToConversation(Map<String, dynamic> item) {
+      final sender = field(item, ['sender_id']);
+      final receiver = field(item, ['receiver_id']);
+      return (sender == currentUserId && receiver == friendId) ||
+          (sender == friendId && receiver == currentUserId);
+    }
+    await _mutate(_outboxKey, (items) =>
+        items.where((item) => !belongsToConversation(item)).toList());
+    await _mutate(_inboxKey, (items) =>
+        items.where((item) => !belongsToConversation(item)).toList());
+  }
+
   static Future<void> reconcile(List<Map<String, dynamic>> serverMessages) async {
     if (serverMessages.isEmpty) return;
     await _mutate(_outboxKey, (items) =>
@@ -7632,6 +7645,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     if (confirmed != true || !mounted) return;
     try {
       await Api.clearPrivateConversation(friendId);
+      await BarqOfflineQueue.clearConversation(friendId, widget.currentUserId);
       if (!mounted) return;
       setState(() {
         messages = [];
@@ -7665,6 +7679,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     if (confirmed != true || !mounted) return;
     try {
       await Api.deletePrivateConversation(friendId);
+      await BarqOfflineQueue.clearConversation(friendId, widget.currentUserId);
       if (!mounted) return;
       Navigator.pop(context);
     } catch (e) {
