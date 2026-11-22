@@ -7398,7 +7398,16 @@ class _BarqMediaViewer extends StatefulWidget {
 class _BarqMediaViewerState extends State<_BarqMediaViewer> {
   VideoPlayerController? _controller;
   bool _loading = false;
+  bool _lastIsPlaying = false;
   String? _error;
+
+  void _onVideoChanged() {
+    final playing = _controller?.value.isPlaying ?? false;
+    if (playing != _lastIsPlaying && mounted) {
+      _lastIsPlaying = playing;
+      setState(() {});
+    }
+  }
 
   @override
   void initState() {
@@ -7420,8 +7429,10 @@ class _BarqMediaViewerState extends State<_BarqMediaViewer> {
           return;
         }
         await localController.setLooping(false);
+        _controller = localController;
+        _lastIsPlaying = localController.value.isPlaying;
+        localController.addListener(_onVideoChanged);
         setState(() {
-          _controller = localController;
           _loading = false;
           _error = null;
         });
@@ -7463,8 +7474,10 @@ class _BarqMediaViewerState extends State<_BarqMediaViewer> {
           return;
         }
         await candidate.setLooping(false);
+        _controller = candidate;
+        _lastIsPlaying = candidate.value.isPlaying;
+        candidate.addListener(_onVideoChanged);
         setState(() {
-          _controller = candidate;
           _loading = false;
           _error = null;
         });
@@ -7484,6 +7497,7 @@ class _BarqMediaViewerState extends State<_BarqMediaViewer> {
 
   @override
   void dispose() {
+    _controller?.removeListener(_onVideoChanged);
     _controller?.dispose();
     super.dispose();
   }
