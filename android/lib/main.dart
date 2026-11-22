@@ -3954,6 +3954,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   List<Map<String, dynamic>> memories = [];
   bool memoriesLoadFailed = false;
   bool loading = true;
+  bool initialRefreshComplete = false;
   Map<String, dynamic> privacySettings = {'searchable': true, 'readReceipts': true};
   Map<String, dynamic> notificationPrefs = {'messages': true, 'groups': true, 'statuses': true};
   Timer? offlineSyncTimer;
@@ -4017,7 +4018,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _handlePendingNotificationTap() async {
-    if (!mounted || loading || _handlingNotificationTap || Api.token == null) return;
+    if (!mounted || !initialRefreshComplete || _handlingNotificationTap || Api.token == null) return;
     final route = barqPendingNotificationTap.value;
     if (route == null) return;
     _handlingNotificationTap = true;
@@ -4097,12 +4098,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _loadCachedFriends() async {
     try {
       final raw = await storage.read(key: 'barq_cached_friends');
-      if (raw == null) return;
-      final decoded = jsonDecode(raw);
-      if (decoded is List && mounted) {
-        setState(() => friends = decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList());
+      if (raw != null) {
+        final decoded = jsonDecode(raw);
+        if (decoded is List && mounted) {
+          setState(() => friends = decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList());
+        }
       }
-    } catch (_) {}
+    } catch (_) {
+      // Cached data is optional; continue with the signed-in user and refresh online.
+    } finally {
+      // The authenticated user is already available from StartupPage. Show the
+      // app shell immediately and hydrate the remaining tabs in the background.
+      if (mounted) setState(() => loading = false);
+    }
   }
 
   Future<void> refreshAll() async {
@@ -4149,7 +4157,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (mounted) showMsg(context, cleanError(e));
     } finally {
       if (mounted) {
-        setState(() => loading = false);
+        setState(() {
+          loading = false;
+          initialRefreshComplete = true;
+        });
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _handlePendingNotificationTap();
         });
