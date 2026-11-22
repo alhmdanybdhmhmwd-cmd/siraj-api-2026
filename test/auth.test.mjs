@@ -557,9 +557,9 @@ class ProfileOwnershipTestDB extends FakeDB {
       return first();
     };
     statement.run = async () => {
-      if (sql.includes("UPDATE users SET display_name = ?, phone = ?")) {
+      if (sql.includes("UPDATE users SET display_name = ? WHERE id = ?")) {
         this.profileUpdateParams = statement.params;
-        assert.match(sql, /WHERE id = \? AND NOT EXISTS/);
+        assert.match(sql, /WHERE id = \?/);
         return { meta: { changes: 1 } };
       }
       return run();
@@ -581,9 +581,8 @@ test("profile updates are always scoped to the authenticated account despite a s
     })
   }), { DB: db, JWT_SECRET: secret });
   assert.equal(response.status, 200);
-  assert.equal(db.profileUpdateParams[2], user.id);
-  assert.equal(db.profileUpdateParams[3], user.id);
-  assert.notEqual(db.profileUpdateParams[2], "victim-account");
+  assert.equal(db.profileUpdateParams[1], user.id);
+  assert.notEqual(db.profileUpdateParams[1], "victim-account");
 });
 
 test("profile photo reads deny non-friends when the target profile is private", async () => {
@@ -1608,7 +1607,7 @@ class FakeReadReceiptDB extends FakeDB {
   }
 }
 
-test("profile updates reject an existing phone written in an equivalent local format", async () => {
+test("profile updates ignore legacy phone changes after registration", async () => {
   const db = new FakeDB();
   db.phoneCandidates = [{ id: "other-user", phone: "+967700000002" }];
   const token = await worker.signToken(user, secret, 0);
@@ -1620,9 +1619,8 @@ test("profile updates reject an existing phone written in an equivalent local fo
     },
     body: JSON.stringify({ displayName: "Tester", phone: "+967700000002" })
   }), { DB: db, JWT_SECRET: secret });
-  assert.equal(response.status, 409);
-  assert.ok(db.phoneLookupQueries > 0);
-  assert.match(db.lastPhoneLookupSql, /replace\(phone, '٠', '0'\)/);
+  assert.equal(response.status, 200);
+  assert.equal(db.phoneLookupQueries || 0, 0, "profile edits must not run phone replacement lookups");
 });
 
 test("registration rejects an existing Yemen phone in local and international formats", async () => {
