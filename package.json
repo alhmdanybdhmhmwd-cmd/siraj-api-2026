@@ -3,13 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "node server.js",
-    "test": "node --test"
+    "start": "node node_server.mjs",
+    "test": "node --test",
+    "audit:runtime-portability": "node scripts/barq-runtime-portability-audit.mjs",
+    "start:proxy": "node server.js"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
-    "aws4fetch": "^1.0.20"
+    "aws4fetch": "^1.0.20",
+    "@libsql/client": "^0.18.0"
   }
 }

@@ -1,0 +1,67 @@
+name: BARQ Worker configuration validation
+
+on:
+  push:
+    branches:
+      - barq/phase-2-android-ci-2026-11-20
+    paths:
+      - "src/src/**"
+      - "wrangler.toml"
+      - "wrangler.test.toml"
+      - "wrangler.fallback.test.toml"
+      - ".github/workflows/barq-worker-config-validation.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "src/src/**"
+      - "wrangler.toml"
+      - "wrangler.test.toml"
+      - "wrangler.fallback.test.toml"
+      - ".github/workflows/barq-worker-config-validation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-worker-configs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify production and Preview resource isolation
+        run: |
+          python3 - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          production = tomllib.loads(Path("wrangler.toml").read_text())
+          preview = tomllib.loads(Path("wrangler.test.toml").read_text())
+          fallback = tomllib.loads(Path("wrangler.fallback.test.toml").read_text())
+
+          prod_db = production["d1_databases"][0]["database_id"]
+          preview_db = preview["d1_databases"][0]["database_id"]
+          fallback_db = fallback["d1_databases"][0]["database_id"]
+          prod_bucket = production["vars"]["TIGRIS_BUCKET"]
+          preview_bucket = preview["vars"]["TIGRIS_BUCKET"]
+          fallback_bucket = fallback["vars"]["TIGRIS_BUCKET"]
+
+          assert prod_db != preview_db == fallback_db
+          assert prod_bucket != preview_bucket == fallback_bucket
+          assert len({production["name"], preview["name"], fallback["name"]}) == 3
+          assert preview["ai"]["binding"] == fallback["ai"]["binding"] == "AI"
+          assert preview["triggers"]["crons"] == ["*/15 * * * *"]
+          assert "triggers" not in fallback, "Standby must not duplicate scheduled cleanup"
+          assert "routes" not in preview and "routes" not in fallback
+          assert preview["workers_dev"] is True and fallback["workers_dev"] is True
+          print("Isolation verified: Preview + standby share only Preview D1/media; production resources remain separate.")
+          print("Standby has no cron by design; scheduled cleanup remains single-owner until failover orchestration exists.")
+          PY
+      - name: Install Worker dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Wrangler dry-run — isolated Preview Worker
+        run: npx --yes wrangler@4 deploy --dry-run --config wrangler.test.toml
+      - name: Wrangler dry-run — isolated standby Worker
+        run: npx --yes wrangler@4 deploy --dry-run --config wrangler.fallback.test.toml

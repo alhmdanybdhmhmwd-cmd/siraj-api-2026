@@ -1,13 +1,33 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 
 const workerPath = new URL("../src/src/index.js", import.meta.url);
 let workerSource = await readFile(workerPath, "utf8");
-workerSource = workerSource.replace('import { AwsClient } from "aws4fetch";', 'class AwsClient {}');
-const workerModule = await import(
-  "data:text/javascript;base64," + Buffer.from(workerSource).toString("base64")
+const summarySource = await readFile(new URL("../src/src/conversation_summary.js", import.meta.url), "utf8");
+const adapterSource = await readFile(new URL("../src/src/runtime_adapters.js", import.meta.url), "utf8");
+const notificationSource = await readFile(new URL("../src/src/notification_service.js", import.meta.url), "utf8");
+const runtimeAdapterImport = workerSource.split("\n").find(line => line.includes("runtime_adapters.js"));
+workerSource = workerSource.replace(runtimeAdapterImport, adapterSource.replaceAll("export function ", "function "));
+workerSource = workerSource.replace(
+  'import { sendBarqPushNotification } from "./notification_service.js";',
+  notificationSource
+    .replace('import { createPushProvider } from "./runtime_adapters.js";', '')
+    .replaceAll("export async function ", "async function ")
 );
+workerSource = workerSource.replace('import { AwsClient } from "aws4fetch";', "class AwsClient {}");
+workerSource = workerSource.replace(
+  'import { prepareConversationSummaryTranscript, buildConversationSummaryMessages, extractConversationSummaryText } from "./conversation_summary.js";',
+  summarySource
+);
+workerSource = workerSource.replace(
+  'import { handleResumableMediaUpload, cleanupExpiredUploadSessions } from "./media_multipart_routes.js";',
+  'const handleResumableMediaUpload = async () => null; const cleanupExpiredUploadSessions = async () => ({ expired: 0 });'
+);
+const workerModulePath = `/tmp/barq-health-worker-${process.pid}.mjs`;
+await writeFile(workerModulePath, workerSource, "utf8");
+const workerModule = await import(pathToFileURL(workerModulePath).href);
 const fetchWorker = workerModule.default.fetch;
 
 function request(path) {
@@ -58,4 +78,30 @@ test("GET /health/ready returns 503 when the database probe fails", async () => 
   const response = await fetchWorker(request("/health/ready"), env);
   assert.equal(response.status, 503);
   assert.deepEqual(await response.json(), { status: "not_ready" });
+});
+
+
+test("scheduled rate-limit cleanup also removes expired transcription limiter rows", async () => {
+  const statements = [];
+  const env = {
+    DB: {
+      prepare(sql) {
+        statements.push(sql);
+        return {
+          bind(cutoff) {
+            assert.equal(cutoff, 1_700_000_000 - 86_400);
+            return { async run() { return { meta: { changes: 2 } }; } };
+          }
+        };
+      }
+    }
+  };
+  const result = await workerModule.cleanupExpiredRateLimits(env, 1_700_000_000_000);
+  assert.deepEqual(result, {
+    login_rate_limits: 2,
+    recovery_rate_limits: 2,
+    transcription_rate_limits: 2
+  });
+  assert.equal(statements.length, 3);
+  assert.ok(statements.some(sql => sql.includes("DELETE FROM transcription_rate_limits")));
 });

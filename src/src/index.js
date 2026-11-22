@@ -1,11 +1,23 @@
 import { AwsClient } from "aws4fetch";
+import { createAiProvider, createDatabaseProvider, createS3ObjectStorageProvider, createObjectStorageUrl, createBackgroundTaskScheduler, runScheduledTasks } from "./runtime_adapters.js";
+import { sendBarqPushNotification } from "./notification_service.js";
+import { prepareConversationSummaryTranscript, buildConversationSummaryMessages, extractConversationSummaryText } from "./conversation_summary.js";
+import { handleResumableMediaUpload, cleanupExpiredUploadSessions } from "./media_multipart_routes.js";
 
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-File-Name, X-Recipient-Id, X-Group-Id",
-  "Content-Type": "application/json; charset=utf-8"
+  "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, Range, X-File-Name, X-Recipient-Id, X-Group-Id, X-Idempotency-Key, X-Status-Caption, X-Status-Id, X-Audio-Duration-Ms",
+  "Access-Control-Expose-Headers": "Accept-Ranges, Content-Range, Content-Disposition, ETag, X-Request-Id",
+  "Content-Type": "application/json; charset=utf-8",
+  "Cache-Control": "no-store",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "no-referrer",
+  "X-Permitted-Cross-Domain-Policies": "none",
+  "Content-Security-Policy": "default-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+  "Strict-Transport-Security": "max-age=31536000"
 };
 
 const json = (data, status = 200) =>
@@ -13,6 +25,49 @@ const json = (data, status = 200) =>
     status,
     headers: corsHeaders
   });
+
+const SPARK_STATUS_BACKGROUNDS = new Set(["electric_blue", "violet", "gold", "midnight"]);
+const SPARK_STATUS_TEXT_COLORS = new Set(["white", "black", "gold"]);
+const SPARK_STATUS_FONTS = new Set(["modern", "classic", "mono"]);
+
+async function rollbackSparkMediaUpload(env, storage, storageUrl, objectKey) {
+  let objectDeleted = false;
+  try {
+    const response = await storage.fetch(storageUrl, { method: "DELETE" });
+    objectDeleted = response.ok || response.status === 404;
+  } catch (error) {
+    console.error("SPARK media rollback delete failed:", error);
+  }
+  try {
+    if (objectDeleted) {
+      await env.DB.prepare("DELETE FROM media_expirations WHERE object_key = ?").bind(objectKey).run();
+    } else {
+      // A failed upload rollback must become immediately eligible for the scheduled
+      // cleanup; otherwise a successful PUT followed by a D1 failure can orphan media.
+      await env.DB.prepare(
+        "INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?) ON CONFLICT(object_key) DO UPDATE SET expires_at = excluded.expires_at"
+      ).bind(objectKey, new Date().toISOString()).run();
+    }
+  } catch (error) {
+    console.error("SPARK media rollback cleanup record failed:", error);
+  }
+  return objectDeleted;
+}
+
+async function ensureSparkStatusStyleColumns(env) {
+  const columns = await env.DB.prepare("PRAGMA table_info(status_posts)").all();
+  const names = new Set((columns.results || []).map(column => column.name));
+  const additions = [
+    ["background_key", "TEXT NOT NULL DEFAULT 'midnight'"],
+    ["text_color_key", "TEXT NOT NULL DEFAULT 'white'"],
+    ["font_key", "TEXT NOT NULL DEFAULT 'modern'"]
+  ];
+  for (const [name, definition] of additions) {
+    if (!names.has(name)) {
+      await env.DB.prepare(`ALTER TABLE status_posts ADD COLUMN ${name} ${definition}`).run();
+    }
+  }
+}
 
 const encoder = new TextEncoder();
 
@@ -120,10 +175,13 @@ async function verifyToken(token, secret) {
       new TextDecoder().decode(decodeBase64url(parts[1]))
     );
 
+    // Treat JWT claims as typed security data, not JavaScript-coercible values.
+    // This rejects numeric/string confusion, empty subjects and fractional expiries.
     if (
-      !payload.sub ||
-      !payload.exp ||
-      payload.exp < Math.floor(Date.now() / 1000)
+      typeof payload.sub !== "string" ||
+      payload.sub.trim().length === 0 ||
+      !Number.isSafeInteger(payload.exp) ||
+      payload.exp <= Math.floor(Date.now() / 1000)
     ) {
       return null;
     }
@@ -174,6 +232,11 @@ async function authenticate(request, env) {
         payload.sv !== Number(row.session_version)) {
       return null;
     }
+    const tokenHash = await sha256Hex(token);
+    const revoked = await env.DB.prepare(
+      "SELECT 1 FROM revoked_sessions WHERE token_hash = ? AND user_id = ? AND expires_at > unixepoch()"
+    ).bind(tokenHash, payload.sub).first();
+    if (revoked) return null;
   } catch (error) {
     // Never accept a session when its revocation state cannot be verified.
     console.error("Session security check failed:", error);
@@ -218,7 +281,7 @@ function normalizedPhoneSql(column = "phone") {
   for (const [from, to] of digits) {
     expression = `replace(${expression}, '${from}', '${to}')`;
   }
-  for (const character of [" ", "+", "-", "(", ")", ".", "\t"]) {
+  for (const character of [" ", "+", "-", "(", ")", ".", "\\t"]) {
     expression = `replace(${expression}, '${character}', '')`;
   }
   return expression;
@@ -228,17 +291,19 @@ function phoneConflictCondition(column, phone) {
   const variants = [...new Set(phoneVariants(phone))];
   if (!variants.length) return { sql: "0", bindings: [] };
 
-  const normalized = normalizedPhoneSql(column);
-  const placeholders = variants.map(() => "?").join(", ");
-  const conditions = [
-    `${normalized} IN (${placeholders})`,
-    `(substr(${normalized}, 1, 2) = '00' AND substr(${normalized}, 3) IN (${placeholders}))`,
-    `(substr(${normalized}, 1, 3) = '967' AND length(${normalized}) >= 10 AND substr(${normalized}, 4) IN (${placeholders}))`,
-    `(substr(${normalized}, 1, 1) = '0' AND length(${normalized}) >= 8 AND substr(${normalized}, 2) IN (${placeholders}))`
-  ];
+  // Registration accepts E.164 input. Match the raw canonical value and the
+  // small set of exact forms generated in JS; keep the race guard shallow so
+  // libSQL does not need to parse a deeply nested Unicode normalization tree.
+  const rawVariants = new Set([String(phone || "").trim()]);
+  for (const variant of variants) {
+    rawVariants.add(variant);
+    rawVariants.add("+" + variant);
+    rawVariants.add("00" + variant);
+  }
+  const values = [...rawVariants].filter(Boolean);
   return {
-    sql: "(" + conditions.join(" OR ") + ")",
-    bindings: [...variants, ...variants, ...variants, ...variants]
+    sql: `${column} IN (${values.map(() => "?").join(", ")})`,
+    bindings: values
   };
 }
 
@@ -272,8 +337,97 @@ function cleanUser(user) {
     id: user.id,
     username: user.username,
     displayName: user.display_name,
-    phone: user.phone || null
+    phone: user.phone || null,
+    ...(user.photo_updated_at ? {
+      photoUrl: "/api/profile/photo/" + encodeURIComponent(user.id),
+      photoUpdatedAt: user.photo_updated_at
+    } : {})
   };
+}
+
+async function readJsonRequestLimited(request, maxBytes = 256 * 1024) {
+  const declaredLength = Number(request.headers.get("Content-Length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    try { await request.body?.cancel(); } catch (_) {}
+    const error = new Error("JSON request body is too large");
+    error.status = 413;
+    throw error;
+  }
+  const bytes = await readRequestBodyLimited(request, maxBytes);
+  if (!bytes) {
+    const error = new Error("JSON request body is too large");
+    error.status = 413;
+    throw error;
+  }
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+
+async function readRequestBodyLimited(request, maxBytes) {
+  const stream = request.body;
+  if (!stream) return new Uint8Array();
+  const reader = stream.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = value instanceof Uint8Array ? value : new Uint8Array(value);
+      total += chunk.byteLength;
+      if (total > maxBytes) {
+        try { await reader.cancel(); } catch (_) {}
+        return null;
+      }
+      chunks.push(chunk);
+    }
+  } finally {
+    try { reader.releaseLock(); } catch (_) {}
+  }
+  const result = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return result;
+}
+
+function detectSparkMediaType(bytes) {
+  const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const ascii = (start, end) => String.fromCharCode(...b.slice(start, end));
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b.length >= 8 && b[0] === 0x89 && ascii(1, 4) === "PNG" &&
+      b[4] === 0x0d && b[5] === 0x0a && b[6] === 0x1a && b[7] === 0x0a) return "image/png";
+  if (b.length >= 12 && ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP") return "image/webp";
+  if (b.length >= 6 && (ascii(0, 6) === "GIF87a" || ascii(0, 6) === "GIF89a")) return "image/gif";
+  if (b.length >= 12 && ascii(4, 8) === "ftyp") {
+    // QuickTime MOV uses the qt\u0020\u0020 major brand; other ISO-BMFF brands remain MP4.
+    return ascii(8, 12) === "qt  " ? "video/quicktime" : "video/mp4";
+  }
+  if (b.length >= 4 && b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) return "video/webm";
+  return null;
+}
+
+function detectProfileImageType(bytes) {
+  const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47 &&
+      b[4] === 0x0d && b[5] === 0x0a && b[6] === 0x1a && b[7] === 0x0a) return "image/png";
+  if (b.length >= 12 && String.fromCharCode(...b.slice(0, 4)) === "RIFF" &&
+      String.fromCharCode(...b.slice(8, 12)) === "WEBP") return "image/webp";
+  return null;
+}
+
+async function ensureProfilePhotos(env) {
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS profile_photos (
+      user_id TEXT PRIMARY KEY,
+      object_key TEXT NOT NULL UNIQUE,
+      content_type TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `).run();
 }
 
 function safeFileName(value) {
@@ -285,118 +439,7 @@ function safeFileName(value) {
 
 
 async function sendSirajPush(env, recipientId, senderId, senderName, messageText, options = {}) {
-  const category = ["groups", "statuses"].includes(options.category) ? options.category : "messages";
-  const pushType = category === "groups" ? "group_message"
-    : category === "statuses" ? "status_update" : "direct_message";
-  if (!env.FCM_SERVICE_ACCOUNT_JSON) return;
-  try {
-    const account = JSON.parse(env.FCM_SERVICE_ACCOUNT_JSON);
-    const now = Math.floor(Date.now() / 1000);
-    const pem = String(account.private_key || "").replace(/\\n/g, "\n");
-    const keyBytes = Uint8Array.from(
-      atob(pem.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\\s/g, "")),
-      c => c.charCodeAt(0)
-    );
-    const signingKey = await crypto.subtle.importKey(
-      "pkcs8", keyBytes,
-      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-      false, ["sign"]
-    );
-    const assertionHeader = base64url(encoder.encode(JSON.stringify({ alg: "RS256", typ: "JWT" })));
-    const assertionPayload = base64url(encoder.encode(JSON.stringify({
-      iss: account.client_email,
-      scope: "https://www.googleapis.com/auth/firebase.messaging",
-      aud: account.token_uri || "https://oauth2.googleapis.com/token",
-      iat: now, exp: now + 3600
-    })));
-    const unsigned = assertionHeader + "." + assertionPayload;
-    const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", signingKey, encoder.encode(unsigned));
-    const assertion = unsigned + "." + base64url(new Uint8Array(signature));
-    const tokenResponse = await fetch(account.token_uri || "https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-        assertion
-      })
-    });
-    if (!tokenResponse.ok) throw new Error("FCM OAuth token request failed: " + tokenResponse.status);
-    const tokenData = await tokenResponse.json();
-    const projectId = account.project_id || env.FCM_PROJECT_ID;
-    if (!projectId || !tokenData.access_token) throw new Error("FCM project or access token missing");
-
-    await env.DB.prepare(`
-      CREATE TABLE IF NOT EXISTS notification_preferences (
-        user_id TEXT PRIMARY KEY,
-        messages INTEGER NOT NULL DEFAULT 1,
-        groups INTEGER NOT NULL DEFAULT 1,
-        statuses INTEGER NOT NULL DEFAULT 1,
-        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-      )
-    `).run();
-    const pref = await env.DB.prepare(
-      "SELECT " + category + " AS enabled FROM notification_preferences WHERE user_id = ?"
-    ).bind(recipientId).first();
-    if (pref && pref.enabled === 0) return;
-
-    await env.DB.prepare(`
-      CREATE TABLE IF NOT EXISTS device_tokens (
-        user_id TEXT NOT NULL,
-        fcm_token TEXT PRIMARY KEY,
-        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-      )
-    `).run();
-    const devices = await env.DB.prepare(
-      "SELECT fcm_token FROM device_tokens WHERE user_id = ?"
-    ).bind(recipientId).all();
-
-    const preview = String(messageText || "").slice(0, 120);
-    await Promise.all((devices.results || []).map(async device => {
-      const response = await fetch(
-        `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/messages:send`,
-        {
-          method: "POST",
-          headers: {
-            "Authorization": "Bearer " + tokenData.access_token,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            message: {
-              token: device.fcm_token,
-              notification: {
-                title: category === "groups"
-                  ? "رسالة في " + String(options.groupName || "مجموعة برق").slice(0, 65)
-                  : category === "statuses"
-                    ? "حالة جديدة من " + String(senderName || "مستخدم برق").slice(0, 80)
-                    : "رسالة من " + String(senderName || "مستخدم برق").slice(0, 80),
-                body: category === "statuses" ? "شارك حالة جديدة" : preview || "لديك رسالة جديدة"
-              },
-              data: {
-                type: pushType,
-                senderId: String(senderId || ""),
-                ...(category === "groups" ? { groupId: String(options.groupId || "") } : {})
-              },
-              android: { priority: "HIGH", notification: { channel_id: category === "groups" ? "barq_groups" : category === "statuses" ? "barq_statuses" : "barq_messages" } }
-            }
-          })
-        }
-      );
-      if (!response.ok) {
-        const detail = await response.clone().text().catch(() => "");
-        if ((response.status === 404 || response.status === 400) &&
-            /UNREGISTERED|INVALID_ARGUMENT/i.test(detail)) {
-          await env.DB.prepare("DELETE FROM device_tokens WHERE fcm_token = ?")
-            .bind(device.fcm_token).run();
-        } else {
-          console.error("FCM message send failed:", response.status, detail.slice(0, 300));
-        }
-      }
-    }));
-  } catch (error) {
-    console.error("Barq push delivery failed:", error);
-  }
+  return sendBarqPushNotification(env, recipientId, senderId, senderName, messageText, options);
 }
 
 
@@ -478,18 +521,73 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
     throw new Error("Media storage credentials are not configured");
   }
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS media_expirations (object_key TEXT PRIMARY KEY, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS media_access (
+      object_key TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL,
+      recipient_id TEXT,
+      group_id TEXT,
+      file_name TEXT NOT NULL,
+      content_type TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    )
+  `).run();
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS status_posts (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL, content TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, expires_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `).run();
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS status_media (
+      id TEXT PRIMARY KEY, status_id TEXT NOT NULL, object_key TEXT NOT NULL UNIQUE,
+      file_name TEXT NOT NULL, content_type TEXT NOT NULL,
+      size INTEGER NOT NULL, caption TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE
+    )
+  `).run();
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS status_audio_replies (
+      id TEXT PRIMARY KEY, status_id TEXT NOT NULL, user_id TEXT NOT NULL,
+      object_key TEXT NOT NULL UNIQUE, content_type TEXT NOT NULL,
+      size INTEGER NOT NULL, duration_ms INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `).run();
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS status_views (
+      status_id TEXT NOT NULL, viewer_id TEXT NOT NULL,
+      viewed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (status_id, viewer_id),
+      FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE,
+      FOREIGN KEY (viewer_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `).run();
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS status_reactions (
+      status_id TEXT NOT NULL, user_id TEXT NOT NULL, emoji TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (status_id, user_id, emoji),
+      FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE
+    )
+  `).run();
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS status_replies (
+      id TEXT PRIMARY KEY, status_id TEXT NOT NULL, user_id TEXT NOT NULL,
+      body TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `).run();
   const cutoff = new Date(now).toISOString();
   const expired = await env.DB.prepare(
     "SELECT object_key FROM media_expirations WHERE expires_at <= ? ORDER BY expires_at ASC LIMIT 100"
   ).bind(cutoff).all();
-  const bucket = env.TIGRIS_BUCKET || "siraj-media";
-  const storage = new AwsClient({
-    accessKeyId: env.TIGRIS_ACCESS_KEY_ID,
-    secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY,
-    service: "s3",
-    region: "auto",
-    retries: 2
-  });
+  const storage = createS3ObjectStorageProvider(env, AwsClient);
   let deleted = 0;
   for (const item of expired.results || []) {
     const key = String(item.object_key || "");
@@ -498,11 +596,13 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
       console.error("Skipping invalid media expiration key");
       continue;
     }
-    const objectPath = key.split("/").map(encodeURIComponent).join("/");
-    const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
+      const storageUrl = createObjectStorageUrl(env, key);
     try {
       const response = await storage.fetch(storageUrl, { method: "DELETE" });
       if (response.ok || response.status === 404) {
+        await env.DB.prepare("DELETE FROM status_media WHERE object_key = ?").bind(key).run();
+        await env.DB.prepare("DELETE FROM status_audio_replies WHERE object_key = ?").bind(key).run();
+        await env.DB.prepare("DELETE FROM media_access WHERE object_key = ?").bind(key).run();
         await env.DB.prepare(
           "DELETE FROM media_expirations WHERE object_key = ? AND expires_at <= ?"
         ).bind(key, cutoff).run();
@@ -515,13 +615,61 @@ async function cleanupExpiredMedia(env, now = Date.now()) {
       console.error("Expired media cleanup item failed:", error);
     }
   }
+  await env.DB.prepare(
+    "DELETE FROM status_views WHERE status_id IN (SELECT id FROM status_posts WHERE expires_at <= ?)"
+  ).bind(cutoff).run();
+  await env.DB.prepare(
+    "DELETE FROM status_reactions WHERE status_id IN (SELECT id FROM status_posts WHERE expires_at <= ?)"
+  ).bind(cutoff).run();
+  await env.DB.prepare(
+    "DELETE FROM status_replies WHERE status_id IN (SELECT id FROM status_posts WHERE expires_at <= ?)"
+  ).bind(cutoff).run();
+  await env.DB.prepare(
+    "DELETE FROM status_media WHERE status_id IN (SELECT id FROM status_posts WHERE expires_at <= ?)"
+  ).bind(cutoff).run();
+  await env.DB.prepare(
+    "DELETE FROM status_audio_replies WHERE status_id IN (SELECT id FROM status_posts WHERE expires_at <= ?)"
+  ).bind(cutoff).run();
+  await env.DB.prepare("DELETE FROM status_posts WHERE expires_at <= ?").bind(cutoff).run();
   return { checked: (expired.results || []).length, deleted };
+}
+
+async function cleanupExpiredEphemeralMessages(env, now = Date.now()) {
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS ephemeral_messages (
+      id TEXT PRIMARY KEY,
+      sender_id TEXT NOT NULL,
+      receiver_id TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      read_at INTEGER,
+      delete_at INTEGER,
+      FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `).run();
+  await env.DB.prepare(
+    "CREATE INDEX IF NOT EXISTS idx_ephemeral_expiration ON ephemeral_messages(delete_at)"
+  ).run();
+  const cutoff = Math.floor(now / 1000);
+  const result = await env.DB.prepare(
+    "DELETE FROM ephemeral_messages WHERE delete_at IS NOT NULL AND delete_at <= ?"
+  ).bind(cutoff).run();
+  return { deleted: Number(result?.meta?.changes || 0), cutoff };
+}
+
+async function cleanupExpiredRevokedSessions(env, now = Date.now()) {
+  const cutoff = Math.floor(now / 1000);
+  const result = await env.DB.prepare(
+    "DELETE FROM revoked_sessions WHERE expires_at <= ?"
+  ).bind(cutoff).run();
+  return { deleted: Number(result?.meta?.changes || 0), cutoff };
 }
 
 async function cleanupExpiredRateLimits(env, now = Date.now()) {
   const cutoff = Math.floor(now / 1000) - 24 * 60 * 60;
   const results = {};
-  for (const table of ["login_rate_limits", "recovery_rate_limits"]) {
+  for (const table of ["login_rate_limits", "recovery_rate_limits", "transcription_rate_limits"]) {
     try {
       const result = await env.DB.prepare(
         `DELETE FROM ${table} WHERE window_started < ?`
@@ -536,24 +684,77 @@ async function cleanupExpiredRateLimits(env, now = Date.now()) {
   return results;
 }
 
-export { phoneVariants, safeFileName, cleanupExpiredMedia, cleanupExpiredRateLimits };
+export { phoneVariants, safeFileName, cleanupExpiredMedia, cleanupExpiredRateLimits, cleanupExpiredEphemeralMessages, cleanupExpiredRevokedSessions, signToken, verifyToken, authenticate, hashPassword, sendSirajPush, detectProfileImageType, readRequestBodyLimited, rollbackSparkMediaUpload };
+
+
+async function createConversationSummary(env, messages, conversationType) {
+  const ai = createAiProvider(env.AI);
+  if (!ai.isAvailable()) {
+    return json({ error: "Conversation summaries are not configured" }, 503);
+  }
+  const transcript = prepareConversationSummaryTranscript(messages);
+  if (!transcript.length) {
+    return json({ error: "لا توجد رسائل نصية كافية لتلخيصها." }, 422);
+  }
+  try {
+    const result = await ai.run("@cf/qwen/qwen3.8-27b", {
+      messages: buildConversationSummaryMessages(transcript, conversationType),
+      max_tokens: 380,
+      temperature: 0.2
+    });
+    const summary = extractConversationSummaryText(result);
+    if (!summary) return json({ error: "تعذر إنشاء ملخص واضح. حاول مرة أخرى." }, 502);
+    return json({
+      summary,
+      messageCount: transcript.length,
+      generatedAt: new Date().toISOString(),
+      scope: "latest_available_messages"
+    });
+  } catch (error) {
+    console.error("Conversation summary inference failed:", error?.name || "Error");
+    return json({ error: "تعذر إنشاء ملخص المحادثة حاليًا. حاول مرة أخرى." }, 502);
+  }
+}
 
 export default {
   async scheduled(_controller, env) {
-    try {
-      const result = await cleanupExpiredRateLimits(env);
-      console.log("Rate limit cleanup:", result);
-    } catch (error) {
-      console.error("Rate limit cleanup failed:", error);
-    }
-    try {
-      const result = await cleanupExpiredMedia(env);
-      console.log("Media expiration cleanup:", result);
-    } catch (error) {
-      console.error("Media expiration cleanup failed:", error);
-    }
+    env = { ...env, DB: createDatabaseProvider(env.DB) };
+    // Each cleanup is isolated: a transient failure must not block other jobs.
+    await runScheduledTasks([
+      {
+        name: "Revoked session cleanup",
+        successMessage: "Revoked session cleanup:",
+        failureMessage: "Revoked session cleanup failed:",
+        run: () => cleanupExpiredRevokedSessions(env)
+      },
+      {
+        name: "Rate limit cleanup",
+        successMessage: "Rate limit cleanup:",
+        failureMessage: "Rate limit cleanup failed:",
+        run: () => cleanupExpiredRateLimits(env)
+      },
+      {
+        name: "Media expiration cleanup",
+        successMessage: "Media expiration cleanup:",
+        failureMessage: "Media expiration cleanup failed:",
+        run: () => cleanupExpiredMedia(env)
+      },
+      {
+        name: "Expired multipart session cleanup",
+        successMessage: "Expired multipart session cleanup:",
+        failureMessage: "Expired multipart session cleanup failed:",
+        run: () => cleanupExpiredUploadSessions(env)
+      },
+      {
+        name: "Ephemeral message cleanup",
+        successMessage: "Ephemeral message cleanup:",
+        failureMessage: "Ephemeral message cleanup failed:",
+        run: () => cleanupExpiredEphemeralMessages(env)
+      }
+    ]);
   },
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
+    env = { ...env, DB: createDatabaseProvider(env.DB) };
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders });
     }
@@ -601,20 +802,52 @@ export default {
 
       // Register
       if (method === "POST" && path === "/api/register") {
-        const body = await request.json();
+        const body = await readJsonRequestLimited(request);
 
         const displayName = String(body.displayName || "").trim();
-        const username = String(body.username || "").trim().toLowerCase();
+        let username = String(body.username || "").trim().toLowerCase();
         const password = String(body.password || "");
         const phone = String(body.phone || "").trim();
+        const inviteCode = String(body.inviteCode || "").trim().toUpperCase();
 
-        if (!displayName || !username || !password) {
+        if (inviteCode && !/^[A-F0-9]{12}$/.test(inviteCode)) {
+          return json({ error: "Invalid invite code" }, 400);
+        }
+        let inviterUserId = null;
+        if (inviteCode) {
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS user_invite_codes (
+              user_id TEXT PRIMARY KEY,
+              invite_code TEXT NOT NULL UNIQUE,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+          `).run();
+          const inviter = await env.DB.prepare(
+            "SELECT user_id FROM user_invite_codes WHERE invite_code = ?"
+          ).bind(inviteCode).first();
+          if (!inviter?.user_id) {
+            return json({ error: "Invite code was not found" }, 400);
+          }
+          inviterUserId = String(inviter.user_id);
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS user_invites (
+              invitee_user_id TEXT PRIMARY KEY,
+              inviter_user_id TEXT NOT NULL,
+              created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+              FOREIGN KEY (invitee_user_id) REFERENCES users(id) ON DELETE CASCADE,
+              FOREIGN KEY (inviter_user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+          `).run();
+        }
+
+        if (!displayName || !phone || !password) {
           return json({
-            error: "Name, username and password are required"
+            error: "Display name, international phone number and password are required"
           }, 400);
         }
 
-        if (!/^[a-zA-Z0-9_.]{3,30}$/.test(username)) {
+        if (username && !/^[a-zA-Z0-9_.]{3,30}$/.test(username)) {
           return json({
             error: "Username must be 3-30 characters: letters, numbers, _ or ."
           }, 400);
@@ -626,10 +859,13 @@ export default {
           }, 400);
         }
 
-        if (phone.length > 25) {
-          return json({ error: "Invalid phone number" }, 400);
+        // Registration uses an international E.164 phone as the primary account
+        // identifier. National/local formatting must be normalized by the client
+        // using the selected country code before reaching this endpoint.
+        if (!/^\+[1-9][0-9]{7,14}$/.test(phone)) {
+          return json({ error: "Enter a valid international phone number including its country code" }, 400);
         }
-        if (phone && await phoneAlreadyInUse(env, phone)) {
+        if (await phoneAlreadyInUse(env, phone)) {
           return json({ error: "Phone number is already registered" }, 409);
         }
         // Limit automated account creation before the expensive password hash.
@@ -643,6 +879,10 @@ export default {
           });
         }
 
+        // Usernames are optional and secondary. Generate a private handle when
+        // the user chooses not to create one; phone remains the login identifier.
+        if (!username) username = "barq" + randomHex(6).toLowerCase();
+
         const id = crypto.randomUUID();
         const salt = base64url(
           crypto.getRandomValues(new Uint8Array(16))
@@ -652,7 +892,7 @@ export default {
 
         const recovery = await generateRecoveryCode();
         const createdAt = Math.floor(Date.now() / 1000);
-        const registrationResults = await env.DB.batch([
+        const registrationStatements = [
           (() => {
             const phoneConflict = phone ? phoneConflictCondition("phone", phone) : { sql: "0", bindings: [] };
             return env.DB.prepare(`INSERT INTO users
@@ -668,7 +908,19 @@ export default {
             SELECT ?, ?, ?, ?, NULL, ?
             WHERE EXISTS (SELECT 1 FROM users WHERE id = ?)`)
             .bind(id, recovery.codeHash, recovery.salt, createdAt + RECOVERY_CODE_TTL_SECONDS, createdAt, id)
-        ]);
+        ];
+        if (inviterUserId) {
+          registrationStatements.push(env.DB.prepare(`
+            INSERT INTO user_invites (invitee_user_id, inviter_user_id)
+            SELECT ?, ?
+            WHERE EXISTS (SELECT 1 FROM users WHERE id = ?)
+              AND EXISTS (SELECT 1 FROM users WHERE id = ?)
+          `).bind(id, inviterUserId, id, inviterUserId));
+        }
+        const registrationResults = await env.DB.batch(registrationStatements);
+        if (inviterUserId && Number(registrationResults?.[2]?.meta?.changes || 0) !== 1) {
+          throw new Error("Invite attribution could not be saved");
+        }
         if (Number(registrationResults?.[0]?.meta?.changes || 0) !== 1) {
           return json({ error: phone ? "Phone number is already registered" : "Unable to create account" }, 409);
         }
@@ -694,7 +946,7 @@ export default {
 
       // Recover an account with its one-time recovery code (no SMS/email dependency).
       if (method === "POST" && path === "/api/password/recover") {
-        const body = await request.json();
+        const body = await readJsonRequestLimited(request);
         const identifier = String(body.identifier || body.username || body.phone || "").trim();
         const recoveryCode = String(body.recoveryCode || "").replace(/[\s-]/g, "").toUpperCase();
         const newPassword = String(body.newPassword || "");
@@ -780,7 +1032,7 @@ export default {
 
       // Login
       if (method === "POST" && path === "/api/login") {
-        const body = await request.json();
+        const body = await readJsonRequestLimited(request);
 
         const username = String(body.username || "").trim().toLowerCase();
         const password = String(body.password || "");
@@ -842,9 +1094,498 @@ export default {
         return json({ error: "Unauthorized" }, 401);
       }
 
+      // Media recipient authorization also observes user blocks before upload sessions are created.
+      if (path === "/api/media/uploads" || path.startsWith("/api/media/uploads/")) {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS blocked_users (
+            blocker_id TEXT NOT NULL, blocked_id TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (blocker_id, blocked_id), CHECK (blocker_id <> blocked_id),
+            FOREIGN KEY (blocker_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (blocked_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+      }
+      // Resumable chat media uploads are isolated behind authenticated session routes.
+      const resumableMediaResponse = await handleResumableMediaUpload(request, env, currentUser, url, path, method);
+      if (resumableMediaResponse) return resumableMediaResponse;
+
+      // Revoke only this bearer token; other device sessions remain valid.
+      if (method === "POST" && path === "/api/logout") {
+        const authHeader = request.headers.get("Authorization") || "";
+        const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+        if (!bearerToken) return json({ error: "Unauthorized" }, 401);
+        await ensureAccountSecurity(env);
+        await env.DB.prepare(
+          "INSERT OR IGNORE INTO revoked_sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)"
+        ).bind(await sha256Hex(bearerToken), currentUser.sub, currentUser.exp).run();
+        return json({ message: "تم تسجيل الخروج من هذا الجهاز." });
+      }
+
+      // Private memories are isolated by owner_id; saved message text is copied
+      // into the private vault and does not depend on the source chat remaining.
+      if (path === "/api/private-memories" || path.startsWith("/api/private-memories/")) {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS private_memories (
+            id TEXT PRIMARY KEY,
+            owner_id TEXT NOT NULL,
+            title TEXT NOT NULL DEFAULT '',
+            content TEXT NOT NULL,
+            source_type TEXT NOT NULL DEFAULT 'text' CHECK (source_type IN ('text', 'message')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        await env.DB.prepare(
+          "CREATE INDEX IF NOT EXISTS idx_private_memories_owner_updated ON private_memories(owner_id, updated_at DESC)"
+        ).run();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS private_memory_media (
+            id TEXT PRIMARY KEY,
+            memory_id TEXT NOT NULL,
+            owner_id TEXT NOT NULL,
+            object_key TEXT NOT NULL UNIQUE,
+            file_name TEXT NOT NULL,
+            content_type TEXT NOT NULL,
+            size INTEGER NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (memory_id) REFERENCES private_memories(id) ON DELETE CASCADE,
+            FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+
+        if (method === "GET" && path === "/api/private-memories") {
+          const result = await env.DB.prepare(
+            "SELECT id, title, content, source_type AS sourceType, created_at AS createdAt, updated_at AS updatedAt FROM private_memories WHERE owner_id = ? ORDER BY updated_at DESC, created_at DESC LIMIT 200"
+          ).bind(currentUser.sub).all();
+          const memories = result.results || [];
+          const mediaResult = await env.DB.prepare(
+            "SELECT id, memory_id AS memoryId, object_key AS attachmentId, file_name AS fileName, content_type AS contentType, size, created_at AS createdAt FROM private_memory_media WHERE owner_id = ? ORDER BY created_at DESC"
+          ).bind(currentUser.sub).all();
+          const mediaByMemory = new Map();
+          for (const media of mediaResult.results || []) {
+            const list = mediaByMemory.get(media.memoryId) || [];
+            list.push(media);
+            mediaByMemory.set(media.memoryId, list);
+          }
+          for (const memory of memories) memory.media = mediaByMemory.get(memory.id) || [];
+          return json({ memories });
+        }
+
+        if (method === "POST" && path === "/api/private-memories") {
+          const body = await readJsonRequestLimited(request);
+          const title = String(body.title || "").trim();
+          const content = String(body.content || "").trim();
+          const sourceType = body.sourceType === undefined ? "text" : String(body.sourceType);
+          if (title.length > 120 || (!content && !title) || content.length > 10000 ||
+              !["text", "message"].includes(sourceType)) {
+            return json({ error: "Memory title, content, or type is invalid" }, 400);
+          }
+          const id = crypto.randomUUID();
+          await env.DB.prepare(
+            "INSERT INTO private_memories (id, owner_id, title, content, source_type) VALUES (?, ?, ?, ?, ?)"
+          ).bind(id, currentUser.sub, title, content, sourceType).run();
+          const memory = await env.DB.prepare(
+            "SELECT id, title, content, source_type AS sourceType, created_at AS createdAt, updated_at AS updatedAt FROM private_memories WHERE id = ? AND owner_id = ?"
+          ).bind(id, currentUser.sub).first();
+          return json({ memory }, 201);
+        }
+
+        const memoryPathPrefix = "/api/private-memories/";
+        const memoryPathPart = path.startsWith(memoryPathPrefix) ? path.slice(memoryPathPrefix.length) : "";
+        const memoryMediaId = memoryPathPart.endsWith("/media") ? memoryPathPart.slice(0, -6) : "";
+        if (memoryMediaId && method === "POST") {
+          let memoryId;
+          try { memoryId = decodeURIComponent(memoryMediaId); } catch (_) {
+            return json({ error: "Invalid memory identifier" }, 400);
+          }
+          const memory = await env.DB.prepare(
+            "SELECT id FROM private_memories WHERE id = ? AND owner_id = ?"
+          ).bind(memoryId, currentUser.sub).first();
+          if (!memory) return json({ error: "Memory not found" }, 404);
+          if (!env.TIGRIS_ACCESS_KEY_ID || !env.TIGRIS_SECRET_ACCESS_KEY) {
+            return json({ error: "Media storage credentials are not configured" }, 503);
+          }
+          const contentType = (request.headers.get("Content-Type") || "").split(";")[0].trim().toLowerCase();
+          if (!["image/jpeg", "image/png", "image/webp"].includes(contentType)) {
+            return json({ error: "Private memory photos must be JPEG, PNG, or WebP" }, 415);
+          }
+          const maxPhotoBytes = 4 * 1024 * 1024;
+          const declaredLength = Number(request.headers.get("Content-Length"));
+          if (Number.isFinite(declaredLength) && declaredLength > maxPhotoBytes) {
+            return json({ error: "Private memory photo must not exceed 4 MB" }, 413);
+          }
+          const bytes = await readRequestBodyLimited(request, maxPhotoBytes);
+          if (!bytes || !bytes.byteLength) return json({ error: "Photo is empty or exceeds 4 MB" }, 413);
+          if (detectProfileImageType(bytes) !== contentType) {
+            return json({ error: "Photo content does not match its declared image type" }, 415);
+          }
+          let suppliedName = "memory-photo";
+          try {
+            suppliedName = safeFileName(decodeURIComponent(request.headers.get("X-File-Name") || "memory-photo"));
+          } catch (_) {
+            return json({ error: "Invalid photo filename" }, 400);
+          }
+          await env.DB.prepare(
+            "CREATE TABLE IF NOT EXISTS media_expirations (object_key TEXT PRIMARY KEY, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+          ).run();
+          const objectKey = currentUser.sub + "/private-memories/" + crypto.randomUUID();
+                  const storageUrl = createObjectStorageUrl(env, objectKey);
+          const storage = createS3ObjectStorageProvider(env, AwsClient);
+          const expiresAt = "9999-12-31T23:59:59.999Z";
+          const putResponse = await storage.fetch(storageUrl, {
+            method: "PUT",
+            headers: {
+              "Content-Type": contentType,
+              "x-amz-meta-ownerid": currentUser.sub,
+              "x-amz-meta-category": "private-memory",
+              "x-amz-meta-expiresat": expiresAt
+            },
+            body: bytes
+          });
+          if (!putResponse.ok) return json({ error: "Private memory photo upload failed" }, 502);
+          const mediaId = crypto.randomUUID();
+          try {
+            await env.DB.prepare(`
+              CREATE TABLE IF NOT EXISTS media_access (
+                object_key TEXT PRIMARY KEY,
+                owner_id TEXT NOT NULL,
+                recipient_id TEXT,
+                group_id TEXT,
+                file_name TEXT NOT NULL,
+                content_type TEXT NOT NULL,
+                expires_at TEXT NOT NULL
+              )
+            `).run();
+            const savedRows = await env.DB.batch([
+              env.DB.prepare(
+                "INSERT INTO private_memory_media (id, memory_id, owner_id, object_key, file_name, content_type, size) VALUES (?, ?, ?, ?, ?, ?, ?)"
+              ).bind(mediaId, memoryId, currentUser.sub, objectKey, suppliedName, contentType, bytes.byteLength),
+              env.DB.prepare(
+                "INSERT INTO media_access (object_key, owner_id, recipient_id, group_id, file_name, content_type, expires_at) VALUES (?, ?, NULL, NULL, ?, ?, ?)"
+              ).bind(objectKey, currentUser.sub, suppliedName, contentType, expiresAt)
+            ]);
+            if (Number(savedRows?.[0]?.meta?.changes || 0) !== 1 ||
+                Number(savedRows?.[1]?.meta?.changes || 0) !== 1) {
+              await rollbackSparkMediaUpload(env, storage, storageUrl, objectKey);
+              return json({ error: "Could not save private memory photo metadata" }, 500);
+            }
+          } catch (error) {
+            await rollbackSparkMediaUpload(env, storage, storageUrl, objectKey);
+            throw error;
+          }
+          return json({
+            media: { id: mediaId, memoryId, attachmentId: objectKey, fileName: suppliedName, contentType, size: bytes.byteLength }
+          }, 201);
+        }
+
+        const memoryIdOnly = memoryPathPart && !memoryPathPart.includes("/") ? memoryPathPart : "";
+        const memoryMatch = memoryIdOnly ? [path, memoryIdOnly] : null;
+        if (memoryMatch && method === "PATCH") {
+          let memoryId;
+          try { memoryId = decodeURIComponent(memoryMatch[1]); } catch (_) {
+            return json({ error: "Invalid memory identifier" }, 400);
+          }
+          if (!memoryId || memoryId.length > 128) {
+            return json({ error: "Invalid memory identifier" }, 400);
+          }
+          const body = await readJsonRequestLimited(request);
+          const title = String(body.title || "").trim();
+          const content = String(body.content || "").trim();
+          if (title.length > 120 || (!content && !title) || content.length > 10000) {
+            return json({ error: "Memory title or content is invalid" }, 400);
+          }
+          const updated = await env.DB.prepare(
+            "UPDATE private_memories SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND owner_id = ?"
+          ).bind(title, content, memoryId, currentUser.sub).run();
+          if (Number(updated?.meta?.changes || 0) !== 1) {
+            return json({ error: "Memory not found" }, 404);
+          }
+          const memory = await env.DB.prepare(
+            "SELECT id, title, content, source_type AS sourceType, created_at AS createdAt, updated_at AS updatedAt FROM private_memories WHERE id = ? AND owner_id = ?"
+          ).bind(memoryId, currentUser.sub).first();
+          return json({ memory });
+        }
+
+        if (memoryMatch && method === "DELETE") {
+          let memoryId;
+          try { memoryId = decodeURIComponent(memoryMatch[1]); } catch (_) {
+            return json({ error: "Invalid memory identifier" }, 400);
+          }
+          const existing = await env.DB.prepare(
+            "SELECT id FROM private_memories WHERE id = ? AND owner_id = ?"
+          ).bind(memoryId, currentUser.sub).first();
+          if (!existing) return json({ error: "Memory not found" }, 404);
+          const attachedMedia = await env.DB.prepare(
+            "SELECT object_key FROM private_memory_media WHERE memory_id = ? AND owner_id = ?"
+          ).bind(memoryId, currentUser.sub).all();
+          const deletionStatements = [];
+          if ((attachedMedia.results || []).length) {
+            await env.DB.prepare(
+              "CREATE TABLE IF NOT EXISTS media_expirations (object_key TEXT PRIMARY KEY, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+            ).run();
+            const cleanupAt = new Date().toISOString();
+            for (const media of attachedMedia.results) {
+              deletionStatements.push(
+                env.DB.prepare(
+                  "INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?) ON CONFLICT(object_key) DO UPDATE SET expires_at = excluded.expires_at"
+                ).bind(media.object_key, cleanupAt),
+                env.DB.prepare("DELETE FROM media_access WHERE object_key = ?").bind(media.object_key),
+                env.DB.prepare(
+                  "DELETE FROM private_memory_media WHERE memory_id = ? AND owner_id = ? AND object_key = ?"
+                ).bind(memoryId, currentUser.sub, media.object_key)
+              );
+            }
+          }
+          deletionStatements.push(
+            env.DB.prepare(
+              "DELETE FROM private_memories WHERE id = ? AND owner_id = ?"
+            ).bind(memoryId, currentUser.sub)
+          );
+          const deletionResults = await env.DB.batch(deletionStatements);
+          const deleted = deletionResults?.[deletionStatements.length - 1];
+          if (Number(deleted?.meta?.changes || 0) !== 1) {
+            return json({ error: "Memory not found" }, 404);
+          }
+          return json({ message: "Memory deleted" });
+        }
+      }
+
+      // Explicitly requested speech transcription. Audio and transcript are never persisted.
+      if (method === "POST" && path === "/api/transcribe") {
+        const ai = createAiProvider(env.AI);
+        if (!ai.isAvailable()) {
+          return json({ error: "Speech transcription is not configured" }, 503);
+        }
+        const contentType = (request.headers.get("Content-Type") || "").split(";")[0].trim().toLowerCase();
+        const allowedAudioTypes = new Set(["audio/mpeg", "audio/mp4", "audio/aac", "audio/wav", "audio/ogg", "audio/webm", "audio/x-wav", "audio/3gpp", "audio/amr"]);
+        if (!allowedAudioTypes.has(contentType)) {
+          return json({ error: "Unsupported audio format" }, 415);
+        }
+        const declaredLength = Number(request.headers.get("Content-Length"));
+        const maxTranscriptionBytes = 2 * 1024 * 1024;
+        if (Number.isFinite(declaredLength) && declaredLength > maxTranscriptionBytes) {
+          return json({ error: "Audio must not exceed 2 MB for transcription" }, 413);
+        }
+        const audio = await readRequestBodyLimited(request, maxTranscriptionBytes);
+        if (!audio) {
+          return json({ error: "Audio must not exceed 2 MB for transcription" }, 413);
+        }
+        if (!audio.byteLength) {
+          return json({ error: "Audio must be between 1 byte and 2 MB" }, 413);
+        }
+
+        // Limit each account to 10 inference requests per rolling hour to prevent abuse.
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS transcription_rate_limits (
+            user_id TEXT PRIMARY KEY,
+            window_started INTEGER NOT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0
+          )
+        `).run();
+        const now = Math.floor(Date.now() / 1000);
+        const windowStart = now - 3600;
+        await env.DB.prepare(
+          `INSERT INTO transcription_rate_limits (user_id, window_started, attempts)
+           VALUES (?, ?, 1)
+           ON CONFLICT(user_id) DO UPDATE SET
+             window_started = CASE WHEN transcription_rate_limits.window_started <= ? THEN excluded.window_started ELSE transcription_rate_limits.window_started END,
+             attempts = CASE WHEN transcription_rate_limits.window_started <= ? THEN 1 ELSE transcription_rate_limits.attempts + 1 END`
+        ).bind(currentUser.sub, now, windowStart, windowStart).run();
+        const usage = await env.DB.prepare(
+          "SELECT attempts FROM transcription_rate_limits WHERE user_id = ?"
+        ).bind(currentUser.sub).first();
+        if (Number(usage?.attempts || 0) > 10) {
+          return json({ error: "Transcription limit reached. Try again later." }, 429);
+        }
+
+        try {
+          const result = await ai.run("@cf/openai/whisper", {
+            audio: Array.from(new Uint8Array(audio))
+          });
+          const text = String(result?.text || "").trim();
+          if (!text) return json({ error: "No clear speech was detected" }, 422);
+          return json({ text });
+        } catch (error) {
+          console.error("Speech transcription inference failed:", error?.name || "Error");
+          return json({ error: "Speech transcription failed. Please try again." }, 502);
+        }
+      }
+
+      // A single private invite code per account; no counters, badges, thresholds, or rewards.
+      if (method === "GET" && path === "/api/referrals") {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS user_invite_codes (
+            user_id TEXT PRIMARY KEY,
+            invite_code TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        const existing = await env.DB.prepare(
+          "SELECT invite_code FROM user_invite_codes WHERE user_id = ?"
+        ).bind(currentUser.sub).first();
+        if (existing?.invite_code) return json({ inviteCode: existing.invite_code });
+
+        const inviteCode = Array.from(crypto.getRandomValues(new Uint8Array(6)), byte => byte.toString(16).padStart(2, "0")).join("").toUpperCase();
+        await env.DB.prepare(
+          "INSERT OR IGNORE INTO user_invite_codes (user_id, invite_code) VALUES (?, ?)"
+        ).bind(currentUser.sub, inviteCode).run();
+        const saved = await env.DB.prepare(
+          "SELECT invite_code FROM user_invite_codes WHERE user_id = ?"
+        ).bind(currentUser.sub).first();
+        if (!saved?.invite_code) return json({ error: "Could not create invite code" }, 503);
+        return json({ inviteCode: saved.invite_code });
+      }
+
+      // Directional user blocks; shared group membership and group messages remain unchanged.
+      if (path === "/api/blocks" || path.startsWith("/api/blocks/") ||
+          path === "/api/messages" || path === "/api/media" || path === "/api/ephemeral-messages" ||
+          path === "/api/users/search" || path === "/api/friends" ||
+          path.startsWith("/api/profile/photo/") || path === "/api/statuses") {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS blocked_users (
+            blocker_id TEXT NOT NULL,
+            blocked_id TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (blocker_id, blocked_id),
+            CHECK (blocker_id <> blocked_id),
+            FOREIGN KEY (blocker_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (blocked_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+      }
+      if (path === "/api/blocks" && method === "GET") {
+        const result = await env.DB.prepare(
+          "SELECT blocked_id AS userId, created_at AS blockedAt FROM blocked_users WHERE blocker_id = ? ORDER BY created_at DESC"
+        ).bind(currentUser.sub).all();
+        return json({ blockedUsers: result.results || [] });
+      }
+      if (path === "/api/blocks" && (method === "POST" || method === "DELETE")) {
+        const body = method === "POST" ? await readJsonRequestLimited(request) : {};
+        const targetId = String(body.userId || url.searchParams.get("userId") || "").trim();
+        if (!targetId || targetId.length > 128 || targetId === currentUser.sub) {
+          return json({ error: "Invalid user to block" }, 400);
+        }
+        const target = await env.DB.prepare("SELECT id FROM users WHERE id = ?").bind(targetId).first();
+        if (!target) return json({ error: "User not found" }, 404);
+        if (method === "POST") {
+          await env.DB.prepare("INSERT OR IGNORE INTO blocked_users (blocker_id, blocked_id) VALUES (?, ?)")
+            .bind(currentUser.sub, targetId).run();
+          return json({ message: "User blocked", userId: targetId }, 201);
+        }
+        await env.DB.prepare("DELETE FROM blocked_users WHERE blocker_id = ? AND blocked_id = ?")
+          .bind(currentUser.sub, targetId).run();
+        return json({ message: "User unblocked", userId: targetId });
+      }
+      async function isBlockedPair(userA, userB) {
+        if (!userA || !userB || userA === userB) return false;
+        return Boolean(await env.DB.prepare(
+          "SELECT 1 FROM blocked_users WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?) LIMIT 1"
+        ).bind(userA, userB, userB, userA).first());
+      }
+
+      // Ephemeral private messages are stored only in D1 (never sent to Firebase).
+      // The ten-second deletion window starts when the recipient first fetches the message.
+      if (path === "/api/ephemeral-messages" && (method === "GET" || method === "POST")) {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS ephemeral_messages (
+            id TEXT PRIMARY KEY,
+            sender_id TEXT NOT NULL,
+            receiver_id TEXT NOT NULL,
+            body TEXT NOT NULL,
+            created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+            read_at INTEGER,
+            delete_at INTEGER,
+            FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        await env.DB.prepare(
+          "CREATE INDEX IF NOT EXISTS idx_ephemeral_conversation ON ephemeral_messages(sender_id, receiver_id, created_at)"
+        ).run();
+        await env.DB.prepare(
+          "CREATE INDEX IF NOT EXISTS idx_ephemeral_expiration ON ephemeral_messages(delete_at)"
+        ).run();
+        await env.DB.prepare(
+          "DELETE FROM ephemeral_messages WHERE delete_at IS NOT NULL AND delete_at <= unixepoch()"
+        ).run();
+
+        if (method === "POST") {
+          const body = await readJsonRequestLimited(request);
+          const receiverId = String(body.receiverId || "").trim();
+          const message = String(body.body || "").trim();
+          if (!receiverId || !message) {
+            return json({ error: "Receiver and message are required" }, 400);
+          }
+          if (receiverId === currentUser.sub) {
+            return json({ error: "Cannot message yourself" }, 400);
+          }
+          if (await isBlockedPair(currentUser.sub, receiverId)) return json({ error: "Private communication is unavailable" }, 403);
+          if (message.length > 5000) {
+            return json({ error: "Message is too long" }, 400);
+          }
+          const friendship = await env.DB.prepare(
+            "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
+          ).bind(currentUser.sub, receiverId).first();
+          if (!friendship) return json({ error: "You can only message friends" }, 403);
+
+          const id = crypto.randomUUID();
+          await env.DB.prepare(
+            "INSERT INTO ephemeral_messages (id, sender_id, receiver_id, body) VALUES (?, ?, ?, ?)"
+          ).bind(id, currentUser.sub, receiverId, message).run();
+          // Deliberately no push notification: ephemeral content must not be copied to Firebase.
+          return json({ message: "Ephemeral message sent", id }, 201);
+        }
+
+        const friendId = (url.searchParams.get("with") || "").trim();
+        if (!friendId) return json({ error: "Friend ID is required" }, 400);
+        if (await isBlockedPair(currentUser.sub, friendId)) return json({ error: "Private communication is unavailable" }, 403);
+        const friendship = await env.DB.prepare(
+          "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
+        ).bind(currentUser.sub, friendId).first();
+        if (!friendship) return json({ error: "You can only view chats with friends" }, 403);
+
+        // First retrieval by the recipient is the read event; start the ten-second TTL once.
+        await env.DB.prepare(
+          `UPDATE ephemeral_messages
+           SET read_at = unixepoch(), delete_at = unixepoch() + 10
+           WHERE sender_id = ? AND receiver_id = ? AND read_at IS NULL`
+        ).bind(friendId, currentUser.sub).run();
+
+        const result = await env.DB.prepare(
+          `SELECT id, sender_id, receiver_id, body, created_at, read_at, delete_at
+           FROM ephemeral_messages
+           WHERE ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))
+             AND (delete_at IS NULL OR delete_at > unixepoch())
+           ORDER BY created_at ASC, id ASC
+           LIMIT 200`
+        ).bind(currentUser.sub, friendId, friendId, currentUser.sub).all();
+        const messages = result.results || [];
+        // Schedule physical D1 deletion for ten seconds after the recipient's first read.
+        // Cron cleanup remains a recovery path if the request's background task is interrupted.
+        const backgroundScheduler = createBackgroundTaskScheduler(ctx);
+        if (ctx && typeof ctx.waitUntil === "function") {
+          for (const message of messages) {
+            const deleteAt = Number(message.delete_at || 0);
+            if (!message.id || !Number.isFinite(deleteAt) || deleteAt <= 0) continue;
+            const delay = Math.max(0, deleteAt * 1000 - Date.now());
+            backgroundScheduler.schedule(() =>
+              new Promise(resolve => setTimeout(resolve, delay))
+                .then(() => env.DB.prepare(
+                  "DELETE FROM ephemeral_messages WHERE id = ? AND delete_at IS NOT NULL AND delete_at <= unixepoch()"
+                ).bind(message.id).run())
+                .catch(error => console.error("Ephemeral message deletion task failed:", error?.name || "Error"))
+            );
+          }
+        }
+        return json({ messages });
+      }
+
       // Rotate the one-time recovery code after verifying the current password.
       if (method === "POST" && path === "/api/recovery-code") {
-        const body = await request.json();
+        const body = await readJsonRequestLimited(request);
         const password = String(body.password || "");
         const user = await env.DB.prepare(
           "SELECT password_hash, password_salt FROM users WHERE id = ?"
@@ -860,18 +1601,162 @@ export default {
         });
       }
 
+      // Private profile photos use their own namespace and never enter chat-media expiry.
+      const profilePhotoPrefix = "/api/profile/photo/";
+      if (path.startsWith(profilePhotoPrefix) && (method === "GET" || method === "POST")) {
+        if (!env.TIGRIS_ACCESS_KEY_ID || !env.TIGRIS_SECRET_ACCESS_KEY) {
+          return json({ error: "Profile photo storage is not configured" }, 503);
+        }
+        let targetUserId;
+        try {
+          targetUserId = decodeURIComponent(path.slice(profilePhotoPrefix.length));
+          if (targetUserId === "me") targetUserId = currentUser.sub;
+        } catch (_) {
+          return json({ error: "Invalid profile identifier" }, 400);
+        }
+        if (!targetUserId || targetUserId.length > 128) {
+          return json({ error: "Invalid profile identifier" }, 400);
+        }
+        await ensureProfilePhotos(env);
+
+        if (method === "POST") {
+          if (targetUserId !== currentUser.sub) return json({ error: "You can only update your own photo" }, 403);
+          const contentType = (request.headers.get("Content-Type") || "").split(";")[0].trim().toLowerCase();
+          if (!["image/jpeg", "image/png", "image/webp"].includes(contentType)) {
+            return json({ error: "Use a JPEG, PNG, or WebP image" }, 415);
+          }
+          const declaredLength = Number(request.headers.get("Content-Length"));
+          const maxPhotoBytes = 4 * 1024 * 1024;
+          if (Number.isFinite(declaredLength) && declaredLength > maxPhotoBytes) {
+            return json({ error: "Profile photo must not exceed 4 MiB" }, 413);
+          }
+          const bytes = await readRequestBodyLimited(request, maxPhotoBytes);
+          if (!bytes || !bytes.length) {
+            return json({ error: "Profile photo must be between 1 byte and 4 MiB" }, 413);
+          }
+          if (detectProfileImageType(bytes) !== contentType) {
+            return json({ error: "Image content does not match its declared type" }, 415);
+          }
+          const previous = await env.DB.prepare(
+            "SELECT object_key FROM profile_photos WHERE user_id = ?"
+          ).bind(currentUser.sub).first();
+          const objectKey = "profiles/" + currentUser.sub + "/" + crypto.randomUUID();
+                  const storageUrl = createObjectStorageUrl(env, objectKey);
+          const storage = createS3ObjectStorageProvider(env, AwsClient);
+          const putResponse = await storage.fetch(storageUrl, {
+            method: "PUT",
+            headers: {
+              "Content-Type": contentType,
+              "x-amz-meta-ownerid": currentUser.sub,
+              "x-amz-meta-contenttype": contentType
+            },
+            body: bytes
+          });
+          if (!putResponse.ok) {
+            return json({ error: "Profile photo upload failed", storageStatus: putResponse.status }, 502);
+          }
+          try {
+            await env.DB.prepare(`
+              INSERT INTO profile_photos (user_id, object_key, content_type, updated_at)
+              VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+              ON CONFLICT(user_id) DO UPDATE SET
+                object_key = excluded.object_key,
+                content_type = excluded.content_type,
+                updated_at = CURRENT_TIMESTAMP
+            `).bind(currentUser.sub, objectKey, contentType).run();
+          } catch (error) {
+            try { await storage.fetch(storageUrl, { method: "DELETE" }); } catch (_) {}
+            throw error;
+          }
+          if (previous?.object_key && previous.object_key !== objectKey) {
+            try {
+              await storage.delete(String(previous.object_key));
+            } catch (error) {
+              console.error("Previous profile photo cleanup failed:", error?.name || "Error");
+            }
+          }
+          const saved = await env.DB.prepare(
+            "SELECT updated_at FROM profile_photos WHERE user_id = ?"
+          ).bind(currentUser.sub).first();
+          return json({
+            photoUrl: "/api/profile/photo/" + encodeURIComponent(currentUser.sub),
+            updatedAt: saved?.updated_at || null
+          }, 201);
+        }
+
+        if (targetUserId !== currentUser.sub) {
+          if (await isBlockedPair(currentUser.sub, targetUserId)) return json({ error: "Profile photo access denied" }, 403);
+          const friendship = await env.DB.prepare(
+            `SELECT 1 FROM friendships
+             WHERE (user_id = ? AND friend_id = ?)
+                OR (user_id = ? AND friend_id = ?)
+             LIMIT 1`
+          ).bind(currentUser.sub, targetUserId, targetUserId, currentUser.sub).first();
+          if (!friendship) {
+            const sharedGroup = await env.DB.prepare(
+              `SELECT 1
+               FROM group_members mine
+               JOIN group_members theirs ON theirs.group_id = mine.group_id
+               WHERE mine.user_id = ? AND theirs.user_id = ?
+               LIMIT 1`
+            ).bind(currentUser.sub, targetUserId).first();
+            if (!sharedGroup) {
+              // A discoverable public profile may be opened from search or matched
+              // phone contacts without a friendship or shared group. Keep private
+              // profiles protected by the same searchable preference as discovery.
+              await env.DB.prepare(`
+                CREATE TABLE IF NOT EXISTS user_privacy (
+                  user_id TEXT PRIMARY KEY,
+                  searchable INTEGER NOT NULL DEFAULT 1,
+                  read_receipts INTEGER NOT NULL DEFAULT 1,
+                  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+              `).run();
+              const privacy = await env.DB.prepare(
+                "SELECT searchable FROM user_privacy WHERE user_id = ?"
+              ).bind(targetUserId).first();
+              if (Number(privacy?.searchable ?? 1) !== 1) {
+                return json({ error: "Profile photo access denied" }, 403);
+              }
+            }
+          }
+        }
+        const photo = await env.DB.prepare(
+          "SELECT object_key, content_type, updated_at FROM profile_photos WHERE user_id = ?"
+        ).bind(targetUserId).first();
+        if (!photo?.object_key) return json({ error: "Profile photo not found" }, 404);
+        const objectPath = String(photo.object_key).split("/").map(encodeURIComponent).join("/");
+        const storageUrl = createObjectStorageUrl(env, photo.object_key);
+        const storage = createS3ObjectStorageProvider(env, AwsClient);
+        const stored = await storage.fetch(storageUrl, { method: "GET" });
+        if (stored.status === 404) return json({ error: "Profile photo not found" }, 404);
+        if (!stored.ok) return json({ error: "Profile photo could not be loaded" }, 502);
+        return new Response(await stored.arrayBuffer(), {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": photo.content_type,
+            "Cache-Control": "private, max-age=300",
+            "Vary": "Authorization",
+            "X-Content-Type-Options": "nosniff"
+          }
+        });
+      }
+
       // Update current user's editable profile fields
       if (method === "POST" && path === "/api/profile") {
-        const body = await request.json();
+        await ensureProfilePhotos(env);
+        const body = await readJsonRequestLimited(request);
         const displayName = String(body.displayName || "").trim();
         const phone = String(body.phone || "").trim();
         if (!displayName || displayName.length > 60) {
           return json({ error: "Display name must be 1-60 characters" }, 400);
         }
-        if (phone.length > 25) {
-          return json({ error: "Phone number is too long" }, 400);
+        if (!/^\+[1-9][0-9]{7,14}$/.test(phone)) {
+          return json({ error: "Enter a valid international phone number including its country code" }, 400);
         }
-        if (phone && await phoneAlreadyInUse(env, phone, currentUser.sub)) {
+        if (await phoneAlreadyInUse(env, phone, currentUser.sub)) {
           return json({ error: "Phone number is already in use" }, 409);
         }
         const phoneConflict = phone ? phoneConflictCondition("phone", phone) : { sql: "0", bindings: [] };
@@ -884,7 +1769,10 @@ export default {
         ).bind(displayName, phone || null, currentUser.sub, currentUser.sub,
           ...phoneConflict.bindings).run();
         const user = await env.DB.prepare(
-          "SELECT id, username, display_name, phone FROM users WHERE id = ?"
+          `SELECT u.id, u.username, u.display_name, u.phone,
+                  p.updated_at AS photo_updated_at
+           FROM users u LEFT JOIN profile_photos p ON p.user_id = u.id
+           WHERE u.id = ?`
         ).bind(currentUser.sub).first();
         if (!user) return json({ error: "User not found" }, 404);
         if (Number(updateResult?.meta?.changes || 0) !== 1) {
@@ -905,7 +1793,7 @@ export default {
           )
         `).run();
         if (method === "POST") {
-          const body = await request.json();
+          const body = await readJsonRequestLimited(request);
           const existing = await env.DB.prepare(
             "SELECT searchable, read_receipts FROM user_privacy WHERE user_id = ?"
           ).bind(currentUser.sub).first();
@@ -947,7 +1835,7 @@ export default {
           )
         `).run();
         if (method === "POST") {
-          const body = await request.json();
+          const body = await readJsonRequestLimited(request);
           const existing = await env.DB.prepare(
             "SELECT messages, groups, statuses FROM notification_preferences WHERE user_id = ?"
           ).bind(currentUser.sub).first();
@@ -987,7 +1875,7 @@ export default {
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
           )
         `).run();
-        const body = await request.json();
+        const body = await readJsonRequestLimited(request);
         const fcmToken = String(body.fcmToken || "").trim();
 
         if (!fcmToken || fcmToken.length > 4096) {
@@ -1015,9 +1903,13 @@ export default {
       }
       // Current user
       if (method === "GET" && path === "/api/me") {
+        await ensureProfilePhotos(env);
         const user = await env.DB.prepare(
-          `SELECT id, username, display_name, phone
-           FROM users WHERE id = ?`
+          `SELECT u.id, u.username, u.display_name, u.phone,
+                  p.updated_at AS photo_updated_at
+           FROM users u
+           LEFT JOIN profile_photos p ON p.user_id = u.id
+           WHERE u.id = ?`
         ).bind(currentUser.sub).first();
 
         if (!user) {
@@ -1025,6 +1917,167 @@ export default {
         }
 
         return json({ user: cleanUser(user) });
+      }
+
+      // Publish a 24-hour SPARK image/video status using private Tigris storage.
+      if (method === "POST" && path === "/api/statuses/media") {
+        if (!env.TIGRIS_ACCESS_KEY_ID || !env.TIGRIS_SECRET_ACCESS_KEY) {
+          return json({ error: "Media storage credentials are not configured" }, 503);
+        }
+        const statusAllowed = await consumeLoginAttempt(env, "status", currentUser.sub, 10);
+        if (!statusAllowed) {
+          return new Response(JSON.stringify({ error: "Too many status posts. Please try again in 15 minutes." }), {
+            status: 429, headers: { ...corsHeaders, "Retry-After": "900" }
+          });
+        }
+        const contentType = (request.headers.get("Content-Type") || "").split(";")[0].toLowerCase();
+        if (!/^(image\/(jpeg|png|webp|gif)|video\/(mp4|webm|quicktime))$/.test(contentType)) {
+          return json({ error: "SPARK supports image and video media only" }, 415);
+        }
+        const declaredLength = Number(request.headers.get("Content-Length"));
+        const maxStatusMediaBytes = 60 * 1024 * 1024;
+        if (Number.isFinite(declaredLength) && declaredLength > maxStatusMediaBytes) {
+          return json({ error: "SPARK media must not exceed 60 MB" }, 413);
+        }
+        const bytes = await readRequestBodyLimited(request, maxStatusMediaBytes);
+        if (!bytes?.byteLength) return json({ error: "SPARK media is empty or too large" }, 413);
+        // Never trust a client-supplied MIME type: validate the actual file signature
+        // before storing it or serving it back to other accounts.
+        if (detectSparkMediaType(bytes) !== contentType) {
+          return json({ error: "SPARK file content does not match its declared media type" }, 415);
+        }
+        const caption = String(request.headers.get("X-Status-Caption") || "").trim();
+        if (caption.length > 1000) return json({ error: "SPARK caption must not exceed 1000 characters" }, 400);
+
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_posts (
+            id TEXT PRIMARY KEY, user_id TEXT NOT NULL, content TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, expires_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_views (
+            status_id TEXT NOT NULL, viewer_id TEXT NOT NULL,
+            viewed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (status_id, viewer_id),
+            FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE,
+            FOREIGN KEY (viewer_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_media (
+            id TEXT PRIMARY KEY, status_id TEXT NOT NULL, object_key TEXT NOT NULL UNIQUE,
+            file_name TEXT NOT NULL, content_type TEXT NOT NULL,
+            size INTEGER NOT NULL, caption TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE
+          )
+        `).run();
+        await env.DB.prepare("CREATE TABLE IF NOT EXISTS media_expirations (object_key TEXT PRIMARY KEY, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS media_access (
+            object_key TEXT PRIMARY KEY, owner_id TEXT NOT NULL, recipient_id TEXT,
+            group_id TEXT, file_name TEXT NOT NULL, content_type TEXT NOT NULL, expires_at TEXT NOT NULL
+          )
+        `).run();
+
+        const requestedStatusId = (request.headers.get("X-Status-Id") || "").trim();
+        if (requestedStatusId.length > 128) return json({ error: "Invalid SPARK status identifier" }, 400);
+        const id = requestedStatusId || crypto.randomUUID();
+        let existingStatusExpiry = null;
+        if (requestedStatusId) {
+          const existingStatus = await env.DB.prepare(
+            "SELECT user_id, expires_at FROM status_posts WHERE id = ?"
+          ).bind(requestedStatusId).first();
+          if (!existingStatus || existingStatus.user_id !== currentUser.sub ||
+              Date.parse(existingStatus.expires_at) <= Date.now()) {
+            return json({ error: "SPARK status not found or expired" }, 404);
+          }
+          existingStatusExpiry = existingStatus.expires_at;
+          const existingMediaCount = await env.DB.prepare(
+            "SELECT COUNT(*) AS count FROM status_media WHERE status_id = ?"
+          ).bind(requestedStatusId).first();
+          if (Number(existingMediaCount?.count || 0) >= 10) {
+            return json({ error: "A SPARK status can contain at most 10 media files" }, 409);
+          }
+        }
+        const mediaId = crypto.randomUUID();
+        const objectKey = currentUser.sub + "/" + crypto.randomUUID();
+        const suppliedName = safeFileName(request.headers.get("X-File-Name") || "spark-media");
+        const expiresAt = existingStatusExpiry || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+            const storageUrl = createObjectStorageUrl(env, objectKey);
+        const storage = createS3ObjectStorageProvider(env, AwsClient);
+        const putResponse = await storage.fetch(storageUrl, {
+          method: "PUT",
+          headers: {
+            "Content-Type": contentType,
+            "x-amz-meta-ownerid": currentUser.sub,
+            "x-amz-meta-filename": encodeURIComponent(suppliedName),
+            "x-amz-meta-contenttype": contentType,
+            "x-amz-meta-expiresat": expiresAt,
+            "x-amz-meta-category": "spark"
+          },
+          body: bytes
+        });
+        if (!putResponse.ok) {
+          return json({ error: "SPARK media upload failed", storageStatus: putResponse.status }, 502);
+        }
+        try {
+          const statements = [];
+          if (!requestedStatusId) {
+            statements.push(env.DB.prepare(
+              "INSERT INTO status_posts (id, user_id, content, expires_at) VALUES (?, ?, ?, ?)"
+            ).bind(id, currentUser.sub, caption, expiresAt));
+          }
+          const mediaInsertIndex = statements.length;
+          statements.push(
+            // Enforce the 10-file ceiling atomically in D1 as well as with the
+            // early count check above, so concurrent uploads cannot exceed it.
+            env.DB.prepare(
+              "INSERT INTO status_media (id, status_id, object_key, file_name, content_type, size, caption, created_at) SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM status_media WHERE status_id = ?) < 10"
+            ).bind(mediaId, id, objectKey, suppliedName, contentType, bytes.byteLength, caption, new Date().toISOString(), id),
+            env.DB.prepare(
+              "INSERT INTO media_expirations (object_key, expires_at) SELECT ?, ? WHERE EXISTS (SELECT 1 FROM status_media WHERE object_key = ?)"
+            ).bind(objectKey, expiresAt, objectKey),
+            env.DB.prepare(
+              "INSERT INTO media_access (object_key, owner_id, recipient_id, group_id, file_name, content_type, expires_at) SELECT ?, ?, NULL, NULL, ?, ?, ? WHERE EXISTS (SELECT 1 FROM status_media WHERE object_key = ?)"
+            ).bind(objectKey, currentUser.sub, suppliedName, contentType, expiresAt, objectKey)
+          );
+          const savedRows = await env.DB.batch(statements);
+          if (Number(savedRows?.[mediaInsertIndex]?.meta?.changes || 0) !== 1) {
+            await rollbackSparkMediaUpload(env, storage, storageUrl, objectKey);
+            return json({ error: "A SPARK status can contain at most 10 media files" }, 409);
+          }
+        } catch (error) {
+          await rollbackSparkMediaUpload(env, storage, storageUrl, objectKey);
+          throw error;
+        }
+        if (!requestedStatusId) {
+          try {
+            const recipients = await env.DB.prepare(
+              `SELECT f.friend_id FROM friendships f
+             WHERE f.user_id = ?
+               AND EXISTS (
+                 SELECT 1 FROM friendships reciprocal
+                 WHERE reciprocal.user_id = f.friend_id AND reciprocal.friend_id = ?
+               )`
+            ).bind(currentUser.sub, currentUser.sub).all();
+            await Promise.all((recipients.results || []).map(item =>
+              sendSirajPush(env, item.friend_id, currentUser.sub,
+                currentUser.username, "لحظة جديدة في SPARK", { category: "statuses", statusId: id })
+            ));
+          } catch (notificationError) {
+            console.error("SPARK media notification dispatch failed:", notificationError);
+          }
+        }
+        return json({
+          status: {
+            id, userId: currentUser.sub, content: caption,
+            createdAt: new Date().toISOString(), expiresAt,
+            media: { id: mediaId, attachmentId: objectKey, fileName: suppliedName, contentType, size: bytes.byteLength, caption }
+          }
+        }, 201);
       }
 
       // Publish a 24-hour text status
@@ -1037,11 +2090,21 @@ export default {
             headers: { ...corsHeaders, "Retry-After": "900" }
           });
         }
-        const body = await request.json();
+        const body = await readJsonRequestLimited(request);
         const content = String(body.content || "").trim();
+        const backgroundKey = body.backgroundKey === undefined ? "midnight" : body.backgroundKey;
+        const textColorKey = body.textColorKey === undefined ? "white" : body.textColorKey;
+        const fontKey = body.fontKey === undefined ? "modern" : body.fontKey;
 
         if (!content || content.length > 1000) {
           return json({ error: "Status text must be between 1 and 1000 characters" }, 400);
+        }
+        if (typeof backgroundKey !== "string" || !SPARK_STATUS_BACKGROUNDS.has(backgroundKey) ||
+            typeof textColorKey !== "string" || !SPARK_STATUS_TEXT_COLORS.has(textColorKey) ||
+            typeof fontKey !== "string" || !SPARK_STATUS_FONTS.has(fontKey) ||
+            (backgroundKey === "gold" && textColorKey !== "black") ||
+            (backgroundKey !== "gold" && textColorKey === "black")) {
+          return json({ error: "Unsupported SPARK text style" }, 400);
         }
 
         await env.DB.prepare(`
@@ -1051,24 +2114,34 @@ export default {
             content TEXT NOT NULL,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             expires_at TEXT NOT NULL,
+            background_key TEXT NOT NULL DEFAULT 'midnight',
+            text_color_key TEXT NOT NULL DEFAULT 'white',
+            font_key TEXT NOT NULL DEFAULT 'modern',
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
           )
         `).run();
+        await ensureSparkStatusStyleColumns(env);
 
         const id = crypto.randomUUID();
         await env.DB.prepare(
-          `INSERT INTO status_posts (id, user_id, content, expires_at)
-           VALUES (?, ?, ?, datetime('now', '+24 hours'))`
-        ).bind(id, currentUser.sub, content).run();
+          `INSERT INTO status_posts
+             (id, user_id, content, expires_at, background_key, text_color_key, font_key)
+           VALUES (?, ?, ?, datetime('now', '+24 hours'), ?, ?, ?)`
+        ).bind(id, currentUser.sub, content, backgroundKey, textColorKey, fontKey).run();
 
         // Status persistence is authoritative; push failures must not undo it.
         try {
           const recipients = await env.DB.prepare(
-            "SELECT friend_id FROM friendships WHERE user_id = ?"
-          ).bind(currentUser.sub).all();
+            `SELECT f.friend_id FROM friendships f
+             WHERE f.user_id = ?
+               AND EXISTS (
+                 SELECT 1 FROM friendships reciprocal
+                 WHERE reciprocal.user_id = f.friend_id AND reciprocal.friend_id = ?
+               )`
+          ).bind(currentUser.sub, currentUser.sub).all();
           await Promise.all((recipients.results || []).map(item =>
             sendSirajPush(env, item.friend_id, currentUser.sub,
-              currentUser.username, "شارك حالة جديدة", { category: "statuses" })
+              currentUser.username, "شارك لحظة جديدة في SPARK", { category: "statuses", statusId: id })
           ));
         } catch (notificationError) {
           console.error("Status notification dispatch failed:", notificationError);
@@ -1091,26 +2164,403 @@ export default {
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
           )
         `).run();
+        await ensureSparkStatusStyleColumns(env);
 
+        await ensureProfilePhotos(env);
+        // A first-ever SPARK feed request must not query status_views before
+        // the table has been created by the viewer endpoint.
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_views (
+            status_id TEXT NOT NULL,
+            viewer_id TEXT NOT NULL,
+            viewed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (status_id, viewer_id),
+            FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE,
+            FOREIGN KEY (viewer_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
         const result = await env.DB.prepare(
           `SELECT s.id, s.user_id AS userId, u.username,
                   u.display_name AS displayName, s.content,
-                  s.created_at AS createdAt, s.expires_at AS expiresAt
+                  s.background_key AS backgroundKey,
+                  s.text_color_key AS textColorKey,
+                  s.font_key AS fontKey,
+                  s.created_at AS createdAt, s.expires_at AS expiresAt,
+                  CASE WHEN pp.user_id IS NOT NULL
+                    THEN '/api/profile/photo/' || u.id ELSE NULL END AS photoUrl,
+                  pp.updated_at AS photoUpdatedAt,
+                  (SELECT COUNT(*) FROM status_views sv WHERE sv.status_id = s.id) AS viewCount
            FROM status_posts s
            JOIN users u ON u.id = s.user_id
+           LEFT JOIN profile_photos pp ON pp.user_id = u.id
            WHERE s.expires_at > CURRENT_TIMESTAMP
+             AND NOT EXISTS (
+               SELECT 1 FROM blocked_users b
+               WHERE (b.blocker_id = ? AND b.blocked_id = s.user_id)
+                  OR (b.blocker_id = s.user_id AND b.blocked_id = ?)
+             )
              AND (
                s.user_id = ?
                OR EXISTS (
                  SELECT 1 FROM friendships f
                  WHERE f.user_id = ? AND f.friend_id = s.user_id
+                   AND EXISTS (
+                     SELECT 1 FROM friendships reciprocal
+                     WHERE reciprocal.user_id = s.user_id AND reciprocal.friend_id = ?
+                   )
                )
              )
            ORDER BY s.created_at DESC
            LIMIT 100`
-        ).bind(currentUser.sub, currentUser.sub).all();
+        ).bind(currentUser.sub, currentUser.sub, currentUser.sub, currentUser.sub, currentUser.sub).all();
 
-        return json({ statuses: result.results || [] });
+        const statuses = result.results || [];
+        if (statuses.length) {
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS status_media (
+              id TEXT PRIMARY KEY, status_id TEXT NOT NULL, object_key TEXT NOT NULL UNIQUE,
+              file_name TEXT NOT NULL, content_type TEXT NOT NULL,
+              size INTEGER NOT NULL, caption TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE
+            )
+          `).run();
+          const ids = statuses.map(item => item.id);
+          const placeholders = ids.map(() => "?").join(",");
+          const mediaResult = await env.DB.prepare(
+            `SELECT status_id AS statusId, object_key AS attachmentId,
+                    file_name AS fileName, content_type AS contentType,
+                    size, caption, created_at AS createdAt
+             FROM status_media WHERE status_id IN (${placeholders}) ORDER BY created_at ASC`
+          ).bind(...ids).all();
+          const mediaByStatus = new Map();
+          for (const media of mediaResult.results || []) {
+            const list = mediaByStatus.get(media.statusId) || [];
+            list.push(media);
+            mediaByStatus.set(media.statusId, list);
+          }
+          for (const item of statuses) item.media = mediaByStatus.get(item.id) || [];
+        } else {
+          for (const item of statuses) item.media = [];
+        }
+        return json({ statuses });
+      }
+
+      // Record unique SPARK viewers and expose the viewer list only to the status owner.
+      const sparkViewerMatch = path.match(/^\/api\/statuses\/([^/]+)\/(view|viewers)$/);
+      if (sparkViewerMatch) {
+        let statusId;
+        try { statusId = decodeURIComponent(sparkViewerMatch[1]); } catch (_) {
+          return json({ error: "Invalid SPARK status identifier" }, 400);
+        }
+        const action = sparkViewerMatch[2];
+        const status = await env.DB.prepare(
+          "SELECT user_id FROM status_posts WHERE id = ? AND expires_at > CURRENT_TIMESTAMP"
+        ).bind(statusId).first();
+        if (!status) return json({ error: "SPARK status not found or expired" }, 404);
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_views (
+            status_id TEXT NOT NULL, viewer_id TEXT NOT NULL,
+            viewed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (status_id, viewer_id),
+            FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE,
+            FOREIGN KEY (viewer_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        if (action === "view" && method === "POST") {
+          if (status.user_id !== currentUser.sub) {
+            const friendship = await env.DB.prepare(
+              `SELECT 1 FROM friendships f
+               WHERE f.user_id = ? AND f.friend_id = ?
+                 AND EXISTS (
+                   SELECT 1 FROM friendships reciprocal
+                   WHERE reciprocal.user_id = ? AND reciprocal.friend_id = ?
+                 )`
+            ).bind(currentUser.sub, status.user_id, status.user_id, currentUser.sub).first();
+            if (!friendship) return json({ error: "SPARK status access denied" }, 403);
+            await env.DB.prepare(
+              "INSERT OR IGNORE INTO status_views (status_id, viewer_id) VALUES (?, ?)"
+            ).bind(statusId, currentUser.sub).run();
+          }
+          const count = await env.DB.prepare(
+            "SELECT COUNT(*) AS count FROM status_views WHERE status_id = ?"
+          ).bind(statusId).first();
+          return json({ statusId, viewCount: Number(count?.count || 0) });
+        }
+        if (action === "viewers" && method === "GET") {
+          if (status.user_id !== currentUser.sub) return json({ error: "Only the status owner can view this list" }, 403);
+          const viewers = await env.DB.prepare(
+            `SELECT sv.viewed_at AS viewedAt, u.id, u.display_name AS displayName, u.username
+             FROM status_views sv JOIN users u ON u.id = sv.viewer_id
+             WHERE sv.status_id = ? ORDER BY sv.viewed_at DESC LIMIT 100`
+          ).bind(statusId).all();
+          return json({ viewers: viewers.results || [] });
+        }
+        return json({ error: "Method not allowed" }, 405);
+      }
+
+
+      // Private voice replies for SPARK. Audio objects inherit the parent status expiry.
+      const sparkAudioReplyMatch = path.match(/^\/api\/statuses\/([^/]+)\/audio-replies(?:\/([^/]+))?$/);
+      if (sparkAudioReplyMatch) {
+        let statusId, audioReplyId = null;
+        try {
+          statusId = decodeURIComponent(sparkAudioReplyMatch[1]);
+          audioReplyId = sparkAudioReplyMatch[2] ? decodeURIComponent(sparkAudioReplyMatch[2]) : null;
+        } catch (_) {
+          return json({ error: "Invalid SPARK audio reply identifier" }, 400);
+        }
+        if (!statusId || statusId.length > 128 || (audioReplyId && audioReplyId.length > 128)) {
+          return json({ error: "Invalid SPARK audio reply identifier" }, 400);
+        }
+        const status = await env.DB.prepare(
+          "SELECT user_id, expires_at FROM status_posts WHERE id = ? AND expires_at > CURRENT_TIMESTAMP"
+        ).bind(statusId).first();
+        if (!status) return json({ error: "SPARK status not found or expired" }, 404);
+        const isOwner = status.user_id === currentUser.sub;
+        if (!isOwner) {
+          const friendship = await env.DB.prepare(
+            `SELECT 1 FROM friendships f
+             WHERE f.user_id = ? AND f.friend_id = ?
+               AND EXISTS (
+                 SELECT 1 FROM friendships reciprocal
+                 WHERE reciprocal.user_id = ? AND reciprocal.friend_id = ?
+               )`
+          ).bind(currentUser.sub, status.user_id, status.user_id, currentUser.sub).first();
+          if (!friendship) return json({ error: "SPARK status access denied" }, 403);
+        }
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_audio_replies (
+            id TEXT PRIMARY KEY, status_id TEXT NOT NULL, user_id TEXT NOT NULL,
+            object_key TEXT NOT NULL UNIQUE, content_type TEXT NOT NULL,
+            size INTEGER NOT NULL, duration_ms INTEGER NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        if (method === "POST" && !audioReplyId) {
+          if (!env.TIGRIS_ACCESS_KEY_ID || !env.TIGRIS_SECRET_ACCESS_KEY) {
+            return json({ error: "Media storage credentials are not configured" }, 503);
+          }
+          if (!(await consumeLoginAttempt(env, "spark_audio_reply", currentUser.sub, 10))) {
+            return new Response(JSON.stringify({ error: "Too many SPARK voice replies. Try again later." }), {
+              status: 429, headers: { ...corsHeaders, "Retry-After": "900" }
+            });
+          }
+          const contentType = (request.headers.get("Content-Type") || "").split(";")[0].trim().toLowerCase();
+          if (contentType !== "audio/mp4") return json({ error: "SPARK voice replies must use AAC audio in an MP4 container" }, 415);
+          const durationMs = Number(request.headers.get("X-Audio-Duration-Ms"));
+          if (!Number.isInteger(durationMs) || durationMs < 1000 || durationMs > 60000) {
+            return json({ error: "SPARK voice replies must be between 1 and 60 seconds" }, 400);
+          }
+          await env.DB.prepare("CREATE TABLE IF NOT EXISTS media_expirations (object_key TEXT PRIMARY KEY, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
+          const maxAudioReplyBytes = 5 * 1024 * 1024;
+          const declaredLength = Number(request.headers.get("Content-Length"));
+          if (Number.isFinite(declaredLength) && declaredLength > maxAudioReplyBytes) {
+            return json({ error: "SPARK voice replies must not exceed 5 MB" }, 413);
+          }
+          const bytes = await readRequestBodyLimited(request, maxAudioReplyBytes);
+          if (!bytes?.byteLength) return json({ error: "SPARK audio is empty or exceeds 5 MB" }, 413);
+          const audioSignature = bytes.length >= 12
+            ? String.fromCharCode(...bytes.slice(4, 8))
+            : "";
+          if (audioSignature !== "ftyp") return json({ error: "Invalid AAC audio file" }, 415);
+
+          const audioReplyId = crypto.randomUUID();
+          const objectKey = currentUser.sub + "/spark-audio/" + crypto.randomUUID();
+          const expiresAt = status.expires_at;
+                  const storageUrl = createObjectStorageUrl(env, objectKey);
+          const storage = createS3ObjectStorageProvider(env, AwsClient);
+          const putResponse = await storage.fetch(storageUrl, {
+            method: "PUT",
+            headers: {
+              "Content-Type": contentType,
+              "x-amz-meta-ownerid": currentUser.sub,
+              "x-amz-meta-statusid": statusId,
+              "x-amz-meta-expiresat": expiresAt,
+              "x-amz-meta-category": "spark-audio-reply"
+            },
+            body: bytes
+          });
+          if (!putResponse.ok) return json({ error: "SPARK voice reply upload failed" }, 502);
+          try {
+            await env.DB.batch([
+              env.DB.prepare(
+                "INSERT INTO status_audio_replies (id, status_id, user_id, object_key, content_type, size, duration_ms, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+              ).bind(audioReplyId, statusId, currentUser.sub, objectKey, contentType, bytes.byteLength, durationMs, new Date().toISOString()),
+              env.DB.prepare(
+                "INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?)"
+              ).bind(objectKey, expiresAt)
+            ]);
+          } catch (error) {
+            // Use the same rollback policy as SPARK image/video uploads:
+            // failed deletion is queued for immediate scheduled cleanup.
+            await rollbackSparkMediaUpload(env, storage, storageUrl, objectKey);
+            throw error;
+          }
+          if (!isOwner) {
+            try {
+              const sender = await env.DB.prepare("SELECT display_name FROM users WHERE id = ?").bind(currentUser.sub).first();
+              await sendSirajPush(env, status.user_id, currentUser.sub,
+                sender?.display_name || currentUser.username || "مستخدم برق",
+                "رد صوتي جديد على SPARK", { category: "statuses", statusId });
+            } catch (notificationError) {
+              console.error("SPARK audio reply notification failed:", notificationError);
+            }
+          }
+          return json({ audioReply: {
+            id: audioReplyId, statusId, userId: currentUser.sub,
+            contentType, size: bytes.byteLength, durationMs,
+            createdAt: new Date().toISOString()
+          } }, 201);
+        }
+        if (method === "GET" && !audioReplyId) {
+          const rows = await env.DB.prepare(
+            `SELECT r.id, r.user_id AS userId, r.content_type AS contentType,
+                    r.duration_ms AS durationMs, r.created_at AS createdAt,
+                    u.display_name AS displayName, u.username
+             FROM status_audio_replies r JOIN users u ON u.id = r.user_id
+             WHERE r.status_id = ? ORDER BY r.created_at ASC LIMIT 100`
+          ).bind(statusId).all();
+          return json({ audioReplies: rows.results || [] });
+        }
+        if (method === "GET" && audioReplyId) {
+          if (!env.TIGRIS_ACCESS_KEY_ID || !env.TIGRIS_SECRET_ACCESS_KEY) {
+            return json({ error: "Media storage credentials are not configured" }, 503);
+          }
+          const row = await env.DB.prepare(
+            `SELECT object_key AS objectKey, content_type AS contentType, expires_at AS expiresAt
+             FROM status_audio_replies r JOIN status_posts s ON s.id = r.status_id
+             WHERE r.id = ? AND r.status_id = ? AND s.expires_at > CURRENT_TIMESTAMP LIMIT 1`
+          ).bind(audioReplyId, statusId).first();
+          if (!row) return json({ error: "SPARK audio reply not found or expired" }, 404);
+                  const storageUrl = createObjectStorageUrl(env, row.objectKey);
+          const storage = createS3ObjectStorageProvider(env, AwsClient);
+          const media = await storage.fetch(storageUrl);
+          if (!media.ok) return json({ error: "SPARK audio reply media unavailable" }, media.status === 404 ? 404 : 502);
+          return new Response(media.body, {
+            status: 200,
+            headers: {
+              ...corsHeaders,
+              "Content-Type": row.contentType,
+              "Cache-Control": "private, no-store",
+              "X-Content-Type-Options": "nosniff",
+              "Content-Disposition": "inline"
+            }
+          });
+        }
+        return json({ error: "Method not allowed" }, 405);
+      }
+
+      // SPARK replies and reactions are available only while the status is active and visible.
+      const sparkInteractionMatch = path.match(/^\/api\/statuses\/([^/]+)\/(reactions|replies)$/);
+      if (sparkInteractionMatch) {
+        let statusId;
+        try { statusId = decodeURIComponent(sparkInteractionMatch[1]); } catch (_) {
+          return json({ error: "Invalid SPARK status identifier" }, 400);
+        }
+        const action = sparkInteractionMatch[2];
+        const status = await env.DB.prepare(
+          "SELECT user_id, expires_at FROM status_posts WHERE id = ? AND expires_at > CURRENT_TIMESTAMP"
+        ).bind(statusId).first();
+        if (!status) return json({ error: "SPARK status not found or expired" }, 404);
+        const isOwner = status.user_id === currentUser.sub;
+        if (!isOwner) {
+          const friendship = await env.DB.prepare(
+            `SELECT 1 FROM friendships f
+             WHERE f.user_id = ? AND f.friend_id = ?
+               AND EXISTS (
+                 SELECT 1 FROM friendships reciprocal
+                 WHERE reciprocal.user_id = ? AND reciprocal.friend_id = ?
+               )`
+          ).bind(currentUser.sub, status.user_id, status.user_id, currentUser.sub).first();
+          if (!friendship) return json({ error: "SPARK status access denied" }, 403);
+        }
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_reactions (
+            status_id TEXT NOT NULL, user_id TEXT NOT NULL, emoji TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (status_id, user_id, emoji),
+            FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE
+          )
+        `).run();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_audio_replies (
+            id TEXT PRIMARY KEY, status_id TEXT NOT NULL, user_id TEXT NOT NULL,
+            object_key TEXT NOT NULL UNIQUE, content_type TEXT NOT NULL,
+            size INTEGER NOT NULL, duration_ms INTEGER NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_replies (
+            id TEXT PRIMARY KEY, status_id TEXT NOT NULL, user_id TEXT NOT NULL,
+            body TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        if (action === "reactions") {
+          if (method !== "POST" && method !== "DELETE") return json({ error: "Method not allowed" }, 405);
+          const allowed = ["👍", "❤️", "😂", "😮", "😢", "😡", "🎉", "🔥"];
+          const body = method === "POST" ? await readJsonRequestLimited(request) : null;
+          const emoji = method === "POST" ? String(body.emoji || "") : (url.searchParams.get("emoji") || "");
+          if (!allowed.includes(emoji)) return json({ error: "Unsupported reaction" }, 400);
+          if (method === "POST") {
+            await env.DB.prepare(
+              "INSERT OR IGNORE INTO status_reactions (status_id, user_id, emoji) VALUES (?, ?, ?)"
+            ).bind(statusId, currentUser.sub, emoji).run();
+          } else {
+            await env.DB.prepare(
+              "DELETE FROM status_reactions WHERE status_id = ? AND user_id = ? AND emoji = ?"
+            ).bind(statusId, currentUser.sub, emoji).run();
+          }
+          return json({ message: "SPARK reaction updated", statusId, emoji, active: method === "POST" });
+        }
+        if (method === "GET") {
+          const replies = await env.DB.prepare(
+            `SELECT r.id, r.body, r.created_at AS createdAt, r.user_id AS userId,
+                    u.display_name AS displayName, u.username
+             FROM status_replies r JOIN users u ON u.id = r.user_id
+             WHERE r.status_id = ? ORDER BY r.created_at ASC LIMIT 100`
+          ).bind(statusId).all();
+          const audioReplies = await env.DB.prepare(
+            `SELECT r.id, r.user_id AS userId, r.content_type AS contentType,
+                    r.duration_ms AS durationMs, r.created_at AS createdAt,
+                    u.display_name AS displayName, u.username
+             FROM status_audio_replies r JOIN users u ON u.id = r.user_id
+             WHERE r.status_id = ? ORDER BY r.created_at ASC LIMIT 100`
+          ).bind(statusId).all();
+          return json({ replies: replies.results || [], audioReplies: audioReplies.results || [] });
+        }
+        if (method === "POST") {
+          const replyAllowed = await consumeLoginAttempt(env, "spark_reply", currentUser.sub, 20);
+          if (!replyAllowed) return json({ error: "Too many SPARK replies. Try again later." }, 429);
+          const body = await readJsonRequestLimited(request);
+          const reply = String(body.body || "").trim();
+          if (!reply || reply.length > 1000) return json({ error: "SPARK reply must be between 1 and 1000 characters" }, 400);
+          const replyId = crypto.randomUUID();
+          await env.DB.prepare(
+            "INSERT INTO status_replies (id, status_id, user_id, body) VALUES (?, ?, ?, ?)"
+          ).bind(replyId, statusId, currentUser.sub, reply).run();
+          if (!isOwner) {
+            try {
+              const sender = await env.DB.prepare(
+                "SELECT display_name FROM users WHERE id = ?"
+              ).bind(currentUser.sub).first();
+              await sendSirajPush(env, status.user_id, currentUser.sub,
+                sender?.display_name || currentUser.username || "مستخدم برق",
+                "رد جديد على SPARK", { category: "statuses", statusId });
+            } catch (notificationError) {
+              console.error("SPARK reply notification failed:", notificationError);
+            }
+          }
+          return json({ reply: { id: replyId, statusId, userId: currentUser.sub, body: reply } }, 201);
+        }
+        return json({ error: "Method not allowed" }, 405);
       }
 
       // Ensure privacy preferences table exists for all authenticated accounts.
@@ -1148,8 +2598,13 @@ export default {
            WHERE id != ?
              AND username LIKE ?
              AND COALESCE((SELECT searchable FROM user_privacy WHERE user_id = users.id), 1) = 1
+             AND NOT EXISTS (
+               SELECT 1 FROM blocked_users b
+               WHERE (b.blocker_id = ? AND b.blocked_id = users.id)
+                  OR (b.blocker_id = users.id AND b.blocked_id = ?)
+             )
            LIMIT 30`
-        ).bind(currentUser.sub, "%" + q + "%").all();
+        ).bind(currentUser.sub, "%" + q + "%", currentUser.sub, currentUser.sub).all();
         for (const candidate of usernameMatches.results || []) byId.set(candidate.id, candidate);
 
         // Phone lookup uses normalized digits so a Yemen local number can find
@@ -1169,8 +2624,13 @@ export default {
              WHERE id != ?
                AND (${normalizedPhoneSql("phone")} LIKE ?${exactClause}${suffixClause})
                AND COALESCE((SELECT searchable FROM user_privacy WHERE user_id = users.id), 1) = 1
+               AND NOT EXISTS (
+                 SELECT 1 FROM blocked_users b
+                 WHERE (b.blocker_id = ? AND b.blocked_id = users.id)
+                    OR (b.blocker_id = users.id AND b.blocked_id = ?)
+               )
              LIMIT 100`
-          ).bind(currentUser.sub, "%" + normalizedQuery + "%", ...variants, ...suffixes).all();
+          ).bind(currentUser.sub, "%" + normalizedQuery + "%", ...variants, ...suffixes, currentUser.sub, currentUser.sub).all();
           const localSearchDigits = normalizedQuery.startsWith("0")
             ? normalizedQuery.slice(1) : normalizedQuery;
           for (const candidate of phoneMatches.results || []) {
@@ -1189,7 +2649,7 @@ export default {
       // Match phone contacts only after the client has obtained explicit permission.
       // Submitted phone numbers are processed in memory and are never persisted.
       if (method === "POST" && path === "/api/contacts/match") {
-        const body = await request.json();
+        const body = await readJsonRequestLimited(request);
         if (!Array.isArray(body.phones) || body.phones.length > 500) {
           return json({ error: "قائمة جهات الاتصال غير صالحة" }, 400);
         }
@@ -1244,7 +2704,7 @@ export default {
 
       // Add a contact directly (no friend-request workflow).
       if (method === "POST" && path === "/api/contacts") {
-        const body = await request.json();
+        const body = await readJsonRequestLimited(request);
         const userId = String(body.userId || "").trim();
         if (!userId || userId === currentUser.sub) {
           return json({ error: "Invalid contact" }, 400);
@@ -1293,17 +2753,50 @@ export default {
 
       // Get friends
       if (method === "GET" && path === "/api/friends") {
+        await ensureProfilePhotos(env);
         const friends = await env.DB.prepare(
-          `SELECT u.id, u.username, u.display_name, u.phone
+          `SELECT u.id, u.username, u.display_name, u.phone,
+                  p.updated_at AS photo_updated_at
            FROM friendships f
            JOIN users u ON u.id = f.friend_id
+           LEFT JOIN profile_photos p ON p.user_id = u.id
            WHERE f.user_id = ?
+             AND NOT EXISTS (
+               SELECT 1 FROM blocked_users b
+               WHERE (b.blocker_id = f.user_id AND b.blocked_id = f.friend_id)
+                  OR (b.blocker_id = f.friend_id AND b.blocked_id = f.user_id)
+             )
            ORDER BY u.display_name`
         ).bind(currentUser.sub).all();
 
         return json({
           friends: (friends.results || []).map(cleanUser)
         });
+      }
+
+      // Preview-safe message interaction tables; production is never migrated here.
+      if (path === "/api/messages" || path.startsWith("/api/messages/") || path.startsWith("/api/groups/")) {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS message_reactions (
+            scope_type TEXT NOT NULL CHECK (scope_type IN ('private', 'group')),
+            scope_id TEXT NOT NULL,
+            message_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            emoji TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (scope_type, scope_id, message_id, user_id, emoji)
+          )
+        `).run();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS pinned_messages (
+            scope_type TEXT NOT NULL CHECK (scope_type IN ('private', 'group')),
+            scope_id TEXT NOT NULL,
+            message_id TEXT NOT NULL,
+            pinned_by TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (scope_type, scope_id, message_id, pinned_by)
+          )
+        `).run();
       }
 
       // Group chat tables and membership helpers.
@@ -1328,6 +2821,19 @@ export default {
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
           )
         `).run();
+        // Optional admin assignments are stored separately so existing member
+        // rows remain valid and default to the least-privileged "member" role.
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS group_member_roles (
+            group_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            role TEXT NOT NULL CHECK (role IN ('admin', 'member')),
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (group_id, user_id),
+            FOREIGN KEY (group_id, user_id)
+              REFERENCES group_members(group_id, user_id) ON DELETE CASCADE
+          )
+        `).run();
         await env.DB.prepare(`
           CREATE TABLE IF NOT EXISTS group_messages (
             id TEXT PRIMARY KEY,
@@ -1335,6 +2841,10 @@ export default {
             sender_id TEXT NOT NULL,
             body TEXT NOT NULL,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            reply_to_id TEXT,
+            reply_to_body TEXT,
+            reply_to_sender_id TEXT,
+            edited_at TEXT,
             FOREIGN KEY (group_id) REFERENCES chat_groups(id) ON DELETE CASCADE,
             FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
           )
@@ -1345,17 +2855,21 @@ export default {
         const result = await env.DB.prepare(`
           SELECT g.id, g.name, g.description, g.owner_id,
                  g.created_at,
-                 (SELECT COUNT(*) FROM group_members m WHERE m.group_id = g.id) AS member_count
+                 (SELECT COUNT(*) FROM group_members m WHERE m.group_id = g.id) AS member_count,
+                 CASE WHEN g.owner_id = ? THEN 'owner'
+                      ELSE COALESCE(my_role.role, 'member') END AS current_role
           FROM chat_groups g
           JOIN group_members mine ON mine.group_id = g.id
+          LEFT JOIN group_member_roles my_role
+            ON my_role.group_id = g.id AND my_role.user_id = mine.user_id
           WHERE mine.user_id = ?
           ORDER BY g.created_at DESC
-        `).bind(currentUser.sub).all();
+        `).bind(currentUser.sub, currentUser.sub).all();
         return json({ groups: result.results || [] });
       }
 
       if (method === "POST" && path === "/api/groups") {
-        const body = await request.json();
+        const body = await readJsonRequestLimited(request);
         const name = String(body.name || "").trim();
         const description = String(body.description || "").trim();
         if (!name || name.length > 80 || description.length > 300) {
@@ -1380,37 +2894,322 @@ export default {
           "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
         ).bind(groupId, currentUser.sub).first();
         if (!member) return json({ error: "Group not found" }, 404);
+        await ensureProfilePhotos(env);
         const result = await env.DB.prepare(`
           SELECT u.id, u.username, u.display_name, u.phone, m.joined_at,
-                 CASE WHEN g.owner_id = u.id THEN 1 ELSE 0 END AS is_owner
+                 p.updated_at AS photo_updated_at,
+                 CASE WHEN g.owner_id = u.id THEN 1 ELSE 0 END AS is_owner,
+                 CASE WHEN g.owner_id = u.id THEN 'owner'
+                      ELSE COALESCE(r.role, 'member') END AS role
           FROM group_members m
           JOIN users u ON u.id = m.user_id
           JOIN chat_groups g ON g.id = m.group_id
+          LEFT JOIN profile_photos p ON p.user_id = u.id
+          LEFT JOIN group_member_roles r
+            ON r.group_id = m.group_id AND r.user_id = m.user_id
           WHERE m.group_id = ?
-          ORDER BY is_owner DESC, u.display_name ASC
+          ORDER BY is_owner DESC, role ASC, u.display_name ASC
         `).bind(groupId).all();
         return json({ members: result.results || [] });
       }
 
       if (method === "POST" && groupMemberMatch) {
         const groupId = groupMemberMatch[1];
-        const body = await request.json();
+        const body = await readJsonRequestLimited(request);
         const userId = String(body.userId || "").trim();
-        // Only the group owner may add members. Membership alone must not
-        // grant an account the ability to invite arbitrary users.
+        // Owners and explicitly assigned admins may invite members. Ordinary
+        // members cannot expand group access or invite arbitrary accounts.
         const group = await env.DB.prepare(
           "SELECT owner_id FROM chat_groups WHERE id = ?"
         ).bind(groupId).first();
         if (!group) return json({ error: "Group not found" }, 404);
-        if (group.owner_id !== currentUser.sub) {
-          return json({ error: "Only the group owner can add members" }, 403);
+        const actorRole = group.owner_id === currentUser.sub ? "owner" :
+          (await env.DB.prepare(
+            "SELECT role FROM group_member_roles WHERE group_id = ? AND user_id = ?"
+          ).bind(groupId, currentUser.sub).first())?.role || "member";
+        if (actorRole !== "owner" && actorRole !== "admin") {
+          return json({ error: "Only group owners and admins can add members" }, 403);
         }
+        if (!userId || userId.length > 128) return json({ error: "Invalid user id" }, 400);
         const target = await env.DB.prepare("SELECT id FROM users WHERE id = ?").bind(userId).first();
         if (!target) return json({ error: "User not found" }, 404);
         await env.DB.prepare(
           "INSERT OR IGNORE INTO group_members (group_id, user_id) VALUES (?, ?)"
         ).bind(groupId, userId).run();
-        return json({ message: "Member added" }, 201);
+        return json({ message: "Member added", role: "member" }, 201);
+      }
+
+      // Only the owner can promote/demote admins. The owner role is implicit
+      // and cannot be assigned or removed through this endpoint.
+      const groupRoleMatch = path.match(/^\/api\/groups\/([^/]+)\/members\/([^/]+)\/role$/);
+      if (method === "POST" && groupRoleMatch) {
+        const groupId = groupRoleMatch[1];
+        const targetUserId = groupRoleMatch[2];
+        const body = await readJsonRequestLimited(request);
+        const role = String(body.role || "").trim().toLowerCase();
+        if (role !== "admin" && role !== "member") {
+          return json({ error: "Role must be admin or member" }, 400);
+        }
+        const group = await env.DB.prepare(
+          "SELECT owner_id FROM chat_groups WHERE id = ?"
+        ).bind(groupId).first();
+        if (!group) return json({ error: "Group not found" }, 404);
+        if (group.owner_id !== currentUser.sub) {
+          return json({ error: "Only the group owner can manage admin roles" }, 403);
+        }
+        if (targetUserId === group.owner_id) {
+          return json({ error: "The group owner role cannot be changed" }, 400);
+        }
+        const targetMember = await env.DB.prepare(
+          "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
+        ).bind(groupId, targetUserId).first();
+        if (!targetMember) return json({ error: "Group member not found" }, 404);
+        if (role === "admin") {
+          await env.DB.prepare(`
+            INSERT INTO group_member_roles (group_id, user_id, role, updated_at)
+            VALUES (?, ?, 'admin', CURRENT_TIMESTAMP)
+            ON CONFLICT(group_id, user_id)
+            DO UPDATE SET role = 'admin', updated_at = CURRENT_TIMESTAMP
+          `).bind(groupId, targetUserId).run();
+        } else {
+          await env.DB.prepare(
+            "DELETE FROM group_member_roles WHERE group_id = ? AND user_id = ?"
+          ).bind(groupId, targetUserId).run();
+        }
+        return json({ message: "Member role updated", userId: targetUserId, role });
+      }
+
+      // Only the current owner can transfer ownership to an existing group member.
+      const groupOwnershipMatch = path.match(/^\/api\/groups\/([^/]+)\/owner$/);
+      if (method === "POST" && groupOwnershipMatch) {
+        const groupId = groupOwnershipMatch[1];
+        const body = await readJsonRequestLimited(request);
+        const targetUserId = String(body.userId || "").trim();
+        if (!targetUserId || targetUserId.length > 128 || targetUserId === currentUser.sub) {
+          return json({ error: "Choose another valid group member as the new owner" }, 400);
+        }
+        const results = await env.DB.batch([
+          env.DB.prepare(
+            `UPDATE chat_groups
+             SET owner_id = ?
+             WHERE id = ? AND owner_id = ?
+               AND EXISTS (
+                 SELECT 1 FROM group_members
+                 WHERE group_id = ? AND user_id = ?
+               )`
+          ).bind(targetUserId, groupId, currentUser.sub, groupId, targetUserId),
+          env.DB.prepare(
+            `DELETE FROM group_member_roles
+             WHERE group_id = ? AND user_id IN (?, ?)
+               AND EXISTS (
+                 SELECT 1 FROM chat_groups
+                 WHERE id = ? AND owner_id = ?
+               )`
+          ).bind(groupId, currentUser.sub, targetUserId, groupId, targetUserId)
+        ]);
+        if (Number(results?.[0]?.meta?.changes || 0) !== 1) {
+          return json({ error: "Group not found, ownership changed, or target is not a member" }, 409);
+        }
+        return json({ message: "Group ownership transferred", ownerId: targetUserId });
+      }
+
+      // Members may leave themselves; owners can remove any non-owner member,
+      // while admins can remove ordinary members but not fellow admins.
+      const groupMemberActionMatch = path.match(/^\/api\/groups\/([^/]+)\/members\/([^/]+)$/);
+      if (method === "DELETE" && groupMemberActionMatch) {
+        const groupId = groupMemberActionMatch[1];
+        const targetUserId = groupMemberActionMatch[2];
+        const group = await env.DB.prepare(
+          "SELECT owner_id FROM chat_groups WHERE id = ?"
+        ).bind(groupId).first();
+        if (!group) return json({ error: "Group not found" }, 404);
+        if (targetUserId === group.owner_id) {
+          return json({ error: "The group owner cannot leave or be removed before ownership is transferred" }, 403);
+        }
+        const target = await env.DB.prepare(
+          "SELECT role FROM group_member_roles WHERE group_id = ? AND user_id = ?"
+        ).bind(groupId, targetUserId).first();
+        const targetExists = await env.DB.prepare(
+          "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
+        ).bind(groupId, targetUserId).first();
+        if (!targetExists) return json({ error: "Group member not found" }, 404);
+        const actorRole = group.owner_id === currentUser.sub ? "owner" :
+          (await env.DB.prepare(
+            "SELECT role FROM group_member_roles WHERE group_id = ? AND user_id = ?"
+          ).bind(groupId, currentUser.sub).first())?.role || "member";
+        const selfLeave = targetUserId === currentUser.sub;
+        if (!selfLeave && actorRole !== "owner" &&
+            !(actorRole === "admin" && (target?.role || "member") === "member")) {
+          return json({ error: "You do not have permission to remove this member" }, 403);
+        }
+        await env.DB.batch([
+          env.DB.prepare(
+            "DELETE FROM group_member_roles WHERE group_id = ? AND user_id = ?"
+          ).bind(groupId, targetUserId),
+          env.DB.prepare(
+            "DELETE FROM group_members WHERE group_id = ? AND user_id = ?"
+          ).bind(groupId, targetUserId)
+        ]);
+        return json({ message: selfLeave ? "You left the group" : "Member removed", userId: targetUserId });
+      }
+
+            // Group reactions and personal pins are available only to current group members.
+      const groupInteractionMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/([^/]+)\/(reactions|pin)$/);
+      if (groupInteractionMatch && (method === "POST" || method === "DELETE")) {
+        const groupId = groupInteractionMatch[1];
+        const messageId = groupInteractionMatch[2];
+        const action = groupInteractionMatch[3];
+        const member = await env.DB.prepare(
+          "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
+        ).bind(groupId, currentUser.sub).first();
+        if (!member) return json({ error: "Group not found" }, 404);
+        const target = await env.DB.prepare(
+          "SELECT id FROM group_messages WHERE id = ? AND group_id = ?"
+        ).bind(messageId, groupId).first();
+        if (!target) return json({ error: "Message not found" }, 404);
+        if (action === "reactions") {
+          const allowed = ["👍", "❤️", "😂", "😮", "😢", "😡", "🎉", "🔥"];
+          let emoji = "";
+          if (method === "POST") {
+            const body = await readJsonRequestLimited(request);
+            emoji = String(body.emoji || "");
+          } else {
+            emoji = url.searchParams.get("emoji") || "";
+          }
+          if (!allowed.includes(emoji)) return json({ error: "Unsupported reaction" }, 400);
+          if (method === "POST") {
+            await env.DB.prepare(
+              "INSERT OR IGNORE INTO message_reactions (scope_type, scope_id, message_id, user_id, emoji) VALUES ('group', ?, ?, ?, ?)"
+            ).bind(groupId, messageId, currentUser.sub, emoji).run();
+          } else {
+            await env.DB.prepare(
+              "DELETE FROM message_reactions WHERE scope_type = 'group' AND scope_id = ? AND message_id = ? AND user_id = ? AND emoji = ?"
+            ).bind(groupId, messageId, currentUser.sub, emoji).run();
+          }
+          return json({ message: "Reaction updated", messageId, emoji, active: method === "POST" });
+        }
+        if (method === "POST") {
+          await env.DB.prepare(
+            "INSERT OR IGNORE INTO pinned_messages (scope_type, scope_id, message_id, pinned_by) VALUES ('group', ?, ?, ?)"
+          ).bind(groupId, messageId, currentUser.sub).run();
+        } else {
+          await env.DB.prepare(
+            "DELETE FROM pinned_messages WHERE scope_type = 'group' AND scope_id = ? AND message_id = ? AND pinned_by = ?"
+          ).bind(groupId, messageId, currentUser.sub).run();
+        }
+        return json({ message: method === "POST" ? "Message pinned" : "Pin removed", messageId, pinned: method === "POST" });
+      }
+
+      // Group members may delete only messages they authored.
+      const groupMessageActionMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/([^/]+)$/);
+      if ((method === "DELETE" || method === "PATCH") && groupMessageActionMatch) {
+        const groupId = groupMessageActionMatch[1];
+        const messageId = groupMessageActionMatch[2];
+        const member = await env.DB.prepare(
+          "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
+        ).bind(groupId, currentUser.sub).first();
+        if (!member) return json({ error: "Group not found" }, 404);
+        const owned = await env.DB.prepare(
+          "SELECT id FROM group_messages WHERE id = ? AND group_id = ? AND sender_id = ?"
+        ).bind(messageId, groupId, currentUser.sub).first();
+        if (!owned) return json({ error: "Message not found or cannot be changed" }, 404);
+        if (method === "PATCH") {
+          const body = await readJsonRequestLimited(request);
+          const message = String(body.body || "").trim();
+          if (!message || message.length > 5000) return json({ error: "Invalid message" }, 400);
+          await env.DB.prepare(
+            "UPDATE group_messages SET body = ?, edited_at = CURRENT_TIMESTAMP WHERE id = ? AND group_id = ? AND sender_id = ?"
+          ).bind(message, messageId, groupId, currentUser.sub).run();
+          return json({ message: "Message updated", id: messageId, body: message, editedAt: true });
+        }
+        // Remove per-message interaction metadata in the same D1 batch as the
+        // owned message deletion; these tables intentionally have no message FK.
+        const deletion = await env.DB.batch([
+          env.DB.prepare(
+            "DELETE FROM message_reactions WHERE scope_type = 'group' AND scope_id = ? AND message_id = ?"
+          ).bind(groupId, messageId),
+          env.DB.prepare(
+            "DELETE FROM pinned_messages WHERE scope_type = 'group' AND scope_id = ? AND message_id = ?"
+          ).bind(groupId, messageId),
+          env.DB.prepare(
+            "DELETE FROM group_messages WHERE id = ? AND group_id = ? AND sender_id = ?"
+          ).bind(messageId, groupId, currentUser.sub)
+        ]);
+        if (Number(deletion?.[2]?.meta?.changes || 0) !== 1) {
+          return json({ error: "Message not found or cannot be changed" }, 404);
+        }
+        return json({ message: "Message deleted", id: messageId });
+      }
+
+const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/search$/);
+      if (method === "GET" && groupMessageSearchMatch) {
+        const groupId = groupMessageSearchMatch[1];
+        const query = (url.searchParams.get("q") || "").trim();
+        if (query.length < 2 || query.length > 100) {
+          return json({ error: "Search query must be between 2 and 100 characters" }, 400);
+        }
+        const before = url.searchParams.get("before");
+        const beforeId = url.searchParams.get("beforeId");
+        if ((before && (!beforeId || before.length > 64 || beforeId.length > 128)) ||
+            (!before && beforeId)) return json({ error: "Invalid search cursor" }, 400);
+        const member = await env.DB.prepare(
+          "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
+        ).bind(groupId, currentUser.sub).first();
+        if (!member) return json({ error: "Group not found" }, 404);
+        if (!(await consumeLoginAttempt(env, "message-search-group", currentUser.sub + ":" + groupId, 40))) {
+          return new Response(JSON.stringify({ error: "Too many message searches. Please try again in 15 minutes." }), {
+            status: 429, headers: { ...corsHeaders, "Retry-After": "900" }
+          });
+        }
+        const requestedLimit = Number(url.searchParams.get("limit") || 30);
+        const limit = Number.isInteger(requestedLimit) ? Math.min(50, Math.max(1, requestedLimit)) : 30;
+        const cursorClause = before ? "AND (gm.created_at < ? OR (gm.created_at = ? AND gm.id < ?))" : "";
+        await ensureProfilePhotos(env);
+        const statement = env.DB.prepare(`
+          SELECT gm.id, gm.group_id, gm.sender_id, gm.body, gm.created_at,
+                 gm.reply_to_id, gm.reply_to_body, gm.reply_to_sender_id, gm.edited_at,
+                 u.username, u.display_name, p.updated_at AS photo_updated_at
+          FROM group_messages gm
+          JOIN users u ON u.id = gm.sender_id
+          LEFT JOIN profile_photos p ON p.user_id = gm.sender_id
+          WHERE gm.group_id = ? AND instr(lower(gm.body), lower(?)) > 0 ${cursorClause}
+          ORDER BY gm.created_at DESC, gm.id DESC
+          LIMIT ?
+        `);
+        const result = before
+          ? await statement.bind(groupId, query, before, before, beforeId, limit + 1).all()
+          : await statement.bind(groupId, query, limit + 1).all();
+        const rows = result.results || [];
+        const hasMore = rows.length > limit;
+        const messages = hasMore ? rows.slice(0, limit) : rows;
+        const oldest = messages[messages.length - 1];
+        return json({
+          messages, query, hasMore,
+          nextCursor: hasMore && oldest ? { before: oldest.created_at, beforeId: oldest.id } : null
+        });
+      }
+
+
+      // On-demand group summary. Membership is checked before reading any message.
+      const groupSummaryMatch = path.match(/^\/api\/groups\/([^/]+)\/summary$/);
+      if (method === "POST" && groupSummaryMatch) {
+        const groupId = groupSummaryMatch[1];
+        const member = await env.DB.prepare(
+          "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
+        ).bind(groupId, currentUser.sub).first();
+        if (!member) return json({ error: "Group not found" }, 404);
+        if (!(await consumeLoginAttempt(env, "conversation-summary", currentUser.sub, 5))) {
+          return json({ error: "تم بلوغ حد الملخصات؛ حاول بعد 15 دقيقة." }, 429);
+        }
+        const result = await env.DB.prepare(`
+          SELECT gm.sender_id, u.display_name, gm.body, gm.created_at
+          FROM group_messages gm
+          JOIN users u ON u.id = gm.sender_id
+          WHERE gm.group_id = ?
+          ORDER BY gm.created_at DESC, gm.id DESC
+          LIMIT 60
+        `).bind(groupId).all();
+        return createConversationSummary(env, result.results || [], "محادثة جماعية");
       }
 
       const groupMessagesMatch = path.match(/^\/api\/groups\/([^/]+)\/messages$/);
@@ -1431,12 +3230,15 @@ export default {
             return json({ error: "Invalid message cursor" }, 400);
           }
           const cursorClause = before ? "AND (gm.created_at < ? OR (gm.created_at = ? AND gm.id < ?))" : "";
+          await ensureProfilePhotos(env);
           const statement = env.DB.prepare(`
             SELECT * FROM (
               SELECT gm.id, gm.group_id, gm.sender_id, gm.body, gm.created_at,
-                     u.username, u.display_name
+                     gm.reply_to_id, gm.reply_to_body, gm.reply_to_sender_id, gm.edited_at,
+                     u.username, u.display_name, p.updated_at AS photo_updated_at
               FROM group_messages gm
               JOIN users u ON u.id = gm.sender_id
+              LEFT JOIN profile_photos p ON p.user_id = u.id
               WHERE gm.group_id = ? ${cursorClause}
               ORDER BY gm.created_at DESC, gm.id DESC
               LIMIT ?
@@ -1449,6 +3251,29 @@ export default {
           const rows = result.results || [];
           const hasMore = rows.length > limit;
           const messages = hasMore ? rows.slice(1) : rows;
+          if (messages.length) {
+            const ids = messages.map(item => item.id);
+            const placeholders = ids.map(() => "?").join(",");
+            const [reactionRows, pinRows] = await Promise.all([
+              env.DB.prepare(`SELECT mr.message_id, mr.emoji, mr.user_id, u.display_name
+                FROM message_reactions mr JOIN users u ON u.id = mr.user_id
+                WHERE mr.scope_type = 'group' AND scope_id = ? AND message_id IN (${placeholders})`)
+                .bind(groupId, ...ids).all(),
+              env.DB.prepare(`SELECT message_id FROM pinned_messages
+                WHERE scope_type = 'group' AND scope_id = ? AND pinned_by = ? AND message_id IN (${placeholders})`)
+                .bind(groupId, currentUser.sub, ...ids).all()
+            ]);
+            const reactionMap = new Map();
+            for (const reaction of reactionRows.results || []) {
+              if (!reactionMap.has(reaction.message_id)) reactionMap.set(reaction.message_id, []);
+              reactionMap.get(reaction.message_id).push({ emoji: reaction.emoji, user_id: reaction.user_id, display_name: reaction.display_name });
+            }
+            const pinnedIds = new Set((pinRows.results || []).map(item => item.message_id));
+            for (const item of messages) {
+              item.reactions = reactionMap.get(item.id) || [];
+              item.is_pinned = pinnedIds.has(item.id);
+            }
+          }
           const oldest = messages[0];
           return json({
             messages,
@@ -1458,13 +3283,25 @@ export default {
           });
         }
         if (method === "POST") {
-          const body = await request.json();
+          const body = await readJsonRequestLimited(request);
           const message = String(body.body || "").trim();
           if (!message || message.length > 5000) return json({ error: "Invalid message" }, 400);
+          const replyToId = body.replyToId == null ? "" : String(body.replyToId).trim();
+          let reply = { id: null, body: null, sender_id: null };
+          if (replyToId) {
+            if (replyToId.length > 128) return json({ error: "Invalid reply target" }, 400);
+            const target = await env.DB.prepare(
+              "SELECT id, body, sender_id FROM group_messages WHERE id = ? AND group_id = ?"
+            ).bind(replyToId, groupId).first();
+            if (!target) return json({ error: "Reply target not found in this group" }, 404);
+            reply = { id: target.id, body: String(target.body || "").slice(0, 500), sender_id: target.sender_id };
+          }
           const id = crypto.randomUUID();
           await env.DB.prepare(
-            "INSERT INTO group_messages (id, group_id, sender_id, body) VALUES (?, ?, ?, ?)"
-          ).bind(id, groupId, currentUser.sub, message).run();
+            `INSERT INTO group_messages
+             (id, group_id, sender_id, body, reply_to_id, reply_to_body, reply_to_sender_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`
+          ).bind(id, groupId, currentUser.sub, message, reply.id, reply.body, reply.sender_id).run();
           try {
             const [group, recipients, sender] = await Promise.all([
               env.DB.prepare("SELECT name FROM chat_groups WHERE id = ?").bind(groupId).first(),
@@ -1488,7 +3325,7 @@ export default {
 
       // Send message
       if (method === "POST" && path === "/api/messages") {
-        const body = await request.json();
+        const body = await readJsonRequestLimited(request);
 
         const receiverId = String(body.receiverId || "").trim();
         const message = String(body.body || "").trim();
@@ -1517,19 +3354,51 @@ export default {
             error: "You can only message friends"
           }, 403);
         }
+        if (await isBlockedPair(currentUser.sub, receiverId)) return json({ error: "Private communication is unavailable" }, 403);
 
-        const id = crypto.randomUUID();
+        // The Android offline outbox retries with the same 128-bit client ID.
+        // Persist that ID as the message primary key so a lost HTTP response
+        // cannot create duplicate messages when the outbox retries.
+        const clientMessageId = body.clientMessageId == null
+          ? "" : String(body.clientMessageId).trim().toLowerCase();
+        if (clientMessageId && !/^[a-f0-9]{32}$/.test(clientMessageId)) {
+          return json({ error: "Invalid client message ID" }, 400);
+        }
+        const id = clientMessageId || crypto.randomUUID();
 
-        await env.DB.prepare(
+        const replyToId = body.replyToId == null ? "" : String(body.replyToId).trim();
+        let reply = { id: null, body: null, sender_id: null };
+        if (replyToId) {
+          if (replyToId.length > 128) return json({ error: "Invalid reply target" }, 400);
+          const target = await env.DB.prepare(
+            `SELECT id, body, sender_id FROM messages
+             WHERE id = ? AND (
+               (sender_id = ? AND receiver_id = ?) OR
+               (sender_id = ? AND receiver_id = ?)
+             )`
+          ).bind(replyToId, currentUser.sub, receiverId, receiverId, currentUser.sub).first();
+          if (!target) return json({ error: "Reply target not found in this conversation" }, 404);
+          reply = { id: target.id, body: String(target.body || "").slice(0, 500), sender_id: target.sender_id };
+        }
+
+        const inserted = await env.DB.prepare(
           `INSERT INTO messages
-           (id, sender_id, receiver_id, body)
-           VALUES (?, ?, ?, ?)`
-        ).bind(
-          id,
-          currentUser.sub,
-          receiverId,
-          message
-        ).run();
+           (id, sender_id, receiver_id, body, reply_to_id, reply_to_body, reply_to_sender_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO NOTHING`
+        ).bind(id, currentUser.sub, receiverId, message, reply.id, reply.body, reply.sender_id).run();
+
+        if (Number(inserted?.meta?.changes || 0) === 0) {
+          const existing = await env.DB.prepare(
+            "SELECT sender_id, receiver_id, body, reply_to_id FROM messages WHERE id = ?"
+          ).bind(id).first();
+          if (!existing || existing.sender_id !== currentUser.sub ||
+              existing.receiver_id !== receiverId || existing.body !== message ||
+              (existing.reply_to_id || "") !== (reply.id || "")) {
+            return json({ error: "Client message ID conflict" }, 409);
+          }
+          return json({ message: "Message already accepted", id, duplicate: true });
+        }
 
         // Message persistence is authoritative; sender lookup or push delivery
         // must not turn a successfully stored message into an apparent failure.
@@ -1549,6 +3418,164 @@ export default {
           message: "Message sent",
           id
         }, 201);
+      }
+
+
+      // On-demand private conversation summary. Only the two current contacts may request it.
+      const privateSummaryMatch = path.match(/^\/api\/messages\/([^/]+)\/summary$/);
+      if (method === "POST" && privateSummaryMatch) {
+        let friendId;
+        try { friendId = decodeURIComponent(privateSummaryMatch[1]); } catch (_) {
+          return json({ error: "Invalid conversation identifier" }, 400);
+        }
+        if (!friendId || friendId.length > 128 || friendId === currentUser.sub) {
+          return json({ error: "Invalid conversation identifier" }, 400);
+        }
+        const friendship = await env.DB.prepare(
+          "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
+        ).bind(currentUser.sub, friendId).first();
+        if (!friendship || await isBlockedPair(currentUser.sub, friendId)) return json({ error: "Conversation access denied" }, 403);
+        if (!(await consumeLoginAttempt(env, "conversation-summary", currentUser.sub, 5))) {
+          return json({ error: "تم بلوغ حد الملخصات؛ حاول بعد 15 دقيقة." }, 429);
+        }
+        const result = await env.DB.prepare(`
+          SELECT m.sender_id, u.display_name, m.body, m.created_at
+          FROM messages m
+          JOIN users u ON u.id = m.sender_id
+          WHERE (m.sender_id = ? AND m.receiver_id = ?)
+             OR (m.sender_id = ? AND m.receiver_id = ?)
+          ORDER BY m.created_at DESC, m.id DESC
+          LIMIT 60
+        `).bind(currentUser.sub, friendId, friendId, currentUser.sub).all();
+        return createConversationSummary(env, result.results || [], "محادثة فردية");
+      }
+
+      // Private reactions and pins are scoped to the two participants only.
+      const privateInteractionMatch = path.match(/^\/api\/messages\/([^/]+)\/(reactions|pin)$/);
+      if (privateInteractionMatch && (method === "POST" || method === "DELETE")) {
+        const messageId = privateInteractionMatch[1];
+        const action = privateInteractionMatch[2];
+        const target = await env.DB.prepare(
+          "SELECT sender_id, receiver_id FROM messages WHERE id = ? AND (sender_id = ? OR receiver_id = ?)"
+        ).bind(messageId, currentUser.sub, currentUser.sub).first();
+        if (!target) return json({ error: "Message not found" }, 404);
+        const peerId = target.sender_id === currentUser.sub ? target.receiver_id : target.sender_id;
+        const friendship = await env.DB.prepare(
+          "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
+        ).bind(currentUser.sub, peerId).first();
+        if (!friendship) return json({ error: "Conversation access denied" }, 403);
+        const scopeId = [target.sender_id, target.receiver_id].sort().join(":");
+        if (action === "reactions") {
+          const allowed = ["👍", "❤️", "😂", "😮", "😢", "😡", "🎉", "🔥"];
+          const body = method === "POST" ? await readJsonRequestLimited(request) : null;
+          const emoji = method === "POST" ? String(body.emoji || "") : (url.searchParams.get("emoji") || "");
+          if (!allowed.includes(emoji)) return json({ error: "Unsupported reaction" }, 400);
+          if (method === "POST") {
+            await env.DB.prepare(
+              "INSERT OR IGNORE INTO message_reactions (scope_type, scope_id, message_id, user_id, emoji) VALUES ('private', ?, ?, ?, ?)"
+            ).bind(scopeId, messageId, currentUser.sub, emoji).run();
+          } else {
+            await env.DB.prepare(
+              "DELETE FROM message_reactions WHERE scope_type = 'private' AND scope_id = ? AND message_id = ? AND user_id = ? AND emoji = ?"
+            ).bind(scopeId, messageId, currentUser.sub, emoji).run();
+          }
+          return json({ message: "Reaction updated", messageId, emoji, active: method === "POST" });
+        }
+        if (method === "POST") {
+          await env.DB.prepare(
+            "INSERT OR IGNORE INTO pinned_messages (scope_type, scope_id, message_id, pinned_by) VALUES ('private', ?, ?, ?)"
+          ).bind(scopeId, messageId, currentUser.sub).run();
+        } else {
+          await env.DB.prepare(
+            "DELETE FROM pinned_messages WHERE scope_type = 'private' AND scope_id = ? AND message_id = ? AND pinned_by = ?"
+          ).bind(scopeId, messageId, currentUser.sub).run();
+        }
+        return json({ message: method === "POST" ? "Message pinned" : "Pin removed", messageId, pinned: method === "POST" });
+      }
+
+      // A sender may delete only their own private message.
+      const privateMessageActionMatch = path.match(/^\/api\/messages\/([^/]+)$/);
+      if ((method === "DELETE" || method === "PATCH") && privateMessageActionMatch) {
+        const messageId = privateMessageActionMatch[1];
+        const owned = await env.DB.prepare(
+          "SELECT id, sender_id, receiver_id FROM messages WHERE id = ? AND sender_id = ?"
+        ).bind(messageId, currentUser.sub).first();
+        if (!owned) return json({ error: "Message not found or cannot be changed" }, 404);
+        if (method === "PATCH") {
+          const body = await readJsonRequestLimited(request);
+          const message = String(body.body || "").trim();
+          if (!message || message.length > 5000) return json({ error: "Invalid message" }, 400);
+          await env.DB.prepare(
+            "UPDATE messages SET body = ?, edited_at = CURRENT_TIMESTAMP WHERE id = ? AND sender_id = ?"
+          ).bind(message, messageId, currentUser.sub).run();
+          return json({ message: "Message updated", id: messageId, body: message, editedAt: true });
+        }
+        const scopeId = [owned.sender_id, owned.receiver_id].sort().join(":");
+        // Keep deleted content from leaving orphan reactions or personal pins.
+        const deletion = await env.DB.batch([
+          env.DB.prepare(
+            "DELETE FROM message_reactions WHERE scope_type = 'private' AND scope_id = ? AND message_id = ?"
+          ).bind(scopeId, messageId),
+          env.DB.prepare(
+            "DELETE FROM pinned_messages WHERE scope_type = 'private' AND scope_id = ? AND message_id = ?"
+          ).bind(scopeId, messageId),
+          env.DB.prepare(
+            "DELETE FROM messages WHERE id = ? AND sender_id = ?"
+          ).bind(messageId, currentUser.sub)
+        ]);
+        if (Number(deletion?.[2]?.meta?.changes || 0) !== 1) {
+          return json({ error: "Message not found or cannot be changed" }, 404);
+        }
+        return json({ message: "Message deleted", id: messageId });
+      }
+
+      // Search only within the authenticated private conversation.
+      if (method === "GET" && path === "/api/messages/search") {
+        const friendId = (url.searchParams.get("with") || "").trim();
+        const query = (url.searchParams.get("q") || "").trim();
+        if (!friendId) return json({ error: "Friend ID is required" }, 400);
+        if (query.length < 2 || query.length > 100) {
+          return json({ error: "Search query must be between 2 and 100 characters" }, 400);
+        }
+        const before = url.searchParams.get("before");
+        const beforeId = url.searchParams.get("beforeId");
+        if ((before && (!beforeId || before.length > 64 || beforeId.length > 128)) ||
+            (!before && beforeId)) return json({ error: "Invalid search cursor" }, 400);
+        const friendship = await env.DB.prepare(
+          "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
+        ).bind(currentUser.sub, friendId).first();
+        if (!friendship) return json({ error: "You can only search chats with friends" }, 403);
+        if (!(await consumeLoginAttempt(env, "message-search-private", currentUser.sub + ":" + friendId, 40))) {
+          return new Response(JSON.stringify({ error: "Too many message searches. Please try again in 15 minutes." }), {
+            status: 429, headers: { ...corsHeaders, "Retry-After": "900" }
+          });
+        }
+        const requestedLimit = Number(url.searchParams.get("limit") || 30);
+        const limit = Number.isInteger(requestedLimit) ? Math.min(50, Math.max(1, requestedLimit)) : 30;
+        const cursorClause = before ? "AND (m.created_at < ? OR (m.created_at = ? AND m.id < ?))" : "";
+        const statement = env.DB.prepare(`
+          SELECT m.id, m.sender_id, m.receiver_id, m.body, m.created_at, m.read_at,
+                 m.reply_to_id, m.reply_to_body, m.reply_to_sender_id, m.edited_at,
+                 u.display_name, u.username
+          FROM messages m
+          JOIN users u ON u.id = m.sender_id
+          WHERE ((m.sender_id = ? AND m.receiver_id = ?)
+              OR (m.sender_id = ? AND m.receiver_id = ?))
+            AND instr(lower(m.body), lower(?)) > 0 ${cursorClause}
+          ORDER BY m.created_at DESC, m.id DESC
+          LIMIT ?
+        `);
+        const result = before
+          ? await statement.bind(currentUser.sub, friendId, friendId, currentUser.sub, query, before, before, beforeId, limit + 1).all()
+          : await statement.bind(currentUser.sub, friendId, friendId, currentUser.sub, query, limit + 1).all();
+        const rows = result.results || [];
+        const hasMore = rows.length > limit;
+        const messages = hasMore ? rows.slice(0, limit) : rows;
+        const oldest = messages[messages.length - 1];
+        return json({
+          messages, query, hasMore,
+          nextCursor: hasMore && oldest ? { before: oldest.created_at, beforeId: oldest.id } : null
+        });
       }
 
       // Get conversation messages
@@ -1573,6 +3600,7 @@ export default {
             error: "You can only view chats with friends"
           }, 403);
         }
+        if (await isBlockedPair(currentUser.sub, friendId)) return json({ error: "Private communication is unavailable" }, 403);
 
         const requestedLimit = Number(url.searchParams.get("limit") || 100);
         const limit = Number.isInteger(requestedLimit)
@@ -1588,7 +3616,8 @@ export default {
         const result = before
           ? await env.DB.prepare(
               `SELECT * FROM (
-                 SELECT id, sender_id, receiver_id, body, created_at, read_at
+                 SELECT id, sender_id, receiver_id, body, created_at, read_at,
+                        reply_to_id, reply_to_body, reply_to_sender_id, edited_at
                  FROM messages
                  WHERE ((sender_id = ? AND receiver_id = ?)
                     OR (sender_id = ? AND receiver_id = ?))
@@ -1601,7 +3630,8 @@ export default {
               before, before, beforeId, limit + 1).all()
           : await env.DB.prepare(
               `SELECT * FROM (
-                 SELECT id, sender_id, receiver_id, body, created_at, read_at
+                 SELECT id, sender_id, receiver_id, body, created_at, read_at,
+                        reply_to_id, reply_to_body, reply_to_sender_id, edited_at
                  FROM messages
                  WHERE (sender_id = ? AND receiver_id = ?)
                     OR (sender_id = ? AND receiver_id = ?)
@@ -1633,6 +3663,30 @@ export default {
           }
         }
 
+        if (messages.length) {
+          const ids = messages.map(item => item.id);
+          const placeholders = ids.map(() => "?").join(",");
+          const scopeId = [currentUser.sub, friendId].sort().join(":");
+          const [reactionRows, pinRows] = await Promise.all([
+            env.DB.prepare(`SELECT mr.message_id, mr.emoji, mr.user_id, u.display_name
+              FROM message_reactions mr JOIN users u ON u.id = mr.user_id
+              WHERE mr.scope_type = 'private' AND scope_id = ? AND message_id IN (${placeholders})`)
+              .bind(scopeId, ...ids).all(),
+            env.DB.prepare(`SELECT message_id FROM pinned_messages
+              WHERE scope_type = 'private' AND scope_id = ? AND pinned_by = ? AND message_id IN (${placeholders})`)
+              .bind(scopeId, currentUser.sub, ...ids).all()
+          ]);
+          const reactionMap = new Map();
+          for (const reaction of reactionRows.results || []) {
+            if (!reactionMap.has(reaction.message_id)) reactionMap.set(reaction.message_id, []);
+            reactionMap.get(reaction.message_id).push({ emoji: reaction.emoji, user_id: reaction.user_id, display_name: reaction.display_name });
+          }
+          const pinnedIds = new Set((pinRows.results || []).map(item => item.message_id));
+          for (const item of messages) {
+            item.reactions = reactionMap.get(item.id) || [];
+            item.is_pinned = pinnedIds.has(item.id);
+          }
+        }
         const oldest = messages[0];
         return json({
           messages,
@@ -1653,6 +3707,9 @@ export default {
           return json({ error: "Choose one conversation destination" }, 400);
         }
         if (recipientId) {
+          if (await isBlockedPair(currentUser.sub, recipientId)) {
+            return json({ error: "Private media sharing is unavailable" }, 403);
+          }
           const friendship = await env.DB.prepare(
             "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
           ).bind(currentUser.sub, recipientId).first();
@@ -1672,25 +3729,30 @@ export default {
         if (Number.isFinite(declaredLength) && declaredLength > maxMediaBytes) {
           return json({ error: "File must be between 1 byte and 60 MB" }, 413);
         }
-        const bytes = await request.arrayBuffer();
-        if (!bytes.byteLength || bytes.byteLength > maxMediaBytes) {
+        const bytes = await readRequestBodyLimited(request, maxMediaBytes);
+        if (!bytes || !bytes.byteLength) {
           return json({ error: "File must be between 1 byte and 60 MB" }, 413);
         }
         const suppliedName = safeFileName(request.headers.get("X-File-Name") || "attachment");
         const id = crypto.randomUUID();
         const key = currentUser.sub + "/" + id;
-        const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
+        // Chat attachments are retained until the user explicitly deletes them.
+        // Keep the far-future sentinel consistent with resumable uploads.
+        const expiresAt = "9999-12-31T23:59:59.999Z";
         await env.DB.prepare("CREATE TABLE IF NOT EXISTS media_expirations (object_key TEXT PRIMARY KEY, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
-        const bucket = env.TIGRIS_BUCKET || "siraj-media";
-        const objectPath = key.split("/").map(encodeURIComponent).join("/");
-        const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
-        const storage = new AwsClient({
-          accessKeyId: env.TIGRIS_ACCESS_KEY_ID,
-          secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY,
-          service: "s3",
-          region: "auto",
-          retries: 2
-        });
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS media_access (
+            object_key TEXT PRIMARY KEY,
+            owner_id TEXT NOT NULL,
+            recipient_id TEXT,
+            group_id TEXT,
+            file_name TEXT NOT NULL,
+            content_type TEXT NOT NULL,
+            expires_at TEXT NOT NULL
+          )
+        `).run();
+                    const storageUrl = createObjectStorageUrl(env, key);
+        const storage = createS3ObjectStorageProvider(env, AwsClient);
         const putResponse = await storage.fetch(storageUrl, {
           method: "PUT",
           headers: {
@@ -1717,8 +3779,8 @@ export default {
         const messageId = crypto.randomUUID();
         try {
           await env.DB.prepare(
-            "INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?)"
-          ).bind(key, expiresAt).run();
+            "INSERT INTO media_access (object_key, owner_id, recipient_id, group_id, file_name, content_type, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+          ).bind(key, currentUser.sub, recipientId || null, groupId || null, suppliedName, contentType, expiresAt).run();
           if (recipientId) {
             await env.DB.prepare(
               "INSERT INTO messages (id, sender_id, receiver_id, body) VALUES (?, ?, ?, ?)"
@@ -1729,10 +3791,22 @@ export default {
             ).bind(messageId, groupId, currentUser.sub, attachmentBody).run();
           }
         } catch (error) {
-          // Avoid leaving an unreachable object or expiration record behind if persistence fails.
-          try { await storage.fetch(storageUrl, { method: "DELETE" }); } catch (_) {}
+          // Revoke access immediately. If storage deletion fails, schedule a near-immediate
+          // retry; successful chat attachments never enter the automatic expiry queue.
+          let objectDeleted = false;
           try {
-            await env.DB.prepare("DELETE FROM media_expirations WHERE object_key = ?").bind(key).run();
+            const deleteResponse = await storage.fetch(storageUrl, { method: "DELETE" });
+            objectDeleted = deleteResponse.ok || deleteResponse.status === 404;
+          } catch (_) {}
+          try {
+            await env.DB.prepare("DELETE FROM media_access WHERE object_key = ?").bind(key).run();
+            if (objectDeleted) {
+              await env.DB.prepare("DELETE FROM media_expirations WHERE object_key = ?").bind(key).run();
+            } else {
+              await env.DB.prepare(
+                "INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?) ON CONFLICT(object_key) DO UPDATE SET expires_at = excluded.expires_at"
+              ).bind(key, new Date().toISOString()).run();
+            }
           } catch (_) {}
           throw error;
         }
@@ -1780,46 +3854,159 @@ export default {
             key.split("/").some(part => !part || part === "." || part === "..")) {
           return json({ error: "Invalid attachment identifier" }, 400);
         }
-        const bucket = env.TIGRIS_BUCKET || "siraj-media";
-        const objectPath = key.split("/").map(encodeURIComponent).join("/");
-        const storageUrl = "https://" + encodeURIComponent(bucket) + ".t3.storage.dev/" + objectPath;
-        const storage = new AwsClient({
-          accessKeyId: env.TIGRIS_ACCESS_KEY_ID,
-          secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY,
-          service: "s3",
-          region: "auto",
-          retries: 2
-        });
-        // Read only object metadata first; never download bytes before authorization.
+                    const storageUrl = createObjectStorageUrl(env, key);
+        const storage = createS3ObjectStorageProvider(env, AwsClient);
+        // New uploads have an authorization record in D1, allowing access checks
+        // before any request is made to object storage. Legacy objects fall back
+        // to their existing signed metadata until they naturally expire.
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS media_access (
+            object_key TEXT PRIMARY KEY,
+            owner_id TEXT NOT NULL,
+            recipient_id TEXT,
+            group_id TEXT,
+            file_name TEXT NOT NULL,
+            content_type TEXT NOT NULL,
+            expires_at TEXT NOT NULL
+          )
+        `).run();
+        const accessRow = await env.DB.prepare(
+          "SELECT owner_id, recipient_id, group_id, file_name, content_type, expires_at FROM media_access WHERE object_key = ?"
+        ).bind(key).first();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS blocked_users (
+            blocker_id TEXT NOT NULL, blocked_id TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (blocker_id, blocked_id), CHECK (blocker_id <> blocked_id),
+            FOREIGN KEY (blocker_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (blocked_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_posts (
+            id TEXT PRIMARY KEY, user_id TEXT NOT NULL, content TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, expires_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS status_media (
+            id TEXT PRIMARY KEY, status_id TEXT NOT NULL, object_key TEXT NOT NULL UNIQUE,
+            file_name TEXT NOT NULL, content_type TEXT NOT NULL,
+            size INTEGER NOT NULL, caption TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE
+          )
+        `).run();
+        const sparkMedia = await env.DB.prepare(
+          `SELECT sm.status_id AS statusId, sp.user_id AS ownerId, sp.expires_at AS expiresAt
+           FROM status_media sm JOIN status_posts sp ON sp.id = sm.status_id
+           WHERE sm.object_key = ? LIMIT 1`
+        ).bind(key).first();
+        // Private memory photos must remain linked to a live owner-owned memory.
+        // This also blocks reads immediately after deletion while Tigris cleanup is pending.
+        if (key.split("/").length === 3 && key.split("/")[1] === "private-memories") {
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS private_memory_media (
+              id TEXT PRIMARY KEY,
+              memory_id TEXT NOT NULL,
+              owner_id TEXT NOT NULL,
+              object_key TEXT NOT NULL UNIQUE,
+              file_name TEXT NOT NULL,
+              content_type TEXT NOT NULL,
+              size INTEGER NOT NULL,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (memory_id) REFERENCES private_memories(id) ON DELETE CASCADE,
+              FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+          `).run();
+          const privateMemoryMedia = await env.DB.prepare(
+            "SELECT id FROM private_memory_media WHERE object_key = ? AND owner_id = ?"
+          ).bind(key, currentUser.sub).first();
+          if (!privateMemoryMedia) return json({ error: "Private memory photo not found" }, 404);
+        }
+        let permitted = false;
+        if (sparkMedia) {
+          // Expiry applies to the owner too: possession of the original status
+          // must never keep its media readable after the 24-hour lifetime.
+          const sparkExpiry = Date.parse(sparkMedia.expiresAt);
+          if (!Number.isFinite(sparkExpiry) || sparkExpiry <= Date.now()) {
+            return json({ error: "SPARK media not found or expired" }, 410);
+          }
+          permitted = sparkMedia.ownerId === currentUser.sub;
+          if (!permitted) {
+            const blocked = await env.DB.prepare(
+              "SELECT 1 FROM blocked_users WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?) LIMIT 1"
+            ).bind(currentUser.sub, sparkMedia.ownerId, sparkMedia.ownerId, currentUser.sub).first();
+            if (blocked) return json({ error: "SPARK media access denied" }, 403);
+            const friendship = await env.DB.prepare(
+              `SELECT 1 FROM friendships f
+               WHERE f.user_id = ? AND f.friend_id = ?
+                 AND EXISTS (
+                   SELECT 1 FROM friendships reciprocal
+                   WHERE reciprocal.user_id = ? AND reciprocal.friend_id = ?
+                 )`
+            ).bind(currentUser.sub, sparkMedia.ownerId, sparkMedia.ownerId, currentUser.sub).first();
+            permitted = !!friendship;
+          }
+          if (!permitted) return json({ error: "SPARK media access denied" }, 403);
+        }
+        if (accessRow && !sparkMedia) {
+          permitted = accessRow.owner_id === currentUser.sub;
+          if (!permitted && accessRow.recipient_id === currentUser.sub && accessRow.owner_id) {
+            const blocked = await env.DB.prepare(
+              "SELECT 1 FROM blocked_users WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?) LIMIT 1"
+            ).bind(currentUser.sub, accessRow.owner_id, accessRow.owner_id, currentUser.sub).first();
+            if (blocked) return json({ error: "Attachment access denied" }, 403);
+            const friendship = await env.DB.prepare(
+              "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
+            ).bind(currentUser.sub, accessRow.owner_id).first();
+            permitted = !!friendship;
+          }
+          if (!permitted && accessRow.group_id) {
+            const member = await env.DB.prepare(
+              "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
+            ).bind(accessRow.group_id, currentUser.sub).first();
+            permitted = !!member;
+          }
+          if (!permitted) return json({ error: "Attachment access denied" }, 403);
+        }
         const headResponse = await storage.fetch(storageUrl, { method: "HEAD" });
         if (headResponse.status === 404) return json({ error: "Attachment not found" }, 404);
         if (!headResponse.ok) return json({ error: "Media storage lookup failed", storageStatus: headResponse.status }, 502);
-        const ownerId = headResponse.headers.get("x-amz-meta-ownerid") || "";
-        const recipientId = headResponse.headers.get("x-amz-meta-recipientid") || "";
-        const groupId = headResponse.headers.get("x-amz-meta-groupid") || "";
-        let permitted = ownerId === currentUser.sub;
-        if (!permitted && recipientId === currentUser.sub && ownerId) {
-          const friendship = await env.DB.prepare(
-            "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
-          ).bind(currentUser.sub, ownerId).first();
-          permitted = !!friendship;
+        if (!accessRow && !sparkMedia) {
+          const ownerId = headResponse.headers.get("x-amz-meta-ownerid") || "";
+          const recipientId = headResponse.headers.get("x-amz-meta-recipientid") || "";
+          const groupId = headResponse.headers.get("x-amz-meta-groupid") || "";
+          permitted = ownerId === currentUser.sub;
+          if (!permitted && recipientId === currentUser.sub && ownerId) {
+            const blocked = await env.DB.prepare(
+              "SELECT 1 FROM blocked_users WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?) LIMIT 1"
+            ).bind(currentUser.sub, ownerId, ownerId, currentUser.sub).first();
+            if (blocked) return json({ error: "Attachment access denied" }, 403);
+            const friendship = await env.DB.prepare(
+              "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
+            ).bind(currentUser.sub, ownerId).first();
+            permitted = !!friendship;
+          }
+          if (!permitted && groupId) {
+            const member = await env.DB.prepare(
+              "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
+            ).bind(groupId, currentUser.sub).first();
+            permitted = !!member;
+          }
+          if (!permitted) return json({ error: "Attachment access denied" }, 403);
         }
-        if (!permitted && groupId) {
-          const member = await env.DB.prepare(
-            "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
-          ).bind(groupId, currentUser.sub).first();
-          permitted = !!member;
-        }
-        if (!permitted) return json({ error: "Attachment access denied" }, 403);
         // Check expiry only after authorization so an unrelated account cannot
         // trigger deletion of another user's object by guessing its identifier.
-        const expiresAt = headResponse.headers.get("x-amz-meta-expiresat");
+        const expiresAt = sparkMedia?.expiresAt || accessRow?.expires_at || headResponse.headers.get("x-amz-meta-expiresat");
         if (expiresAt && Number.isFinite(Date.parse(expiresAt)) && Date.parse(expiresAt) <= Date.now()) {
           try {
             const deletion = await storage.fetch(storageUrl, { method: "DELETE" });
             // Keep the expiration row when storage deletion fails so the scheduled
             // cleanup can retry instead of permanently orphaning the object.
             if (deletion.ok || deletion.status === 404) {
+              await env.DB.prepare("DELETE FROM media_access WHERE object_key = ?").bind(key).run();
               await env.DB.prepare("DELETE FROM media_expirations WHERE object_key = ? AND expires_at <= ?")
                 .bind(key, new Date().toISOString()).run();
             } else {
@@ -1830,22 +4017,41 @@ export default {
           }
           return json({ error: "Attachment has expired" }, 410);
         }
-        const storageResponse = await storage.fetch(storageUrl, { method: "GET" });
+        const range = request.headers.get("Range");
+        const ifRange = request.headers.get("If-Range");
+        const downloadHeaders = {};
+        if (range) downloadHeaders.Range = range;
+        if (ifRange) downloadHeaders["If-Range"] = ifRange;
+        const storageResponse = await storage.fetch(storageUrl, {
+          method: "GET",
+          headers: downloadHeaders
+        });
         if (storageResponse.status === 404) return json({ error: "Attachment not found" }, 404);
-        if (!storageResponse.ok) return json({ error: "Media storage download failed", storageStatus: storageResponse.status }, 502);
+        if (storageResponse.status !== 200 && storageResponse.status !== 206 && storageResponse.status !== 416) {
+          return json({ error: "Media storage download failed", storageStatus: storageResponse.status }, 502);
+        }
         const headers = new Headers(corsHeaders);
-        headers.set("Content-Type", headResponse.headers.get("content-type") || "application/octet-stream");
-        const encodedName = headResponse.headers.get("x-amz-meta-filename") || "attachment";
+        headers.set("Content-Type", headResponse.headers.get("content-type") || accessRow?.content_type || "application/octet-stream");
+        const encodedName = headResponse.headers.get("x-amz-meta-filename") ||
+          (accessRow?.file_name ? encodeURIComponent(accessRow.file_name) : "attachment");
         let fileName = "attachment";
         try { fileName = decodeURIComponent(encodedName); } catch (_) { fileName = encodedName; }
         headers.set("Content-Disposition", "attachment; filename*=UTF-8''" + encodeURIComponent(safeFileName(fileName)));
         headers.set("Cache-Control", "private, no-store");
-        return new Response(storageResponse.body, { status: 200, headers });
+        headers.set("Accept-Ranges", storageResponse.headers.get("accept-ranges") || "bytes");
+        for (const name of ["content-range", "content-length", "etag", "last-modified"]) {
+          const value = storageResponse.headers.get(name);
+          if (value) headers.set(name === "content-range" ? "Content-Range" : name === "content-length" ? "Content-Length" : name === "etag" ? "ETag" : "Last-Modified", value);
+        }
+        return new Response(storageResponse.body, { status: storageResponse.status, headers });
       }
 
       return json({ error: "Route not found" }, 404);
 
     } catch (error) {
+      if (error?.status === 413) {
+        return json({ error: "JSON request body is too large" }, 413);
+      }
       // Malformed client JSON is a request error, not an internal server failure.
       if (error instanceof SyntaxError) {
         return json({ error: "Invalid JSON body" }, 400);

@@ -1,0 +1,90 @@
+name: BARQ isolated Preview fallback Worker deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_preview_fallback:
+        description: "Explicitly approve deploying the isolated fallback Worker (Preview only)"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-preview-fallback:
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_preview_fallback == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.BARQ_CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.BARQ_CLOUDFLARE_ACCOUNT_ID }}
+      BARQ_PREVIEW_JWT_SECRET: ${{ secrets.BARQ_PREVIEW_JWT_SECRET }}
+      BARQ_PREVIEW_TIGRIS_ACCESS_KEY_ID: ${{ secrets.BARQ_PREVIEW_TIGRIS_ACCESS_KEY_ID }}
+      BARQ_PREVIEW_TIGRIS_SECRET_ACCESS_KEY: ${{ secrets.BARQ_PREVIEW_TIGRIS_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Worker dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Verify fallback isolation and credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$BARQ_PREVIEW_JWT_SECRET"
+          test -n "$BARQ_PREVIEW_TIGRIS_ACCESS_KEY_ID"
+          test -n "$BARQ_PREVIEW_TIGRIS_SECRET_ACCESS_KEY"
+          python3 - <<'PY'
+          import tomllib
+          from pathlib import Path
+          fallback = tomllib.loads(Path("wrangler.fallback.test.toml").read_text())
+          preview = tomllib.loads(Path("wrangler.test.toml").read_text())
+          production = tomllib.loads(Path("wrangler.toml").read_text())
+          assert fallback["name"] == "barq-api-phase2-fallback-test"
+          assert fallback["workers_dev"] is True
+          assert "routes" not in fallback
+          assert "triggers" not in fallback
+          assert fallback["d1_databases"][0]["database_id"] == "5bfada32-4f9b-4edb-85dd-3b3b30ab73b0"
+          assert fallback["d1_databases"][0]["database_id"] == preview["d1_databases"][0]["database_id"]
+          assert fallback["d1_databases"][0]["database_id"] != production["d1_databases"][0]["database_id"]
+          assert fallback["vars"]["TIGRIS_BUCKET"] == "barq-preview-media"
+          assert fallback["vars"]["TIGRIS_BUCKET"] != production["vars"]["TIGRIS_BUCKET"]
+          assert fallback["name"] != preview["name"] and fallback["name"] != production["name"]
+          print("Fallback guard passed: distinct Preview Worker; shared isolated Preview D1/media only; no production route, database, bucket, or cron.")
+          PY
+          npx --yes wrangler@4 whoami
+      - name: Deploy isolated fallback Worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 deploy --config wrangler.fallback.test.toml 2>&1 | tee deploy.log
+          URL="$(grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' deploy.log | head -n 1 || true)"
+          test -n "$URL"
+          echo "BARQ_FALLBACK_PREVIEW_URL=$URL" >> "$GITHUB_ENV"
+      - name: Install fallback Preview-only secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$BARQ_PREVIEW_JWT_SECRET" | npx --yes wrangler@4 secret put JWT_SECRET --config wrangler.fallback.test.toml
+          printf '%s' "$BARQ_PREVIEW_TIGRIS_ACCESS_KEY_ID" | npx --yes wrangler@4 secret put TIGRIS_ACCESS_KEY_ID --config wrangler.fallback.test.toml
+          printf '%s' "$BARQ_PREVIEW_TIGRIS_SECRET_ACCESS_KEY" | npx --yes wrangler@4 secret put TIGRIS_SECRET_ACCESS_KEY --config wrangler.fallback.test.toml
+      - name: Verify fallback liveness and readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --connect-timeout 5 --max-time 15 --silent --show-error --fail "$BARQ_FALLBACK_PREVIEW_URL/health/live" > live.json
+          curl --connect-timeout 5 --max-time 15 --silent --show-error --fail "$BARQ_FALLBACK_PREVIEW_URL/health/ready" > ready.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const live = JSON.parse(fs.readFileSync('live.json', 'utf8'));
+          const ready = JSON.parse(fs.readFileSync('ready.json', 'utf8'));
+          if (live.status !== 'alive' || live.service !== 'barq-api') throw new Error('Fallback liveness verification failed');
+          if (ready.status !== 'ready' || ready.service !== 'barq-api') throw new Error('Fallback D1 readiness verification failed');
+          console.log('Isolated fallback Worker is live and its shared Preview D1 is ready.');
+          NODE
+          echo "Fallback Preview Worker URL: $BARQ_FALLBACK_PREVIEW_URL" >> "$GITHUB_STEP_SUMMARY"

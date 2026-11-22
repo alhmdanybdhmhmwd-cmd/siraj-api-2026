@@ -1,0 +1,51 @@
+name: BARQ isolated Preview integration verification
+# Re-run isolated media checks after Preview schema migration and Worker redeploy.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - barq/phase-2-android-ci-2026-11-20
+    paths:
+      - "test/barq_preview_integration.mjs"
+      - "test/barq_preview_media_integration.mjs"
+      - ".github/workflows/barq-preview-integration-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BARQ_PREVIEW_URL: https://barq-api-phase2-test.alhmdanybdhmhmwd.workers.dev
+      BARQ_PREVIEW_MEDIA_CREDENTIALS_CONFIGURED: ${{ secrets.BARQ_PREVIEW_TIGRIS_ACCESS_KEY_ID != '' && secrets.BARQ_PREVIEW_TIGRIS_SECRET_ACCESS_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify isolated Preview health and D1 readiness
+        run: |
+          set -euo pipefail
+          curl --connect-timeout 5 --max-time 15 --silent --show-error --fail "$BARQ_PREVIEW_URL/health/live"
+          curl --connect-timeout 5 --max-time 15 --silent --show-error --fail "$BARQ_PREVIEW_URL/health/ready"
+      - name: Run account, profile, privacy, contacts, messaging, and group integration tests
+        run: node test/barq_preview_integration.mjs
+      - name: Run live media upload, download, range, and recipient checks when Preview storage is configured
+        id: media
+        run: node test/barq_preview_media_integration.mjs
+      - name: Report Preview media verification status
+        if: always()
+        env:
+          MEDIA_CONFIGURED: ${{ secrets.BARQ_PREVIEW_TIGRIS_ACCESS_KEY_ID != '' && secrets.BARQ_PREVIEW_TIGRIS_SECRET_ACCESS_KEY != '' }}
+        run: |
+          if [ "$MEDIA_CONFIGURED" = "true" ]; then
+            echo "### Preview media verification" >> "$GITHUB_STEP_SUMMARY"
+            echo "Storage credentials are configured; live upload/download checks were executed. See the preceding step for the result." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::Live Preview media verification was NOT executed: Preview-only Tigris credentials are missing."
+            echo "### Preview media verification: NOT RUN" >> "$GITHUB_STEP_SUMMARY"
+            echo "The API/D1 checks may pass, but no live object-storage upload/download has been verified. Add the two Preview-only Tigris secrets to enable it." >> "$GITHUB_STEP_SUMMARY"
+          fi

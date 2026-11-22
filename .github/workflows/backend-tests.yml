@@ -15,6 +15,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Install backend test dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund --no-package-lock
+      - name: Check Worker JavaScript syntax
+        run: node --check src/src/index.js
+      - name: Check standalone Node API syntax
+        run: node --check node_server.mjs
+      - name: Audit Worker runtime portability dependencies
+        run: npm run audit:runtime-portability
       - name: Run backend authentication tests
         run: npm test
       - name: Test D1 migration SQL with SQLite
@@ -23,5 +31,5 @@ jobs:
         run: python3 test/d1_schema_inspection.test.py
       - name: Verify test Wrangler config cannot target production
         run: python3 test/barq_wrangler_config.test.py
-      - name: Check Worker JavaScript syntax
-        run: node --check src/src/index.js
+      - name: Verify Android Firebase package and signing-key safety
+        run: python3 test/android_release_safety.test.py
