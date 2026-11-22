@@ -130,6 +130,26 @@ await call("/api/messages", {
   expected: 409
 });
 
+// Delete-for-me must hide the private message only from the requesting account.
+const deleteForMeId = randomUUID().replaceAll("-", "");
+await call("/api/messages", {
+  method: "POST", token: a.token,
+  body: { receiverId: b.user.id, body: "delete for me fixture " + suffix, clientMessageId: deleteForMeId },
+  expected: 201
+});
+await call("/api/messages/" + encodeURIComponent(deleteForMeId) + "?scope=me", {
+  method: "DELETE", token: b.token
+});
+const bAfterDeleteForMe = await call("/api/messages?with=" + encodeURIComponent(a.user.id), { token: b.token });
+assert.ok(!bAfterDeleteForMe.messages.some(message => message.id === deleteForMeId),
+  "delete-for-me must hide the message for the requesting account");
+const aAfterDeleteForMe = await call("/api/messages?with=" + encodeURIComponent(b.user.id), { token: a.token });
+assert.ok(aAfterDeleteForMe.messages.some(message => message.id === deleteForMeId),
+  "delete-for-me must preserve the other participant's message");
+await call("/api/messages/" + encodeURIComponent(deleteForMeId) + "?scope=me", {
+  method: "DELETE", token: legacyLogin.token, expected: 404
+});
+
 const secondPrivateId = randomUUID().replaceAll("-", "");
 await call("/api/messages", {
   method: "POST", token: a.token,
