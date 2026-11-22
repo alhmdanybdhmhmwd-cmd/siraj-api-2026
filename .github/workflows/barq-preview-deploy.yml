@@ -165,5 +165,26 @@ jobs:
           const signedIn = await login.json();
           assert.equal(login.status, 200, 'phone login through Vercel proxy must succeed: ' + JSON.stringify(signedIn));
           assert.equal(signedIn.user?.id, registered.user.id, 'phone login must resolve the newly registered account');
-          console.log('Vercel Preview proxy integration passed: registration + phone login reached the isolated BARQ Worker.');
+          const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6j8AAAAASUVORK5CYII=', 'base64');
+          const caption = 'Vercel proxy SPARK caption ' + randomUUID().slice(0, 8);
+          const media = await fetch(new URL('/api/statuses/media', base), {
+            method: 'POST',
+            headers: {
+              Authorization: 'Bearer ' + registered.token,
+              'Content-Type': 'image/png',
+              'X-File-Name': 'barq-proxy-preview.png',
+              'X-Status-Caption': caption
+            },
+            body: png
+          });
+          const mediaResult = await media.json();
+          assert.equal(media.status, 201, 'Vercel proxy must preserve SPARK media headers: ' + JSON.stringify(mediaResult));
+          assert.equal(mediaResult.status?.content, caption, 'SPARK caption must survive the Vercel proxy');
+          const feedResponse = await fetch(new URL('/api/statuses', base), {
+            headers: { Authorization: 'Bearer ' + registered.token }
+          });
+          const feed = await feedResponse.json();
+          assert.ok(feed.statuses?.some(item => item.id === mediaResult.status.id && item.content === caption),
+            'captioned SPARK media must appear in the feed after proxy upload');
+          console.log('Vercel Preview proxy integration passed: registration, phone login, and captioned SPARK media upload.');
           NODE
