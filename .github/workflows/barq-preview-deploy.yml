@@ -12,6 +12,7 @@ on:
     branches:
       - barq/phase-2-android-ci-2026-11-20
       - barq/fix-approved-menus-2026-11-22
+      - barq/phase4-messaging-interactions-2026-11-22
     paths:
       - ".github/workflows/barq-preview-deploy.yml"
       - "src/src/index.js"
@@ -23,7 +24,7 @@ permissions:
 
 jobs:
   deploy-preview:
-    if: (github.event_name == 'workflow_dispatch' && inputs.deploy_preview == true) || (github.event_name == 'push' && (github.ref == 'refs/heads/barq/phase-2-android-ci-2026-11-20' || github.ref == 'refs/heads/barq/fix-approved-menus-2026-11-22'))
+    if: (github.event_name == 'workflow_dispatch' && inputs.deploy_preview == true) || (github.event_name == 'push' && (github.ref == 'refs/heads/barq/phase-2-android-ci-2026-11-20' || github.ref == 'refs/heads/barq/fix-approved-menus-2026-11-22' || github.ref == 'refs/heads/barq/phase4-messaging-interactions-2026-11-22'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
