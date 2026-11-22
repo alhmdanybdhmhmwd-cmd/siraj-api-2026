@@ -201,14 +201,15 @@ test("Android API, media, and realtime origins are selectable for isolated previ
 
 
 
-test("conversation hub keeps search and the three agreed sections", () => {
+test("conversation hub keeps search, chats, contacts, groups, and calls", () => {
   const start = flutterApp.indexOf("Widget _chatsPage()");
   const end = flutterApp.indexOf("String _personName(", start);
   const page = flutterApp.slice(start, end);
-  assert.ok(page.includes("ابحث في المحادثات والمجموعات"));
+  assert.ok(page.includes("ابحث في المحادثات وجهات الاتصال والمجموعات"));
   assert.ok(page.includes("المحادثات"));
   assert.ok(page.includes("المجموعات"));
   assert.ok(page.includes("المكالمات"));
+  assert.ok(page.includes("جهات الاتصال"));
   assert.ok(page.includes("conversationQuery"));
   assert.ok(!flutterApp.includes("IconButton(onPressed: loadMessages, icon: const Icon(Icons.refresh))"));
 });
