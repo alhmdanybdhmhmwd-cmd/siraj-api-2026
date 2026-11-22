@@ -45,6 +45,15 @@ assert.ok(b.user?.id && b.token, "second account registration must return a sess
 
 const login = await call("/api/login", { method: "POST", body: { username: accountA.phone, password } });
 assert.ok(login.token && login.user.id === a.user.id, "phone login must return the created account");
+await call("/api/login", {
+  method: "POST", body: { username: accountA.phone, password: "Wrong-Preview-Password" }, expected: 401
+});
+await call("/api/register", {
+  method: "POST", body: accountA, expected: 409
+});
+await call("/api/register", {
+  method: "POST", body: { phone: "+12025550123", password }, expected: 400
+});
 
 const me = await call("/api/me", { token: a.token });
 assert.equal(me.user.id, a.user.id);
