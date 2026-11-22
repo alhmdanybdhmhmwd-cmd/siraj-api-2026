@@ -121,10 +121,16 @@ jobs:
           NODE
           echo "Preview Worker URL: $BARQ_PREVIEW_URL" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Exercise deployed Preview account, profile, privacy, and contacts APIs
+      - name: Exercise deployed Preview account, profile, privacy, contacts, messaging, and conversation visibility APIs
         env:
           BARQ_PREVIEW_URL: ${{ env.BARQ_PREVIEW_URL }}
         run: node test/barq_preview_integration.mjs
+
+      - name: Verify live Preview media upload, download, range, and recipient access
+        env:
+          BARQ_PREVIEW_URL: ${{ env.BARQ_PREVIEW_URL }}
+          BARQ_PREVIEW_MEDIA_CREDENTIALS_CONFIGURED: ${{ secrets.BARQ_PREVIEW_TIGRIS_ACCESS_KEY_ID != '' && secrets.BARQ_PREVIEW_TIGRIS_SECRET_ACCESS_KEY != '' }}
+        run: node test/barq_preview_media_integration.mjs
 
       - name: Verify signup and phone login through the Vercel Preview proxy
         env:
