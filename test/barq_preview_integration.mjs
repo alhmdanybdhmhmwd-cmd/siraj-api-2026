@@ -174,8 +174,8 @@ await call("/api/statuses/" + encodeURIComponent(sparkStatus.status.id) + "/reac
 await call("/api/statuses/" + encodeURIComponent(sparkStatus.status.id) + "/replies", {
   method: "POST", token: b.token, body: { body: "SPARK reply integration " + suffix }, expected: 201
 });
-const sparkReplies = await call("/api/statuses/" + encodeURIComponent(sparkStatus.status.id) + "/replies", { token: a.token });
-assert.ok(sparkReplies.replies?.some(reply => reply.body === "SPARK reply integration " + suffix),
+const sparkReplyFeed = await call("/api/statuses/" + encodeURIComponent(sparkStatus.status.id) + "/replies", { token: a.token });
+assert.ok(sparkReplyFeed.replies?.some(reply => reply.body === "SPARK reply integration " + suffix),
   "SPARK replies must persist and be visible to the status owner");
 await call("/api/statuses/" + encodeURIComponent(sparkStatus.status.id) + "/reactions?emoji=" + encodeURIComponent("🎉"), {
   method: "DELETE", token: b.token
