@@ -27,7 +27,7 @@ void main() {
     );
 
     expect(find.text('تعذر تحميل ذكرياتك'), findsOneWidget);
-    expect(find.text('لم نحذف ذكرياتك المحفوظة.'), findsOneWidget);
+    expect(find.text('تحقق من اتصالك وحاول التحديث. لم نحذف ذكرياتك المحفوظة.'), findsOneWidget);
     await tester.tap(find.text('إعادة المحاولة'));
     await tester.pump();
     expect(retried, isTrue);
