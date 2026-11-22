@@ -523,7 +523,7 @@ function parseMessageAttachment(rawBody) {
     if (!body || body.type !== "attachment" || typeof body.attachmentId !== "string") return null;
     const attachmentId = body.attachmentId;
     if (!attachmentId || attachmentId.length > 512 || attachmentId.startsWith("/") ||
-        attachmentId.includes("\\\\") || attachmentId.split("/").some(part => !part || part === "." || part === "..")) return null;
+        attachmentId.includes(String.fromCharCode(92)) || attachmentId.split("/").some(part => !part || part === "." || part === "..")) return null;
     return {
       attachmentId,
       fileName: safeFileName(body.fileName || "attachment"),
