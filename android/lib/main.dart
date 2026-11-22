@@ -159,6 +159,93 @@ Future<bool> revokeBarqFcmTokenSafely({
 
 
 /// إعدادات الميزات المحلية التي لا تحتاج إلى اتصال بالخادم.
+Future<FilePickerResult?> showBarqMediaPicker(
+  BuildContext context, {
+  required bool allowMultiple,
+  required String title,
+  bool withData = false,
+}) async {
+  final choice = await showModalBottomSheet<String>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (sheetContext) {
+      final palette = Theme.of(sheetContext).colorScheme;
+      return Container(
+        decoration: BoxDecoration(
+          color: palette.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+          border: Border.all(color: palette.primary.withValues(alpha: .22)),
+          boxShadow: [BoxShadow(color: palette.primary.withValues(alpha: .12), blurRadius: 28)],
+        ),
+        padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
+        child: SafeArea(top: false, child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: 42, height: 4, decoration: BoxDecoration(
+            color: palette.onSurface.withValues(alpha: .22), borderRadius: BorderRadius.circular(8))),
+          const SizedBox(height: 16),
+          Row(children: [
+            Icon(Icons.perm_media_rounded, color: palette.primary),
+            const SizedBox(width: 9),
+            Expanded(child: Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
+          ]),
+          const SizedBox(height: 14),
+          Row(children: [
+            Expanded(child: _BarqMediaChoice(
+              icon: Icons.photo_library_rounded, title: 'الصور والفيديو',
+              subtitle: 'من معرض جهازك', onTap: () => Navigator.pop(sheetContext, 'media'))),
+            const SizedBox(width: 10),
+            Expanded(child: _BarqMediaChoice(
+              icon: Icons.folder_rounded, title: 'الملفات',
+              subtitle: 'مستندات وملفات أخرى', onTap: () => Navigator.pop(sheetContext, 'files'))),
+          ]),
+          const SizedBox(height: 10),
+          Text(allowMultiple ? 'يمكنك تحديد عدة وسائط معاً.' : 'اختر عنصراً واحداً للإرسال.',
+            style: TextStyle(color: palette.onSurface.withValues(alpha: .58), fontSize: 11)),
+        ])),
+      );
+    },
+  );
+  if (choice == null || !context.mounted) return null;
+  return FilePicker.platform.pickFiles(
+    type: choice == 'media' ? FileType.media : FileType.any,
+    allowMultiple: choice == 'media' && allowMultiple,
+    withData: withData,
+  );
+}
+
+class _BarqMediaChoice extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  const _BarqMediaChoice({required this.icon, required this.title, required this.subtitle, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = Theme.of(context).colorScheme;
+    return Material(
+      color: palette.primary.withValues(alpha: .07),
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap, borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: palette.primary.withValues(alpha: .20))),
+          child: Column(children: [
+            Icon(icon, size: 30, color: palette.primary),
+            const SizedBox(height: 8),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 3),
+            Text(subtitle, textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 10, color: palette.onSurface.withValues(alpha: .58))),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
 class BarqFeatures {
   static bool autoTranslate = false;
   static const String _translationKey = 'barq_auto_translate';
@@ -3820,7 +3907,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
         body: loading
             ? const Center(child: CircularProgressIndicator())
-            : pages[selectedTab],
+            : IndexedStack(index: selectedTab, children: pages),
         floatingActionButton: selectedTab == 1 || selectedTab == 2
             ? FloatingActionButton(
                 backgroundColor: Theme.of(context).colorScheme.primary,
@@ -3987,8 +4074,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<void> publishSparkMediaDialog() async {
     final pageContext = context;
-    final picked = await FilePicker.platform.pickFiles(
-      type: FileType.media, allowMultiple: true, withData: false,
+    final picked = await showBarqMediaPicker(
+      pageContext, allowMultiple: true, title: 'اختيار وسائط SPARK',
     );
     if (picked == null || picked.files.isEmpty || !pageContext.mounted) return;
     if (picked.files.length > 10) {
@@ -7526,6 +7613,10 @@ class _ChatPageState extends State<ChatPage> {
       showMsg(context, 'الرسالة طويلة جدًا؛ الحد الأقصى 5000 حرف.');
       return;
     }
+    // حرر حقل الكتابة فور الضغط، ولا تنتظر الشبكة.
+    final replySnapshot = replyToMessage == null ? null : Map<String, dynamic>.from(replyToMessage!);
+    controller.clear();
+    if (mounted) setState(() => replyToMessage = null);
     setState(() => sending = true);
     try {
       if (ephemeralMode) {
@@ -7535,7 +7626,7 @@ class _ChatPageState extends State<ChatPage> {
         final messageId = newBarqMessageId();
         try {
           await Api.sendMessage(friendId, text, clientMessageId: messageId,
-            replyToId: replyToMessage == null ? null : field(replyToMessage!, ['id', 'message_id']));
+            replyToId: replySnapshot == null ? null : field(replySnapshot, ['id', 'message_id']));
         } catch (e) {
           if (!e.toString().contains('NETWORK_DIAGNOSTIC')) rethrow;
           final localMessage = {
@@ -7543,15 +7634,15 @@ class _ChatPageState extends State<ChatPage> {
             'sender_id': widget.currentUserId,
             'receiver_id': friendId,
             'body': text,
-            if (replyToMessage != null) 'reply_to_id': field(replyToMessage!, ['id', 'message_id']),
-            if (replyToMessage != null) 'reply_to_body': field(replyToMessage!, ['body', 'content', 'message']),
-            if (replyToMessage != null) 'reply_to_sender_id': field(replyToMessage!, ['sender_id']),
+            if (replySnapshot != null) 'reply_to_id': field(replySnapshot, ['id', 'message_id']),
+            if (replySnapshot != null) 'reply_to_body': field(replySnapshot, ['body', 'content', 'message']),
+            if (replySnapshot != null) 'reply_to_sender_id': field(replySnapshot, ['sender_id']),
             'created_at': DateTime.now().toUtc().toIso8601String(),
           };
           await BarqOfflineQueue.enqueueOutgoing(localMessage);
           var deliveredNearby = false;
           try {
-            if (replyToMessage == null) {
+            if (replySnapshot == null) {
               deliveredNearby = await BarqNearbyService.instance.sendTextMessage(
                 receiverId: friendId, messageId: messageId, body: text, senderId: widget.currentUserId,
               );
@@ -7570,9 +7661,7 @@ class _ChatPageState extends State<ChatPage> {
           return;
         }
       }
-      controller.clear();
-      if (mounted) setState(() => replyToMessage = null);
-      await loadMessages();
+      await loadMessages(silent: true);
     } catch (e) {
       if (mounted) showMsg(context, cleanError(e));
     } finally {
@@ -7601,7 +7690,9 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> pickAndSendFile() async {
     try {
-      final result = await FilePicker.platform.pickFiles(withData: true, allowMultiple: false);
+      final result = await showBarqMediaPicker(
+        context, allowMultiple: false, title: 'إرسال وسائط أو ملف', withData: true,
+      );
       if (result == null || result.files.isEmpty) return;
       final file = result.files.single;
       final bytes = file.bytes;
@@ -8655,13 +8746,14 @@ class _GroupChatPageState extends State<GroupChatPage> {
       showMsg(context, 'الرسالة طويلة جدًا؛ الحد الأقصى 5000 حرف.');
       return;
     }
+    final replySnapshot = replyToMessage == null ? null : Map<String, dynamic>.from(replyToMessage!);
+    controller.clear();
+    if (mounted) setState(() => replyToMessage = null);
     setState(() => sending = true);
     try {
       await Api.sendGroupMessage(groupId, body,
-        replyToId: replyToMessage == null ? null : field(replyToMessage!, ['id', 'message_id']));
-      controller.clear();
-      if (mounted) setState(() => replyToMessage = null);
-      await loadMessages();
+        replyToId: replySnapshot == null ? null : field(replySnapshot, ['id', 'message_id']));
+      await loadMessages(silent: true);
     } catch (e) { if (mounted) showMsg(context, cleanError(e)); }
     finally { if (mounted) setState(() => sending = false); }
   }
