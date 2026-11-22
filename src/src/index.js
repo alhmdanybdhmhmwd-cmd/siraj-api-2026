@@ -2682,12 +2682,28 @@ export default {
         return json({ error: "Friend requests are not supported. Add the contact directly." }, 410);
       }
 
-      // Get friends
+      // Get friends and keep deleted chats separate from the underlying contacts.
       if (method === "GET" && path === "/api/friends") {
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS private_conversation_state (
+            user_id TEXT NOT NULL,
+            peer_id TEXT NOT NULL,
+            hidden_at TEXT,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, peer_id),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (peer_id) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
         await ensureProfilePhotos(env);
         const friends = await env.DB.prepare(
           `SELECT u.id, u.username, u.display_name, u.phone,
-                  p.updated_at AS photo_updated_at
+                  p.updated_at AS photo_updated_at,
+                  CASE WHEN EXISTS (
+                    SELECT 1 FROM private_conversation_state cs
+                    WHERE cs.user_id = f.user_id AND cs.peer_id = f.friend_id
+                      AND cs.hidden_at IS NOT NULL
+                  ) THEN 1 ELSE 0 END AS chat_hidden
            FROM friendships f
            JOIN users u ON u.id = f.friend_id
            LEFT JOIN profile_photos p ON p.user_id = u.id
@@ -2726,6 +2742,27 @@ export default {
             pinned_by TEXT NOT NULL,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (scope_type, scope_id, message_id, pinned_by)
+          )
+        `).run();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS hidden_private_messages (
+            user_id TEXT NOT NULL,
+            message_id TEXT NOT NULL,
+            hidden_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, message_id),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
+          )
+        `).run();
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS private_conversation_state (
+            user_id TEXT NOT NULL,
+            peer_id TEXT NOT NULL,
+            hidden_at TEXT,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, peer_id),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (peer_id) REFERENCES users(id) ON DELETE CASCADE
           )
         `).run();
       }
@@ -3338,6 +3375,21 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           return json({ message: "Message already accepted", id, duplicate: true });
         }
 
+        // A new message restores the chat row for both participants without
+        // restoring any messages they previously cleared or deleted locally.
+        await env.DB.batch([
+          env.DB.prepare(`
+            INSERT INTO private_conversation_state (user_id, peer_id, hidden_at, updated_at)
+            VALUES (?, ?, NULL, CURRENT_TIMESTAMP)
+            ON CONFLICT(user_id, peer_id) DO UPDATE SET hidden_at = NULL, updated_at = CURRENT_TIMESTAMP
+          `).bind(currentUser.sub, receiverId),
+          env.DB.prepare(`
+            INSERT INTO private_conversation_state (user_id, peer_id, hidden_at, updated_at)
+            VALUES (?, ?, NULL, CURRENT_TIMESTAMP)
+            ON CONFLICT(user_id, peer_id) DO UPDATE SET hidden_at = NULL, updated_at = CURRENT_TIMESTAMP
+          `).bind(receiverId, currentUser.sub)
+        ]);
+
         // Message persistence is authoritative; sender lookup or push delivery
         // must not turn a successfully stored message into an apparent failure.
         try {
@@ -3380,11 +3432,15 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           SELECT m.sender_id, u.display_name, m.body, m.created_at
           FROM messages m
           JOIN users u ON u.id = m.sender_id
-          WHERE (m.sender_id = ? AND m.receiver_id = ?)
-             OR (m.sender_id = ? AND m.receiver_id = ?)
+          WHERE ((m.sender_id = ? AND m.receiver_id = ?)
+             OR (m.sender_id = ? AND m.receiver_id = ?))
+            AND NOT EXISTS (
+              SELECT 1 FROM hidden_private_messages hm
+              WHERE hm.user_id = ? AND hm.message_id = m.id
+            )
           ORDER BY m.created_at DESC, m.id DESC
           LIMIT 60
-        `).bind(currentUser.sub, friendId, friendId, currentUser.sub).all();
+        `).bind(currentUser.sub, friendId, friendId, currentUser.sub, currentUser.sub).all();
         return createConversationSummary(env, result.results || [], "محادثة فردية");
       }
 
@@ -3432,6 +3488,47 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           ).bind(scopeId, messageId, currentUser.sub).run();
         }
         return json({ message: method === "POST" ? "Message pinned" : "Pin removed", messageId, pinned: method === "POST" });
+      }
+
+      // Clear or delete a private conversation only for the authenticated account.
+      // Individual message rows stay intact for the other participant.
+      const privateConversationActionMatch = path.match(/^\/api\/conversations\/([^/]+)(\/clear)?$/);
+      if (privateConversationActionMatch && (
+        (method === "DELETE" && !privateConversationActionMatch[2]) ||
+        (method === "POST" && privateConversationActionMatch[2] === "/clear")
+      )) {
+        let friendId;
+        try { friendId = decodeURIComponent(privateConversationActionMatch[1]); } catch (_) {
+          return json({ error: "Invalid conversation identifier" }, 400);
+        }
+        if (!friendId || friendId === currentUser.sub || friendId.length > 128) {
+          return json({ error: "Invalid conversation identifier" }, 400);
+        }
+        const friendship = await env.DB.prepare(
+          "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
+        ).bind(currentUser.sub, friendId).first();
+        if (!friendship) return json({ error: "Conversation not found" }, 404);
+        const statements = [
+          env.DB.prepare(`
+            INSERT OR IGNORE INTO hidden_private_messages (user_id, message_id)
+            SELECT ?, id FROM messages
+            WHERE (sender_id = ? AND receiver_id = ?)
+               OR (sender_id = ? AND receiver_id = ?)
+          `).bind(currentUser.sub, currentUser.sub, friendId, friendId, currentUser.sub),
+          env.DB.prepare(`
+            INSERT INTO private_conversation_state (user_id, peer_id, hidden_at, updated_at)
+            VALUES (?, ?, ${privateConversationActionMatch[2] ? "NULL" : "CURRENT_TIMESTAMP"}, CURRENT_TIMESTAMP)
+            ON CONFLICT(user_id, peer_id) DO UPDATE SET
+              hidden_at = excluded.hidden_at,
+              updated_at = CURRENT_TIMESTAMP
+          `).bind(currentUser.sub, friendId)
+        ];
+        await env.DB.batch(statements);
+        return json({
+          message: privateConversationActionMatch[2] ? "Conversation history cleared" : "Conversation deleted",
+          peerId: friendId,
+          hidden: !privateConversationActionMatch[2]
+        });
       }
 
       // A sender may delete only their own private message.
@@ -3502,13 +3599,17 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           JOIN users u ON u.id = m.sender_id
           WHERE ((m.sender_id = ? AND m.receiver_id = ?)
               OR (m.sender_id = ? AND m.receiver_id = ?))
+            AND NOT EXISTS (
+              SELECT 1 FROM hidden_private_messages hm
+              WHERE hm.user_id = ? AND hm.message_id = m.id
+            )
             AND instr(lower(m.body), lower(?)) > 0 ${cursorClause}
           ORDER BY m.created_at DESC, m.id DESC
           LIMIT ?
         `);
         const result = before
-          ? await statement.bind(currentUser.sub, friendId, friendId, currentUser.sub, query, before, before, beforeId, limit + 1).all()
-          : await statement.bind(currentUser.sub, friendId, friendId, currentUser.sub, query, limit + 1).all();
+          ? await statement.bind(currentUser.sub, friendId, friendId, currentUser.sub, currentUser.sub, query, before, before, beforeId, limit + 1).all()
+          : await statement.bind(currentUser.sub, friendId, friendId, currentUser.sub, currentUser.sub, query, limit + 1).all();
         const rows = result.results || [];
         const hasMore = rows.length > limit;
         const messages = hasMore ? rows.slice(0, limit) : rows;
@@ -3562,25 +3663,33 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
                  FROM messages
                  WHERE ((sender_id = ? AND receiver_id = ?)
                     OR (sender_id = ? AND receiver_id = ?))
+                   AND NOT EXISTS (
+                     SELECT 1 FROM hidden_private_messages hm
+                     WHERE hm.user_id = ? AND hm.message_id = messages.id
+                   )
                    ${cursorClause}
                  ORDER BY created_at DESC, id DESC
                  LIMIT ?
                )
                ORDER BY created_at ASC, id ASC`
-            ).bind(currentUser.sub, friendId, friendId, currentUser.sub,
+            ).bind(currentUser.sub, friendId, friendId, currentUser.sub, currentUser.sub,
               before, before, beforeId, limit + 1).all()
           : await env.DB.prepare(
               `SELECT * FROM (
                  SELECT id, sender_id, receiver_id, body, created_at, read_at,
                         reply_to_id, reply_to_body, reply_to_sender_id, edited_at
                  FROM messages
-                 WHERE (sender_id = ? AND receiver_id = ?)
-                    OR (sender_id = ? AND receiver_id = ?)
+                 WHERE ((sender_id = ? AND receiver_id = ?)
+                    OR (sender_id = ? AND receiver_id = ?))
+                   AND NOT EXISTS (
+                     SELECT 1 FROM hidden_private_messages hm
+                     WHERE hm.user_id = ? AND hm.message_id = messages.id
+                   )
                  ORDER BY created_at DESC, id DESC
                  LIMIT ?
                )
                ORDER BY created_at ASC, id ASC`
-            ).bind(currentUser.sub, friendId, friendId, currentUser.sub, limit + 1).all();
+            ).bind(currentUser.sub, friendId, friendId, currentUser.sub, currentUser.sub, limit + 1).all();
 
         const rows = result.results || [];
         const hasMore = rows.length > limit;
