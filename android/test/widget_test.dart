@@ -15,6 +15,30 @@ void main() {
     expect(barqInviteMessage, isNot(contains('رمز دعوة')));
   });
 
+  test('private memory photo uploads continue after one photo fails', () async {
+    final attempted = <String>[];
+    final failed = await uploadPrivateMemoryPhotosSequentially(
+      memoryId: 'memory-1',
+      photos: [
+        {'name': 'first.jpg', 'bytes': <int>[1, 2], 'contentType': 'image/jpeg'},
+        {'name': 'second.png', 'bytes': <int>[3, 4], 'contentType': 'image/png'},
+      ],
+      upload: ({
+        required String memoryId,
+        required List<int> bytes,
+        required String fileName,
+        required String contentType,
+      }) async {
+        expect(memoryId, 'memory-1');
+        attempted.add(fileName);
+        if (fileName == 'first.jpg') throw Exception('simulated upload failure');
+      },
+    );
+
+    expect(attempted, ['first.jpg', 'second.png']);
+    expect(failed, ['first.jpg']);
+  });
+
   testWidgets('private and group chat wallpaper uses a premium gradient', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) {
