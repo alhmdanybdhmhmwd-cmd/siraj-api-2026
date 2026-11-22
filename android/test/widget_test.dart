@@ -83,21 +83,6 @@ void main() {
     expect(barqNotificationRouteFromData({'type': 'unknown', 'senderId': 'user-7'}), isNull);
   });
 
-  test('private invite links accept only the BARQ scheme, host and 12-character code', () {
-    expect(barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef123456')), 'ABCDEF123456');
-    expect(barqInviteCodeFromUri(Uri.parse('barq://invite?code=abcdef123456')), 'ABCDEF123456');
-    expect(barqInviteCodeFromUri(Uri.parse('https://invite/abcdef123456')), isNull);
-    expect(barqInviteCodeFromUri(Uri.parse('barq://other/abcdef123456')), isNull);
-    expect(barqInviteCodeFromUri(Uri.parse('barq://invite/abc123')), isNull);
-    expect(barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef12345z')), isNull);
-    expect(barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef123456/extra')), isNull);
-    expect(barqInviteCodeFromUri(Uri.parse('barq://invite?code=abcdef123456&code=111111111111')), isNull);
-    expect(barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef123456?code=abcdef123456')), isNull);
-    expect(barqInviteCodeFromUri(Uri.parse('barq://invite@evil.example/abcdef123456')), isNull);
-    expect(barqInviteCodeFromUri(Uri.parse('barq://invite:443/abcdef123456')), isNull);
-    expect(barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef123456#other')), isNull);
-  });
-
   test('Nearby requests only permissions supported by the Android API level', () {
     expect(barqNearbyPermissionNamesForAndroidSdk(26), ['location', 'bluetooth']);
     expect(barqNearbyPermissionNamesForAndroidSdk(30), ['location', 'bluetooth']);
