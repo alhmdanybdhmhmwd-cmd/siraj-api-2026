@@ -312,7 +312,7 @@ void main() {
     _flutterTest.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'receiver_id': 'other'}), _flutterTest.isFalse);
   });
 
-  _flutterTest.test('offline queue reconciliation removes exact _flutterTest.matches found on any server page', () {
+  _flutterTest.test('offline queue reconciliation removes exact matches found on any server page', () {
     final queued = [
       {'id': 'offline-old', 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'وصلت دون إنترنت'},
       {'id': 'offline-new', 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'بانتظار المزامنة'},
@@ -1189,7 +1189,7 @@ void main() {
     _flutterTest.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'receiver_id': 'other'}), _flutterTest.isFalse);
   });
 
-  _flutterTest.test('offline queue reconciliation removes exact _flutterTest.matches found on any server page', () {
+  _flutterTest.test('offline queue reconciliation removes exact matches found on any server page', () {
     final queued = [
       {'id': 'offline-old', 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'وصلت دون إنترنت'},
       {'id': 'offline-new', 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'بانتظار المزامنة'},
