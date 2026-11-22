@@ -3378,6 +3378,18 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
               (existing.reply_to_id || "") !== (reply.id || "")) {
             return json({ error: "Client message ID conflict" }, 409);
           }
+          await env.DB.batch([
+            env.DB.prepare(`
+              INSERT INTO private_conversation_state (user_id, peer_id, hidden_at, updated_at)
+              VALUES (?, ?, NULL, CURRENT_TIMESTAMP)
+              ON CONFLICT(user_id, peer_id) DO UPDATE SET hidden_at = NULL, updated_at = CURRENT_TIMESTAMP
+            `).bind(currentUser.sub, receiverId),
+            env.DB.prepare(`
+              INSERT INTO private_conversation_state (user_id, peer_id, hidden_at, updated_at)
+              VALUES (?, ?, NULL, CURRENT_TIMESTAMP)
+              ON CONFLICT(user_id, peer_id) DO UPDATE SET hidden_at = NULL, updated_at = CURRENT_TIMESTAMP
+            `).bind(receiverId, currentUser.sub)
+          ]);
           return json({ message: "Message already accepted", id, duplicate: true });
         }
 
