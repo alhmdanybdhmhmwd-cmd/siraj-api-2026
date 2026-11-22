@@ -98,7 +98,7 @@ test("media proxy rejects oversized declared Content-Length before reading or fo
     let streamRead = false;
     const req = {
       url: "/api/media", method: "POST",
-      headers: { "content-length": String(60 * 1024 * 1024 + 1) },
+      headers: { "content-length": String(4 * 1024 * 1024 + 1) },
       async *[Symbol.asyncIterator]() { streamRead = true; }
     };
     await handler(req, res);
@@ -166,7 +166,7 @@ test("profile photo proxy forwards authenticated binary image uploads", async ()
   }
 });
 
-test("media proxy rejects streamed bodies over 60 MB when Content-Length is absent", async () => {
+test("media proxy rejects streamed bodies over 4 MiB when Content-Length is absent", async () => {
   const originalFetch = globalThis.fetch;
   let fetchCalled = false;
   globalThis.fetch = async () => { fetchCalled = true; throw new Error("unexpected upstream request"); };
@@ -174,7 +174,7 @@ test("media proxy rejects streamed bodies over 60 MB when Content-Length is abse
     const res = makeResponse();
     const req = makeRequest({
       headers: {},
-      chunks: [Buffer.alloc(60 * 1024 * 1024), Buffer.from([1])]
+      chunks: [Buffer.alloc(4 * 1024 * 1024), Buffer.from([1])]
     });
     await handler(req, res);
     assert.equal(res.statusCode, 413);
@@ -507,5 +507,89 @@ test("gateway retries a POST only when an idempotency key is supplied", async ()
     else process.env.BARQ_API_FALLBACK_UPSTREAM = previousFallback;
     if (previousEnvironment === undefined) delete process.env.VERCEL_ENV;
     else process.env.VERCEL_ENV = previousEnvironment;
+  }
+});
+
+test("private-memory photo proxy rejects oversized uploads before reading", async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalled = false;
+  globalThis.fetch = async () => { fetchCalled = true; throw new Error("unexpected upstream request"); };
+  try {
+    const res = makeResponse();
+    let streamRead = false;
+    const req = {
+      url: "/api/private-memories/memory-1/media", method: "POST",
+      headers: { "content-length": String(4 * 1024 * 1024 + 1) },
+      async *[Symbol.asyncIterator]() { streamRead = true; }
+    };
+    await handler(req, res);
+    assert.equal(res.statusCode, 413);
+    assert.equal(streamRead, false);
+    assert.equal(fetchCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("SPARK audio reply proxy rejects payloads above the Vercel-safe 4 MiB limit", async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalled = false;
+  globalThis.fetch = async () => { fetchCalled = true; throw new Error("unexpected upstream request"); };
+  try {
+    const res = makeResponse();
+    let streamRead = false;
+    const req = {
+      url: "/api/statuses/spark-1/audio-replies", method: "POST",
+      headers: { "content-length": String(4 * 1024 * 1024 + 1) },
+      async *[Symbol.asyncIterator]() { streamRead = true; }
+    };
+    await handler(req, res);
+    assert.equal(res.statusCode, 413);
+    assert.equal(streamRead, false);
+    assert.equal(fetchCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("transcription proxy rejects payloads above the Worker 2 MiB limit before reading", async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalled = false;
+  globalThis.fetch = async () => { fetchCalled = true; throw new Error("unexpected upstream request"); };
+  try {
+    const res = makeResponse();
+    let streamRead = false;
+    const req = {
+      url: "/api/transcribe", method: "POST",
+      headers: { "content-length": String(2 * 1024 * 1024 + 1) },
+      async *[Symbol.asyncIterator]() { streamRead = true; }
+    };
+    await handler(req, res);
+    assert.equal(res.statusCode, 413);
+    assert.equal(streamRead, false);
+    assert.equal(fetchCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("generic API proxy bodies are capped at 256 KiB before reading", async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalled = false;
+  globalThis.fetch = async () => { fetchCalled = true; throw new Error("unexpected upstream request"); };
+  try {
+    const res = makeResponse();
+    let streamRead = false;
+    const req = {
+      url: "/api/messages", method: "POST",
+      headers: { "content-length": String(256 * 1024 + 1) },
+      async *[Symbol.asyncIterator]() { streamRead = true; }
+    };
+    await handler(req, res);
+    assert.equal(res.statusCode, 413);
+    assert.equal(streamRead, false);
+    assert.equal(fetchCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
   }
 });
