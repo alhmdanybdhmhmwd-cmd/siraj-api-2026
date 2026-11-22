@@ -168,7 +168,59 @@ const afterRetry = await json("/api/messages?with=" + encodeURIComponent(b.user.
 assert.equal((afterRetry.messages || []).filter(message => message.id === sessionId).length, 1,
   "completion retry must not duplicate the attachment chat message");
 
-console.log("Preview media integration passed: resumable upload creates one visible chat message, restores a hidden conversation, exact SHA-256 readback, HTTP Range, recipient authorization, and idempotent completion.");
+// Exercise the same resumable-media pipeline for a real Preview group conversation.
+const group = await json("/api/groups", {
+  method: "POST", token: a.token, expected: 201,
+  body: { name: "Media Group " + suffix }
+});
+assert.ok(group.group?.id, "group must be created for group media coverage");
+await json("/api/groups/" + encodeURIComponent(group.group.id) + "/members", {
+  method: "POST", token: a.token, expected: 201, body: { userId: b.user.id }
+});
+const groupSource = new Uint8Array(256 * 1024 + 31);
+for (let i = 0; i < groupSource.length; i++) groupSource[i] = (i * 19 + 7) % 253;
+const groupHash = createHash("sha256").update(groupSource).digest("hex");
+const groupKey = "media-group-preview-" + randomUUID();
+const groupUpload = await json("/api/media/uploads", {
+  method: "POST", token: a.token, expected: 201,
+  headers: { "X-Idempotency-Key": groupKey },
+  body: {
+    size: groupSource.length, contentType: "application/octet-stream",
+    fileName: "barq-preview-group.bin", groupId: group.group.id
+  }
+});
+const groupSessionId = groupUpload.session?.id;
+assert.ok(groupSessionId, "group upload session must be created");
+await request(`/api/media/uploads/${groupSessionId}/chunks/1`, {
+  method: "PUT", token: a.token, body: groupSource,
+  headers: { "Content-Type": "application/octet-stream" }, expected: 200
+});
+const groupCompleted = await json(`/api/media/uploads/${groupSessionId}/complete`, {
+  method: "POST", token: a.token, expected: 201, body: {}
+});
+const groupAttachmentId = groupCompleted.attachment?.attachmentId;
+assert.ok(groupAttachmentId, "group upload must produce an attachment");
+const groupMessages = await json("/api/groups/" + encodeURIComponent(group.group.id) + "/messages", {
+  token: a.token
+});
+const groupAttachmentMessage = (groupMessages.messages || []).find(message => message.id === groupSessionId);
+assert.ok(groupAttachmentMessage, "group attachment must be visible as exactly one group message");
+const groupAttachmentBody = JSON.parse(groupAttachmentMessage.body);
+assert.equal(groupAttachmentBody.attachmentId, groupAttachmentId);
+assert.equal(groupAttachmentBody.size, groupSource.length);
+const memberGroupMessages = await json("/api/groups/" + encodeURIComponent(group.group.id) + "/messages", {
+  token: b.token
+});
+assert.ok((memberGroupMessages.messages || []).some(message => message.id === groupSessionId),
+  "group member must see the uploaded attachment message");
+const groupDownload = await request("/api/media/" + encodeURIComponent(groupAttachmentId), {
+  token: b.token, expected: 200
+});
+assert.equal(createHash("sha256").update(groupDownload.bytes).digest("hex"), groupHash,
+  "group member download must exactly match the uploaded bytes");
+console.log("Preview group media integration passed: group attachment message visibility and member SHA-256 download.");
+
+console.log("Preview private media integration passed: resumable upload creates one visible chat message, restores a hidden conversation, exact SHA-256 readback, HTTP Range, recipient authorization, and idempotent completion.");
 
 
 }
