@@ -16,3 +16,8 @@ Recovery codes are generated once, stored as salted SHA-256 digests, expire afte
 ## Database schema status
 
 The recovery-code migration is present, but this repository does not currently include authoritative base migrations for `users`, `friendships`, or `messages`. Review [the database schema audit](docs/database-schema-audit-2026-11-19.md) before attempting D1 integration tests. Do not use the production D1 binding for testing, and do not create a guessed base schema.
+
+
+## Production vs Preview migration isolation
+
+The default `wrangler.toml` points only to `migrations/production`, which currently contains the additive recovery-code and revoked-session migrations. The broader `migrations/` directory is the isolated Preview/test fixture and must be used only with `wrangler.test.toml` or `wrangler.fallback.test.toml`. It includes Preview-only core-schema and feature fixtures; never point the production Worker at that directory or apply it to `siraj-db`. No production migration has been applied as part of this audit.
