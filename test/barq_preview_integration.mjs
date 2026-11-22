@@ -59,6 +59,17 @@ await call("/api/register", {
 
 const me = await call("/api/me", { token: a.token });
 assert.equal(me.user.id, a.user.id);
+
+// Optional identity packages must require authentication and return the expected
+// versioned palette data before the Android client caches or enables them.
+await call("/api/identity-packages/purpleShadow", { expected: 401 });
+for (const identity of ["purpleShadow", "skyJewel"]) {
+  const bundle = await call("/api/identity-packages/" + identity, { token: a.token });
+  assert.equal(bundle.identity, identity);
+  assert.equal(bundle.version, "1.0.0");
+  assert.ok(bundle.palette?.primary && bundle.palette?.background && bundle.palette?.tagline);
+}
+await call("/api/identity-packages/blueLightning", { token: a.token, expected: 404 });
 const updatedName = "Preview Updated " + suffix;
 const profile = await call("/api/profile", {
   method: "POST", token: a.token,
