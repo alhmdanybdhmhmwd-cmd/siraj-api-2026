@@ -912,3 +912,16 @@ test("only bundled BARQ identities can be selected before optional packages are 
   assert.match(flutterApp, /تحتاج إلى تنزيل الحزمة قبل التفعيل/);
   assert.match(flutterApp, /download_for_offline_outlined/);
 });
+
+
+test("optional identity packages are authenticated, versioned, and downloadable", () => {
+  assert.ok(worker.includes('/api/identity-packages/'));
+  assert.ok(worker.includes('purpleShadow:'));
+  assert.ok(worker.includes('skyJewel:'));
+  assert.ok(worker.includes('version: "1.0.0"'));
+  assert.match(identitySource, /static Future<void> download/);
+  assert.match(identitySource, /_packagesStorageKey/);
+  assert.match(identitySource, /downloadedPackages\[identity\.name\]/);
+  assert.match(flutterApp, /BarqIdentity\.download\(identity, apiBase: apiBase, token: Api\.token!/);
+  assert.match(flutterApp, /اضغط لتنزيل الحزمة ثم تفعيلها/);
+});
