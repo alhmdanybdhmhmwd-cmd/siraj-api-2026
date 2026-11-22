@@ -7,6 +7,14 @@ import 'package:barq/main.dart';
 import 'package:barq/barq_identity.dart';
 
 void main() {
+  test('BARQ friend invitation shares the public app download link', () {
+    expect(barqInviteMessage, contains('برق — BARQ'));
+    expect(barqInviteMessage, contains(barqPlayStoreUrl));
+    expect(barqPlayStoreUrl,
+        'https://play.google.com/store/apps/details?id=com.barq.app');
+    expect(barqInviteMessage, isNot(contains('رمز دعوة')));
+  });
+
   test('background work pauses only when the app is hidden or detached', () {
     expect(barqShouldPauseBackgroundWork(AppLifecycleState.resumed), isFalse);
     expect(barqShouldPauseBackgroundWork(AppLifecycleState.inactive), isFalse);
