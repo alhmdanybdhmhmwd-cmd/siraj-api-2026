@@ -995,6 +995,10 @@ typedef PrivateMemoryPhotoUploader = Future<void> Function({
   required String contentType,
 });
 
+bool isBarqPrivateMemoryPhotoContentTypeAllowed(String contentType) =>
+    const {'image/jpeg', 'image/png', 'image/webp'}
+        .contains(contentType.trim().toLowerCase());
+
 Future<List<String>> uploadPrivateMemoryPhotosSequentially({
   required String memoryId,
   required List<Map<String, dynamic>> photos,
@@ -1011,11 +1015,17 @@ Future<List<String>> uploadPrivateMemoryPhotosSequentially({
       if (bytes.isEmpty || bytes.length > 4 * 1024 * 1024) {
         throw Exception('حجم الصورة غير مسموح.');
       }
+      final contentType = (photo['contentType'] as String? ?? '')
+          .trim()
+          .toLowerCase();
+      if (!isBarqPrivateMemoryPhotoContentTypeAllowed(contentType)) {
+        throw Exception('صيغة صورة الذكرى غير مدعومة.');
+      }
       await upload(
         memoryId: memoryId,
         bytes: bytes,
         fileName: fileName,
-        contentType: photo['contentType'] as String,
+        contentType: contentType,
       );
     } catch (_) {
       failedFiles.add(fileName);
@@ -1357,7 +1367,7 @@ class Api {
     if (bytes.isEmpty || bytes.length > 4 * 1024 * 1024) {
       throw Exception('حجم صورة الذكرى يجب ألا يتجاوز 4 ميجابايت.');
     }
-    if (!['image/jpeg', 'image/png', 'image/webp'].contains(contentType)) {
+    if (!isBarqPrivateMemoryPhotoContentTypeAllowed(contentType)) {
       throw Exception('صيغة صورة الذكرى غير مدعومة.');
     }
     final response = await _postMediaPathResponse(
