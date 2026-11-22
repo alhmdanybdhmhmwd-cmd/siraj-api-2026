@@ -533,6 +533,17 @@ let friendsAfterDelete = await call("/api/friends", { token: a.token });
 assert.equal(friendsAfterDelete.friends.find(user => user.id === b.user.id)?.chatHidden, true,
   "delete conversation must hide the chat but retain the contact");
 
+// A retry of an already-accepted offline message is not new activity and
+// must not unhide a conversation that was deleted after the first response.
+await call("/api/messages", {
+  method: "POST", token: a.token,
+  body: { receiverId: b.user.id, body: "private clear fixture " + suffix, clientMessageId: clearFixtureId },
+  expected: 200
+});
+const friendsAfterDuplicateRetry = await call("/api/friends", { token: a.token });
+assert.equal(friendsAfterDuplicateRetry.friends.find(user => user.id === b.user.id)?.chatHidden, true,
+  "idempotent retries must not restore a locally deleted conversation");
+
 const restoredMessageId = randomUUID().replaceAll("-", "");
 await call("/api/messages", {
   method: "POST", token: b.token,
