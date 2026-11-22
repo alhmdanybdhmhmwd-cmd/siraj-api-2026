@@ -804,8 +804,8 @@ export default {
       if (method === "POST" && path === "/api/register") {
         const body = await readJsonRequestLimited(request);
 
-        const displayName = String(body.displayName || "").trim();
-        let username = String(body.username || "").trim().toLowerCase();
+        const displayName = String(body.displayName || body.name || body.display_name || "").trim();
+        let username = String(body.username || body.userName || "").trim().toLowerCase();
         const password = String(body.password || "");
         const phone = String(body.phone || "").trim();
         const inviteCode = String(body.inviteCode || "").trim().toUpperCase();
