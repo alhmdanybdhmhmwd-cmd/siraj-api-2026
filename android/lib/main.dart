@@ -4106,7 +4106,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> refreshAll() async {
-    setState(() => loading = true);
+    // Keep the current tabs visible during background refreshes. The initial
+    // loading state is already true until the first refresh completes.
     try {
       final results = await Future.wait([
         Api.friends(),
