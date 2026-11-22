@@ -10192,15 +10192,17 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                                   const Text('جارٍ الإرسال', style: TextStyle(color: Colors.white60, fontSize: 9)),
                                 ] else ...[
                                   Icon(
-                                    field(m, ['read_at', 'readAt']).isNotEmpty ? Icons.done_all_rounded : Icons.done_rounded,
+                                    (int.tryParse((m['seen_count'] ?? 0).toString()) ?? 0) > 0
+                                        ? Icons.done_all_rounded : Icons.done_rounded,
                                     size: 13,
-                                    color: field(m, ['read_at', 'readAt']).isNotEmpty
+                                    color: (int.tryParse((m['seen_count'] ?? 0).toString()) ?? 0) > 0
                                         ? Theme.of(context).colorScheme.primary
                                         : Theme.of(context).colorScheme.onSurface.withValues(alpha: .62),
                                   ),
                                   const SizedBox(width: 3),
                                   Text(
-                                    field(m, ['read_at', 'readAt']).isNotEmpty ? 'تمت المشاهدة' : 'تم الإرسال',
+                                    (int.tryParse((m['seen_count'] ?? 0).toString()) ?? 0) > 0
+                                        ? 'تمت المشاهدة (${m['seen_count']})' : 'تم الإرسال',
                                     style: const TextStyle(color: Colors.white60, fontSize: 9),
                                   ),
                                 ],
