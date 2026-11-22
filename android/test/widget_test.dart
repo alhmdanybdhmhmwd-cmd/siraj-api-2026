@@ -15,6 +15,14 @@ void main() {
     expect(barqInviteMessage, isNot(contains('رمز دعوة')));
   });
 
+  test('Android back returns to chats then clears chat search before exit', () {
+    expect(barqHomeCanPop(selectedTab: 1, conversationQuery: ''), isFalse);
+    expect(barqHomeCanPop(selectedTab: 2, conversationQuery: ''), isFalse);
+    expect(barqHomeCanPop(selectedTab: 3, conversationQuery: ''), isFalse);
+    expect(barqHomeCanPop(selectedTab: 0, conversationQuery: '  '), isTrue);
+    expect(barqHomeCanPop(selectedTab: 0, conversationQuery: 'barq'), isFalse);
+  });
+
   test('background work pauses only when the app is hidden or detached', () {
     expect(barqShouldPauseBackgroundWork(AppLifecycleState.resumed), isFalse);
     expect(barqShouldPauseBackgroundWork(AppLifecycleState.inactive), isFalse);
