@@ -77,14 +77,14 @@ class BarqIdentityPalette {
       // Preserves the currently deployed BARQ blue / gold / black / white look.
       case BarqIdentity.blueLightning:
         return const BarqIdentityPalette(
-          primary: Color(0xFFD6AD55),
-          secondary: Color(0xFF168BFF),
+          primary: Color(0xFF168BFF),
+          secondary: Color(0xFFD6AD55),
           background: Color(0xFF090909),
           surface: Color(0xFF171717),
           text: Color(0xFFFFFFFF),
           mutedText: Color(0xFFB8BEC8),
-          onPrimary: Color(0xFF090909),
-          onSecondary: Color(0xFFFFFFFF),
+          onPrimary: Color(0xFFFFFFFF),
+          onSecondary: Color(0xFF090909),
           border: Color(0x553F91E8),
           glow: Color(0xFF168BFF),
           tagline: 'الهوية الرسمية',
