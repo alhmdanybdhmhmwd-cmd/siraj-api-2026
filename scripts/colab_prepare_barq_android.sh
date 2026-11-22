@@ -79,9 +79,12 @@ GRADLE_HOME_TMP="$(mktemp -d)"
 curl -fL "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -o "$GRADLE_HOME_TMP/gradle.zip"
 unzip -q "$GRADLE_HOME_TMP/gradle.zip" -d "$GRADLE_HOME_TMP"
 mkdir -p "$GRADLE_HOME_TMP/wrapper-project"
+# Gradle 9.5 requires a valid build root before the built-in wrapper task can run.
+# A minimal settings file is sufficient; this temporary project is never copied to BARQ.
+printf 'rootProject.name = "barq-wrapper-bootstrap"\n' > "$GRADLE_HOME_TMP/wrapper-project/settings.gradle.kts"
 (
   cd "$GRADLE_HOME_TMP/wrapper-project"
-  "$GRADLE_HOME_TMP/gradle-${GRADLE_VERSION}/bin/gradle" wrapper \
+  "$GRADLE_HOME_TMP/gradle-${GRADLE_VERSION}/bin/gradle" --no-daemon wrapper \
     --gradle-version "$GRADLE_VERSION" --distribution-type all
 )
 mkdir -p "$NATIVE_ROOT/gradle/wrapper"
