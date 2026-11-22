@@ -48,15 +48,17 @@ class FakeD1 {
           return {meta:{changes:1}};
         }
         if(q.startsWith("INSERT INTO media_upload_chunks")){
-          const [sid,n,size,sha256]=args;const key=sid+":"+n;
-          if(!db.chunks.has(key))db.chunks.set(key,{session_id:sid,chunk_number:n,size,sha256});
+          const [sid,n,size,sha256,sessionId,ownerId]=args;const key=sid+":"+n,session=db.sessions.get(sessionId);
+          if(session&&session.owner_id===ownerId&&session.state==="uploading"&&!db.chunks.has(key))db.chunks.set(key,{session_id:sid,chunk_number:n,size,sha256});
           return {meta:{changes:db.chunks.has(key)?1:0}};
         }
         if(q.startsWith("UPDATE media_upload_chunks SET sha256")){
           const [sha256,sid,n]=args;const row=db.chunks.get(sid+":"+n);if(row&&!row.sha256)row.sha256=sha256;return {meta:{changes:row?1:0}};
         }
         if(q.startsWith("INSERT INTO media_upload_parts")){
-          const [sid,n,etag,size,sha256]=args;db.parts.set(sid+":"+n,{session_id:sid,part_number:n,etag,size,sha256});return {meta:{changes:1}};
+          const [sid,n,etag,size,sha256,sessionId,ownerId]=args;const session=db.sessions.get(sessionId),key=sid+":"+n;
+          if(session&&session.owner_id===ownerId&&session.state==="uploading"&&!db.parts.has(key))db.parts.set(key,{session_id:sid,part_number:n,etag,size,sha256});
+          return {meta:{changes:db.parts.has(key)?1:0}};
         }
         if(q.startsWith("INSERT INTO media_access")){
           const [objectKey,owner,recipient,group,fileName,contentType,expiresAt]=args;
@@ -66,7 +68,7 @@ class FakeD1 {
         if(q.startsWith("UPDATE media_upload_sessions SET state = 'completing'")){const r=db.sessions.get(args[0]);const now=Date.now();const stale=r&&r.updated_at&&Date.parse(r.updated_at.replace(" ","T")+"Z")<=now-120000;const claimed=Boolean(r&&r.owner_id===args[1]&&(r.state==="uploading"||(r.state==="completing"&&stale)));if(claimed){r.state="completing";r.updated_at=new Date(now).toISOString();}return {meta:{changes:claimed?1:0}};}
         if(q.startsWith("UPDATE media_upload_sessions SET state = 'uploading'")){const r=db.sessions.get(args[0]);if(r)r.state="uploading";return {meta:{changes:r?1:0}};}
         if(q.startsWith("UPDATE media_upload_sessions SET state = 'completed'")){const r=db.sessions.get(args[0]);if(r)r.state="completed";return {meta:{changes:r?1:0}};}
-        if(q.startsWith("UPDATE media_upload_sessions SET state = 'aborted'")){const r=db.sessions.get(args[0]);if(r)r.state="aborted";return {meta:{changes:r?1:0}};}
+        if(q.startsWith("UPDATE media_upload_sessions SET state = 'aborted'")){const r=db.sessions.get(args[0]);const changed=Boolean(r&&r.owner_id===args[1]&&r.state==="uploading");if(changed)r.state="aborted";return {meta:{changes:changed?1:0}};}
         if(q.startsWith("UPDATE media_upload_sessions SET updated_at")) return {meta:{changes:1}};
         if(q.startsWith("DELETE FROM media_upload_chunks")&&q.includes("BETWEEN")){for(const [k,r] of db.chunks)if(r.session_id===args[0]&&r.chunk_number>=args[1]&&r.chunk_number<=args[2])db.chunks.delete(k);return {meta:{changes:1}};}
         if(q.startsWith("DELETE FROM media_upload_chunks")){for(const [k,r] of db.chunks)if(r.session_id===args[0])db.chunks.delete(k);return {meta:{changes:1}};}
