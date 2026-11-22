@@ -4147,11 +4147,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                   child: field(status, ['photoUrl', 'photo_url']).isEmpty
                                       ? const Icon(Icons.person, size: 28)
                                       : Image.network(
-                                          '$apiBase\${field(status, ['photoUrl', 'photo_url'])}?v=\${Uri.encodeComponent(field(status, ['photoUpdatedAt', 'photo_updated_at']))}',
+                                          '$apiBase${field(status, ['photoUrl', 'photo_url'])}?v=${Uri.encodeComponent(field(status, ['photoUpdatedAt', 'photo_updated_at']))}',
                                           width: 58,
                                           height: 58,
                                           fit: BoxFit.cover,
-                                          headers: {'Authorization': 'Bearer \${Api.token}'},
+                                          headers: {'Authorization': 'Bearer ${Api.token}'},
                                           errorBuilder: (_, __, ___) => const Icon(Icons.person),
                                         ),
                                 ),
@@ -6585,14 +6585,14 @@ class _VideoAttachmentDialogState extends State<_VideoAttachmentDialog> {
       }
       return;
     }
-    final headers = {if (Api.token != null) 'Authorization': 'Bearer \${Api.token}'};
+    final headers = {if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'};
     final bases = <String>[mediaWorkerBase, if (apiBase != mediaWorkerBase) apiBase];
     Object? lastError;
     for (final base in bases) {
       VideoPlayerController? candidate;
       try {
         candidate = VideoPlayerController.networkUrl(
-          Uri.parse('$base/api/media/\${Uri.encodeComponent(id)}'),
+          Uri.parse('$base/api/media/${Uri.encodeComponent(id)}'),
           httpHeaders: headers,
         );
         await candidate.initialize().timeout(const Duration(minutes: 2));
