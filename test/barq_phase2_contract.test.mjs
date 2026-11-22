@@ -70,7 +70,8 @@ test("private conversation clear/delete is per-account and preserves contacts", 
   assert.ok(conversationMigration.includes("CREATE TABLE IF NOT EXISTS hidden_private_messages"));
   assert.ok(conversationMigration.includes("CREATE TABLE IF NOT EXISTS private_conversation_state"));
   assert.ok(worker.includes('path.match(/^\\/api\\/conversations\\/([^/]+)(\\/clear)?$/)'));
-  assert.ok(worker.includes("INSERT OR IGNORE INTO hidden_private_messages"));
+  assert.ok(worker.includes("INSERT INTO hidden_private_messages (user_id, message_id, hide_reason)"));
+  assert.ok(worker.includes("hide_reason = 'clear'"));
   assert.ok(worker.includes("hm.user_id = ? AND hm.message_id = messages.id"));
   assert.ok(worker.includes("chat_hidden"));
   assert.ok(worker.includes("A newly delivered private attachment is new conversation activity"));
@@ -914,7 +915,8 @@ test("private message delete-for-me hides only the authenticated participant cop
   const route = worker.slice(start, end);
   assert.ok(route.includes('url.searchParams.get("scope") === "me"'));
   assert.ok(route.includes("sender_id = ? OR receiver_id = ?"));
-  assert.ok(route.includes("INSERT OR IGNORE INTO hidden_private_messages"));
+  assert.ok(route.includes("INSERT INTO hidden_private_messages (user_id, message_id, hide_reason)"));
+  assert.ok(route.includes("hide_reason = 'clear'"));
   assert.ok(route.includes('DELETE FROM messages WHERE id = ? AND sender_id = ?'));
   assert.ok(flutterApp.includes("حذف لدي فقط"));
   assert.ok(flutterApp.includes("حذف لدى الجميع"));
