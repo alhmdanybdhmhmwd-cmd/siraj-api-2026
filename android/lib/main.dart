@@ -165,6 +165,8 @@ Future<FilePickerResult?> showBarqMediaPicker(
   required bool allowMultiple,
   required String title,
   bool withData = false,
+  bool allowFiles = true,
+  RequestType requestType = RequestType.common,
 }) async {
   final choice = await showModalBottomSheet<String>(
     context: context,
@@ -189,15 +191,20 @@ Future<FilePickerResult?> showBarqMediaPicker(
             Expanded(child: Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
           ]),
           const SizedBox(height: 14),
-          Row(children: [
-            Expanded(child: _BarqMediaChoice(
-              icon: Icons.photo_library_rounded, title: 'الصور والفيديو',
+          if (allowFiles)
+            Row(children: [
+              Expanded(child: _BarqMediaChoice(
+                icon: Icons.photo_library_rounded, title: 'الصور والفيديو',
+                subtitle: 'من معرض جهازك', onTap: () => Navigator.pop(sheetContext, 'media'))),
+              const SizedBox(width: 10),
+              Expanded(child: _BarqMediaChoice(
+                icon: Icons.folder_rounded, title: 'الملفات',
+                subtitle: 'مستندات وملفات أخرى', onTap: () => Navigator.pop(sheetContext, 'files'))),
+            ])
+          else
+            SizedBox(width: double.infinity, child: _BarqMediaChoice(
+              icon: Icons.photo_library_rounded, title: 'اختيار الصور',
               subtitle: 'من معرض جهازك', onTap: () => Navigator.pop(sheetContext, 'media'))),
-            const SizedBox(width: 10),
-            Expanded(child: _BarqMediaChoice(
-              icon: Icons.folder_rounded, title: 'الملفات',
-              subtitle: 'مستندات وملفات أخرى', onTap: () => Navigator.pop(sheetContext, 'files'))),
-          ]),
           const SizedBox(height: 10),
           Text(allowMultiple ? 'يمكنك تحديد عدة وسائط معاً.' : 'اختر عنصراً واحداً للإرسال.',
             style: TextStyle(color: palette.onSurface.withValues(alpha: .58), fontSize: 11)),
@@ -218,7 +225,7 @@ Future<FilePickerResult?> showBarqMediaPicker(
     context,
     pickerConfig: AssetPickerConfig(
       maxAssets: allowMultiple ? 10 : 1,
-      requestType: RequestType.common,
+      requestType: requestType,
       gridCount: 4,
       pageSize: 80,
       themeColor: Theme.of(context).colorScheme.primary,
@@ -5287,10 +5294,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     ],
                     OutlinedButton.icon(
                       onPressed: saving ? null : () async {
-                        final result = await FilePicker.platform.pickFiles(
-                          type: FileType.image,
+                        final result = await showBarqMediaPicker(
+                          dialogContext,
                           allowMultiple: true,
+                          title: 'اختيار صور للذكرى',
                           withData: true,
+                          allowFiles: false,
+                          requestType: RequestType.image,
                         );
                         if (result == null || result.files.isEmpty || !dialogContext.mounted) return;
                         final selected = <Map<String, dynamic>>[];
@@ -5473,10 +5483,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<void> pickProfilePhoto() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
+      final result = await showBarqMediaPicker(
+        context,
         allowMultiple: false,
+        title: 'اختيار صورة الملف الشخصي',
         withData: true,
+        allowFiles: false,
+        requestType: RequestType.image,
       );
       if (!mounted) return;
       if (result == null || result.files.isEmpty) return;
@@ -7533,7 +7546,7 @@ class ChatPage extends StatefulWidget {
   State<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends State<ChatPage> {
+class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   final controller = TextEditingController();
   List<Map<String, dynamic>> messages = [];
   final Map<String, String> translatedMessages = {};
@@ -7565,6 +7578,7 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     loadMessages();
     _loadChatWallpaper();
     nearbySubscription = BarqNearbyService.instance.events.listen((event) {
@@ -7577,14 +7591,35 @@ class _ChatPageState extends State<ChatPage> {
         loadMessages(silent: true);
       }
     });
-    // مزامنة الرسائل عبر REST/Vercel كل 5 ثوانٍ دون الاعتماد على workers.dev.
+    // مزامنة الرسائل عبر REST/Vercel كل 5 ثوانٍ أثناء ظهور التطبيق فقط.
+    _startRefreshTimer();
+  }
+
+  void _startRefreshTimer() {
+    refreshTimer?.cancel();
     refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (mounted && !sending && !refreshing) loadMessages(silent: true);
     });
   }
 
+  void _stopRefreshTimer() {
+    refreshTimer?.cancel();
+    refreshTimer = null;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _startRefreshTimer();
+      if (!refreshing) loadMessages(silent: true);
+    } else if (barqShouldPauseBackgroundWork(state)) {
+      _stopRefreshTimer();
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     refreshTimer?.cancel();
     _ephemeralExpiryTimer?.cancel();
     realtimeSubscription?.cancel();
@@ -8773,7 +8808,7 @@ class GroupChatPage extends StatefulWidget {
   State<GroupChatPage> createState() => _GroupChatPageState();
 }
 
-class _GroupChatPageState extends State<GroupChatPage> {
+class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserver {
   final controller = TextEditingController();
   List<Map<String, dynamic>> messages = [];
   final Map<String, String> translatedMessages = {};
@@ -8794,14 +8829,36 @@ class _GroupChatPageState extends State<GroupChatPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     loadMessages();
+    _startRefreshTimer();
+  }
+
+  void _startRefreshTimer() {
+    refreshTimer?.cancel();
     refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (mounted && !sending && !refreshing) loadMessages(silent: true);
     });
   }
 
+  void _stopRefreshTimer() {
+    refreshTimer?.cancel();
+    refreshTimer = null;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _startRefreshTimer();
+      if (!refreshing) loadMessages(silent: true);
+    } else if (barqShouldPauseBackgroundWork(state)) {
+      _stopRefreshTimer();
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     refreshTimer?.cancel();
     controller.dispose();
     super.dispose();
