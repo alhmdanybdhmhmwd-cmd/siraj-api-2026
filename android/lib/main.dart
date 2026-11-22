@@ -1105,8 +1105,12 @@ class Api {
     if (!RegExp(r'^(image/(jpeg|png|webp|gif)|video/(mp4|webm|quicktime))$').hasMatch(contentType)) {
       throw Exception('نوع الملف غير مدعوم في SPARK.');
     }
+    // Small SPARK media travels through the Vercel proxy so networks that
+    // restrict workers.dev can still publish. Large media stays direct to the
+    // Worker to avoid Vercel's request-body limit.
+    final uploadBase = bytes.length <= proxyMediaThresholdBytes ? apiBase : mediaWorkerBase;
     final response = await http.post(
-      Uri.parse('$mediaWorkerBase/api/statuses/media'),
+      Uri.parse('$uploadBase/api/statuses/media'),
       headers: {
         if (token != null) 'Authorization': 'Bearer $token',
         'Content-Type': contentType,
