@@ -5899,6 +5899,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
     );
     nameController.dispose();
+    phoneController.dispose();
   }
 
   Future<void> rotateRecoveryCodeDialog() async {
@@ -6044,8 +6045,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
       ),
     );
-    nameController.dispose();
-    phoneController.dispose();
   }
 
   Widget _accountPage() {
