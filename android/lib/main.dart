@@ -18,8 +18,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:wechat_assets_picker/wechat_assets_picker.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:google_mlkit_translation/google_mlkit_translation.dart';
-import 'package:app_links/app_links.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:nearby_connections/nearby_connections.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -385,35 +383,6 @@ class BarqFeatures {
   }
 }
 
-/// يستخرج رمز الدعوة من رابط برق فقط، ويرفض الروابط الخارجية أو الرموز غير المطابقة.
-String? barqInviteCodeFromUri(Uri uri) {
-  if (uri.scheme != 'barq' ||
-      uri.host != 'invite' ||
-      uri.userInfo.isNotEmpty ||
-      uri.hasPort ||
-      uri.fragment.isNotEmpty) {
-    return null;
-  }
-
-  final segments = uri.pathSegments;
-  final query = uri.queryParametersAll;
-  String? rawCode;
-  if (segments.length == 1 &&
-      segments.single.isNotEmpty &&
-      query.isEmpty) {
-    rawCode = segments.single;
-  } else if (segments.isEmpty &&
-      query.length == 1 &&
-      query['code']?.length == 1) {
-    rawCode = query['code']!.single;
-  } else {
-    return null;
-  }
-
-  final code = rawCode.trim().toUpperCase();
-  return RegExp(r'^[A-F0-9]{12}$').hasMatch(code) ? code : null;
-}
-
 /// يتحقق من هوية طرفي رسالة Nearby وحدودها قبل إدخالها إلى صندوق الرسائل المحلي.
 bool isValidBarqNearbyTextPayload(
   Map<String, dynamic> payload, {
@@ -464,37 +433,6 @@ bool isValidBarqNearbyOutgoingText({
     RegExp(r'^[a-f0-9]{32}$').hasMatch(messageId) &&
     isBarqMessageTextAllowed(body);
 
-/// استقبال روابط الدعوة barq://invite/CODE حتى عند فتح التطبيق من رابط خارجي.
-class BarqInviteLinks {
-  static final AppLinks _links = AppLinks();
-  static StreamSubscription<Uri>? _subscription;
-  static final ValueNotifier<String?> pendingCode = ValueNotifier<String?>(null);
-  static const String _pendingKey = 'barq_pending_invite_code';
-
-  static Future<void> initialize() async {
-    _subscription ??= _links.uriLinkStream.listen((uri) => _handle(uri));
-    try {
-      final initial = await _links.getInitialLink();
-      if (initial != null) await _handle(initial);
-    } catch (_) {}
-    try {
-      pendingCode.value = await storage.read(key: _pendingKey);
-    } catch (_) {}
-  }
-
-  static Future<void> _handle(Uri uri) async {
-    final code = barqInviteCodeFromUri(uri);
-    if (code == null) return;
-    pendingCode.value = code;
-    try { await storage.write(key: _pendingKey, value: code); } catch (_) {}
-  }
-
-  static Future<void> clear() async {
-    pendingCode.value = null;
-    try { await storage.delete(key: _pendingKey); } catch (_) {}
-  }
-}
-
 /// ترجمة محلية على الجهاز؛ النص الأصلي لا يُستبدل ولا يُرسل إلى الخادم.
 class BarqTranslator {
   static Future<String> translateArabicEnglish(String original) async {
@@ -526,7 +464,6 @@ Future<void> main() async {
   } catch (_) {}
   await BarqFeatures.load();
   await BarqIdentity.load();
-  await BarqInviteLinks.initialize();
   runApp(const SirajApp());
 }
 
@@ -1048,7 +985,6 @@ class Api {
     required String displayName,
     required String password,
     required String phone,
-    String? inviteCode,
   }) async {
     lastRecoveryCode = null;
     final privateUsername = barqPrivateRegistrationUsername(phone);
@@ -1060,8 +996,6 @@ class Api {
       'username': privateUsername,
       'password': password,
       'phone': phone,
-      if (inviteCode != null && inviteCode.trim().isNotEmpty)
-        'inviteCode': inviteCode.trim().toUpperCase(),
     });
     token = data['token']?.toString();
     if (token == null || token!.isEmpty) throw Exception('لم يستلم التطبيق رمز الدخول من الخادم.');
@@ -1145,9 +1079,6 @@ class Api {
   }) async => _map((await request('POST', '/api/notification-settings', body: {
         'messages': messages, 'groups': groups, 'statuses': statuses,
       }))['settings']);
-
-  static Future<Map<String, dynamic>> referrals() async =>
-      _map(await request('GET', '/api/referrals'));
 
   static Future<List<Map<String, dynamic>>> friends() async =>
       _list((await request('GET', '/api/friends'))['friends']);
@@ -3214,7 +3145,6 @@ class _LoginPageState extends State<LoginPage> {
   final username = TextEditingController(); // login identifier: phone or username
   final phone = TextEditingController();
   final password = TextEditingController();
-  final inviteCode = TextEditingController();
   bool registering = false;
   bool busy = false;
   bool obscurePassword = true;
@@ -3224,23 +3154,12 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
-    BarqInviteLinks.pendingCode.addListener(_applyPendingInvite);
-    _applyPendingInvite();
-  }
-
-  void _applyPendingInvite() {
-    final code = BarqInviteLinks.pendingCode.value;
-    if (code != null && code.isNotEmpty && mounted) {
-      inviteCode.text = code;
-      if (!registering) setState(() => registering = true);
-    }
   }
 
   @override
   void dispose() {
-    BarqInviteLinks.pendingCode.removeListener(_applyPendingInvite);
     name.dispose(); username.dispose();
-    phone.dispose(); password.dispose(); inviteCode.dispose();
+    phone.dispose(); password.dispose();
     super.dispose();
   }
 
@@ -3345,11 +3264,9 @@ class _LoginPageState extends State<LoginPage> {
               displayName: name.text.trim(),
               password: password.text,
               phone: _normalizedInternationalPhone(phone.text),
-              inviteCode: inviteCode.text.trim().isEmpty ? null : inviteCode.text.trim(),
             )
           : await Api.login(username.text.trim(), password.text);
       if (registering) {
-        await BarqInviteLinks.clear();
         final code = Api.lastRecoveryCode;
         if (code != null && code.isNotEmpty && mounted) {
           await showRecoveryCodeDialog(context, code);
@@ -3470,7 +3387,6 @@ class _LoginPageState extends State<LoginPage> {
                                 const SizedBox(height: 10),
                                 _input(phone, 'رقم الهاتف', Icons.phone_android, isPhone: true),
                                 const SizedBox(height: 13),
-                                _input(inviteCode, 'رمز دعوة صديق', Icons.bolt_outlined, optional: true),
                               ] else ...[
                                 _input(username, 'رقم الهاتف أو اسم المستخدم', Icons.person_search),
                               ],
@@ -3766,7 +3682,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool loading = true;
   Map<String, dynamic> privacySettings = {'searchable': true, 'readReceipts': true};
   Map<String, dynamic> notificationPrefs = {'messages': true, 'groups': true, 'statuses': true};
-  Map<String, dynamic> referralStats = {};
   Timer? offlineSyncTimer;
   bool _handlingNotificationTap = false;
 
@@ -3954,11 +3869,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       } catch (_) {
         // Preserve previously loaded memories; a network error must not look like an empty vault.
         memoriesLoadFailed = true;
-      }
-      try {
-        referralStats = await Api.referrals();
-      } catch (_) {
-        // يبقى التطبيق متاحًا قبل نشر مسارات الإحالات.
       }
     } catch (e) {
       if (mounted) showMsg(context, cleanError(e));
@@ -5754,53 +5664,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (mounted) showMsg(context, cleanError(e));
     } finally {
       passwordController.dispose();
-    }
-  }
-
-  Future<void> inviteFriendsDialog() async {
-    try {
-      final stats = await Api.referrals();
-      if (!mounted) return;
-      setState(() => referralStats = stats);
-      final code = field(stats, ['inviteCode']);
-      if (code.isEmpty) throw Exception('لم يتم إنشاء رمز الدعوة بعد.');
-      final link = 'barq://invite/$code';
-      await showDialog<void>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          backgroundColor: Theme.of(context).colorScheme.surface,
-          title: const Text('ادعُ أصدقاءك إلى برق'),
-          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            const Text('هذا رابط دعوتك الخاص لمشاركة برق مع من تختار.'),
-            const SizedBox(height: 14),
-            Text('رمز الدعوة', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
-            SelectableText(code, textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: 2)),
-            const SizedBox(height: 10),
-            SelectableText(link, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
-            const SizedBox(height: 8),
-            const Text('الرابط يفتح برق إذا كان مثبتًا على جهاز صديقك. ويمكنه إدخال الرمز يدويًا أثناء التسجيل.', style: TextStyle(color: Colors.white60, fontSize: 12)),
-          ]),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق')),
-            TextButton.icon(
-              onPressed: () async {
-                await Clipboard.setData(ClipboardData(text: link));
-                if (dialogContext.mounted) showMsg(dialogContext, 'تم نسخ رابط الدعوة.');
-              },
-              icon: const Icon(Icons.copy), label: const Text('نسخ الرابط'),
-            ),
-            FilledButton.icon(
-              style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary),
-              onPressed: () => SharePlus.instance.share(
-                ShareParams(text: 'انضم إلى برق! استخدم رمز الدعوة $code أو افتح الرابط: $link'),
-              ),
-              icon: const Icon(Icons.share), label: const Text('مشاركة'),
-            ),
-          ],
-        ),
-      );
-    } catch (e) {
-      if (mounted) showMsg(context, cleanError(e));
     }
   }
 
