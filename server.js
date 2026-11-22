@@ -1,7 +1,7 @@
 
 const http = require("http");
 
-const UPSTREAM = "https://siraj-api.alhmdanybdhmhmwd.workers.dev";
+const UPSTREAM = (process.env.BARQ_API_UPSTREAM || "https://siraj-api.alhmdanybdhmhmwd.workers.dev").replace(/\\/+$/, "");
 
 const server = http.createServer(async (req, res) => {
   const cors = {
