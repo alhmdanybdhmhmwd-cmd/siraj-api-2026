@@ -9218,8 +9218,8 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
       }
       final excerpt = widget.caption.trim().isEmpty
           ? 'لحظة من SPARK'
-          : widget.caption.trim().replaceAll(RegExp(r'\\s+'), ' ');
-      await Api.sendMessage(widget.authorId, '🎙️ رد صوتي على SPARK\\n$excerpt');
+          : widget.caption.trim().replaceAll(RegExp(r'\s+'), ' ');
+      await Api.sendMessage(widget.authorId, '🎙️ رد صوتي على SPARK\n$excerpt');
       await Api.uploadAttachment(
         bytes: bytes,
         fileName: 'barq_spark_reply_${DateTime.now().millisecondsSinceEpoch}.m4a',
