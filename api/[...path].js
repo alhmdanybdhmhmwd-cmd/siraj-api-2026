@@ -45,23 +45,35 @@ module.exports = async (req, res) => {
     const isMultipartPartUpload = req.method === "PUT" &&
       /^\/api\/media\/uploads\/[A-Za-z0-9-]{1,128}\/parts\/\d+$/.test(requestPath);
     const isProfilePhotoUpload = req.method === "POST" &&
-      requestPath.startsWith("/api/profile/photo/");
-    const maxMediaBytes = 60 * 1024 * 1024;
+      /^\/api\/profile\/photo\/[^/]+$/.test(requestPath);
+    const isPrivateMemoryPhotoUpload = req.method === "POST" &&
+      /^\/api\/private-memories\/[^/]+\/media$/.test(requestPath);
+    const isSparkMediaUpload = req.method === "POST" && requestPath === "/api/statuses/media";
+    const isSparkAudioReplyUpload = req.method === "POST" &&
+      /^\/api\/statuses\/[^/]+\/audio-replies$/.test(requestPath);
+    const isTranscriptionUpload = req.method === "POST" && requestPath === "/api/transcribe";
+    const maxProxyBinaryBytes = 4 * 1024 * 1024;
+    const maxTranscriptionBytes = 2 * 1024 * 1024;
     const maxMultipartChunkBytes = 1 * 1024 * 1024;
-    const maxMultipartPartBytes = 5 * 1024 * 1024;
-    const maxProfilePhotoBytes = 4 * 1024 * 1024;
+    const maxJsonBytes = 256 * 1024;
+    const bodyLimit = isMultipartChunkUpload
+      ? maxMultipartChunkBytes
+      : isTranscriptionUpload
+        ? maxTranscriptionBytes
+        : isMediaUpload || isMultipartPartUpload || isProfilePhotoUpload ||
+          isPrivateMemoryPhotoUpload || isSparkMediaUpload || isSparkAudioReplyUpload
+          ? maxProxyBinaryBytes
+          : maxJsonBytes;
+    const limitMessage = isTranscriptionUpload
+      ? "Audio transcription payload must not exceed 2 MiB"
+      : isMultipartChunkUpload
+        ? "Transport chunk must not exceed 1 MiB"
+        : bodyLimit === maxProxyBinaryBytes
+          ? "Binary uploads through the Vercel proxy must not exceed 4 MiB"
+          : "Request body must not exceed 256 KiB";
     const declaredLength = Number(req.headers["content-length"]);
-    if (isMediaUpload && Number.isFinite(declaredLength) && declaredLength > maxMediaBytes) {
-      return res.status(413).json({ error: "File must be between 1 byte and 60 MB" });
-    }
-    if (isMultipartChunkUpload && Number.isFinite(declaredLength) && declaredLength > maxMultipartChunkBytes) {
-      return res.status(413).json({ error: "Transport chunk must not exceed 1 MiB" });
-    }
-    if (isMultipartPartUpload && Number.isFinite(declaredLength) && declaredLength > maxMultipartPartBytes) {
-      return res.status(413).json({ error: "Multipart part must not exceed 5 MiB" });
-    }
-    if (isProfilePhotoUpload && Number.isFinite(declaredLength) && declaredLength > maxProfilePhotoBytes) {
-      return res.status(413).json({ error: "Profile photo must not exceed 4 MiB" });
+    if (Number.isFinite(declaredLength) && declaredLength > bodyLimit) {
+      return res.status(413).json({ error: limitMessage });
     }
 
     const chunks = [];
@@ -70,17 +82,8 @@ module.exports = async (req, res) => {
     for await (const chunk of req) {
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       receivedBytes += buffer.length;
-      if (isMediaUpload && receivedBytes > maxMediaBytes) {
-        return res.status(413).json({ error: "File must be between 1 byte and 60 MB" });
-      }
-      if (isMultipartChunkUpload && receivedBytes > maxMultipartChunkBytes) {
-        return res.status(413).json({ error: "Transport chunk must not exceed 1 MiB" });
-      }
-      if (isMultipartPartUpload && receivedBytes > maxMultipartPartBytes) {
-        return res.status(413).json({ error: "Multipart part must not exceed 5 MiB" });
-      }
-      if (isProfilePhotoUpload && receivedBytes > maxProfilePhotoBytes) {
-        return res.status(413).json({ error: "Profile photo must not exceed 4 MiB" });
+      if (receivedBytes > bodyLimit) {
+        return res.status(413).json({ error: limitMessage });
       }
       chunks.push(buffer);
     }
