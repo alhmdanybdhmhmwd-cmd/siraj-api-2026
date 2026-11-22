@@ -3140,9 +3140,27 @@ export default {
           const body = await readJsonRequestLimited(request);
           const message = String(body.body || "").trim();
           if (!message || message.length > 5000) return json({ error: "Invalid message" }, 400);
-          await env.DB.prepare(
-            "UPDATE group_messages SET body = ?, edited_at = CURRENT_TIMESTAMP WHERE id = ? AND group_id = ? AND sender_id = ?"
-          ).bind(message, messageId, groupId, currentUser.sub).run();
+          const attachment = parseMessageAttachment(owned.body);
+          if (attachment) {
+            const expiresAt = new Date().toISOString();
+            await env.DB.prepare("CREATE TABLE IF NOT EXISTS media_expirations (object_key TEXT PRIMARY KEY, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
+            await env.DB.prepare("CREATE TABLE IF NOT EXISTS media_access (object_key TEXT PRIMARY KEY, owner_id TEXT NOT NULL, recipient_id TEXT, group_id TEXT, file_name TEXT NOT NULL, content_type TEXT NOT NULL, expires_at TEXT NOT NULL)").run();
+            await env.DB.batch([
+              env.DB.prepare("INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?) ON CONFLICT(object_key) DO UPDATE SET expires_at = excluded.expires_at").bind(attachment.attachmentId, expiresAt),
+              env.DB.prepare(
+                `INSERT INTO media_access (object_key, owner_id, recipient_id, group_id, file_name, content_type, expires_at)
+                 VALUES (?, ?, NULL, ?, ?, ?, ?)
+                 ON CONFLICT(object_key) DO UPDATE SET owner_id = excluded.owner_id,
+                   recipient_id = NULL, group_id = excluded.group_id, file_name = excluded.file_name,
+                   content_type = excluded.content_type, expires_at = excluded.expires_at`
+              ).bind(attachment.attachmentId, currentUser.sub, groupId, attachment.fileName, attachment.contentType, expiresAt),
+              env.DB.prepare("UPDATE group_messages SET body = ?, edited_at = CURRENT_TIMESTAMP WHERE id = ? AND group_id = ? AND sender_id = ?").bind(message, messageId, groupId, currentUser.sub)
+            ]);
+          } else {
+            await env.DB.prepare(
+              "UPDATE group_messages SET body = ?, edited_at = CURRENT_TIMESTAMP WHERE id = ? AND group_id = ? AND sender_id = ?"
+            ).bind(message, messageId, groupId, currentUser.sub).run();
+          }
           return json({ message: "Message updated", id: messageId, body: message, editedAt: true });
         }
         // Remove per-message interaction metadata in the same D1 batch as the
@@ -3631,9 +3649,27 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           const body = await readJsonRequestLimited(request);
           const message = String(body.body || "").trim();
           if (!message || message.length > 5000) return json({ error: "Invalid message" }, 400);
-          await env.DB.prepare(
-            "UPDATE messages SET body = ?, edited_at = CURRENT_TIMESTAMP WHERE id = ? AND sender_id = ?"
-          ).bind(message, messageId, currentUser.sub).run();
+          const attachment = parseMessageAttachment(owned.body);
+          if (attachment) {
+            const expiresAt = new Date().toISOString();
+            await env.DB.prepare("CREATE TABLE IF NOT EXISTS media_expirations (object_key TEXT PRIMARY KEY, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
+            await env.DB.prepare("CREATE TABLE IF NOT EXISTS media_access (object_key TEXT PRIMARY KEY, owner_id TEXT NOT NULL, recipient_id TEXT, group_id TEXT, file_name TEXT NOT NULL, content_type TEXT NOT NULL, expires_at TEXT NOT NULL)").run();
+            await env.DB.batch([
+              env.DB.prepare("INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?) ON CONFLICT(object_key) DO UPDATE SET expires_at = excluded.expires_at").bind(attachment.attachmentId, expiresAt),
+              env.DB.prepare(
+                `INSERT INTO media_access (object_key, owner_id, recipient_id, group_id, file_name, content_type, expires_at)
+                 VALUES (?, ?, ?, NULL, ?, ?, ?)
+                 ON CONFLICT(object_key) DO UPDATE SET owner_id = excluded.owner_id,
+                   recipient_id = excluded.recipient_id, group_id = NULL, file_name = excluded.file_name,
+                   content_type = excluded.content_type, expires_at = excluded.expires_at`
+              ).bind(attachment.attachmentId, currentUser.sub, owned.receiver_id, attachment.fileName, attachment.contentType, expiresAt),
+              env.DB.prepare("UPDATE messages SET body = ?, edited_at = CURRENT_TIMESTAMP WHERE id = ? AND sender_id = ?").bind(message, messageId, currentUser.sub)
+            ]);
+          } else {
+            await env.DB.prepare(
+              "UPDATE messages SET body = ?, edited_at = CURRENT_TIMESTAMP WHERE id = ? AND sender_id = ?"
+            ).bind(message, messageId, currentUser.sub).run();
+          }
           return json({ message: "Message updated", id: messageId, body: message, editedAt: true });
         }
         const scopeId = [owned.sender_id, owned.receiver_id].sort().join(":");
