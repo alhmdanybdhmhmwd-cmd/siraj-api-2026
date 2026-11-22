@@ -4673,6 +4673,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           caption: field(status, ['content']),
           backgroundKey: field(status, ['backgroundKey', 'background_key'], 'midnight'),
           textColorKey: field(status, ['textColorKey', 'text_color_key'], 'white'),
+          viewCount: int.tryParse((status['viewCount'] ?? 0).toString()) ?? 0,
+          showViewCount: status['userId']?.toString() == myId,
           fontKey: field(status, ['fontKey', 'font_key'], 'modern'),
         ),
       ),
@@ -9076,9 +9078,12 @@ class SparkMediaViewer extends StatefulWidget {
   final String backgroundKey;
   final String textColorKey;
   final String fontKey;
+  final int viewCount;
+  final bool showViewCount;
   const SparkMediaViewer({
     super.key, required this.statusId, required this.media, required this.author, required this.caption,
     this.backgroundKey = 'midnight', this.textColorKey = 'white', this.fontKey = 'modern',
+    this.viewCount = 0, this.showViewCount = false,
   });
 
   @override
@@ -9221,7 +9226,34 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
     final headers = <String, String>{if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'};
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(backgroundColor: Colors.black, title: Text(widget.author), foregroundColor: Colors.white),
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        title: Text(widget.author),
+        foregroundColor: Colors.white,
+        actions: [
+          if (widget.showViewCount)
+            Padding(
+              padding: const EdgeInsetsDirectional.only(end: 12),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: gold.withValues(alpha: .14),
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(color: gold.withValues(alpha: .42)),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.visibility_outlined, size: 16, color: gold),
+                    const SizedBox(width: 6),
+                    Text('${widget.viewCount}', style: const TextStyle(
+                      color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800,
+                    )),
+                  ]),
+                ),
+              ),
+            ),
+        ],
+      ),
       body: SafeArea(
         child: Column(children: [
           Expanded(
@@ -9968,8 +10000,34 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                         constraints: const BoxConstraints(maxWidth: 310),
                         margin: const EdgeInsets.symmetric(vertical: 4),
                         padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: mine ? Theme.of(context).colorScheme.primary.withValues(alpha: .18) : Theme.of(context).colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(15)),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topRight,
+                            end: Alignment.bottomLeft,
+                            colors: mine
+                                ? [
+                                    Theme.of(context).colorScheme.primary.withValues(alpha: .23),
+                                    Theme.of(context).colorScheme.secondary.withValues(alpha: .09),
+                                  ]
+                                : [
+                                    Theme.of(context).colorScheme.surfaceContainerHighest,
+                                    Theme.of(context).colorScheme.surface,
+                                  ],
+                          ),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: mine
+                                ? Theme.of(context).colorScheme.primary.withValues(alpha: .24)
+                                : Theme.of(context).colorScheme.outline.withValues(alpha: .12),
+                          ),
+                          boxShadow: [BoxShadow(
+                            color: mine
+                                ? Theme.of(context).colorScheme.primary.withValues(alpha: .07)
+                                : Colors.black.withValues(alpha: .07),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          )],
+                        ),
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           if (field(m, ['reply_to_id']).isNotEmpty)
                             Container(
