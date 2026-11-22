@@ -53,6 +53,11 @@ assert.ok(a.token && b.user?.id);
 await json("/api/contacts", {
   method: "POST", token: a.token, expected: 201, body: { userId: b.user.id }
 });
+// Hide the conversation first: completing a new private media upload must
+// restore the chat row and create exactly one visible attachment message.
+await request("/api/conversations/" + encodeURIComponent(b.user.id), {
+  method: "DELETE", token: a.token, expected: 200
+});
 
 const MiB = 1024 * 1024;
 const totalSize = 5 * MiB + 17;
@@ -89,6 +94,18 @@ const attachmentId = completed.attachment?.attachmentId;
 assert.ok(attachmentId, "completion must return a final attachment identifier");
 assert.equal(completed.attachment.size, totalSize);
 
+const chat = await json("/api/messages?with=" + encodeURIComponent(b.user.id), { token: a.token });
+const attachmentMessages = (chat.messages || []).filter(message => message.id === sessionId);
+assert.equal(attachmentMessages.length, 1, "resumable upload must create exactly one chat message");
+const attachmentBody = JSON.parse(attachmentMessages[0].body);
+assert.equal(attachmentBody.type, "attachment");
+assert.equal(attachmentBody.attachmentId, attachmentId);
+const friends = await json("/api/friends", { token: a.token });
+const restoredChat = (friends.friends || friends.contacts || []).find(friend =>
+  (friend.id || friend.userId) === b.user.id);
+assert.ok(restoredChat && restoredChat.chatHidden !== true,
+  "a newly delivered resumable attachment must restore the private conversation");
+
 const downloaded = await request("/api/media/" + encodeURIComponent(attachmentId), {
   token: a.token, expected: 200
 });
@@ -113,8 +130,11 @@ const retry = await json(`/api/media/uploads/${sessionId}/complete`, {
   method: "POST", token: a.token, expected: 200, body: {}
 });
 assert.equal(retry.alreadyCompleted, true, "completion retry must be idempotent");
+const afterRetry = await json("/api/messages?with=" + encodeURIComponent(b.user.id), { token: a.token });
+assert.equal((afterRetry.messages || []).filter(message => message.id === sessionId).length, 1,
+  "completion retry must not duplicate the attachment chat message");
 
-console.log("Preview media integration passed: 5 MiB+17 upload via 1 MiB chunks, multipart completion, exact SHA-256 readback, HTTP Range, recipient authorization, and completion retry.");
+console.log("Preview media integration passed: resumable upload creates one visible chat message, restores a hidden conversation, exact SHA-256 readback, HTTP Range, recipient authorization, and idempotent completion.");
 
 
 }
