@@ -445,8 +445,8 @@ await call("/api/messages", {
   body: { receiverId: a.user.id, body: "blocked message " + suffix },
   expected: 403
 });
-await call("/api/blocks", {
-  method: "DELETE", token: a.token, body: { userId: b.user.id }
+await call("/api/blocks?userId=" + encodeURIComponent(b.user.id), {
+  method: "DELETE", token: a.token
 });
 console.log("Preview integration passed: legacy/current signup and phone login, profile/privacy/contacts, private message edit/pin/reactions, private-memory owner isolation/photo access, SPARK text replies/reactions, captioned media upload/feed/download, ephemeral expiry, blocking, and access guards.");
 
