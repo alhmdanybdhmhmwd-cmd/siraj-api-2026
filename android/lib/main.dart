@@ -7620,7 +7620,7 @@ class _ChatPageState extends State<ChatPage> {
     setState(() => sending = true);
     try {
       if (ephemeralMode) {
-        if (replyToMessage != null) throw Exception('الرسائل المؤقتة لا تدعم الرد على رسالة أخرى. ألغِ الرد أولاً.');
+        if (replySnapshot != null) throw Exception('الرسائل المؤقتة لا تدعم الرد على رسالة أخرى. ألغِ الرد أولاً.');
         await Api.sendEphemeralMessage(friendId, text);
       } else {
         final messageId = newBarqMessageId();
