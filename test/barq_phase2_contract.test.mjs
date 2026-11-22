@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const worker = await readFile(new URL("../src/src/index.js", import.meta.url), "utf8");
+const multipartRoutes = await readFile(new URL("../src/src/media_multipart_routes.js", import.meta.url), "utf8");
 const flutterApp = await readFile(new URL("../android/lib/main.dart", import.meta.url), "utf8");
 const androidManifest = await readFile(new URL("../android/android/app/src/main/AndroidManifest.xml", import.meta.url), "utf8");
 const testConfig = await readFile(new URL("../wrangler.test.toml", import.meta.url), "utf8");
@@ -827,6 +828,18 @@ test("private memory photos are owner-only, size-limited, and scheduled for clea
   assert.ok(route.includes("INSERT INTO media_expirations (object_key, expires_at)"));
   assert.ok(route.includes("DELETE FROM media_access WHERE object_key = ?"));
   assert.ok(route.includes("DELETE FROM private_memory_media WHERE memory_id = ? AND owner_id = ? AND object_key = ?"));
+});
+
+test("resumable media completion persists one visible private or group attachment message", () => {
+  assert.ok(multipartRoutes.includes('const attachmentBody = JSON.stringify({'));
+  assert.ok(multipartRoutes.includes('attachmentId: session.object_key'));
+  assert.ok(multipartRoutes.includes('INSERT OR IGNORE INTO messages (id, sender_id, receiver_id, body)'));
+  assert.ok(multipartRoutes.includes('INSERT OR IGNORE INTO group_messages (id, group_id, sender_id, body)'));
+  assert.ok(multipartRoutes.includes(').bind(sessionId, currentUser.sub, session.recipient_id, attachmentBody)'));
+  assert.ok(multipartRoutes.includes(').bind(sessionId, session.group_id, currentUser.sub, attachmentBody)'));
+  assert.ok(multipartRoutes.includes('INSERT INTO private_conversation_state (user_id, peer_id, hidden_at, updated_at)'));
+  assert.ok(multipartRoutes.includes('The upload session ID is also the stable message ID'));
+  assert.ok(multipartRoutes.includes('ON CONFLICT(user_id, peer_id) DO UPDATE SET hidden_at = NULL'));
 });
 
 test("Worker CORS matches the public gateway for resumable media and range downloads", () => {
