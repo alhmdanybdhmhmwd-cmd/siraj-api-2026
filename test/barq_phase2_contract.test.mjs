@@ -916,7 +916,7 @@ test("private message delete-for-me hides only the authenticated participant cop
   assert.ok(route.includes('url.searchParams.get("scope") === "me"'));
   assert.ok(route.includes("sender_id = ? OR receiver_id = ?"));
   assert.ok(route.includes("INSERT INTO hidden_private_messages (user_id, message_id, hide_reason)"));
-  assert.ok(route.includes("hide_reason = 'clear'"));
+  assert.ok(worker.includes("hide_reason = 'clear'"));
   assert.ok(route.includes('DELETE FROM messages WHERE id = ? AND sender_id = ?'));
   assert.ok(flutterApp.includes("حذف لدي فقط"));
   assert.ok(flutterApp.includes("حذف لدى الجميع"));
