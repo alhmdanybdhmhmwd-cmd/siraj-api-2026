@@ -799,6 +799,7 @@ void main() {
     expect(barqSparkMediaContentType('webp'), 'image/webp');
     expect(barqSparkMediaContentType('gif'), 'image/gif');
     expect(barqSparkMediaContentType('mp4'), 'video/mp4');
+    expect(barqSparkMediaContentType('m4v'), 'video/mp4');
     expect(barqSparkMediaContentType('webm'), 'video/webm');
     expect(barqSparkMediaContentType('MOV'), 'video/quicktime');
     expect(barqSparkMediaContentType('exe'), isNull);
