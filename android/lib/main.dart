@@ -7440,14 +7440,14 @@ class _BarqMediaViewerState extends State<_BarqMediaViewer> {
       }
       return;
     }
-    final headers = {if (Api.token != null) 'Authorization': 'Bearer \${Api.token}'};
+    final headers = {if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'};
     final bases = <String>[apiBase, if (mediaWorkerBase != apiBase) mediaWorkerBase];
     Object? lastError;
     for (final base in bases) {
       VideoPlayerController? candidate;
       try {
         candidate = VideoPlayerController.networkUrl(
-          Uri.parse('$base/api/media/\${Uri.encodeComponent(id)}'),
+          Uri.parse('$base/api/media/${Uri.encodeComponent(id)}'),
           httpHeaders: headers,
         );
         await candidate.initialize().timeout(const Duration(minutes: 2));
