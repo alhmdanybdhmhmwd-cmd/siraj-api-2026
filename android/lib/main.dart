@@ -2276,8 +2276,8 @@ Future<void> forwardBarqMessage(BuildContext context, Map<String, dynamic> messa
   }
   try {
     final results = await Future.wait([Api.friends(), Api.groups()]);
-    final contacts = results[0] as List<Map<String, dynamic>>;
-    final groups = results[1] as List<Map<String, dynamic>>;
+    final contacts = results[0];
+    final groups = results[1];
     if (!context.mounted) return;
     final target = await showDialog<Map<String, String>>(
       context: context,
