@@ -7667,14 +7667,14 @@ class _ChatPageState extends State<ChatPage> {
           await BarqOfflineQueue.enqueueOutgoing(localMessage);
           var deliveredNearby = false;
           try {
-            if (replySnapshot == null) {
+            if (replySnapshot == null && messageId != null) {
               deliveredNearby = await BarqNearbyService.instance.sendTextMessage(
                 receiverId: friendId, messageId: messageId, body: text, senderId: widget.currentUserId,
               );
             }
           } catch (_) {}
           if (mounted) {
-            setState(() => messages = mergeMessages(messages, [{...localMessage!, 'is_sending': false, 'is_offline_pending': true}]));
+            setState(() => messages = mergeMessages(messages, [{...localMessage, 'is_sending': false, 'is_offline_pending': true}]));
             showMsg(context, deliveredNearby
                 ? 'أُرسلت الرسالة عبر الاتصال القريب، وستُزامن مع الخادم عند عودة الإنترنت.'
                 : replySnapshot != null
