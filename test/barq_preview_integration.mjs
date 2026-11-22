@@ -146,9 +146,7 @@ assert.ok(!bAfterDeleteForMe.messages.some(message => message.id === deleteForMe
 const aAfterDeleteForMe = await call("/api/messages?with=" + encodeURIComponent(b.user.id), { token: a.token });
 assert.ok(aAfterDeleteForMe.messages.some(message => message.id === deleteForMeId),
   "delete-for-me must preserve the other participant's message");
-await call("/api/messages/" + encodeURIComponent(deleteForMeId) + "?scope=me", {
-  method: "DELETE", token: legacyLogin.token, expected: 404
-});
+
 
 const secondPrivateId = randomUUID().replaceAll("-", "");
 await call("/api/messages", {
@@ -299,6 +297,9 @@ const legacyLogin = await call("/api/login", {
 });
 assert.equal(legacyLogin.user.id, legacyRegistration.user.id,
   "legacy registration account must be able to sign in by phone");
+await call("/api/messages/" + encodeURIComponent(deleteForMeId) + "?scope=me", {
+  method: "DELETE", token: legacyLogin.token, expected: 404
+});
 await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages/" +
   encodeURIComponent(groupInteractionMessage.id) + "/pin", {
     method: "POST", token: legacyLogin.token, expected: 404
