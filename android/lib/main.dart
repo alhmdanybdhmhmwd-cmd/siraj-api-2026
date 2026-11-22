@@ -2106,9 +2106,7 @@ Widget messageReactionBar({
   required Map<String, dynamic> message,
   required String currentUserId,
   required Future<void> Function(String emoji, bool remove) onReaction,
-  Future<void> Function()? onPin,
   Future<void> Function()? onSaveMemory,
-  bool isPinned = false,
 }) {
   final reactions = normalizeMessageReactions(message['reactions']);
   final grouped = <String, List<Map<String, dynamic>>>{};
@@ -7226,6 +7224,7 @@ class _ChatPageState extends State<ChatPage> {
   void initState() {
     super.initState();
     loadMessages();
+    _loadChatWallpaper();
     nearbySubscription = BarqNearbyService.instance.events.listen((event) {
       if (event['type'] == 'message_received' && event['senderId'] == friendId) {
         loadMessages(silent: true);
@@ -7505,6 +7504,14 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
+  Future<void> _loadChatWallpaper() async {
+    try {
+      final saved = await storage.read(key: 'barq_chat_wallpaper_$friendId');
+      final value = saved == null ? null : int.tryParse(saved);
+      if (value != null && mounted) setState(() => chatWallpaperColor = Color(value));
+    } catch (_) {}
+  }
+
   Future<void> _chooseChatWallpaper() async {
     const choices = <Color>[
       Color(0xFF071A2D), Color(0xFF101827), Color(0xFF1B1630),
@@ -7544,6 +7551,12 @@ class _ChatPageState extends State<ChatPage> {
     );
     if (selected != null && mounted) {
       setState(() => chatWallpaperColor = selected == Colors.transparent ? null : selected);
+      final key = 'barq_chat_wallpaper_$friendId';
+      if (selected == Colors.transparent) {
+        await storage.delete(key: key);
+      } else {
+        await storage.write(key: key, value: selected.value.toString());
+      }
     }
   }
 
@@ -7822,13 +7835,6 @@ class _ChatPageState extends State<ChatPage> {
                                           await Api.reactPrivateMessage(field(m, ['id', 'message_id']), emoji, remove: remove);
                                           if (mounted) await loadMessages(silent: true);
                                         },
-                                        isPinned: m['is_pinned'] == true,
-                                        onPin: m['is_ephemeral'] != true && m['is_offline_pending'] != true
-                                            ? () async {
-                                                await Api.pinPrivateMessage(field(m, ['id', 'message_id']), pinned: m['is_pinned'] != true);
-                                                if (mounted) await loadMessages(silent: true);
-                                              }
-                                            : null,
                                       ),
                                   ],
                                 ),
@@ -8932,11 +8938,6 @@ class _GroupChatPageState extends State<GroupChatPage> {
                             currentUserId: widget.currentUserId,
                             onReaction: (emoji, remove) async {
                               await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), emoji, remove: remove);
-                              if (mounted) await loadMessages(silent: true);
-                            },
-                            isPinned: m['is_pinned'] == true,
-                            onPin: () async {
-                              await Api.pinGroupMessage(groupId, field(m, ['id', 'message_id']), pinned: m['is_pinned'] != true);
                               if (mounted) await loadMessages(silent: true);
                             },
                           ),
