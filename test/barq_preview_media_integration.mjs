@@ -167,8 +167,8 @@ await request("/api/media/" + encodeURIComponent(attachmentId), {
   token: c.token, expected: 403
 });
 // Hiding a message for one account must not revoke the shared attachment.
-// Sender deletion marks the attachment expired immediately; the media route
-// returns 410 while expiry cleanup removes the retained storage object.
+// Delete-for-everyone removes the storage object immediately when deletion succeeds,
+// so subsequent reads correctly return 404 (410 is reserved for retained expired media).
 await request("/api/messages/" + encodeURIComponent(sessionId) + "?scope=me", {
   method: "DELETE", token: b.token, expected: 200
 });
@@ -179,10 +179,10 @@ await request("/api/messages/" + encodeURIComponent(sessionId), {
   method: "DELETE", token: a.token, expected: 200
 });
 await request("/api/media/" + encodeURIComponent(attachmentId), {
-  token: a.token, expected: 410
+  token: a.token, expected: 404
 });
 await request("/api/media/" + encodeURIComponent(attachmentId), {
-  token: b.token, expected: 410
+  token: b.token, expected: 404
 });
 
 const retry = await json(`/api/media/uploads/${sessionId}/complete`, {
