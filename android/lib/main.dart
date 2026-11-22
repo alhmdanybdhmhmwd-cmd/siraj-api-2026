@@ -7682,7 +7682,6 @@ class _ChatPageState extends State<ChatPage> {
               icon: const Icon(Icons.build_circle_outlined),
               tooltip: 'أدوات المحادثة',
             ),
-            IconButton(onPressed: loadMessages, icon: const Icon(Icons.refresh)),
           ],
         ),
         body: Column(
@@ -8802,7 +8801,6 @@ class _GroupChatPageState extends State<GroupChatPage> {
             IconButton(onPressed: showGroupMembers, icon: const Icon(Icons.people_alt_outlined), tooltip: 'أعضاء المجموعة'),
             if (['owner', 'admin'].contains(field(widget.group, ['current_role'], 'member')))
               IconButton(onPressed: widget.onAddMember, icon: const Icon(Icons.person_add_alt_1), tooltip: 'إضافة عضو'),
-            IconButton(onPressed: loadMessages, icon: const Icon(Icons.refresh)),
           ],
         ),
         body: Column(children: [
