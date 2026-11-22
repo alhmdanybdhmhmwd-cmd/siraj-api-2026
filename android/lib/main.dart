@@ -39,7 +39,7 @@ const String apiBase = String.fromEnvironment(
 // origin is opt-in only for isolated diagnostics via BARQ_MEDIA_BASE.
 const String mediaWorkerBase = String.fromEnvironment(
   'BARQ_MEDIA_BASE',
-  defaultValue: 'https://siraj-api-2026.vercel.app',
+  defaultValue: 'https://siraj-api.alhmdanybdhmhmwd.workers.dev',
 );
 const int maxAttachmentBytes = 60 * 1024 * 1024;
 
@@ -1108,9 +1108,6 @@ class Api {
     String caption = '',
     String? statusId,
   }) async {
-    if (BarqFeatures.lightningMode) {
-      throw Exception('وضع البرق مفعّل: نشر الصور والفيديو متوقف مؤقتًا.');
-    }
     if (bytes.isEmpty || bytes.length > maxAttachmentBytes) {
       throw Exception('حجم الوسائط يجب ألا يتجاوز 60 ميجابايت.');
     }
@@ -1175,9 +1172,6 @@ class Api {
     required List<int> bytes,
     required int durationMs,
   }) async {
-    if (BarqFeatures.lightningMode) {
-      throw Exception('وضع البرق مفعّل: إرسال الردود الصوتية متوقف مؤقتًا.');
-    }
     if (bytes.isEmpty || bytes.length > 5 * 1024 * 1024) {
       throw Exception('حجم الرد الصوتي يجب ألا يتجاوز 5 ميجابايت.');
     }
@@ -3414,6 +3408,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   int selectedTab = 0;
+  int selectedConversationSection = 0;
   late Map<String, dynamic> me = widget.user;
   List<Map<String, dynamic>> friends = [];
   List<Map<String, dynamic>> matchedContacts = [];
@@ -4242,6 +4237,48 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Widget _chatsPage() {
     final palette = Theme.of(context).colorScheme;
+    Widget sectionTile({
+      required int index,
+      required IconData icon,
+      required String label,
+      required String count,
+    }) {
+      final selected = selectedConversationSection == index;
+      return Expanded(
+        child: Card(
+          margin: EdgeInsets.zero,
+          color: selected ? palette.primary.withValues(alpha: .16) : palette.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(
+              color: selected ? palette.primary : palette.outline.withValues(alpha: .22),
+              width: selected ? 1.5 : 0.7,
+            ),
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => setState(() => selectedConversationSection = index),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, color: selected ? palette.primary : palette.onSurface.withValues(alpha: .72), size: 23),
+                  const SizedBox(height: 5),
+                  Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                      color: selected ? palette.primary : palette.onSurface)),
+                  const SizedBox(height: 2),
+                  Text(count, style: TextStyle(fontSize: 10,
+                    color: palette.onSurface.withValues(alpha: .62))),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return RefreshIndicator(
       color: palette.primary,
       onRefresh: refreshAll,
@@ -4249,167 +4286,130 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         padding: const EdgeInsets.all(12),
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(4, 8, 4, 10),
-            child: Row(children: [
-              Expanded(child: Text('محادثاتك',
-                style: TextStyle(color: palette.primary, fontSize: 21, fontWeight: FontWeight.bold))),
-              IconButton(
-                tooltip: 'إنشاء مجموعة',
-                onPressed: createGroupDialog,
-                icon: const Icon(Icons.group_add_rounded),
-              ),
-            ]),
+            padding: const EdgeInsets.fromLTRB(4, 8, 4, 12),
+            child: Text('محادثاتك',
+              style: TextStyle(color: palette.primary, fontSize: 21, fontWeight: FontWeight.bold)),
           ),
           Row(
             children: [
-              Expanded(
-                child: Card(
-                  margin: EdgeInsets.zero,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(16),
-                    onTap: () => createGroupDialog(),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                      child: Row(children: [
-                        CircleAvatar(
-                          backgroundColor: palette.primary.withValues(alpha: .14),
-                          child: Icon(Icons.groups_rounded, color: palette.primary),
-                        ),
-                        const SizedBox(width: 9),
-                        Expanded(child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('المجموعات', style: TextStyle(fontWeight: FontWeight.w700)),
-                            Text('${groups.length} مجموعة', style: TextStyle(
-                              color: palette.onSurface.withValues(alpha: .65), fontSize: 11)),
-                          ],
-                        )),
-                        Icon(Icons.chevron_left_rounded, color: palette.primary),
-                      ]),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Card(
-                  margin: EdgeInsets.zero,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(16),
-                    onTap: () => Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => Scaffold(
-                        appBar: AppBar(title: const Text('المكالمات')),
-                        body: Center(child: Padding(
-                          padding: const EdgeInsets.all(28),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              CircleAvatar(
-                                radius: 38,
-                                backgroundColor: palette.primary.withValues(alpha: .14),
-                                child: Icon(Icons.call_outlined, size: 38, color: palette.primary),
-                              ),
-                              const SizedBox(height: 18),
-                              const Text('سجل المكالمات', style: TextStyle(
-                                fontSize: 19, fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'لا توجد مكالمات لعرضها حالياً. ستظهر هنا المكالمات الواردة والصادرة والفائتة بعد ربط خدمة الاتصال.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: Colors.white70, height: 1.5),
-                              ),
-                            ],
-                          ),
-                        )),
-                      ),
-                    )),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                      child: Row(children: [
-                        CircleAvatar(
-                          backgroundColor: palette.primary.withValues(alpha: .14),
-                          child: Icon(Icons.call_outlined, color: palette.primary),
-                        ),
-                        const SizedBox(width: 9),
-                        const Expanded(child: Text('المكالمات',
-                          style: TextStyle(fontWeight: FontWeight.w700))),
-                        Icon(Icons.chevron_left_rounded, color: palette.primary),
-                      ]),
-                    ),
-                  ),
-                ),
-              ),
+              sectionTile(index: 0, icon: Icons.chat_bubble_outline_rounded,
+                label: 'المحادثات', count: '${friends.length}'),
+              const SizedBox(width: 7),
+              sectionTile(index: 1, icon: Icons.groups_rounded,
+                label: 'المجموعات', count: '${groups.length}'),
+              const SizedBox(width: 7),
+              sectionTile(index: 2, icon: Icons.call_outlined,
+                label: 'المكالمات', count: 'السجل'),
             ],
           ),
-          if (groups.isEmpty)
-            Card(child: ListTile(
-              leading: const Icon(Icons.group_add_outlined),
-              title: const Text('أنشئ مجموعتك الأولى'),
-              subtitle: const Text('اجمع أصدقاءك في محادثة واحدة'),
-              onTap: createGroupDialog,
-            ))
-          else
-            for (final group in groups)
-              Card(
-                color: palette.surface,
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: palette.primary.withValues(alpha: .14),
-                    child: Icon(Icons.groups_rounded, color: palette.primary),
-                  ),
-                  title: Text(field(group, ['name'], 'مجموعة')),
-                  subtitle: Text('${field(group, ['description'], 'مجموعة برق')} • ${field(group, ['member_count'], '1')} أعضاء'),
-                  trailing: const Icon(Icons.chevron_left_rounded),
-                  onTap: () => Navigator.push(context, MaterialPageRoute(
-                    builder: (_) => GroupChatPage(
-                      group: group,
-                      currentUserId: myId,
-                      onAddMember: () => addMemberDialog(group),
-                      onGroupChanged: refreshAll,
-                    ),
-                  )),
-                ),
-              ),
           const SizedBox(height: 14),
-          Row(children: [
-            Icon(Icons.chat_bubble_outline_rounded, color: palette.primary),
-            const SizedBox(width: 8),
-            Text('المحادثات الفردية', style: TextStyle(color: palette.primary, fontWeight: FontWeight.w700)),
-          ]),
-          if (friends.isEmpty)
-            const Card(child: ListTile(
-              leading: Icon(Icons.person_search_outlined),
-              title: Text('لا توجد محادثات بعد'),
-              subtitle: Text('ابحث عن شخص من جهات الاتصال لتبدأ المراسلة.'),
-            ))
-          else
-            for (final friend in friends)
-              Card(
-                color: palette.surface,
-                child: ListTile(
-                  leading: InkWell(
-                    customBorder: const CircleBorder(),
-                    onTap: () => Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => PublicProfilePage(person: friend, currentUserId: myId, canMessage: true),
-                    )),
-                    child: personAvatar(friend),
+          if (selectedConversationSection == 0) ...[
+            Row(children: [
+              Icon(Icons.chat_bubble_outline_rounded, color: palette.primary),
+              const SizedBox(width: 8),
+              Text('المحادثات الفردية',
+                style: TextStyle(color: palette.primary, fontWeight: FontWeight.w700)),
+            ]),
+            if (friends.isEmpty)
+              const Card(child: ListTile(
+                leading: Icon(Icons.person_search_outlined),
+                title: Text('لا توجد محادثات بعد'),
+                subtitle: Text('ابحث عن شخص من جهات الاتصال لتبدأ المراسلة.'),
+              ))
+            else
+              for (final friend in friends)
+                Card(
+                  color: palette.surface,
+                  child: ListTile(
+                    leading: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: () => Navigator.push(context, MaterialPageRoute(
+                        builder: (_) => PublicProfilePage(person: friend, currentUserId: myId, canMessage: true),
+                      )),
+                      child: personAvatar(friend),
+                    ),
+                    title: InkWell(
+                      onTap: () => Navigator.push(context, MaterialPageRoute(
+                        builder: (_) => PublicProfilePage(person: friend, currentUserId: myId, canMessage: true),
+                      )),
+                      child: Text(_personName(friend)),
+                    ),
+                    subtitle: Text('@${_personUsername(friend)}'),
+                    trailing: IconButton(
+                      tooltip: 'فتح المحادثة',
+                      icon: const Icon(Icons.chat_bubble_outline),
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(
+                        builder: (_) => ChatPage(friend: friend, currentUserId: myId),
+                      )),
+                    ),
                   ),
-                  title: InkWell(
+                ),
+          ] else if (selectedConversationSection == 1) ...[
+            Row(children: [
+              Expanded(child: Text('مجموعاتك',
+                style: TextStyle(color: palette.primary, fontWeight: FontWeight.w700))),
+              IconButton(
+                tooltip: 'إنشاء مجموعة',
+                onPressed: createGroupDialog,
+                icon: Icon(Icons.group_add_rounded, color: palette.primary),
+              ),
+            ]),
+            if (groups.isEmpty)
+              Card(child: ListTile(
+                leading: const Icon(Icons.group_add_outlined),
+                title: const Text('أنشئ مجموعتك الأولى'),
+                subtitle: const Text('اجمع أصدقاءك في محادثة واحدة'),
+                onTap: createGroupDialog,
+              ))
+            else
+              for (final group in groups)
+                Card(
+                  color: palette.surface,
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: palette.primary.withValues(alpha: .14),
+                      child: Icon(Icons.groups_rounded, color: palette.primary),
+                    ),
+                    title: Text(field(group, ['name'], 'مجموعة')),
+                    subtitle: Text('${field(group, ['description'], 'مجموعة برق')} • ${field(group, ['member_count'], '1')} أعضاء'),
+                    trailing: const Icon(Icons.chevron_left_rounded),
                     onTap: () => Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => PublicProfilePage(person: friend, currentUserId: myId, canMessage: true),
-                    )),
-                    child: Text(_personName(friend)),
-                  ),
-                  subtitle: Text('@${_personUsername(friend)}'),
-                  trailing: IconButton(
-                    tooltip: 'فتح المحادثة',
-                    icon: const Icon(Icons.chat_bubble_outline),
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => ChatPage(friend: friend, currentUserId: myId),
+                      builder: (_) => GroupChatPage(
+                        group: group,
+                        currentUserId: myId,
+                        onAddMember: () => addMemberDialog(group),
+                        onGroupChanged: refreshAll,
+                      ),
                     )),
                   ),
                 ),
+          ] else ...[
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    CircleAvatar(
+                      radius: 36,
+                      backgroundColor: palette.primary.withValues(alpha: .14),
+                      child: Icon(Icons.call_outlined, size: 34, color: palette.primary),
+                    ),
+                    const SizedBox(height: 14),
+                    const Text('المكالمات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'سيظهر هنا سجل المكالمات الواردة والصادرة والفائتة عند ربط خدمة الاتصال.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white70, height: 1.5),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text('خدمة الاتصال الفعلية لم تُربط بعد.',
+                      style: TextStyle(color: Colors.amberAccent, fontSize: 12)),
+                  ],
+                ),
               ),
+            ),
+          ],
         ],
       ),
     );
@@ -7779,10 +7779,6 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
     if (_uploadingAudioReply) return;
     if (_recordingAudioReply) {
       await _finishAudioReplyRecording();
-      return;
-    }
-    if (BarqFeatures.lightningMode) {
-      showMsg(context, 'وضع البرق مفعّل: الردود الصوتية متوقفة.');
       return;
     }
     try {
