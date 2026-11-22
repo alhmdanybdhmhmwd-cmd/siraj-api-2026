@@ -5808,6 +5808,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           subtitle: 'الرسائل الخاصة والمجموعات وSPARK',
           onTap: notificationSettingsDialog,
         ),
+        item(
+          icon: Icons.bluetooth_connected_rounded,
+          title: 'الاتصال بالأجهزة القريبة',
+          subtitle: 'إرسال الرسائل النصية للأصدقاء القريبين دون إنترنت عند توفر الاتصال',
+          onTap: () => Navigator.push(context, MaterialPageRoute(
+            builder: (_) => NearbyDevicesPage(user: me, friends: friends),
+          )),
+        ),
         Card(
           margin: const EdgeInsets.only(bottom: 7),
           child: SwitchListTile(
