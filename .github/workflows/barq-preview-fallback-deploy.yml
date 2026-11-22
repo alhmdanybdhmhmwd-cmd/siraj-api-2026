@@ -1,6 +1,16 @@
 name: BARQ isolated Preview fallback Worker deploy
 
 on:
+  # Auto-run only on the dedicated Phase 8 branch so Preview verification
+  # can follow approved fixes without requiring repeated manual dispatch.
+  push:
+    branches:
+      - barq/phase8-cleanup-preview-readiness-2026-11-23
+    paths:
+      - "src/**"
+      - "test/**"
+      - "wrangler.fallback.test.toml"
+      - ".github/workflows/barq-preview-fallback-deploy.yml"
   workflow_dispatch:
     inputs:
       deploy_preview_fallback:
@@ -14,7 +24,7 @@ permissions:
 
 jobs:
   deploy-preview-fallback:
-    if: github.event_name == 'workflow_dispatch' && inputs.deploy_preview_fallback == true
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy_preview_fallback == true)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
