@@ -337,7 +337,7 @@ assert.equal(ownerMemoryPhoto.status, 200, "only the owner should retrieve the p
 const otherMemoryPhoto = await fetch(new URL(
   "/api/media/" + encodeURIComponent(memoryPhoto.media.attachmentId), base
 ), { headers: { Authorization: `Bearer ${b.token}` } });
-assert.equal(otherMemoryPhoto.status, 403, "other accounts must not retrieve private memory photos");
+assert.equal(otherMemoryPhoto.status, 404, "private memory photos must be indistinguishable from missing media to other accounts");
 await call("/api/private-memories/" + encodeURIComponent(privateMemory.memory.id), {
   method: "PATCH", token: a.token,
   body: { title: "Updated private vault " + suffix, content: "Updated private memory." }
