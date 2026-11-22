@@ -484,6 +484,12 @@ test("media reads and small uploads prefer the public API gateway with Worker fa
   assert.ok(flutterApp.includes("'/api/statuses/"));
 });
 
+test("media picker reads files on demand instead of eagerly retaining every selected file", () => {
+  assert.ok(flutterApp.includes("Future<Uint8List> readBarqPickedFileBytes"));
+  assert.ok(flutterApp.includes("File(photos[index]['path'] as String)"));
+  assert.doesNotMatch(flutterApp, /withData:\s*true/);
+});
+
 test("private and group conversation polling stops in background and resumes cleanly", () => {
   for (const className of ["_ChatPageState", "_GroupChatPageState"]) {
     const start = flutterApp.indexOf("class " + className);
