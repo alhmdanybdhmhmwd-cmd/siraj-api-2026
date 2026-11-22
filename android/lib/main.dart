@@ -3923,6 +3923,9 @@ Future<bool> confirmVoiceTranscription(BuildContext context) async {
 
 String cleanError(Object error) => error.toString().replaceFirst('Exception: ', '');
 
+bool barqHomeCanPop({required int selectedTab, required String conversationQuery}) =>
+    selectedTab == 0 && conversationQuery.trim().isEmpty;
+
 bool barqShouldPauseBackgroundWork(AppLifecycleState state) =>
     state == AppLifecycleState.hidden ||
     state == AppLifecycleState.paused ||
@@ -4289,7 +4292,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     ];
     return Directionality(
       textDirection: TextDirection.rtl,
-      child: Scaffold(
+      child: PopScope(
+        canPop: barqHomeCanPop(
+          selectedTab: selectedTab,
+          conversationQuery: conversationQuery,
+        ),
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop || !mounted) return;
+          setState(() {
+            if (selectedTab != 0) {
+              selectedTab = 0;
+            } else {
+              conversationQuery = '';
+            }
+          });
+        },
+        child: Scaffold(
         appBar: AppBar(
           title: Column( crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [ Text('برق', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)), const Text('تواصل بنبض الضوء', style: TextStyle(fontSize: 11, color: Colors.white70)), ]),
         ),
@@ -4334,6 +4352,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               label: 'حسابي',
             ),
           ],
+        ),
         ),
       ),
     );
