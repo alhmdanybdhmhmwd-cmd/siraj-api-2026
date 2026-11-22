@@ -483,6 +483,14 @@ await call("/api/messages", {
 await call("/api/blocks?userId=" + encodeURIComponent(b.user.id), {
   method: "DELETE", token: a.token
 });
+const unblockedList = await call("/api/blocks", { token: a.token });
+assert.ok(!unblockedList.blockedUsers.some(user => user.userId === b.user.id),
+  "unblock must remove the selected account from the current user's block list");
+await call("/api/messages", {
+  method: "POST", token: b.token,
+  body: { receiverId: a.user.id, body: "unblocked message " + suffix },
+  expected: 201
+});
 console.log("Preview integration passed: legacy/current signup and phone login, profile/privacy/contacts, private message edit/pin/reactions, private-memory owner isolation/photo access, SPARK text replies/reactions, captioned media upload/feed/download, ephemeral expiry, blocking, and access guards.");
 
 }
