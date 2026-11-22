@@ -2105,7 +2105,6 @@ Widget messageReactionBar({
   required BuildContext context,
   required Map<String, dynamic> message,
   required String currentUserId,
-  Future<void> Function()? onSaveMemory,
 }) {
   final reactions = normalizeMessageReactions(message['reactions']);
   final grouped = <String, List<Map<String, dynamic>>>{};
