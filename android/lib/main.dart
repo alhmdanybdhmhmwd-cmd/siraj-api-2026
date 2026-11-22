@@ -7304,23 +7304,31 @@ class _BarqRemoteVideoThumbnailState extends State<_BarqRemoteVideoThumbnail> {
       if (mounted) setState(() { _failed = true; _loading = false; });
       return;
     }
-    final controller = VideoPlayerController.networkUrl(
-      Api.sparkMediaUri(id),
-      httpHeaders: {if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'},
-    );
-    try {
-      await controller.initialize().timeout(const Duration(seconds: 35));
-      await controller.setVolume(0);
-      await controller.pause();
-      if (!mounted) {
-        await controller.dispose();
+    final headers = {if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'};
+    final bases = <String>[apiBase, if (mediaWorkerBase != apiBase) mediaWorkerBase];
+    Object? lastError;
+    for (final base in bases) {
+      VideoPlayerController? controller;
+      try {
+        controller = VideoPlayerController.networkUrl(
+          Uri.parse('$base/api/media/${Uri.encodeComponent(id)}'),
+          httpHeaders: headers,
+        );
+        await controller.initialize().timeout(const Duration(seconds: 35));
+        await controller.setVolume(0);
+        await controller.pause();
+        if (!mounted) {
+          await controller.dispose();
+          return;
+        }
+        setState(() { _controller = controller; _loading = false; });
         return;
+      } catch (error) {
+        lastError = error;
+        await controller?.dispose();
       }
-      setState(() { _controller = controller; _loading = false; });
-    } catch (_) {
-      await controller.dispose();
-      if (mounted) setState(() { _failed = true; _loading = false; });
     }
+    if (mounted) setState(() { _failed = true; _loading = false; });
   }
 
   @override
