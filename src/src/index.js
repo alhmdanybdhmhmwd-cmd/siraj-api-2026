@@ -338,6 +338,7 @@ function cleanUser(user) {
     username: user.username,
     displayName: user.display_name,
     phone: user.phone || null,
+    ...(user.chat_hidden !== undefined ? { chatHidden: Number(user.chat_hidden) === 1 } : {}),
     ...(user.photo_updated_at ? {
       photoUrl: "/api/profile/photo/" + encodeURIComponent(user.id),
       photoUpdatedAt: user.photo_updated_at
@@ -2722,7 +2723,8 @@ export default {
       }
 
       // Preview-safe message interaction tables; production is never migrated here.
-      if (path === "/api/messages" || path.startsWith("/api/messages/") || path.startsWith("/api/groups/")) {
+      if (path === "/api/messages" || path.startsWith("/api/messages/") ||
+          path.startsWith("/api/conversations/") || path.startsWith("/api/groups/")) {
         await env.DB.prepare(`
           CREATE TABLE IF NOT EXISTS message_reactions (
             scope_type TEXT NOT NULL CHECK (scope_type IN ('private', 'group')),
