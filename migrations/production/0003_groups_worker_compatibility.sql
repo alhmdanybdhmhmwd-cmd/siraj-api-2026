@@ -34,8 +34,16 @@ BEGIN
   DELETE FROM groups WHERE id = OLD.id;
 END;
 
--- Production group_messages predates reply/edit support. Additive columns keep
--- existing messages intact while bringing the table up to the Worker contract.
+-- Production private messages predate reply/edit support. Additive columns
+-- preserve existing messages while matching the current Worker contract.
+ALTER TABLE messages ADD COLUMN reply_to_id TEXT;
+ALTER TABLE messages ADD COLUMN reply_to_body TEXT;
+ALTER TABLE messages ADD COLUMN reply_to_sender_id TEXT;
+ALTER TABLE messages ADD COLUMN edited_at TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_messages_reply_target ON messages(reply_to_id);
+
+-- Production group messages predate reply/edit support.
 ALTER TABLE group_messages ADD COLUMN reply_to_id TEXT;
 ALTER TABLE group_messages ADD COLUMN reply_to_body TEXT;
 ALTER TABLE group_messages ADD COLUMN reply_to_sender_id TEXT;
