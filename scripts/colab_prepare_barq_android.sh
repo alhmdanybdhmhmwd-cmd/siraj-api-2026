@@ -45,7 +45,12 @@ export ANDROID_HOME="$SDK_ROOT"
 export ANDROID_SDK_ROOT="$SDK_ROOT"
 export PATH="$SDK_ROOT/cmdline-tools/latest/bin:$SDK_ROOT/platform-tools:$PATH"
 
-yes | sdkmanager --licenses >/dev/null
+# sdkmanager may stop reading once all licenses are accepted; then `yes` gets SIGPIPE (141).
+# With pipefail enabled, tolerate only that expected status; real sdkmanager errors still fail.
+yes | sdkmanager --licenses >/dev/null || {
+  license_status=$?
+  [[ "$license_status" -eq 141 ]] || exit "$license_status"
+}
 sdkmanager "platform-tools" "platforms;android-37" "build-tools;37.0.0"
 
 # Keep the existing Flutter SDK path and add/update only sdk.dir.
