@@ -1608,7 +1608,7 @@ class FakeReadReceiptDB extends FakeDB {
 }
 
 test("profile updates ignore legacy phone changes after registration", async () => {
-  const db = new FakeDB();
+  const db = new ProfileOwnershipTestDB();
   db.phoneCandidates = [{ id: "other-user", phone: "+967700000002" }];
   const token = await worker.signToken(user, secret, 0);
   const response = await worker.default.fetch(new Request("https://api.example.test/api/profile", {
