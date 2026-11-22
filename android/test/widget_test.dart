@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:nearby_connections/nearby_connections.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -989,6 +990,36 @@ void main() {
     expect(isBarqPrivateMemoryPhotoContentTypeAllowed('image/gif'), isFalse);
     expect(isBarqPrivateMemoryPhotoContentTypeAllowed('image/svg+xml'), isFalse);
     expect(isBarqPrivateMemoryPhotoContentTypeAllowed('application/octet-stream'), isFalse);
+  });
+
+  test('picked attachment bytes prefer memory and safely fall back to a file path', () async {
+    final directory = await Directory.systemTemp.createTemp('barq-picked-file-');
+    try {
+      final file = File('${directory.path}/attachment.jpg');
+      await file.writeAsBytes([9, 8, 7]);
+
+      final inMemory = PlatformFile(
+        name: 'memory.jpg',
+        size: 2,
+        bytes: [1, 2],
+        path: file.path,
+      );
+      final onDisk = PlatformFile(
+        name: 'disk.jpg',
+        size: 3,
+        path: file.path,
+      );
+      final missing = PlatformFile(name: 'missing.jpg', size: 0);
+
+      expect(await readBarqPickedFileBytes(inMemory), [1, 2]);
+      expect(await readBarqPickedFileBytes(onDisk), [9, 8, 7]);
+      await expectLater(
+        readBarqPickedFileBytes(missing),
+        throwsA(isA<Exception>()),
+      );
+    } finally {
+      await directory.delete(recursive: true);
+    }
   });
 
   test('private memory photo uploads read file paths one at a time', () async {
