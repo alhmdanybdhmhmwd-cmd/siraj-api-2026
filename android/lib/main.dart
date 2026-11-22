@@ -2067,6 +2067,18 @@ String barqSparkPrivateReplyMessage({required String caption, required String re
   return '↩️ رد على SPARK\n$context\n\n${reply.trim()}';
 }
 
+Map<String, String>? parseBarqSparkPrivateReply(String body) {
+  const prefix = '↩️ رد على SPARK\\n';
+  if (!body.startsWith(prefix)) return null;
+  final content = body.substring(prefix.length);
+  final divider = content.indexOf('\\n\\n');
+  if (divider < 0) return null;
+  return {
+    'caption': content.substring(0, divider),
+    'reply': content.substring(divider + 2),
+  };
+}
+
 String newBarqMessageId() {
   final random = math.Random.secure();
   return List.generate(16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
@@ -8767,6 +8779,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                             final m = messages[index - (hasOlderMessages ? 1 : 0)];
                             final sender = field(m, ['sender_id']);
                             final mine = sender == widget.currentUserId;
+                            final sparkReply = parseBarqSparkPrivateReply(field(m, ['body', 'content', 'message']));
                             return Align(
                               alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
                               child: Container(
@@ -8957,7 +8970,33 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                               : null,
                                           isPinned: m['is_pinned'] == true,
                                         ),
-                                        child: BarqMessageBody(text: field(m, ['body', 'content', 'message'])),
+                                        child: sparkReply == null
+                                            ? BarqMessageBody(text: field(m, ['body', 'content', 'message']))
+                                            : Container(
+                                                width: double.infinity,
+                                                padding: const EdgeInsets.all(10),
+                                                decoration: BoxDecoration(
+                                                  color: gold.withValues(alpha: .10),
+                                                  borderRadius: BorderRadius.circular(11),
+                                                  border: Border.all(color: gold.withValues(alpha: .32)),
+                                                ),
+                                                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                                  Row(children: [
+                                                    const Icon(Icons.auto_awesome_rounded, size: 14, color: gold),
+                                                    const SizedBox(width: 6),
+                                                    const Text('رد على SPARK', style: TextStyle(
+                                                      color: gold, fontSize: 11, fontWeight: FontWeight.w800,
+                                                    )),
+                                                  ]),
+                                                  const SizedBox(height: 6),
+                                                  Text(sparkReply['caption'] ?? '', maxLines: 2,
+                                                    overflow: TextOverflow.ellipsis,
+                                                    style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                                                  const Divider(height: 14, color: Colors.white24),
+                                                  Text(sparkReply['reply'] ?? '',
+                                                    style: const TextStyle(fontSize: 13, height: 1.4)),
+                                                ]),
+                                              ),
                                       ),
                                       if (BarqFeatures.autoTranslate && translatedMessages[field(m, ['id', 'message_id'])] != null) ...[
                                         const SizedBox(height: 6),
