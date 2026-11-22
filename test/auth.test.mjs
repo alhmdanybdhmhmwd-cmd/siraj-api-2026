@@ -586,7 +586,7 @@ test("profile updates are always scoped to the authenticated account despite a s
   assert.deepEqual(db.profileUpdateParams, ["Updated Name", user.id]);
   assert.equal(db.profileUpdateParams[1], user.id);
   assert.notEqual(db.profileUpdateParams[1], "victim-account");
-  assert.doesNotMatch(db.profileUpdateSql, /SET[^]*\\bphone\\s*=/i);
+  assert.doesNotMatch(db.profileUpdateSql, /SET[^]*\bphone\s*=/i);
 });
 
 test("profile photo reads deny non-friends when the target profile is private", async () => {
