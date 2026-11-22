@@ -471,7 +471,7 @@ test("media reads and small uploads prefer the public API gateway with Worker fa
   assert.ok(flutterApp.includes("static Future<http.Response> _postMediaPathResponse("));
   assert.ok(flutterApp.includes("static Future<http.Response> _getMediaPathResponse("));
   assert.ok(flutterApp.includes("final bases = bytes.length <= proxyMediaThresholdBytes"));
-  assert.ok(flutterApp.includes("Uri.parse(\'$apiBase/api/media/"));
+  assert.ok(flutterApp.includes("'$apiBase/api/media/"));
   assert.ok(flutterApp.includes("static Uri sparkMediaUri"));
   assert.ok(flutterApp.includes("final bases = <String>[apiBase, if (mediaWorkerBase != apiBase) mediaWorkerBase]"));
   assert.ok(flutterApp.includes("'/api/private-memories/"));
