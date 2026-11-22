@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - barq/phase4-messaging-interactions-2026-11-22
+      - barq/phase5-feature-audit-2026-11-22
     paths:
       - "android/**"
       - ".github/workflows/barq-flutter-checks.yml"
