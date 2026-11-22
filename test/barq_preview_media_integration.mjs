@@ -166,6 +166,23 @@ assert.equal(createHash("sha256").update(recipientDownload.bytes).digest("hex"),
 await request("/api/media/" + encodeURIComponent(attachmentId), {
   token: c.token, expected: 403
 });
+// Hiding a message for one account must not revoke the shared attachment.
+// Deleting it as its sender must revoke access for both conversation participants.
+await request("/api/messages/" + encodeURIComponent(sessionId) + "?scope=me", {
+  method: "DELETE", token: b.token, expected: 200
+});
+await request("/api/media/" + encodeURIComponent(attachmentId), {
+  token: b.token, expected: 200
+});
+await request("/api/messages/" + encodeURIComponent(sessionId), {
+  method: "DELETE", token: a.token, expected: 200
+});
+await request("/api/media/" + encodeURIComponent(attachmentId), {
+  token: a.token, expected: 410
+});
+await request("/api/media/" + encodeURIComponent(attachmentId), {
+  token: b.token, expected: 410
+});
 
 const retry = await json(`/api/media/uploads/${sessionId}/complete`, {
   method: "POST", token: a.token, expected: 200, body: {}
@@ -228,7 +245,13 @@ assert.equal(createHash("sha256").update(groupDownload.bytes).digest("hex"), gro
 await request("/api/media/" + encodeURIComponent(groupAttachmentId), {
   token: c.token, expected: 403
 });
-console.log("Preview group media integration passed: group attachment visibility, member SHA-256 download, and non-member denial.");
+await request("/api/groups/" + encodeURIComponent(group.group.id) + "/messages/" + encodeURIComponent(groupSessionId), {
+  method: "DELETE", token: a.token, expected: 200
+});
+await request("/api/media/" + encodeURIComponent(groupAttachmentId), {
+  token: b.token, expected: 410
+});
+console.log("Preview group media integration passed: group attachment visibility, member SHA-256 download, non-member denial, and revocation after message deletion.");
 
 console.log("Preview private media integration passed: resumable upload creates one visible chat message, restores a hidden conversation, exact SHA-256 readback, HTTP Range, recipient authorization, and idempotent completion.");
 
