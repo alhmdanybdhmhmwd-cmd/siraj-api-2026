@@ -808,39 +808,6 @@ export default {
         let username = String(body.username || body.userName || "").trim().toLowerCase();
         const password = String(body.password || "");
         const phone = String(body.phone || "").trim();
-        const inviteCode = String(body.inviteCode || "").trim().toUpperCase();
-
-        if (inviteCode && !/^[A-F0-9]{12}$/.test(inviteCode)) {
-          return json({ error: "Invalid invite code" }, 400);
-        }
-        let inviterUserId = null;
-        if (inviteCode) {
-          await env.DB.prepare(`
-            CREATE TABLE IF NOT EXISTS user_invite_codes (
-              user_id TEXT PRIMARY KEY,
-              invite_code TEXT NOT NULL UNIQUE,
-              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            )
-          `).run();
-          const inviter = await env.DB.prepare(
-            "SELECT user_id FROM user_invite_codes WHERE invite_code = ?"
-          ).bind(inviteCode).first();
-          if (!inviter?.user_id) {
-            return json({ error: "Invite code was not found" }, 400);
-          }
-          inviterUserId = String(inviter.user_id);
-          await env.DB.prepare(`
-            CREATE TABLE IF NOT EXISTS user_invites (
-              invitee_user_id TEXT PRIMARY KEY,
-              inviter_user_id TEXT NOT NULL,
-              created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-              FOREIGN KEY (invitee_user_id) REFERENCES users(id) ON DELETE CASCADE,
-              FOREIGN KEY (inviter_user_id) REFERENCES users(id) ON DELETE CASCADE
-            )
-          `).run();
-        }
-
         if (!displayName || !phone || !password) {
           return json({
             error: "Display name, international phone number and password are required"
@@ -909,18 +876,7 @@ export default {
             WHERE EXISTS (SELECT 1 FROM users WHERE id = ?)`)
             .bind(id, recovery.codeHash, recovery.salt, createdAt + RECOVERY_CODE_TTL_SECONDS, createdAt, id)
         ];
-        if (inviterUserId) {
-          registrationStatements.push(env.DB.prepare(`
-            INSERT INTO user_invites (invitee_user_id, inviter_user_id)
-            SELECT ?, ?
-            WHERE EXISTS (SELECT 1 FROM users WHERE id = ?)
-              AND EXISTS (SELECT 1 FROM users WHERE id = ?)
-          `).bind(id, inviterUserId, id, inviterUserId));
-        }
         const registrationResults = await env.DB.batch(registrationStatements);
-        if (inviterUserId && Number(registrationResults?.[2]?.meta?.changes || 0) !== 1) {
-          throw new Error("Invite attribution could not be saved");
-        }
         if (Number(registrationResults?.[0]?.meta?.changes || 0) !== 1) {
           return json({ error: phone ? "Phone number is already registered" : "Unable to create account" }, 409);
         }
@@ -1413,31 +1369,6 @@ export default {
         }
       }
 
-      // A single private invite code per account; no counters, badges, thresholds, or rewards.
-      if (method === "GET" && path === "/api/referrals") {
-        await env.DB.prepare(`
-          CREATE TABLE IF NOT EXISTS user_invite_codes (
-            user_id TEXT PRIMARY KEY,
-            invite_code TEXT NOT NULL UNIQUE,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-          )
-        `).run();
-        const existing = await env.DB.prepare(
-          "SELECT invite_code FROM user_invite_codes WHERE user_id = ?"
-        ).bind(currentUser.sub).first();
-        if (existing?.invite_code) return json({ inviteCode: existing.invite_code });
-
-        const inviteCode = Array.from(crypto.getRandomValues(new Uint8Array(6)), byte => byte.toString(16).padStart(2, "0")).join("").toUpperCase();
-        await env.DB.prepare(
-          "INSERT OR IGNORE INTO user_invite_codes (user_id, invite_code) VALUES (?, ?)"
-        ).bind(currentUser.sub, inviteCode).run();
-        const saved = await env.DB.prepare(
-          "SELECT invite_code FROM user_invite_codes WHERE user_id = ?"
-        ).bind(currentUser.sub).first();
-        if (!saved?.invite_code) return json({ error: "Could not create invite code" }, 503);
-        return json({ inviteCode: saved.invite_code });
-      }
 
       // Directional user blocks; shared group membership and group messages remain unchanged.
       if (path === "/api/blocks" || path.startsWith("/api/blocks/") ||
