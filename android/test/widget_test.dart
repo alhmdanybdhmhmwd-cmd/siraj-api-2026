@@ -967,6 +967,18 @@ void main() {
     expect(BarqIdentity.label(BarqIdentity.skyJewel), 'الجوهرة السماوية');
   });
 
+  test('only blue lightning and butterfly ship bundled; premium identities require download', () {
+    expect(BarqIdentity.blueLightning.isBundled, isTrue);
+    expect(BarqIdentity.butterfly.isBundled, isTrue);
+    expect(BarqIdentity.purpleShadow.isBundled, isFalse);
+    expect(BarqIdentity.skyJewel.isBundled, isFalse);
+    expect(BarqIdentity.blueLightning.isAvailable, isTrue);
+    expect(BarqIdentity.butterfly.isAvailable, isTrue);
+    BarqIdentity.downloadedPackages.clear();
+    expect(BarqIdentity.purpleShadow.isAvailable, isFalse);
+    expect(BarqIdentity.skyJewel.isAvailable, isFalse);
+  });
+
   test('BARQ identity palettes keep four distinct readable theme foundations', () {
     double contrastRatio(Color first, Color second) {
       final a = first.computeLuminance();
