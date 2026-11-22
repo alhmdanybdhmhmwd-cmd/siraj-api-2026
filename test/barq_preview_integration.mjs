@@ -218,6 +218,8 @@ await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages/" +
   encodeURIComponent(groupInteractionMessage.id) + "/pin", { method: "POST", token: b.token });
 const groupInteractionPage = await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages", { token: b.token });
 const groupInteraction = groupInteractionPage.messages.find(message => message.id === groupInteractionMessage.id);
+assert.equal(groupInteraction?.body, "edited group root " + suffix,
+  "group message edits must be returned by the conversation API");
 assert.ok(groupInteraction?.is_pinned, "group pin must be returned by the group conversation API");
 assert.ok(groupInteraction?.reactions?.some(reaction => reaction.emoji === "❤️" && reaction.user_id === b.user.id),
   "group reaction must be returned by the group conversation API");
@@ -276,6 +278,14 @@ const legacyLogin = await call("/api/login", {
 });
 assert.equal(legacyLogin.user.id, legacyRegistration.user.id,
   "legacy registration account must be able to sign in by phone");
+await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages/" +
+  encodeURIComponent(groupInteractionMessage.id) + "/pin", {
+    method: "POST", token: legacyLogin.token, expected: 404
+  });
+await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages/" +
+  encodeURIComponent(groupInteractionMessage.id) + "/reactions", {
+    method: "POST", token: legacyLogin.token, body: { emoji: "🔥" }, expected: 404
+  });
 
 const editedText = "edited preview message " + suffix;
 await call("/api/messages/" + encodeURIComponent(clientMessageId), {
