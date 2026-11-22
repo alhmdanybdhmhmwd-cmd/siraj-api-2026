@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 
 const worker = await readFile(new URL("../src/src/index.js", import.meta.url), "utf8");
 const flutterApp = await readFile(new URL("../android/lib/main.dart", import.meta.url), "utf8");
+const androidManifest = await readFile(new URL("../android/android/app/src/main/AndroidManifest.xml", import.meta.url), "utf8");
 const testConfig = await readFile(new URL("../wrangler.test.toml", import.meta.url), "utf8");
 const fallbackTestConfig = await readFile(new URL("../wrangler.fallback.test.toml", import.meta.url), "utf8");
 const productionConfig = await readFile(new URL("../wrangler.toml", import.meta.url), "utf8");
@@ -14,6 +15,11 @@ function hasPath(path) {
   return worker.includes('path === "' + path + '"') ||
     worker.includes("path === '" + path + "'");
 }
+
+test("Android app prevents automatic backup of private local data", () => {
+  assert.match(androidManifest, /android:allowBackup="false"/);
+  assert.match(androidManifest, /android:fullBackupContent="false"/);
+});
 
 test("health probes and read-only readiness query are present", () => {
   assert.ok(hasPath("/health/live"));
