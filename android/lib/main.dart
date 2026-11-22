@@ -160,25 +160,16 @@ Future<bool> revokeBarqFcmTokenSafely({
 
 /// إعدادات الميزات المحلية التي لا تحتاج إلى اتصال بالخادم.
 class BarqFeatures {
-  static bool lightningMode = false;
   static bool autoTranslate = false;
-  static const String _lightningKey = 'barq_lightning_mode';
   static const String _translationKey = 'barq_auto_translate';
 
   static Future<void> load() async {
     try {
-      lightningMode = await storage.read(key: _lightningKey) == '1';
       autoTranslate = await storage.read(key: _translationKey) == '1';
     } catch (_) {
       // فشل قراءة إعداد محلي لا يمنع تشغيل التطبيق؛ تبقى الميزات الاختيارية متوقفة.
-      lightningMode = false;
       autoTranslate = false;
     }
-  }
-
-  static Future<void> setLightningMode(bool enabled) async {
-    await storage.write(key: _lightningKey, value: enabled ? '1' : '0');
-    lightningMode = enabled;
   }
 
   static Future<void> setAutoTranslate(bool enabled) async {
@@ -1428,9 +1419,6 @@ class Api {
     String? recipientId,
     String? groupId,
   }) async {
-    if (BarqFeatures.lightningMode) {
-      throw Exception('وضع البرق مفعّل: إرسال الملفات والوسائط متوقف مؤقتًا.');
-    }
     if ((recipientId == null) == (groupId == null)) {
       throw Exception('حدد محادثة فردية أو مجموعة واحدة.');
     }
@@ -7476,7 +7464,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _sendVoiceRecording(List<int> bytes, Duration duration) async {
-    if (BarqFeatures.lightningMode || sending) return;
+    if (sending) return;
     setState(() => sending = true);
     try {
       await Api.uploadAttachment(
@@ -7495,10 +7483,6 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> pickAndSendFile() async {
-    if (BarqFeatures.lightningMode) {
-      showMsg(context, 'وضع البرق مفعّل: إرسال الوسائط والملفات متوقف مؤقتًا.');
-      return;
-    }
     try {
       final result = await FilePicker.platform.pickFiles(withData: true, allowMultiple: false);
       if (result == null || result.files.isEmpty) return;
@@ -7580,10 +7564,7 @@ class _ChatPageState extends State<ChatPage> {
               personAvatar(widget.friend, radius: 17),
               const SizedBox(width: 9),
               Flexible(child: Text(name, overflow: TextOverflow.ellipsis)),
-              if (BarqFeatures.lightningMode) ...[
-                const SizedBox(width: 6),
-                const Icon(Icons.flash_on_rounded, size: 18),
-              ],
+
             ]),
           ),
           actions: [
@@ -7867,13 +7848,12 @@ class _ChatPageState extends State<ChatPage> {
                       icon: Icon(Icons.timer_outlined, color: ephemeralMode ? Theme.of(context).colorScheme.primary : Colors.white54),
                       tooltip: ephemeralMode ? 'إيقاف الرسائل المؤقتة' : 'إرسال رسالة تختفي بعد قراءتها',
                     ),
-                    if (!BarqFeatures.lightningMode)
-                      IconButton(
+                    IconButton(
                         onPressed: sending ? null : pickAndSendFile,
                         icon: const Icon(Icons.attach_file),
                         tooltip: 'إرسال ملف أو صورة أو فيديو',
                       ),
-                    if (!BarqFeatures.lightningMode && !ephemeralMode)
+                    if (!ephemeralMode)
                       BarqVoiceRecordButton(disabled: sending, onSend: _sendVoiceRecording),
                     Expanded(
                       child: TextField(
@@ -8528,7 +8508,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
   }
 
   Future<void> _sendVoiceRecording(List<int> bytes, Duration duration) async {
-    if (BarqFeatures.lightningMode || sending) return;
+    if (sending) return;
     setState(() => sending = true);
     try {
       await Api.uploadAttachment(
@@ -8547,10 +8527,6 @@ class _GroupChatPageState extends State<GroupChatPage> {
   }
 
   Future<void> pickAndSendFile() async {
-    if (BarqFeatures.lightningMode) {
-      showMsg(context, 'وضع البرق مفعّل: إرسال الوسائط والملفات متوقف مؤقتًا.');
-      return;
-    }
     try {
       final result = await FilePicker.platform.pickFiles(withData: true, allowMultiple: false);
       if (result == null || result.files.isEmpty) return;
@@ -8720,10 +8696,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
         appBar: AppBar(
           title: Row(mainAxisSize: MainAxisSize.min, children: [
             Flexible(child: Text(field(widget.group, ['name'], 'مجموعة'), overflow: TextOverflow.ellipsis)),
-            if (BarqFeatures.lightningMode) ...[
-              const SizedBox(width: 6),
-              const Icon(Icons.flash_on_rounded, size: 18),
-            ],
+
           ]),
           actions: [
             IconButton(
@@ -8975,11 +8948,9 @@ class _GroupChatPageState extends State<GroupChatPage> {
           SafeArea(top: false, child: Padding(
             padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
             child: Row(children: [
-              if (!BarqFeatures.lightningMode)
-                IconButton(onPressed: sending ? null : pickAndSendFile,
+              IconButton(onPressed: sending ? null : pickAndSendFile,
                   icon: const Icon(Icons.attach_file), tooltip: 'إرسال ملف أو صورة أو فيديو'),
-              if (!BarqFeatures.lightningMode)
-                BarqVoiceRecordButton(disabled: sending, onSend: _sendVoiceRecording),
+              BarqVoiceRecordButton(disabled: sending, onSend: _sendVoiceRecording),
               Expanded(child: TextField(controller: controller, minLines: 1, maxLines: 4,
                 decoration: inputDecoration('اكتب رسالة للمجموعة...', Icons.message).copyWith(
                   helperText: replyToMessage == null ? null : 'الرد على: ${messageReplyPreview(replyToMessage!)}',
