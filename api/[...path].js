@@ -59,3 +59,11 @@ module.exports.config = {
     bodyParser: false,
   },
 };
+
+// Disable Vercel's default JSON body parser so the proxy can forward the
+// original request stream to the Worker without silently sending an empty body.
+module.exports.config = {
+  api: {
+    bodyParser: false,
+  },
+};
