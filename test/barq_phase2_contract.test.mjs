@@ -185,6 +185,48 @@ test("Android API, media, and realtime origins are selectable for isolated previ
 });
 
 
+
+test("conversation hub keeps search and the three agreed sections", () => {
+  const start = flutterApp.indexOf("Widget _chatsPage()");
+  const end = flutterApp.indexOf("String _personName(", start);
+  const page = flutterApp.slice(start, end);
+  assert.ok(page.includes("ابحث في المحادثات والمجموعات"));
+  assert.ok(page.includes("المحادثات"));
+  assert.ok(page.includes("المجموعات"));
+  assert.ok(page.includes("المكالمات"));
+  assert.ok(page.includes("conversationQuery"));
+});
+
+test("message actions are opened by long press and include pin, forward, edit, and delete", () => {
+  const start = flutterApp.indexOf("Future<void> showMessageActions(");
+  const end = flutterApp.indexOf("Future<void> forwardBarqMessage(", start);
+  const menu = flutterApp.slice(start, end);
+  assert.ok(menu.includes("تثبيت الرسالة"));
+  assert.ok(menu.includes("تحويل الرسالة"));
+  assert.ok(menu.includes("تعديل الرسالة"));
+  assert.ok(menu.includes("حذف الرسالة"));
+  assert.ok(flutterApp.includes("onLongPress: () => showMessageActions("));
+  assert.ok(flutterApp.includes("Api.readAttachmentBytes"));
+  assert.ok(!flutterApp.includes("BarqFeatures.lightningMode"));
+});
+
+test("SPARK supports text, captioned media, replies, reactions, and authorized media reads", () => {
+  assert.ok(flutterApp.includes("publishSparkMedia"));
+  assert.ok(flutterApp.includes("X-Status-Caption"));
+  assert.ok(worker.includes("path === \"/api/statuses/media\""));
+  assert.ok(worker.includes("sparkInteractionMatch"));
+  assert.ok(worker.includes("status_replies"));
+  assert.ok(worker.includes("status_reactions"));
+  assert.ok(worker.includes("status_media"));
+});
+
+test("chat wallpaper is selectable and persists per conversation", () => {
+  assert.ok(flutterApp.includes("Icons.wallpaper_outlined"));
+  assert.ok(flutterApp.includes("_chooseChatWallpaper"));
+  assert.ok(flutterApp.includes("_loadChatWallpaper"));
+  assert.ok(flutterApp.includes("barq_chat_wallpaper_"));
+});
+
 test("private and group reactions are authenticated, conversation-scoped, and idempotent", () => {
   assert.ok(worker.includes("message_reactions"));
   assert.ok(worker.includes("groupInteractionMatch"));
