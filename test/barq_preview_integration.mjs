@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomInt, randomUUID } from "node:crypto";
+import { createHash, randomInt, randomUUID } from "node:crypto";
 
 const base = process.env.BARQ_PREVIEW_URL;
 if (!base) {
@@ -28,7 +28,14 @@ async function call(path, { method = "GET", token, body, expected = 200 } = {}) 
 const digits = () => String(randomInt(1000000, 9999999));
 const password = "Preview-Test-" + randomUUID().slice(0, 8);
 const suffix = randomUUID().replaceAll("-", "").slice(0, 8);
-const accountA = { displayName: "Preview Alpha " + suffix, username: "pa" + suffix, phone: "+1202" + digits(), password };
+const accountAPhone = "+1202" + digits();
+const accountA = {
+  name: "Preview Alpha " + suffix,
+  displayName: "Preview Alpha " + suffix,
+  username: "barq" + createHash("sha256").update(accountAPhone).digest("hex").slice(0, 16),
+  phone: accountAPhone,
+  password
+};
 const accountB = { displayName: "Preview Beta " + suffix, username: "pb" + suffix, phone: "+1202" + digits(), password };
 
 const a = await call("/api/register", { method: "POST", body: accountA, expected: 201 });
