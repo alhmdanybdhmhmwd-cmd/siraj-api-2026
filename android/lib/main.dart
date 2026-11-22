@@ -929,9 +929,16 @@ Future<List<String>> uploadPrivateMemoryPhotosSequentially({
   for (final photo in photos) {
     final fileName = photo['name'] as String? ?? 'صورة بدون اسم';
     try {
+      final storedBytes = photo['bytes'];
+      final bytes = storedBytes is List<int>
+          ? storedBytes
+          : await File(photo['path'] as String).readAsBytes();
+      if (bytes.isEmpty || bytes.length > 4 * 1024 * 1024) {
+        throw Exception('حجم الصورة غير مسموح.');
+      }
       await upload(
         memoryId: memoryId,
-        bytes: photo['bytes'] as List<int>,
+        bytes: bytes,
         fileName: fileName,
         contentType: photo['contentType'] as String,
       );
@@ -940,6 +947,18 @@ Future<List<String>> uploadPrivateMemoryPhotosSequentially({
     }
   }
   return failedFiles;
+}
+
+Future<Uint8List> readBarqPickedFileBytes(PlatformFile file) async {
+  final existingBytes = file.bytes;
+  if (existingBytes != null && existingBytes.isNotEmpty) {
+    return Uint8List.fromList(existingBytes);
+  }
+  final path = file.path;
+  if (path == null || path.isEmpty) {
+    throw Exception('تعذر قراءة الملف المختار من الجهاز.');
+  }
+  return File(path).readAsBytes();
 }
 
 class Api {
@@ -5340,7 +5359,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                           dialogContext,
                           allowMultiple: true,
                           title: 'اختيار صور للذكرى',
-                          withData: true,
+                          withData: false,
                           allowFiles: false,
                           requestType: RequestType.image,
                         );
@@ -5355,12 +5374,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                             'webp' => 'image/webp',
                             _ => '',
                           };
-                          final bytes = file.bytes;
-                          if (contentType.isEmpty || bytes == null || bytes.isEmpty || bytes.length > 4 * 1024 * 1024) {
+                          if (contentType.isEmpty || file.path == null ||
+                              file.size <= 0 || file.size > 4 * 1024 * 1024) {
                             error = 'كل صورة يجب أن تكون JPG أو PNG أو WebP وألا يتجاوز حجمها 4 ميجابايت.';
                             break;
                           }
-                          selected.add({'bytes': bytes, 'name': file.name, 'contentType': contentType});
+                          selected.add({
+                            'path': file.path,
+                            'size': file.size,
+                            'name': file.name,
+                            'contentType': contentType,
+                          });
                         }
                         if (error != null) {
                           showMsg(dialogContext, error);
@@ -5382,8 +5406,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                               children: [
                                 ClipRRect(
                                   borderRadius: BorderRadius.circular(10),
-                                  child: Image.memory(
-                                    Uint8List.fromList(photos[index]['bytes'] as List<int>),
+                                  child: Image.file(
+                                    File(photos[index]['path'] as String),
                                     width: 88,
                                     height: 88,
                                     fit: BoxFit.cover,
@@ -5529,15 +5553,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         context,
         allowMultiple: false,
         title: 'اختيار صورة الملف الشخصي',
-        withData: true,
+        withData: false,
         allowFiles: false,
         requestType: RequestType.image,
       );
       if (!mounted) return;
       if (result == null || result.files.isEmpty) return;
       final file = result.files.single;
-      final bytes = file.bytes;
-      if (bytes == null || bytes.isEmpty) {
+      final bytes = await readBarqPickedFileBytes(file);
+      if (bytes.isEmpty) {
         showMsg(context, 'تعذر قراءة الصورة المختارة. جرّب صورة أخرى.');
         return;
       }
@@ -7929,12 +7953,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   Future<void> pickAndSendFile() async {
     try {
       final result = await showBarqMediaPicker(
-        context, allowMultiple: false, title: 'إرسال وسائط أو ملف', withData: true,
+        context, allowMultiple: false, title: 'إرسال وسائط أو ملف', withData: false,
       );
       if (result == null || result.files.isEmpty) return;
       final file = result.files.single;
-      final bytes = file.bytes;
-      if (bytes == null) throw Exception('تعذر قراءة الملف من الجهاز.');
+      final bytes = await readBarqPickedFileBytes(file);
       setState(() => sending = true);
       await Api.uploadAttachment(
         bytes: bytes,
@@ -9047,12 +9070,11 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
   Future<void> pickAndSendFile() async {
     try {
       final result = await showBarqMediaPicker(
-        context, allowMultiple: false, title: 'إرسال وسائط أو ملف للمجموعة', withData: true,
+        context, allowMultiple: false, title: 'إرسال وسائط أو ملف للمجموعة', withData: false,
       );
       if (result == null || result.files.isEmpty) return;
       final file = result.files.single;
-      final bytes = file.bytes;
-      if (bytes == null) throw Exception('تعذر قراءة الملف من الجهاز.');
+      final bytes = await readBarqPickedFileBytes(file);
       setState(() => sending = true);
       await Api.uploadAttachment(
         bytes: bytes,
