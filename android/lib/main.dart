@@ -6017,6 +6017,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _showBarqIdentityPicker(BuildContext context) async {
     var draftIdentity = BarqIdentity.selected.value;
     var saving = false;
+    BarqIdentity? downloadingIdentity;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -6070,13 +6071,37 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 ...BarqIdentity.values.map((identity) {
                   final palette = BarqIdentityPalette.forIdentity(identity);
                   final isDraft = draftIdentity == identity;
-                  final isAvailable = identity.isBundled;
+                  final isAvailable = identity.isAvailable;
+                  final isDownloading = downloadingIdentity == identity;
                   final isCurrent = BarqIdentity.selected.value == identity;
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(14),
-                      onTap: saving || !isAvailable ? null : () => setDialogState(() => draftIdentity = identity),
+                      onTap: saving || isDownloading ? null : () async {
+                        if (!identity.isAvailable) {
+                          if (Api.token == null) {
+                            showMsg(dialogContext, 'سجّل الدخول أولاً لتنزيل الهوية.');
+                            return;
+                          }
+                          setDialogState(() => downloadingIdentity = identity);
+                          try {
+                            await BarqIdentity.download(identity, apiBase: apiBase, token: Api.token!);
+                            if (!dialogContext.mounted) return;
+                            setDialogState(() {
+                              downloadingIdentity = null;
+                              draftIdentity = identity;
+                            });
+                            showMsg(dialogContext, 'اكتمل تنزيل حزمة ${BarqIdentity.label(identity)}.');
+                          } catch (e) {
+                            if (!dialogContext.mounted) return;
+                            setDialogState(() => downloadingIdentity = null);
+                            showMsg(dialogContext, 'تعذر تنزيل الهوية: ${cleanError(e)}');
+                          }
+                        } else {
+                          setDialogState(() => draftIdentity = identity);
+                        }
+                      },
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -6109,13 +6134,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                     style: TextStyle(color: palette.text, fontWeight: FontWeight.w700)),
                                   const SizedBox(height: 3),
                                   Text(
-                                    !isAvailable ? 'تحتاج إلى تنزيل الحزمة قبل التفعيل' : palette.tagline,
+                                    isDownloading ? 'جارٍ تنزيل الحزمة...' : (!isAvailable ? 'اضغط لتنزيل الحزمة ثم تفعيلها' : palette.tagline),
                                     style: TextStyle(color: palette.mutedText, fontSize: 11),
                                   ),
                                 ],
                               ),
                             ),
-                            if (!isAvailable)
+                            if (isDownloading)
+                              const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                            else if (!isAvailable)
                               Icon(Icons.download_for_offline_outlined, color: palette.mutedText, size: 19),
                             if (isCurrent && !isDraft)
                               Icon(Icons.check_circle_outline, color: palette.mutedText, size: 19),
