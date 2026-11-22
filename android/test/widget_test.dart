@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nearby_connections/nearby_connections.dart';
-import 'package:flutter_test/flutter_test.dart' show contains, expect, hasLength, isEmpty, isFalse, isNot, isNotNull, isNull, isTrue, matches, same, test, testWidgets;
+import 'package:flutter_test/flutter_test.dart' as ft;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:barq/main.dart' as barqApp;
 
