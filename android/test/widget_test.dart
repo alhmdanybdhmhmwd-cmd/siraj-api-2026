@@ -15,6 +15,29 @@ void main() {
     expect(barqInviteMessage, isNot(contains('رمز دعوة')));
   });
 
+  test('notification deep links wait until initial app data is ready', () {
+    expect(barqCanHandlePendingNotification(
+      initialRefreshComplete: false,
+      alreadyHandling: false,
+      hasSession: true,
+    ), isFalse);
+    expect(barqCanHandlePendingNotification(
+      initialRefreshComplete: true,
+      alreadyHandling: true,
+      hasSession: true,
+    ), isFalse);
+    expect(barqCanHandlePendingNotification(
+      initialRefreshComplete: true,
+      alreadyHandling: false,
+      hasSession: false,
+    ), isFalse);
+    expect(barqCanHandlePendingNotification(
+      initialRefreshComplete: true,
+      alreadyHandling: false,
+      hasSession: true,
+    ), isTrue);
+  });
+
   test('Android back returns to chats then clears chat search before exit', () {
     expect(barqHomeCanPop(selectedTab: 1, conversationQuery: ''), isFalse);
     expect(barqHomeCanPop(selectedTab: 2, conversationQuery: ''), isFalse);
