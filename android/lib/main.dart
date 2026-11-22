@@ -4266,6 +4266,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             Text('المجموعات', style: TextStyle(color: palette.primary, fontWeight: FontWeight.w700)),
             const Spacer(),
             Text('${groups.length}', style: TextStyle(color: palette.onSurface.withValues(alpha: .65))),
+            const SizedBox(width: 8),
+            OutlinedButton.icon(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (dialogContext) => AlertDialog(
+                  title: const Text('المكالمات'),
+                  content: const Text('سيظهر هنا سجل المكالمات الصوتية والمرئية. واجهة المكالمات أُضيفت إلى المحادثات، ويتبقى ربط خدمة الاتصال واختبارها قبل تفعيل إجراء الاتصال.'),
+                  actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('حسناً'))],
+                ),
+              ),
+              icon: const Icon(Icons.call_outlined, size: 18),
+              label: const Text('المكالمات'),
+            ),
           ]),
           if (groups.isEmpty)
             Card(child: ListTile(
