@@ -670,7 +670,9 @@ test("Android SPARK viewer records up to 60-second AAC voice replies and plays a
   assert.ok(flutterApp.includes("_recordingClock"));
   assert.ok(flutterApp.includes("uploadSparkAudioReply"));
   assert.ok(flutterApp.includes("fetchSparkAudioReplyBytes"));
-  assert.ok(flutterApp.includes("_SparkAudioReplyTile"));
+  assert.ok(flutterApp.includes("barqSparkPrivateReplyMessage"));
+  assert.ok(flutterApp.includes("parseBarqSparkPrivateReply"));
+  assert.ok(flutterApp.includes("Api.uploadAttachment"));
   assert.ok(flutterApp.includes("X-Audio-Duration-Ms"));
   assert.ok(flutterApp.includes("_audioRecorder.hasPermission()"));
 });
@@ -691,7 +693,9 @@ test("SPARK reactions and replies require an active status visible to the reques
   assert.ok(route.includes("consumeLoginAttempt(env, \"spark_reply\""));
   assert.ok(flutterApp.includes("reactSparkStatus"));
   assert.ok(flutterApp.includes("replyToSpark"));
-  assert.ok(flutterApp.includes("لا توجد ردود بعد"));
+  assert.ok(flutterApp.includes("barqSparkPrivateReplyMessage"));
+  assert.ok(flutterApp.includes("Api.sendMessage(widget.authorId"));
+  assert.ok(!flutterApp.includes("_loadReplies"));
 });
 
 
