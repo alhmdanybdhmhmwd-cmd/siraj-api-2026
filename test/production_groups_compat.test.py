@@ -35,6 +35,16 @@ class ProductionGroupsCompatibilityTests(unittest.TestCase):
                 FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
+            CREATE TABLE messages (
+                id TEXT PRIMARY KEY,
+                sender_id TEXT NOT NULL,
+                receiver_id TEXT NOT NULL,
+                body TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                read_at TEXT,
+                FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
+            );
             CREATE TABLE group_messages (
                 id TEXT PRIMARY KEY,
                 group_id TEXT NOT NULL,
@@ -66,6 +76,8 @@ class ProductionGroupsCompatibilityTests(unittest.TestCase):
                 VALUES ('legacy-group', 'Legacy group', 'kept', 'owner-1');
             INSERT INTO group_members(group_id, user_id)
                 VALUES ('legacy-group', 'owner-1');
+            INSERT INTO messages(id, sender_id, receiver_id, body)
+                VALUES ('legacy-private-message', 'owner-1', 'member-1', 'private survives');
             INSERT INTO group_messages(id, group_id, sender_id, body)
                 VALUES ('legacy-message', 'legacy-group', 'owner-1', 'preserve me');
             INSERT INTO media_assets
@@ -85,6 +97,12 @@ class ProductionGroupsCompatibilityTests(unittest.TestCase):
             "SELECT id, name, owner_id FROM chat_groups WHERE id = 'legacy-group'"
         ).fetchone()
         self.assertEqual(legacy, ("legacy-group", "Legacy group", "owner-1"))
+        self.assertEqual(
+            self.db.execute(
+                "SELECT body FROM messages WHERE id = 'legacy-private-message'"
+            ).fetchone()[0],
+            "private survives",
+        )
         self.assertEqual(
             self.db.execute(
                 "SELECT body FROM group_messages WHERE id = 'legacy-message'"
@@ -133,6 +151,23 @@ class ProductionGroupsCompatibilityTests(unittest.TestCase):
         self.db.execute(
             "UPDATE group_messages SET body = 'edited', edited_at = CURRENT_TIMESTAMP "
             "WHERE id = 'new-message'"
+        )
+        self.db.execute(
+            "UPDATE messages SET body = 'private edited', edited_at = CURRENT_TIMESTAMP "
+            "WHERE id = 'legacy-private-message'"
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT reply_to_id, reply_to_body, reply_to_sender_id "
+                "FROM messages WHERE id = 'legacy-private-message'"
+            ).fetchone(),
+            (None, None, None),
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT body FROM messages WHERE id = 'legacy-private-message'"
+            ).fetchone()[0],
+            "private edited",
         )
         self.assertEqual(
             self.db.execute(
