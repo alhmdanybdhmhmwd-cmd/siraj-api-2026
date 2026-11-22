@@ -101,9 +101,8 @@ const attachmentBody = JSON.parse(attachmentMessages[0].body);
 assert.equal(attachmentBody.type, "attachment");
 assert.equal(attachmentBody.attachmentId, attachmentId);
 const friends = await json("/api/friends", { token: a.token });
-const restoredChat = (friends.friends || friends.contacts || []).find(friend =>
-  (friend.id || friend.userId) === b.user.id);
-assert.ok(restoredChat && restoredChat.chatHidden !== true,
+const restoredChat = (friends.friends || []).find(friend => friend.id === b.user.id);
+assert.equal(restoredChat?.chatHidden, false,
   "a newly delivered resumable attachment must restore the private conversation");
 
 const downloaded = await request("/api/media/" + encodeURIComponent(attachmentId), {
