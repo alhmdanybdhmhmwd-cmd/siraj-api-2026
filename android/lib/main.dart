@@ -396,10 +396,10 @@ class _BarqPickedVideoThumbnailState extends State<_BarqPickedVideoThumbnail> {
         await controller.dispose();
         return;
       }
-      setState(() { _controller = controller; _loading = false; });
+      setState(() => _controller = controller);
     } catch (_) {
       await controller.dispose();
-      if (mounted) setState(() { _failed = true; _loading = false; });
+      if (mounted) setState(() => _failed = true);
     }
   }
 
