@@ -633,7 +633,8 @@ void main() {
     expect(normalizeMessageReactions(null), isEmpty);
   });
 
-  testWidgets('reaction chips are display-only and new reactions are in the long-press menu', (tester) async {
+  testWidgets('reaction chips toggle add and remove for the current user', (tester) async {
+    final calls = <(String, bool)>[];
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
         body: messageReactionBar(
@@ -643,15 +644,21 @@ void main() {
             'reactions': [
               {'emoji': '❤️', 'user_id': 'u1'},
               {'emoji': '❤️', 'user_id': 'u2'},
+              {'emoji': '🔥', 'user_id': 'u2'},
             ],
           },
+          onReact: (emoji, remove) async => calls.add((emoji, remove)),
         ),
       )),
     ));
 
     expect(find.text('❤️ 2'), findsOneWidget);
-    final chip = tester.widget<ActionChip>(find.byType(ActionChip));
-    expect(chip.onPressed, isNull);
+    expect(find.text('🔥 1'), findsOneWidget);
+    await tester.tap(find.widgetWithText(ActionChip, '❤️ 2'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ActionChip, '🔥 1'));
+    await tester.pumpAndSettle();
+    expect(calls, [('❤️', true), ('🔥', false)]);
   });
 
   testWidgets('message action sheet exposes reaction and pin actions', (tester) async {
