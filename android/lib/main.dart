@@ -2061,6 +2061,12 @@ class Api {
   }
 }
 
+String barqSparkPrivateReplyMessage({required String caption, required String reply}) {
+  final excerpt = caption.trim().replaceAll(RegExp(r'\\s+'), ' ');
+  final context = excerpt.isEmpty ? 'لحظة من SPARK' : excerpt;
+  return '↩️ رد على SPARK\\n$context\\n\\n${reply.trim()}';
+}
+
 String newBarqMessageId() {
   final random = math.Random.secure();
   return List.generate(16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
@@ -9137,11 +9143,10 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
       if (widget.authorId.isEmpty || widget.authorId == widget.currentUserId) {
         throw Exception('تعذر تحديد صاحب SPARK لإرسال الرد إلى محادثته.');
       }
-      final excerpt = widget.caption.trim().isEmpty
-          ? 'لحظة من SPARK'
-          : widget.caption.trim().replaceAll(RegExp(r'\s+'), ' ');
-      final message = '↩️ رد على SPARK\n$excerpt\n\n$value';
-      await Api.sendMessage(widget.authorId, message);
+      await Api.sendMessage(widget.authorId, barqSparkPrivateReplyMessage(
+        caption: widget.caption,
+        reply: value,
+      ));
       _replyController.clear();
       if (mounted) showMsg(context, 'وصل ردك إلى المحادثة الخاصة مع صاحب SPARK.');
     } catch (e) {
@@ -9208,10 +9213,10 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
       if (widget.authorId.isEmpty || widget.authorId == widget.currentUserId) {
         throw Exception('لا يمكن إرسال رد صوتي إلى هذه اللحظة.');
       }
-      final excerpt = widget.caption.trim().isEmpty
-          ? 'لحظة من SPARK'
-          : widget.caption.trim().replaceAll(RegExp(r'\s+'), ' ');
-      await Api.sendMessage(widget.authorId, '🎙️ رد صوتي على SPARK\n$excerpt');
+      await Api.sendMessage(widget.authorId, barqSparkPrivateReplyMessage(
+        caption: widget.caption,
+        reply: '🎙️ أرسل رداً صوتياً على هذه اللحظة.',
+      ));
       await Api.uploadAttachment(
         bytes: bytes,
         fileName: 'barq_spark_reply_${DateTime.now().millisecondsSinceEpoch}.m4a',
