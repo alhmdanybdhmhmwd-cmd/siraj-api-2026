@@ -1493,6 +1493,11 @@ class Api {
     await request('DELETE', '/api/messages/${Uri.encodeComponent(messageId)}');
   }
 
+  static Future<void> hidePrivateMessageForMe(String messageId) async {
+    await request('DELETE',
+      '/api/messages/${Uri.encodeComponent(messageId)}?scope=me');
+  }
+
   static Future<void> clearPrivateConversation(String friendId) async {
     await request('POST',
       '/api/conversations/${Uri.encodeComponent(friendId)}/clear');
@@ -2388,6 +2393,8 @@ Future<void> showMessageActions(
   required String currentUserId,
   required bool canDelete,
   required Future<void> Function() onDelete,
+  bool canDeleteForMe = false,
+  Future<void> Function()? onDeleteForMe,
   Future<void> Function(Map<String, dynamic> message)? onReply,
   Future<void> Function(String body)? onEdit,
   Future<void> Function(String emoji, bool remove)? onReact,
@@ -2444,10 +2451,16 @@ Future<void> showMessageActions(
               title: const Text('تعديل الرسالة'),
               onTap: () => Navigator.pop(sheetContext, 'edit'),
             ),
+          if (canDeleteForMe && onDeleteForMe != null)
+            ListTile(
+              leading: const Icon(Icons.visibility_off_outlined),
+              title: const Text('حذف لدي فقط'),
+              onTap: () => Navigator.pop(sheetContext, 'delete_me'),
+            ),
           if (canDelete)
             ListTile(
-              leading: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
-              title: const Text('حذف الرسالة'),
+              leading: const Icon(Icons.delete_forever_outlined, color: Colors.redAccent),
+              title: const Text('حذف لدى الجميع'),
               onTap: () => Navigator.pop(sheetContext, 'delete'),
             ),
         ],
@@ -2486,18 +2499,38 @@ Future<void> showMessageActions(
       await Clipboard.setData(ClipboardData(text: text));
       if (context.mounted) showMsg(context, 'تم نسخ الرسالة');
     }
+  } else if (action == 'delete_me' && canDeleteForMe && onDeleteForMe != null && context.mounted) {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('حذف الرسالة لدي فقط؟'),
+        content: const Text('ستختفي الرسالة من حسابك فقط، وستبقى ظاهرة للطرف الآخر.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('حذف')),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      try {
+        await onDeleteForMe();
+        if (context.mounted) showMsg(context, 'تم حذف الرسالة من حسابك فقط');
+      } catch (error) {
+        if (context.mounted) showMsg(context, cleanError(error));
+      }
+    }
   } else if (action == 'delete' && canDelete && context.mounted) {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: Theme.of(context).colorScheme.surface,
         title: const Text('حذف الرسالة؟'),
-        content: const Text('سيتم حذف الرسالة من المحادثة.'),
+        content: const Text('سيتم حذف الرسالة لدى الطرفين ولن تظهر في المحادثة.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('حذف', style: TextStyle(color: Colors.redAccent)),
+            child: const Text('حذف لدى الجميع', style: TextStyle(color: Colors.redAccent)),
           ),
         ],
       ),
@@ -8262,6 +8295,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                           message: m,
                                           currentUserId: widget.currentUserId,
                                           canDelete: mine && m['is_ephemeral'] != true && m['is_offline_pending'] != true,
+                                          canDeleteForMe: m['is_ephemeral'] != true && m['is_offline_pending'] != true,
+                                          onDeleteForMe: () async {
+                                            await Api.hidePrivateMessageForMe(field(m, ['id', 'message_id']));
+                                            if (mounted) await loadMessages();
+                                          },
                                           onDelete: () async {
                                             await Api.deletePrivateMessage(field(m, ['id', 'message_id']));
                                             if (mounted) await loadMessages();
@@ -8314,6 +8352,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                           message: m,
                                           currentUserId: widget.currentUserId,
                                           canDelete: mine && m['is_ephemeral'] != true && m['is_offline_pending'] != true,
+                                          canDeleteForMe: m['is_ephemeral'] != true && m['is_offline_pending'] != true,
+                                          onDeleteForMe: () async {
+                                            await Api.hidePrivateMessageForMe(field(m, ['id', 'message_id']));
+                                            if (mounted) await loadMessages();
+                                          },
                                           onDelete: () async {
                                             await Api.deletePrivateMessage(field(m, ['id', 'message_id']));
                                             if (mounted) await loadMessages();
