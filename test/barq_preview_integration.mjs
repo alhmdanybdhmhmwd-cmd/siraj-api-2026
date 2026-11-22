@@ -417,6 +417,37 @@ assert.equal(mediaFetch.status, 200, "authorized mutual contact must be able to 
 assert.match(mediaFetch.headers.get("content-type") || "", /^image\/png/i);
 assert.ok((await mediaFetch.arrayBuffer()).byteLength > 0, "SPARK media response must contain bytes");
 
-console.log("Preview integration passed: legacy/current signup and phone login, profile/privacy/contacts, private message edit/pin/reactions, private-memory owner isolation/photo access, SPARK text replies/reactions, captioned media upload/feed/download, and access guards.");
+const ephemeralSent = await call("/api/ephemeral-messages", {
+  method: "POST", token: a.token,
+  body: { receiverId: b.user.id, body: "Read-once preview message " + suffix },
+  expected: 201
+});
+const ephemeralFirstRead = await call("/api/ephemeral-messages?with=" + encodeURIComponent(a.user.id), {
+  token: b.token
+});
+assert.ok(ephemeralFirstRead.messages.some(message => message.id === ephemeralSent.id),
+  "recipient must see ephemeral message on first read");
+await new Promise(resolve => setTimeout(resolve, 11_000));
+const ephemeralAfterExpiry = await call("/api/ephemeral-messages?with=" + encodeURIComponent(b.user.id), {
+  token: a.token
+});
+assert.ok(!ephemeralAfterExpiry.messages.some(message => message.id === ephemeralSent.id),
+  "ephemeral message must disappear ten seconds after first read");
+
+await call("/api/blocks", {
+  method: "POST", token: a.token, body: { userId: b.user.id }, expected: 201
+});
+const blockedList = await call("/api/blocks", { token: a.token });
+assert.ok(blockedList.blockedUsers.some(user => user.userId === b.user.id),
+  "block list must persist the selected user");
+await call("/api/messages", {
+  method: "POST", token: b.token,
+  body: { receiverId: a.user.id, body: "blocked message " + suffix },
+  expected: 403
+});
+await call("/api/blocks", {
+  method: "DELETE", token: a.token, body: { userId: b.user.id }
+});
+console.log("Preview integration passed: legacy/current signup and phone login, profile/privacy/contacts, private message edit/pin/reactions, private-memory owner isolation/photo access, SPARK text replies/reactions, captioned media upload/feed/download, ephemeral expiry, blocking, and access guards.");
 
 }
