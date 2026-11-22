@@ -7666,7 +7666,7 @@ class _ChatPageState extends State<ChatPage> {
             setState(() => messages = mergeMessages(messages, [{...localMessage!, 'is_sending': false, 'is_offline_pending': true}]));
             showMsg(context, deliveredNearby
                 ? 'أُرسلت الرسالة عبر الاتصال القريب، وستُزامن مع الخادم عند عودة الإنترنت.'
-                : replyToMessage != null
+                : replySnapshot != null
                     ? 'تم حفظ الرد محليًا وسيُرسل مع الاقتباس عند عودة الإنترنت.'
                     : 'حُفظت الرسالة محليًا. افتح الأجهزة القريبة لتسليمها الآن، وستُزامن تلقائيًا عند عودة الإنترنت.');
           }
