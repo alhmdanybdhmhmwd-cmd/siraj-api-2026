@@ -64,7 +64,6 @@ class FakeDB {
     this.recoveryAttempts = new Map();
     this.loginAttempts = new Map();
     this.transcriptionRateLimit = null;
-    this.inviteCodes = new Map();
 
     this.contactCandidates = [];
     this.privacySettings = null;
@@ -151,10 +150,6 @@ class FakeDB {
         }
         if (sql.includes("SELECT attempts FROM transcription_rate_limits")) {
           return { attempts: db.transcriptionRateLimit?.attempts || 0 };
-        }
-        if (sql.includes("SELECT invite_code FROM user_invite_codes WHERE user_id = ?")) {
-          const inviteCode = db.inviteCodes.get(this.params[0]);
-          return inviteCode ? { invite_code: inviteCode } : null;
         }
         return null;
       },
@@ -273,11 +268,6 @@ class FakeDB {
             ? { userId, windowStarted: now, attempts: 1 }
             : { ...current, attempts: current.attempts + 1 };
         }
-        if (sql.includes("INSERT OR IGNORE INTO user_invite_codes")) {
-          if (!db.inviteCodes.has(this.params[0])) {
-            db.inviteCodes.set(this.params[0], this.params[1]);
-          }
-        }
         if (sql.includes("INSERT INTO recovery_codes")) {
           db.recovery = { code_hash: this.params[1], code_salt: this.params[2], expires_at: this.params[3], consumed_at: null };
         }
@@ -340,24 +330,6 @@ class FakeDB {
 }
 
 
-
-test("private invite endpoint creates one stable twelve-character code per account", async () => {
-  const db = new FakeDB();
-  const token = await worker.signToken(user, secret, 0);
-  const request = () => worker.default.fetch(new Request(
-    "https://api.example.test/api/referrals",
-    { headers: { Authorization: "Bearer " + token } }
-  ), { DB: db, JWT_SECRET: secret });
-  const firstResponse = await request();
-  assert.equal(firstResponse.status, 200);
-  const first = await firstResponse.json();
-  assert.match(first.inviteCode, /^[A-F0-9]{12}$/);
-  const secondResponse = await request();
-  assert.equal(secondResponse.status, 200);
-  const second = await secondResponse.json();
-  assert.equal(second.inviteCode, first.inviteCode);
-  assert.equal(db.inviteCodes.size, 1);
-});
 
 test("ephemeral send stores only in its isolated table and requires a friend", async () => {
   const db = new FakeDB();
@@ -966,38 +938,6 @@ test("registration issues a one-time 160-bit recovery code and stores only its s
   assert.ok(db.recovery.code_hash);
   assert.notEqual(db.recovery.code_hash, data.recoveryCode);
   assert.equal(db.recovery.expires_at > Math.floor(Date.now() / 1000), true);
-});
-
-test("registration rejects malformed private invite codes before account creation", async () => {
-  const db = new FakeDB();
-  const response = await worker.default.fetch(new Request("https://api.example.test/api/register", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      displayName: "New User",
-      phone: "+447911123456",
-      password: "secure-password-123",
-      inviteCode: "NOT-A-CODE"
-    })
-  }), { DB: db, JWT_SECRET: secret });
-  assert.equal(response.status, 400);
-  assert.equal(db.users.length, 1);
-});
-
-test("registration rejects unknown private invite codes without creating an account", async () => {
-  const db = new FakeDB();
-  const response = await worker.default.fetch(new Request("https://api.example.test/api/register", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      displayName: "New User",
-      phone: "+447911123456",
-      password: "secure-password-123",
-      inviteCode: "ABCDEF123456"
-    })
-  }), { DB: db, JWT_SECRET: secret });
-  assert.equal(response.status, 400);
-  assert.equal(db.users.length, 1);
 });
 
 test("registration accepts international numbers and generates a private handle when username is omitted", async () => {
