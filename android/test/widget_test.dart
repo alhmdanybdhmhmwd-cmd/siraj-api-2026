@@ -1,145 +1,145 @@
 import 'package:flutter/material.dart';
 import 'package:nearby_connections/nearby_connections.dart';
-import 'package:flutter_test/flutter_test.dart' as barqFlutterTest;
+import 'package:flutter_test/flutter_test.dart' as flutterTesting2026x9;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:barq/main.dart' as barqApp;
 import 'package:barq/barq_identity.dart' as barqIdentity;
 
 void main() {
-  barqFlutterTest.test('optional realtime connects only with a session, endpoint and resumed app', () {
-    barqFlutterTest.expect(barqApp.barqRealtimeCanConnect(authToken: 'session', appResumed: true, socketUrl: 'wss://example.test'), isTrue);
-    barqFlutterTest.expect(barqApp.barqRealtimeCanConnect(authToken: null, appResumed: true, socketUrl: 'wss://example.test'), isFalse);
-    barqFlutterTest.expect(barqApp.barqRealtimeCanConnect(authToken: '', appResumed: true, socketUrl: 'wss://example.test'), isFalse);
-    barqFlutterTest.expect(barqApp.barqRealtimeCanConnect(authToken: 'session', appResumed: false, socketUrl: 'wss://example.test'), isFalse);
-    barqFlutterTest.expect(barqApp.barqRealtimeCanConnect(authToken: 'session', appResumed: true, socketUrl: ''), isFalse);
+  flutterTesting2026x9.test('optional realtime connects only with a session, endpoint and resumed app', () {
+    flutterTesting2026x9.expect(barqApp.barqRealtimeCanConnect(authToken: 'session', appResumed: true, socketUrl: 'wss://example.test'), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqRealtimeCanConnect(authToken: null, appResumed: true, socketUrl: 'wss://example.test'), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqRealtimeCanConnect(authToken: '', appResumed: true, socketUrl: 'wss://example.test'), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqRealtimeCanConnect(authToken: 'session', appResumed: false, socketUrl: 'wss://example.test'), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqRealtimeCanConnect(authToken: 'session', appResumed: true, socketUrl: ''), flutterTesting2026x9.isFalse);
   });
 
-  barqFlutterTest.test('realtime events refresh only the matching direct conversation', () {
-    barqFlutterTest.expect(
+  flutterTesting2026x9.test('realtime events refresh only the matching direct conversation', () {
+    flutterTesting2026x9.expect(
       barqApp.barqRealtimeMessageMatchesConversation(
         {'type': 'message', 'senderId': 'friend-1', 'receiverId': 'me'},
         'friend-1',
       ),
-      isTrue,
+      flutterTesting2026x9.isTrue,
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqRealtimeMessageMatchesConversation(
         {'type': 'message', 'senderId': 'me', 'receiverId': 'friend-1'},
         'friend-1',
       ),
-      isTrue,
+      flutterTesting2026x9.isTrue,
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqRealtimeMessageMatchesConversation(
         {'type': 'message', 'senderId': 'other', 'receiverId': 'me'},
         'friend-1',
       ),
-      isFalse,
+      flutterTesting2026x9.isFalse,
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqRealtimeMessageMatchesConversation(
         {'type': 'presence', 'senderId': 'friend-1'},
         'friend-1',
       ),
-      isFalse,
+      flutterTesting2026x9.isFalse,
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqRealtimeMessageMatchesConversation(
         {'type': 'message', 'senderId': 'friend-1'},
         '',
       ),
-      isFalse,
+      flutterTesting2026x9.isFalse,
     );
   });
 
-  barqFlutterTest.test('notification tap routing validates private chat, group and SPARK destinations', () {
-    barqFlutterTest.expect(
+  flutterTesting2026x9.test('notification tap routing validates private chat, group and SPARK destinations', () {
+    flutterTesting2026x9.expect(
       barqApp.barqNotificationRouteFromData({'type': 'direct_message', 'senderId': 'user-7'}),
       {'type': 'direct_message', 'senderId': 'user-7'},
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqNotificationRouteFromData({'type': 'group_message', 'groupId': 'group-4'}),
       {'type': 'group_message', 'groupId': 'group-4'},
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqNotificationRouteFromData({'type': 'status_update'}),
       {'type': 'status_update'},
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqNotificationRouteFromData({'type': 'status_update', 'statusId': 'spark-9'}),
       {'type': 'status_update', 'statusId': 'spark-9'},
     );
-    barqFlutterTest.expect(barqApp.barqNotificationRouteFromData({'type': 'direct_message'}), isNull);
-    barqFlutterTest.expect(barqApp.barqNotificationRouteFromData({'type': 'group_message', 'groupId': ' '}), isNull);
-    barqFlutterTest.expect(barqApp.barqNotificationRouteFromData({'type': 'unknown', 'senderId': 'user-7'}), isNull);
+    flutterTesting2026x9.expect(barqApp.barqNotificationRouteFromData({'type': 'direct_message'}), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.barqNotificationRouteFromData({'type': 'group_message', 'groupId': ' '}), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.barqNotificationRouteFromData({'type': 'unknown', 'senderId': 'user-7'}), flutterTesting2026x9.isNull);
   });
 
-  barqFlutterTest.test('private invite links accept only the BARQ scheme, host and 12-character code', () {
-    barqFlutterTest.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef123456')), 'ABCDEF123456');
-    barqFlutterTest.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite?code=abcdef123456')), 'ABCDEF123456');
-    barqFlutterTest.expect(barqApp.barqInviteCodeFromUri(Uri.parse('https://invite/abcdef123456')), isNull);
-    barqFlutterTest.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://other/abcdef123456')), isNull);
-    barqFlutterTest.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite/abc123')), isNull);
-    barqFlutterTest.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef12345z')), isNull);
-    barqFlutterTest.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef123456/extra')), isNull);
-    barqFlutterTest.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite?code=abcdef123456&code=111111111111')), isNull);
-    barqFlutterTest.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef123456?code=abcdef123456')), isNull);
-    barqFlutterTest.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite@evil.example/abcdef123456')), isNull);
-    barqFlutterTest.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite:443/abcdef123456')), isNull);
-    barqFlutterTest.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef123456#other')), isNull);
+  flutterTesting2026x9.test('private invite links accept only the BARQ scheme, host and 12-character code', () {
+    flutterTesting2026x9.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef123456')), 'ABCDEF123456');
+    flutterTesting2026x9.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite?code=abcdef123456')), 'ABCDEF123456');
+    flutterTesting2026x9.expect(barqApp.barqInviteCodeFromUri(Uri.parse('https://invite/abcdef123456')), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://other/abcdef123456')), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite/abc123')), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef12345z')), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef123456/extra')), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite?code=abcdef123456&code=111111111111')), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef123456?code=abcdef123456')), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite@evil.example/abcdef123456')), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite:443/abcdef123456')), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef123456#other')), flutterTesting2026x9.isNull);
   });
 
-  barqFlutterTest.test('Nearby requests only permissions supported by the Android API level', () {
-    barqFlutterTest.expect(barqApp.barqNearbyPermissionNamesForAndroidSdk(26), ['location', 'bluetooth']);
-    barqFlutterTest.expect(barqApp.barqNearbyPermissionNamesForAndroidSdk(30), ['location', 'bluetooth']);
-    barqFlutterTest.expect(barqApp.barqNearbyPermissionNamesForAndroidSdk(31), ['location', 'bluetoothAdvertise', 'bluetoothConnect', 'bluetoothScan']);
-    barqFlutterTest.expect(barqApp.barqNearbyPermissionNamesForAndroidSdk(32), ['location', 'bluetoothAdvertise', 'bluetoothConnect', 'bluetoothScan']);
-    barqFlutterTest.expect(barqApp.barqNearbyPermissionNamesForAndroidSdk(33), ['bluetoothAdvertise', 'bluetoothConnect', 'bluetoothScan', 'nearbyWifiDevices']);
-    barqFlutterTest.expect(barqApp.barqNearbyPermissionNamesForAndroidSdk(37), ['bluetoothAdvertise', 'bluetoothConnect', 'bluetoothScan', 'nearbyWifiDevices']);
-    barqFlutterTest.expect(barqApp.barqNearbyRequiresLocationService(30), isTrue);
-    barqFlutterTest.expect(barqApp.barqNearbyRequiresLocationService(32), isTrue);
-    barqFlutterTest.expect(barqApp.barqNearbyRequiresLocationService(33), isFalse);
-    barqFlutterTest.expect(barqApp.barqNearbyRequiresLocationService(37), isFalse);
+  flutterTesting2026x9.test('Nearby requests only permissions supported by the Android API level', () {
+    flutterTesting2026x9.expect(barqApp.barqNearbyPermissionNamesForAndroidSdk(26), ['location', 'bluetooth']);
+    flutterTesting2026x9.expect(barqApp.barqNearbyPermissionNamesForAndroidSdk(30), ['location', 'bluetooth']);
+    flutterTesting2026x9.expect(barqApp.barqNearbyPermissionNamesForAndroidSdk(31), ['location', 'bluetoothAdvertise', 'bluetoothConnect', 'bluetoothScan']);
+    flutterTesting2026x9.expect(barqApp.barqNearbyPermissionNamesForAndroidSdk(32), ['location', 'bluetoothAdvertise', 'bluetoothConnect', 'bluetoothScan']);
+    flutterTesting2026x9.expect(barqApp.barqNearbyPermissionNamesForAndroidSdk(33), ['bluetoothAdvertise', 'bluetoothConnect', 'bluetoothScan', 'nearbyWifiDevices']);
+    flutterTesting2026x9.expect(barqApp.barqNearbyPermissionNamesForAndroidSdk(37), ['bluetoothAdvertise', 'bluetoothConnect', 'bluetoothScan', 'nearbyWifiDevices']);
+    flutterTesting2026x9.expect(barqApp.barqNearbyRequiresLocationService(30), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqNearbyRequiresLocationService(32), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqNearbyRequiresLocationService(33), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqNearbyRequiresLocationService(37), flutterTesting2026x9.isFalse);
   });
 
-  barqFlutterTest.test('Nearby payload transfer treats failure and cancellation as failed', () {
-    barqFlutterTest.expect(barqApp.barqNearbyPayloadTransferFailed(PayloadStatus.FAILURE), isTrue);
-    barqFlutterTest.expect(barqApp.barqNearbyPayloadTransferFailed(PayloadStatus.CANCELED), isTrue);
-    barqFlutterTest.expect(barqApp.barqNearbyPayloadTransferFailed(PayloadStatus.SUCCESS), isFalse);
-    barqFlutterTest.expect(barqApp.barqNearbyPayloadTransferFailed(PayloadStatus.IN_PROGRESS), isFalse);
-    barqFlutterTest.expect(barqApp.barqNearbyPayloadTransferFailed(PayloadStatus.NONE), isFalse);
+  flutterTesting2026x9.test('Nearby payload transfer treats failure and cancellation as failed', () {
+    flutterTesting2026x9.expect(barqApp.barqNearbyPayloadTransferFailed(PayloadStatus.FAILURE), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqNearbyPayloadTransferFailed(PayloadStatus.CANCELED), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqNearbyPayloadTransferFailed(PayloadStatus.SUCCESS), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqNearbyPayloadTransferFailed(PayloadStatus.IN_PROGRESS), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqNearbyPayloadTransferFailed(PayloadStatus.NONE), flutterTesting2026x9.isFalse);
   });
 
-  barqFlutterTest.test('Nearby outgoing text validates sender, contact, stable ID and body', () {
+  flutterTesting2026x9.test('Nearby outgoing text validates sender, contact, stable ID and body', () {
     const id = 'a1b2c3d4e5f60708a1b2c3d4e5f60708';
     const contacts = {'friend-1'};
-    barqFlutterTest.expect(barqApp.isValidBarqNearbyOutgoingText(
+    flutterTesting2026x9.expect(barqApp.isValidBarqNearbyOutgoingText(
       senderId: 'me', currentUserId: 'me', receiverId: 'friend-1',
       knownContacts: contacts, messageId: id, body: 'hello',
-    ), isTrue);
-    barqFlutterTest.expect(barqApp.isValidBarqNearbyOutgoingText(
+    ), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.isValidBarqNearbyOutgoingText(
       senderId: 'spoofed', currentUserId: 'me', receiverId: 'friend-1',
       knownContacts: contacts, messageId: id, body: 'hello',
-    ), isFalse);
-    barqFlutterTest.expect(barqApp.isValidBarqNearbyOutgoingText(
+    ), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.isValidBarqNearbyOutgoingText(
       senderId: 'me', currentUserId: 'me', receiverId: 'stranger',
       knownContacts: contacts, messageId: id, body: 'hello',
-    ), isFalse);
-    barqFlutterTest.expect(barqApp.isValidBarqNearbyOutgoingText(
+    ), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.isValidBarqNearbyOutgoingText(
       senderId: 'me', currentUserId: 'me', receiverId: 'friend-1',
       knownContacts: contacts, messageId: 'bad-id', body: 'hello',
-    ), isFalse);
-    barqFlutterTest.expect(barqApp.isValidBarqNearbyOutgoingText(
+    ), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.isValidBarqNearbyOutgoingText(
       senderId: 'me', currentUserId: 'me', receiverId: 'friend-1',
       knownContacts: contacts, messageId: id, body: '   ',
-    ), isFalse);
-    barqFlutterTest.expect(barqApp.isValidBarqNearbyOutgoingText(
+    ), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.isValidBarqNearbyOutgoingText(
       senderId: 'me', currentUserId: 'me', receiverId: 'friend-1',
       knownContacts: contacts, messageId: id, body: List.filled(5001, 'x').join(),
-    ), isFalse);
+    ), flutterTesting2026x9.isFalse);
   });
 
-  barqFlutterTest.test('Nearby accepts only bounded text messages from the verified peer', () {
+  flutterTesting2026x9.test('Nearby accepts only bounded text messages from the verified peer', () {
     final valid = <String, dynamic>{
       'kind': 'barq_text_message',
       'id': 'a1b2c3d4e5f60708a1b2c3d4e5f60708',
@@ -147,95 +147,95 @@ void main() {
       'receiverId': 'me',
       'body': 'رسالة قريبة',
     };
-    barqFlutterTest.expect(barqApp.isValidBarqNearbyTextPayload(valid, peerId: 'friend-1', currentUserId: 'me'), isTrue);
-    barqFlutterTest.expect(barqApp.isValidBarqNearbyTextPayload({...valid, 'senderId': 'stranger'}, peerId: 'friend-1', currentUserId: 'me'), isFalse);
-    barqFlutterTest.expect(barqApp.isValidBarqNearbyTextPayload({...valid, 'receiverId': 'other'}, peerId: 'friend-1', currentUserId: 'me'), isFalse);
-    barqFlutterTest.expect(barqApp.isValidBarqNearbyTextPayload({...valid, 'id': 'x'.padRight(129, 'x')}, peerId: 'friend-1', currentUserId: 'me'), isFalse);
-    barqFlutterTest.expect(barqApp.isValidBarqNearbyTextPayload({...valid, 'id': 'bad id'}, peerId: 'friend-1', currentUserId: 'me'), isFalse);
-    barqFlutterTest.expect(barqApp.isValidBarqNearbyTextPayload({...valid, 'id': 'a1b2c3d4e5f60708'}, peerId: 'friend-1', currentUserId: 'me'), isFalse);
-    barqFlutterTest.expect(barqApp.isValidBarqNearbyTextPayload({...valid, 'id': 'A1B2C3D4E5F60708A1B2C3D4E5F60708'}, peerId: 'friend-1', currentUserId: 'me'), isFalse);
-    barqFlutterTest.expect(barqApp.isValidBarqNearbyTextPayload({...valid, 'body': '   '}, peerId: 'friend-1', currentUserId: 'me'), isFalse);
-    barqFlutterTest.expect(barqApp.isValidBarqNearbyTextPayload({...valid, 'body': List<String>.filled(5001, 'x').join()}, peerId: 'friend-1', currentUserId: 'me'), isFalse);
-    barqFlutterTest.expect(barqApp.isValidBarqNearbyTextPayload({...valid, 'kind': 'media'}, peerId: 'friend-1', currentUserId: 'me'), isFalse);
+    flutterTesting2026x9.expect(barqApp.isValidBarqNearbyTextPayload(valid, peerId: 'friend-1', currentUserId: 'me'), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.isValidBarqNearbyTextPayload({...valid, 'senderId': 'stranger'}, peerId: 'friend-1', currentUserId: 'me'), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.isValidBarqNearbyTextPayload({...valid, 'receiverId': 'other'}, peerId: 'friend-1', currentUserId: 'me'), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.isValidBarqNearbyTextPayload({...valid, 'id': 'x'.padRight(129, 'x')}, peerId: 'friend-1', currentUserId: 'me'), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.isValidBarqNearbyTextPayload({...valid, 'id': 'bad id'}, peerId: 'friend-1', currentUserId: 'me'), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.isValidBarqNearbyTextPayload({...valid, 'id': 'a1b2c3d4e5f60708'}, peerId: 'friend-1', currentUserId: 'me'), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.isValidBarqNearbyTextPayload({...valid, 'id': 'A1B2C3D4E5F60708A1B2C3D4E5F60708'}, peerId: 'friend-1', currentUserId: 'me'), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.isValidBarqNearbyTextPayload({...valid, 'body': '   '}, peerId: 'friend-1', currentUserId: 'me'), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.isValidBarqNearbyTextPayload({...valid, 'body': List<String>.filled(5001, 'x').join()}, peerId: 'friend-1', currentUserId: 'me'), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.isValidBarqNearbyTextPayload({...valid, 'kind': 'media'}, peerId: 'friend-1', currentUserId: 'me'), flutterTesting2026x9.isFalse);
   });
 
-  barqFlutterTest.test('registration sends a stable private username without exposing the phone', () {
+  flutterTesting2026x9.test('registration sends a stable private username without exposing the phone', () {
     final first = barqApp.barqPrivateRegistrationUsername('+967770000000');
     final second = barqApp.barqPrivateRegistrationUsername('+967770000000');
-    barqFlutterTest.expect(first, second);
-    barqFlutterTest.expect(first, matches(RegExp(r'^barq[a-f0-9]{16}$')));
-    barqFlutterTest.expect(barqApp.normalizeBarqInternationalPhone(' +٩٦٧ ٧٧٠٠٠٠٠٠٠ '), '+967770000000');
-    barqFlutterTest.expect(barqApp.normalizeBarqInternationalPhone('00447911123456'), '+447911123456');
-    barqFlutterTest.expect(barqApp.normalizeBarqRegistrationPhone('٠٧٧٠٠٠٠٠٠٠', '+967'), '+967770000000');
-    barqFlutterTest.expect(barqApp.normalizeBarqRegistrationPhone('0770000000', '+967'), '+967770000000');
-    barqFlutterTest.expect(barqApp.normalizeBarqRegistrationPhone('+447911123456', '+967'), '+447911123456');
-    barqFlutterTest.expect(barqApp.normalizeBarqRegistrationPhone(' +44 7911 123456 ', '+967'), '+447911123456');
-    barqFlutterTest.expect(barqApp.normalizeBarqRegistrationPhone(' 00 44 7911 123456 ', '+967'), '+447911123456');
-    barqFlutterTest.expect(barqApp.normalizeBarqRegistrationPhone(' ٠٧٧٠٠٠٠٠٠٠ ', '+967'), '+967770000000');
+    flutterTesting2026x9.expect(first, second);
+    flutterTesting2026x9.expect(first, flutterTesting2026x9.matches(RegExp(r'^barq[a-f0-9]{16}$')));
+    flutterTesting2026x9.expect(barqApp.normalizeBarqInternationalPhone(' +٩٦٧ ٧٧٠٠٠٠٠٠٠ '), '+967770000000');
+    flutterTesting2026x9.expect(barqApp.normalizeBarqInternationalPhone('00447911123456'), '+447911123456');
+    flutterTesting2026x9.expect(barqApp.normalizeBarqRegistrationPhone('٠٧٧٠٠٠٠٠٠٠', '+967'), '+967770000000');
+    flutterTesting2026x9.expect(barqApp.normalizeBarqRegistrationPhone('0770000000', '+967'), '+967770000000');
+    flutterTesting2026x9.expect(barqApp.normalizeBarqRegistrationPhone('+447911123456', '+967'), '+447911123456');
+    flutterTesting2026x9.expect(barqApp.normalizeBarqRegistrationPhone(' +44 7911 123456 ', '+967'), '+447911123456');
+    flutterTesting2026x9.expect(barqApp.normalizeBarqRegistrationPhone(' 00 44 7911 123456 ', '+967'), '+447911123456');
+    flutterTesting2026x9.expect(barqApp.normalizeBarqRegistrationPhone(' ٠٧٧٠٠٠٠٠٠٠ ', '+967'), '+967770000000');
   });
 
-  barqFlutterTest.test('registration country codes cover 206 geographic calling codes without duplicates', () {
-    barqFlutterTest.expect(barqIdentity.barqCountryCodes.length, 206);
+  flutterTesting2026x9.test('registration country codes cover 206 geographic calling codes without duplicates', () {
+    flutterTesting2026x9.expect(barqIdentity.barqCountryCodes.length, 206);
     final codes = barqIdentity.barqCountryCodes.map((country) => country.$2).toSet();
-    barqFlutterTest.expect(codes.length, 206);
+    flutterTesting2026x9.expect(codes.length, 206);
     for (final code in [
       '+222', '+223', '+228', '+246', '+247', '+269', '+297', '+298', '+299',
       '+350', '+378', '+383', '+389', '+423', '+501', '+590', '+594', '+596',
       '+672', '+681', '+850', '+972', '+995',
     ]) {
-      barqFlutterTest.expect(codes, contains(code));
+      flutterTesting2026x9.expect(codes, flutterTesting2026x9.contains(code));
     }
     // These are regional prefixes within the shared +1 plan, not country codes.
-    barqFlutterTest.expect(codes, isNot(contains('+1684')));
-    barqFlutterTest.expect(codes, isNot(contains('+1340')));
-    barqFlutterTest.expect(codes, isNot(contains('+1787')));
+    flutterTesting2026x9.expect(codes, flutterTesting2026x9.isNot(flutterTesting2026x9.contains('+1684')));
+    flutterTesting2026x9.expect(codes, flutterTesting2026x9.isNot(flutterTesting2026x9.contains('+1340')));
+    flutterTesting2026x9.expect(codes, flutterTesting2026x9.isNot(flutterTesting2026x9.contains('+1787')));
   });
 
-  barqFlutterTest.test('saved contact comparison normalizes Arabic digits and phone punctuation', () {
-    barqFlutterTest.expect(
+  flutterTesting2026x9.test('saved contact comparison normalizes Arabic digits and phone punctuation', () {
+    flutterTesting2026x9.expect(
       barqApp.normalizeBarqContactPhoneDigits('+٩٦٧ (٧٧) ٠٠٠-٠٠٠١'),
       '967770000001',
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.normalizeBarqContactPhoneDigits('+967 77 000 0001'),
       barqApp.normalizeBarqContactPhoneDigits('+٩٦٧ (٧٧) ٠٠٠-٠٠٠١'),
     );
-    barqFlutterTest.expect(barqApp.normalizeBarqContactPhoneDigits('---'), isEmpty);
+    flutterTesting2026x9.expect(barqApp.normalizeBarqContactPhoneDigits('---'), flutterTesting2026x9.isEmpty);
   });
 
-  barqFlutterTest.test('conversation search matches message text and sender case-insensitively', () {
+  flutterTesting2026x9.test('conversation search flutterTesting2026x9.matches message text and sender case-insensitively', () {
     final messages = [
       {'id': '1', 'body': 'مرحبا يا صديقي', 'display_name': 'Ali'},
       {'id': '2', 'body': 'Good morning', 'display_name': 'Sara'},
       {'id': '3', 'body': 'رسالة أخرى', 'display_name': 'Ali'},
     ];
 
-    barqFlutterTest.expect(barqApp.searchConversationMessages(messages, 'صديقي').map((m) => m['id']), ['1']);
-    barqFlutterTest.expect(barqApp.searchConversationMessages(messages, 'ALI').map((m) => m['id']), ['1', '3']);
-    barqFlutterTest.expect(barqApp.searchConversationMessages(messages, 'not found'), isEmpty);
-    barqFlutterTest.expect(barqApp.searchConversationMessages(messages, '   '), isEmpty);
+    flutterTesting2026x9.expect(barqApp.searchConversationMessages(messages, 'صديقي').map((m) => m['id']), ['1']);
+    flutterTesting2026x9.expect(barqApp.searchConversationMessages(messages, 'ALI').map((m) => m['id']), ['1', '3']);
+    flutterTesting2026x9.expect(barqApp.searchConversationMessages(messages, 'not found'), flutterTesting2026x9.isEmpty);
+    flutterTesting2026x9.expect(barqApp.searchConversationMessages(messages, '   '), flutterTesting2026x9.isEmpty);
   });
 
-  barqFlutterTest.test('offline sync pauses only for network failures, not one rejected message', () {
-    barqFlutterTest.expect(barqApp.barqOfflineSyncShouldPause(Exception('NETWORK_DIAGNOSTIC: SocketException')), isTrue);
-    barqFlutterTest.expect(barqApp.barqOfflineSyncShouldPause(Exception('Reply target not found')), isFalse);
-    barqFlutterTest.expect(barqApp.barqOfflineSyncShouldPause(Exception('Message is too long')), isFalse);
+  flutterTesting2026x9.test('offline sync pauses only for network failures, not one rejected message', () {
+    flutterTesting2026x9.expect(barqApp.barqOfflineSyncShouldPause(Exception('NETWORK_DIAGNOSTIC: SocketException')), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqOfflineSyncShouldPause(Exception('Reply target not found')), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqOfflineSyncShouldPause(Exception('Message is too long')), flutterTesting2026x9.isFalse);
   });
 
-  barqFlutterTest.test('Nearby inbox duplicate IDs must match sender, receiver, and body', () {
+  flutterTesting2026x9.test('Nearby inbox duplicate IDs must match sender, receiver, and body', () {
     final original = <String, dynamic>{
       'id': 'a1b2c3d4e5f60708a1b2c3d4e5f60708',
       'sender_id': 'friend-1',
       'receiver_id': 'me',
       'body': 'hello',
     };
-    barqFlutterTest.expect(barqApp.barqOfflineIncomingMessageMatches(original, Map<String, dynamic>.from(original)), isTrue);
-    barqFlutterTest.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'body': 'tampered'}), isFalse);
-    barqFlutterTest.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'sender_id': 'other'}), isFalse);
-    barqFlutterTest.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'receiver_id': 'other'}), isFalse);
+    flutterTesting2026x9.expect(barqApp.barqOfflineIncomingMessageMatches(original, Map<String, dynamic>.from(original)), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'body': 'tampered'}), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'sender_id': 'other'}), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'receiver_id': 'other'}), flutterTesting2026x9.isFalse);
   });
 
-  barqFlutterTest.test('offline reconciliation removes only an exact server copy', () {
+  flutterTesting2026x9.test('offline reconciliation removes only an exact server copy', () {
     const id = 'a1b2c3d4e5f60708a1b2c3d4e5f60708';
     final queued = <Map<String, dynamic>>[
       {'id': id, 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'hello'},
@@ -244,10 +244,10 @@ void main() {
     final server = <Map<String, dynamic>>[
       {'id': id, 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'hello'},
     ];
-    barqFlutterTest.expect(barqApp.barqOfflineItemsNotOnServerPage(queued, server), [queued.last]);
+    flutterTesting2026x9.expect(barqApp.barqOfflineItemsNotOnServerPage(queued, server), [queued.last]);
   });
 
-  barqFlutterTest.test('accepted outbox removal preserves a same-ID entry with changed content or reply target', () {
+  flutterTesting2026x9.test('accepted outbox removal preserves a flutterTesting2026x9.same-ID entry with changed content or reply target', () {
     final accepted = <String, dynamic>{
       'id': 'a1b2c3d4e5f60708a1b2c3d4e5f60708',
       'sender_id': 'me',
@@ -256,17 +256,17 @@ void main() {
       'reply_to_id': 'reply-a',
     };
     final changed = {...accepted, 'reply_to_id': 'reply-b'};
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqOfflineQueueWithoutExactMessage([accepted, changed], accepted),
       [changed],
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqOfflineQueueWithoutExactMessage([accepted], accepted),
-      isEmpty,
+      flutterTesting2026x9.isEmpty,
     );
   });
 
-  barqFlutterTest.test('offline reconciliation keeps a same-ID message when its content or parties differ', () {
+  flutterTesting2026x9.test('offline reconciliation keeps a flutterTesting2026x9.same-ID message when its content or parties differ', () {
     const id = 'a1b2c3d4e5f60708a1b2c3d4e5f60708';
     final queued = <Map<String, dynamic>>[
       {'id': id, 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'original'},
@@ -274,46 +274,46 @@ void main() {
     final server = <Map<String, dynamic>>[
       {'id': id, 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'tampered'},
     ];
-    barqFlutterTest.expect(barqApp.barqOfflineItemsNotOnServerPage(queued, server), queued);
-    barqFlutterTest.expect(barqApp.barqOfflineItemsNotOnServerPage(queued, [
+    flutterTesting2026x9.expect(barqApp.barqOfflineItemsNotOnServerPage(queued, server), queued);
+    flutterTesting2026x9.expect(barqApp.barqOfflineItemsNotOnServerPage(queued, [
       {...server.single, 'sender_id': 'other', 'body': 'original'},
     ]), queued);
   });
 
-  barqFlutterTest.test('offline queue capacity rejects the first item beyond the limit', () {
-    barqFlutterTest.expect(barqApp.barqOfflineQueueIsFull(0), isFalse);
-    barqFlutterTest.expect(barqApp.barqOfflineQueueIsFull(199), isFalse);
-    barqFlutterTest.expect(barqApp.barqOfflineQueueIsFull(200), isTrue);
-    barqFlutterTest.expect(barqApp.barqOfflineQueueIsFull(201), isTrue);
-    barqFlutterTest.expect(barqApp.barqOfflineQueueIsFull(3, limit: 3), isTrue);
+  flutterTesting2026x9.test('offline queue capacity rejects the first item beyond the limit', () {
+    flutterTesting2026x9.expect(barqApp.barqOfflineQueueIsFull(0), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqOfflineQueueIsFull(199), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqOfflineQueueIsFull(200), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqOfflineQueueIsFull(201), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqOfflineQueueIsFull(3, limit: 3), flutterTesting2026x9.isTrue);
   });
 
-  barqFlutterTest.test('offline queue decoding preserves empty queues and rejects corrupted data', () {
-    barqFlutterTest.expect(barqApp.decodeBarqOfflineQueue(null), isEmpty);
-    barqFlutterTest.expect(barqApp.decodeBarqOfflineQueue(''), isEmpty);
-    barqFlutterTest.expect(barqApp.decodeBarqOfflineQueue('[{"id":"m1","body":"hello"}]'), [
+  flutterTesting2026x9.test('offline queue decoding preserves empty queues and rejects corrupted data', () {
+    flutterTesting2026x9.expect(barqApp.decodeBarqOfflineQueue(null), flutterTesting2026x9.isEmpty);
+    flutterTesting2026x9.expect(barqApp.decodeBarqOfflineQueue(''), flutterTesting2026x9.isEmpty);
+    flutterTesting2026x9.expect(barqApp.decodeBarqOfflineQueue('[{"id":"m1","body":"hello"}]'), [
       {'id': 'm1', 'body': 'hello'},
     ]);
-    barqFlutterTest.expect(() => barqApp.decodeBarqOfflineQueue('{bad json'), throwsFormatException);
-    barqFlutterTest.expect(() => barqApp.decodeBarqOfflineQueue('{"id":"m1"}'), throwsFormatException);
-    barqFlutterTest.expect(() => barqApp.decodeBarqOfflineQueue('[{"id":"m1"}, null]'), throwsFormatException);
-    barqFlutterTest.expect(() => barqApp.decodeBarqOfflineQueue('[{"id":"m1"}, "bad-entry"]'), throwsFormatException);
+    flutterTesting2026x9.expect(() => barqApp.decodeBarqOfflineQueue('{bad json'), throwsFormatException);
+    flutterTesting2026x9.expect(() => barqApp.decodeBarqOfflineQueue('{"id":"m1"}'), throwsFormatException);
+    flutterTesting2026x9.expect(() => barqApp.decodeBarqOfflineQueue('[{"id":"m1"}, null]'), throwsFormatException);
+    flutterTesting2026x9.expect(() => barqApp.decodeBarqOfflineQueue('[{"id":"m1"}, "bad-entry"]'), throwsFormatException);
   });
 
-  barqFlutterTest.test('Nearby outbox duplicate IDs must match sender, receiver, and body', () {
+  flutterTesting2026x9.test('Nearby outbox duplicate IDs must match sender, receiver, and body', () {
     final original = <String, dynamic>{
       'id': 'a1b2c3d4e5f60708a1b2c3d4e5f60708',
       'sender_id': 'me',
       'receiver_id': 'friend-1',
       'body': 'hello',
     };
-    barqFlutterTest.expect(barqApp.barqOfflineIncomingMessageMatches(original, Map<String, dynamic>.from(original)), isTrue);
-    barqFlutterTest.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'body': 'tampered'}), isFalse);
-    barqFlutterTest.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'sender_id': 'other'}), isFalse);
-    barqFlutterTest.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'receiver_id': 'other'}), isFalse);
+    flutterTesting2026x9.expect(barqApp.barqOfflineIncomingMessageMatches(original, Map<String, dynamic>.from(original)), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'body': 'tampered'}), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'sender_id': 'other'}), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'receiver_id': 'other'}), flutterTesting2026x9.isFalse);
   });
 
-  barqFlutterTest.test('offline queue reconciliation removes exact matches found on any server page', () {
+  flutterTesting2026x9.test('offline queue reconciliation removes exact flutterTesting2026x9.matches found on any server page', () {
     final queued = [
       {'id': 'offline-old', 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'وصلت دون إنترنت'},
       {'id': 'offline-new', 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'بانتظار المزامنة'},
@@ -322,11 +322,11 @@ void main() {
       {'id': 'offline-old', 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'وصلت دون إنترنت'},
     ]);
 
-    barqFlutterTest.expect(remaining.map((item) => item['id']).toList(), ['offline-new']);
-    barqFlutterTest.expect(barqApp.barqOfflineItemsNotOnServerPage(queued, []), same(queued));
+    flutterTesting2026x9.expect(remaining.map((item) => item['id']).toList(), ['offline-new']);
+    flutterTesting2026x9.expect(barqApp.barqOfflineItemsNotOnServerPage(queued, []), flutterTesting2026x9.same(queued));
   });
 
-  barqFlutterTest.test('message merge deduplicates by id and keeps chronological order', () {
+  flutterTesting2026x9.test('message merge deduplicates by id and keeps chronological order', () {
     final merged = barqApp.mergeMessages(
       [
         {'id': 'm2', 'created_at': '2026-11-19 10:02:00', 'body': 'second'},
@@ -338,95 +338,95 @@ void main() {
       ],
     );
 
-    barqFlutterTest.expect(merged.map((message) => message['id']).toList(), ['m1', 'm2', 'm3']);
-    barqFlutterTest.expect(merged[1]['body'], 'second updated');
+    flutterTesting2026x9.expect(merged.map((message) => message['id']).toList(), ['m1', 'm2', 'm3']);
+    flutterTesting2026x9.expect(merged[1]['body'], 'second updated');
   });
 
-  barqFlutterTest.test('barqApp.field helper supports API snake_case and camelCase fields', () {
-    barqFlutterTest.expect(barqApp.field({'display_name': 'برق'}, ['displayName', 'display_name']), 'برق');
-    barqFlutterTest.expect(barqApp.field({}, ['username'], 'مستخدم'), 'مستخدم');
+  flutterTesting2026x9.test('barqApp.field helper supports API snake_case and camelCase fields', () {
+    flutterTesting2026x9.expect(barqApp.field({'display_name': 'برق'}, ['displayName', 'display_name']), 'برق');
+    flutterTesting2026x9.expect(barqApp.field({}, ['username'], 'مستخدم'), 'مستخدم');
   });
 
-  barqFlutterTest.test('profile photo path is resolved for group payloads with snake_case fields', () {
-    barqFlutterTest.expect(
+  flutterTesting2026x9.test('profile photo path is resolved for group payloads with snake_case fields', () {
+    flutterTesting2026x9.expect(
       barqApp.profilePhotoPath({
         'sender_id': 'user/with space',
         'photo_updated_at': '2026-11-20 12:00:00',
       }),
       '/api/profile/photo/user%2Fwith%20space',
     );
-    barqFlutterTest.expect(barqApp.profilePhotoPath({'id': 'without-photo'}), isEmpty);
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(barqApp.profilePhotoPath({'id': 'without-photo'}), flutterTesting2026x9.isEmpty);
+    flutterTesting2026x9.expect(
       barqApp.profilePhotoPath({'id': 'friend-1', 'photo_url': '/api/profile/photo/friend-1'}),
       '/api/profile/photo/friend-1',
     );
   });
 
 
-  barqFlutterTest.test('group roles limit promotion to owners and preserve the owner account', () {
-    barqFlutterTest.expect(barqApp.barqCanManageGroupRoles('owner', targetIsOwner: false), isTrue);
-    barqFlutterTest.expect(barqApp.barqCanManageGroupRoles('owner', targetIsOwner: true), isFalse);
-    barqFlutterTest.expect(barqApp.barqCanManageGroupRoles('admin', targetIsOwner: false), isFalse);
-    barqFlutterTest.expect(barqApp.barqCanManageGroupRoles('member', targetIsOwner: false), isFalse);
+  flutterTesting2026x9.test('group roles limit promotion to owners and preserve the owner account', () {
+    flutterTesting2026x9.expect(barqApp.barqCanManageGroupRoles('owner', targetIsOwner: false), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqCanManageGroupRoles('owner', targetIsOwner: true), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqCanManageGroupRoles('admin', targetIsOwner: false), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqCanManageGroupRoles('member', targetIsOwner: false), flutterTesting2026x9.isFalse);
   });
 
-  barqFlutterTest.test('group removal permissions prevent admins removing peers or owners', () {
-    barqFlutterTest.expect(
+  flutterTesting2026x9.test('group removal permissions prevent admins removing peers or owners', () {
+    flutterTesting2026x9.expect(
       barqApp.barqCanRemoveGroupMember('owner', 'admin', targetIsOwner: false, targetIsSelf: false),
-      isTrue,
+      flutterTesting2026x9.isTrue,
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqCanRemoveGroupMember('admin', 'member', targetIsOwner: false, targetIsSelf: false),
-      isTrue,
+      flutterTesting2026x9.isTrue,
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqCanRemoveGroupMember('admin', 'admin', targetIsOwner: false, targetIsSelf: false),
-      isFalse,
+      flutterTesting2026x9.isFalse,
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqCanRemoveGroupMember('member', 'member', targetIsOwner: false, targetIsSelf: false),
-      isFalse,
+      flutterTesting2026x9.isFalse,
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqCanRemoveGroupMember('owner', 'member', targetIsOwner: true, targetIsSelf: false),
-      isFalse,
+      flutterTesting2026x9.isFalse,
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqCanRemoveGroupMember('owner', 'member', targetIsOwner: false, targetIsSelf: true),
-      isFalse,
+      flutterTesting2026x9.isFalse,
     );
   });
 
-  barqFlutterTest.test('only an owner can transfer group ownership to another non-owner member', () {
-    barqFlutterTest.expect(
+  flutterTesting2026x9.test('only an owner can transfer group ownership to another non-owner member', () {
+    flutterTesting2026x9.expect(
       barqApp.barqCanTransferGroupOwnership('owner', targetIsOwner: false, targetIsSelf: false),
-      isTrue,
+      flutterTesting2026x9.isTrue,
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqCanTransferGroupOwnership('admin', targetIsOwner: false, targetIsSelf: false),
-      isFalse,
+      flutterTesting2026x9.isFalse,
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqCanTransferGroupOwnership('member', targetIsOwner: false, targetIsSelf: false),
-      isFalse,
+      flutterTesting2026x9.isFalse,
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqCanTransferGroupOwnership('owner', targetIsOwner: true, targetIsSelf: false),
-      isFalse,
+      flutterTesting2026x9.isFalse,
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqCanTransferGroupOwnership('owner', targetIsOwner: false, targetIsSelf: true),
-      isFalse,
+      flutterTesting2026x9.isFalse,
     );
   });
 
-  barqFlutterTest.test('group members can leave themselves but the owner cannot leave without transfer', () {
-    barqFlutterTest.expect(barqApp.barqCanLeaveGroup(isSelf: true, isOwner: false), isTrue);
-    barqFlutterTest.expect(barqApp.barqCanLeaveGroup(isSelf: true, isOwner: true), isFalse);
-    barqFlutterTest.expect(barqApp.barqCanLeaveGroup(isSelf: false, isOwner: false), isFalse);
+  flutterTesting2026x9.test('group members can leave themselves but the owner cannot leave without transfer', () {
+    flutterTesting2026x9.expect(barqApp.barqCanLeaveGroup(isSelf: true, isOwner: false), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqCanLeaveGroup(isSelf: true, isOwner: true), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqCanLeaveGroup(isSelf: false, isOwner: false), flutterTesting2026x9.isFalse);
   });
 
-  barqFlutterTest.testWidgets('public profile page shows the selected contact details', (tester) async {
+  flutterTesting2026x9.testWidgets('public profile page shows the selected contact details', (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: barqApp.PublicProfilePage(
         person: {
@@ -440,23 +440,23 @@ void main() {
       ),
     ));
 
-    barqFlutterTest.expect(find.text('الملف الشخصي'), findsOneWidget);
-    barqFlutterTest.expect(find.text('صديق برق'), findsOneWidget);
-    barqFlutterTest.expect(find.text('@barq_friend'), findsNWidgets(2));
-    barqFlutterTest.expect(find.text('+967700000001'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('الملف الشخصي'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('صديق برق'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('@barq_friend'), findsNWidgets(2));
+    flutterTesting2026x9.expect(find.text('+967700000001'), findsOneWidget);
     // ListView builds off-screen children lazily; scroll to materialize the actions.
     await tester.drag(find.byType(ListView), const Offset(0, -700));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(find.text('حفظ الرقم في جهات الاتصال'), findsOneWidget);
-    barqFlutterTest.expect(find.text('إرسال رسالة'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('حفظ الرقم في جهات الاتصال'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('إرسال رسالة'), findsOneWidget);
     final sendButton = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'إرسال رسالة'),
     );
-    barqFlutterTest.expect(sendButton.onPressed, isNotNull);
+    flutterTesting2026x9.expect(sendButton.onPressed, flutterTesting2026x9.isNotNull);
   });
 
 
-  barqFlutterTest.testWidgets('public profile disables messaging for the current user', (tester) async {
+  flutterTesting2026x9.testWidgets('public profile disables messaging for the current user', (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: barqApp.PublicProfilePage(
         person: {
@@ -474,10 +474,10 @@ void main() {
     final sendButton = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'إرسال رسالة'),
     );
-    barqFlutterTest.expect(sendButton.onPressed, isNull);
+    flutterTesting2026x9.expect(sendButton.onPressed, flutterTesting2026x9.isNull);
   });
 
-  barqFlutterTest.testWidgets('public profile accepts nested API user and hides message action by default', (tester) async {
+  flutterTesting2026x9.testWidgets('public profile accepts nested API user and hides message action by default', (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: barqApp.PublicProfilePage(
         person: {
@@ -491,12 +491,12 @@ void main() {
       ),
     ));
 
-    barqFlutterTest.expect(find.text('عضو المجموعة'), findsOneWidget);
-    barqFlutterTest.expect(find.text('@group_member'), findsNWidgets(2));
-    barqFlutterTest.expect(find.text('إرسال رسالة'), findsNothing);
+    flutterTesting2026x9.expect(find.text('عضو المجموعة'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('@group_member'), findsNWidgets(2));
+    flutterTesting2026x9.expect(find.text('إرسال رسالة'), findsNothing);
   });
 
-  barqFlutterTest.test('ephemeral messages disappear at their first-read expiry deadline', () {
+  flutterTesting2026x9.test('ephemeral messages disappear at their first-read expiry deadline', () {
     final now = DateTime.utc(2026, 11, 20, 12);
     final nowSeconds = now.millisecondsSinceEpoch ~/ 1000;
     final visible = barqApp.filterExpiredEphemeralMessages([
@@ -507,10 +507,10 @@ void main() {
       {'id': 'expired-string', 'body': 'انتهى أيضًا', 'is_ephemeral': true, 'delete_at': (nowSeconds - 1).toString()},
     ], now: now);
 
-    barqFlutterTest.expect(visible.map((message) => message['id']).toList(),
+    flutterTesting2026x9.expect(visible.map((message) => message['id']).toList(),
         ['regular', 'unread', 'active']);
   });
-  barqFlutterTest.testWidgets('own message actions allow copying and confirmed deletion', (tester) async {
+  flutterTesting2026x9.testWidgets('own message actions allow copying and confirmed deletion', (tester) async {
     var deleted = false;
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
@@ -528,18 +528,18 @@ void main() {
 
     await tester.tap(find.text('فتح الإجراءات'));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(find.text('نسخ الرسالة'), findsOneWidget);
-    barqFlutterTest.expect(find.text('حذف الرسالة'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('نسخ الرسالة'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('حذف الرسالة'), findsOneWidget);
 
     await tester.tap(find.text('حذف الرسالة'));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(find.text('حذف الرسالة؟'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('حذف الرسالة؟'), findsOneWidget);
     await tester.tap(find.text('حذف').last);
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(deleted, isTrue);
+    flutterTesting2026x9.expect(deleted, flutterTesting2026x9.isTrue);
   });
 
-  barqFlutterTest.testWidgets('other users message actions do not expose delete', (tester) async {
+  flutterTesting2026x9.testWidgets('other users message actions do not expose delete', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
         body: TextButton(
@@ -556,21 +556,21 @@ void main() {
 
     await tester.tap(find.text('فتح الإجراءات'));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(find.text('نسخ الرسالة'), findsOneWidget);
-    barqFlutterTest.expect(find.text('حذف الرسالة'), findsNothing);
+    flutterTesting2026x9.expect(find.text('نسخ الرسالة'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('حذف الرسالة'), findsNothing);
   });
 
-  barqFlutterTest.test('quoted reply preview is bounded and handles attachment references', () {
-    barqFlutterTest.expect(barqApp.messageReplyPreview({'reply_to_body': 'رسالة مقتبسة'}), 'رسالة مقتبسة');
-    barqFlutterTest.expect(barqApp.messageReplyPreview({'reply_to_body': List.filled(130, 'x').join()}).length, 121);
-    barqFlutterTest.expect(barqApp.messageReplyPreview({'reply_to_body': '{"attachmentId":"a1"}'}), 'مرفق');
-    barqFlutterTest.expect(barqApp.messageReplyPreview({'reply_to_body': '{"attachment_id":"a2"}'}), 'مرفق');
-    barqFlutterTest.expect(barqApp.messageReplyPreview({'reply_to_body': '{"fileName":"photo.jpg"}'}), 'مرفق');
-    barqFlutterTest.expect(barqApp.messageReplyPreview({'reply_to_body': {'attachmentId': 'a3'}}), 'مرفق');
-    barqFlutterTest.expect(barqApp.messageReplyPreview({'reply_to_body': ''}), 'رسالة');
+  flutterTesting2026x9.test('quoted reply preview is bounded and handles attachment references', () {
+    flutterTesting2026x9.expect(barqApp.messageReplyPreview({'reply_to_body': 'رسالة مقتبسة'}), 'رسالة مقتبسة');
+    flutterTesting2026x9.expect(barqApp.messageReplyPreview({'reply_to_body': List.filled(130, 'x').join()}).length, 121);
+    flutterTesting2026x9.expect(barqApp.messageReplyPreview({'reply_to_body': '{"attachmentId":"a1"}'}), 'مرفق');
+    flutterTesting2026x9.expect(barqApp.messageReplyPreview({'reply_to_body': '{"attachment_id":"a2"}'}), 'مرفق');
+    flutterTesting2026x9.expect(barqApp.messageReplyPreview({'reply_to_body': '{"fileName":"photo.jpg"}'}), 'مرفق');
+    flutterTesting2026x9.expect(barqApp.messageReplyPreview({'reply_to_body': {'attachmentId': 'a3'}}), 'مرفق');
+    flutterTesting2026x9.expect(barqApp.messageReplyPreview({'reply_to_body': ''}), 'رسالة');
   });
 
-  barqFlutterTest.testWidgets('message edit dialog returns trimmed replacement text', (tester) async {
+  flutterTesting2026x9.testWidgets('message edit dialog returns trimmed replacement text', (tester) async {
     String? saved;
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
@@ -585,14 +585,14 @@ void main() {
 
     await tester.tap(find.text('فتح التعديل'));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(find.text('تعديل الرسالة'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('تعديل الرسالة'), findsOneWidget);
     await tester.enterText(find.byType(TextField), '  النص الجديد  ');
     await tester.tap(find.text('حفظ'));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(saved, 'النص الجديد');
+    flutterTesting2026x9.expect(saved, 'النص الجديد');
   });
 
-  barqFlutterTest.testWidgets('message action menu invokes the reply callback', (tester) async {
+  flutterTesting2026x9.testWidgets('message action menu invokes the reply callback', (tester) async {
     Map<String, dynamic>? selected;
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
@@ -611,25 +611,25 @@ void main() {
 
     await tester.tap(find.text('فتح الإجراءات'));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(find.text('الرد على الرسالة'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('الرد على الرسالة'), findsOneWidget);
     await tester.tap(find.text('الرد على الرسالة'));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(selected?['id'], 'reply-1');
+    flutterTesting2026x9.expect(selected?['id'], 'reply-1');
   });
 
 
-  barqFlutterTest.test('message reaction normalization preserves emoji and reacting user IDs', () {
+  flutterTesting2026x9.test('message reaction normalization preserves emoji and reacting user IDs', () {
     final normalized = barqApp.normalizeMessageReactions([
       {'emoji': '❤️', 'user_id': 'u1'},
       {'emoji': '🔥', 'user_id': 'u2'},
     ]);
-    barqFlutterTest.expect(normalized, hasLength(2));
-    barqFlutterTest.expect(normalized.first['emoji'], '❤️');
-    barqFlutterTest.expect(normalized.last['user_id'], 'u2');
-    barqFlutterTest.expect(barqApp.normalizeMessageReactions(null), isEmpty);
+    flutterTesting2026x9.expect(normalized, flutterTesting2026x9.hasLength(2));
+    flutterTesting2026x9.expect(normalized.first['emoji'], '❤️');
+    flutterTesting2026x9.expect(normalized.last['user_id'], 'u2');
+    flutterTesting2026x9.expect(barqApp.normalizeMessageReactions(null), flutterTesting2026x9.isEmpty);
   });
 
-  barqFlutterTest.testWidgets('reaction chips show counts and allow removing the current user reaction', (tester) async {
+  flutterTesting2026x9.testWidgets('reaction chips show counts and allow removing the current user reaction', (tester) async {
     String? selectedEmoji;
     bool? removing;
     await tester.pumpWidget(MaterialApp(
@@ -651,14 +651,14 @@ void main() {
       )),
     ));
 
-    barqFlutterTest.expect(find.text('❤️ 2'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('❤️ 2'), findsOneWidget);
     await tester.tap(find.text('❤️ 2'));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(selectedEmoji, '❤️');
-    barqFlutterTest.expect(removing, isTrue);
+    flutterTesting2026x9.expect(selectedEmoji, '❤️');
+    flutterTesting2026x9.expect(removing, flutterTesting2026x9.isTrue);
   });
 
-  barqFlutterTest.testWidgets('message action sheet exposes reaction and pin actions', (tester) async {
+  flutterTesting2026x9.testWidgets('message action sheet exposes reaction and pin actions', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
         body: TextButton(
@@ -678,34 +678,34 @@ void main() {
 
     await tester.tap(find.text('فتح الإجراءات'));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(find.text('إضافة تفاعل'), findsOneWidget);
-    barqFlutterTest.expect(find.text('تثبيت الرسالة'), findsOneWidget);
-    barqFlutterTest.expect(find.text('حفظ في الذكريات الخاصة'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('إضافة تفاعل'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('تثبيت الرسالة'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('حفظ في الذكريات الخاصة'), findsOneWidget);
   });
 
-  barqFlutterTest.test('media duration formatter supports minute and hour lengths', () {
-    barqFlutterTest.expect(barqApp.formatBarqMediaDuration(const Duration(seconds: 0)), '00:00');
-    barqFlutterTest.expect(barqApp.formatBarqMediaDuration(const Duration(minutes: 2, seconds: 9)), '02:09');
-    barqFlutterTest.expect(barqApp.formatBarqMediaDuration(const Duration(hours: 1, minutes: 3, seconds: 5)), '1:03:05');
+  flutterTesting2026x9.test('media duration formatter supports minute and hour lengths', () {
+    flutterTesting2026x9.expect(barqApp.formatBarqMediaDuration(const Duration(seconds: 0)), '00:00');
+    flutterTesting2026x9.expect(barqApp.formatBarqMediaDuration(const Duration(minutes: 2, seconds: 9)), '02:09');
+    flutterTesting2026x9.expect(barqApp.formatBarqMediaDuration(const Duration(hours: 1, minutes: 3, seconds: 5)), '1:03:05');
   });
 
-  barqFlutterTest.test('message links extract only unique safe web URLs and normalize www links', () {
+  flutterTesting2026x9.test('message links extract only unique safe web URLs and normalize www links', () {
     final links = barqApp.extractBarqLinks(
       'زور https://example.com/path، ثم www.openai.com وبعدها https://example.com/path',
     );
-    barqFlutterTest.expect(links, [
+    flutterTesting2026x9.expect(links, [
       Uri.parse('https://example.com/path'),
       Uri.parse('https://www.openai.com'),
     ]);
   });
 
-  barqFlutterTest.test('message link extraction ignores non-web schemes', () {
-    barqFlutterTest.expect(barqApp.extractBarqLinks('javascript:alert(1) file:///tmp/a https://safe.example'), [
+  flutterTesting2026x9.test('message link extraction ignores non-web schemes', () {
+    flutterTesting2026x9.expect(barqApp.extractBarqLinks('javascript:alert(1) file:///tmp/a https://safe.example'), [
       Uri.parse('https://safe.example'),
     ]);
   });
 
-  barqFlutterTest.testWidgets('conversation summary waits for explicit consent before sending messages', (tester) async {
+  flutterTesting2026x9.testWidgets('conversation summary waits for explicit consent before sending messages', (tester) async {
     var requests = 0;
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
@@ -726,18 +726,18 @@ void main() {
 
     await tester.tap(find.text('فتح الملخص'));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(requests, 0);
-    barqFlutterTest.expect(find.text('إنشاء الملخص'), findsOneWidget);
+    flutterTesting2026x9.expect(requests, 0);
+    flutterTesting2026x9.expect(find.text('إنشاء الملخص'), findsOneWidget);
 
     await tester.tap(find.text('إنشاء الملخص'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump();
-    barqFlutterTest.expect(requests, 1);
-    barqFlutterTest.expect(find.text('ملخص اختباري'), findsOneWidget);
+    flutterTesting2026x9.expect(requests, 1);
+    flutterTesting2026x9.expect(find.text('ملخص اختباري'), findsOneWidget);
   });
 
-  barqFlutterTest.testWidgets('conversation tools sheet exposes chat tools outside app settings', (tester) async {
+  flutterTesting2026x9.testWidgets('conversation tools sheet exposes chat tools outside app settings', (tester) async {
     var selectedTool = '';
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
@@ -763,64 +763,64 @@ void main() {
 
     await tester.tap(find.text('فتح أدوات المحادثة'));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(find.text('أدوات المحادثة'), findsOneWidget);
-    barqFlutterTest.expect(find.text('البحث في المحادثة'), findsOneWidget);
-    barqFlutterTest.expect(find.text('الرسائل المثبتة'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('أدوات المحادثة'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('البحث في المحادثة'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('الرسائل المثبتة'), findsOneWidget);
 
     await tester.tap(find.text('الرسائل المثبتة'));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(selectedTool, 'pinned');
+    flutterTesting2026x9.expect(selectedTool, 'pinned');
   });
 
-  barqFlutterTest.test('private and group message text share the server 5000-character limit', () {
-    barqFlutterTest.expect(barqApp.isBarqMessageTextAllowed('رسالة قصيرة'), isTrue);
-    barqFlutterTest.expect(barqApp.isBarqMessageTextAllowed('  رسالة قصيرة  '), isTrue);
-    barqFlutterTest.expect(barqApp.isBarqMessageTextAllowed(''), isFalse);
-    barqFlutterTest.expect(barqApp.isBarqMessageTextAllowed('   '), isFalse);
-    barqFlutterTest.expect(barqApp.isBarqMessageTextAllowed(List.filled(5000, 'س').join()), isTrue);
-    barqFlutterTest.expect(barqApp.isBarqMessageTextAllowed(List.filled(5001, 'س').join()), isFalse);
+  flutterTesting2026x9.test('private and group message text share the server 5000-character limit', () {
+    flutterTesting2026x9.expect(barqApp.isBarqMessageTextAllowed('رسالة قصيرة'), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.isBarqMessageTextAllowed('  رسالة قصيرة  '), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.isBarqMessageTextAllowed(''), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.isBarqMessageTextAllowed('   '), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.isBarqMessageTextAllowed(List.filled(5000, 'س').join()), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.isBarqMessageTextAllowed(List.filled(5001, 'س').join()), flutterTesting2026x9.isFalse);
   });
 
-  barqFlutterTest.test('translation failures become retryable after a cooldown', () {
+  flutterTesting2026x9.test('translation failures become retryable after a cooldown', () {
     final now = DateTime.utc(2026, 11, 21, 12);
     final retryAfter = {'message-1': now.add(const Duration(minutes: 1))};
-    barqFlutterTest.expect(barqApp.barqTranslationRetryAllowed('message-1', retryAfter, now: now), isFalse);
-    barqFlutterTest.expect(barqApp.barqTranslationRetryAllowed('message-1', retryAfter,
-        now: now.add(const Duration(minutes: 1))), isTrue);
-    barqFlutterTest.expect(barqApp.barqTranslationRetryAllowed('message-2', retryAfter, now: now), isTrue);
-    barqFlutterTest.expect(barqApp.barqTranslationRetryAllowed('', retryAfter, now: now), isFalse);
+    flutterTesting2026x9.expect(barqApp.barqTranslationRetryAllowed('message-1', retryAfter, now: now), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqTranslationRetryAllowed('message-1', retryAfter,
+        now: now.add(const Duration(minutes: 1))), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqTranslationRetryAllowed('message-2', retryAfter, now: now), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqTranslationRetryAllowed('', retryAfter, now: now), flutterTesting2026x9.isFalse);
   });
 
-  barqFlutterTest.test('audio transcription enforces the worker two-megabyte limit', () {
-    barqFlutterTest.expect(barqApp.isBarqTranscriptionSizeAllowed(0), isFalse);
-    barqFlutterTest.expect(barqApp.isBarqTranscriptionSizeAllowed(1), isTrue);
-    barqFlutterTest.expect(barqApp.isBarqTranscriptionSizeAllowed(2 * 1024 * 1024), isTrue);
-    barqFlutterTest.expect(barqApp.isBarqTranscriptionSizeAllowed(2 * 1024 * 1024 + 1), isFalse);
-  });
-
-
-  barqFlutterTest.test('SPARK media extensions map to exact supported MIME types', () {
-    barqFlutterTest.expect(barqApp.barqSparkMediaContentType('jpg'), 'image/jpeg');
-    barqFlutterTest.expect(barqApp.barqSparkMediaContentType('.JPEG'), 'image/jpeg');
-    barqFlutterTest.expect(barqApp.barqSparkMediaContentType('png'), 'image/png');
-    barqFlutterTest.expect(barqApp.barqSparkMediaContentType('webp'), 'image/webp');
-    barqFlutterTest.expect(barqApp.barqSparkMediaContentType('gif'), 'image/gif');
-    barqFlutterTest.expect(barqApp.barqSparkMediaContentType('mp4'), 'video/mp4');
-    barqFlutterTest.expect(barqApp.barqSparkMediaContentType('webm'), 'video/webm');
-    barqFlutterTest.expect(barqApp.barqSparkMediaContentType('MOV'), 'video/quicktime');
-    barqFlutterTest.expect(barqApp.barqSparkMediaContentType('exe'), isNull);
-    barqFlutterTest.expect(barqApp.barqSparkMediaContentType(''), isNull);
-  });
-
-  barqFlutterTest.test('SPARK media client size limit rejects empty and oversized files', () {
-    barqFlutterTest.expect(barqApp.isBarqSparkMediaSizeAllowed(0), isFalse);
-    barqFlutterTest.expect(barqApp.isBarqSparkMediaSizeAllowed(1), isTrue);
-    barqFlutterTest.expect(barqApp.isBarqSparkMediaSizeAllowed(60 * 1024 * 1024), isTrue);
-    barqFlutterTest.expect(barqApp.isBarqSparkMediaSizeAllowed(60 * 1024 * 1024 + 1), isFalse);
+  flutterTesting2026x9.test('audio transcription enforces the worker two-megabyte limit', () {
+    flutterTesting2026x9.expect(barqApp.isBarqTranscriptionSizeAllowed(0), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.isBarqTranscriptionSizeAllowed(1), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.isBarqTranscriptionSizeAllowed(2 * 1024 * 1024), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.isBarqTranscriptionSizeAllowed(2 * 1024 * 1024 + 1), flutterTesting2026x9.isFalse);
   });
 
 
-  barqFlutterTest.test('private memory photo uploads continue after an individual failure', () async {
+  flutterTesting2026x9.test('SPARK media extensions map to exact supported MIME types', () {
+    flutterTesting2026x9.expect(barqApp.barqSparkMediaContentType('jpg'), 'image/jpeg');
+    flutterTesting2026x9.expect(barqApp.barqSparkMediaContentType('.JPEG'), 'image/jpeg');
+    flutterTesting2026x9.expect(barqApp.barqSparkMediaContentType('png'), 'image/png');
+    flutterTesting2026x9.expect(barqApp.barqSparkMediaContentType('webp'), 'image/webp');
+    flutterTesting2026x9.expect(barqApp.barqSparkMediaContentType('gif'), 'image/gif');
+    flutterTesting2026x9.expect(barqApp.barqSparkMediaContentType('mp4'), 'video/mp4');
+    flutterTesting2026x9.expect(barqApp.barqSparkMediaContentType('webm'), 'video/webm');
+    flutterTesting2026x9.expect(barqApp.barqSparkMediaContentType('MOV'), 'video/quicktime');
+    flutterTesting2026x9.expect(barqApp.barqSparkMediaContentType('exe'), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.barqSparkMediaContentType(''), flutterTesting2026x9.isNull);
+  });
+
+  flutterTesting2026x9.test('SPARK media client size limit rejects empty and oversized files', () {
+    flutterTesting2026x9.expect(barqApp.isBarqSparkMediaSizeAllowed(0), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.isBarqSparkMediaSizeAllowed(1), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.isBarqSparkMediaSizeAllowed(60 * 1024 * 1024), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.isBarqSparkMediaSizeAllowed(60 * 1024 * 1024 + 1), flutterTesting2026x9.isFalse);
+  });
+
+
+  flutterTesting2026x9.test('private memory photo uploads continue after an individual failure', () async {
     final attempted = <String>[];
     final photos = [
       {'name': 'one.jpg', 'bytes': <int>[1], 'contentType': 'image/jpeg'},
@@ -842,11 +842,11 @@ void main() {
       },
     );
 
-    barqFlutterTest.expect(attempted, ['one.jpg', 'two.png', 'three.webp']);
-    barqFlutterTest.expect(failures, ['two.png']);
+    flutterTesting2026x9.expect(attempted, ['one.jpg', 'two.png', 'three.webp']);
+    flutterTesting2026x9.expect(failures, ['two.png']);
   });
 
-  barqFlutterTest.testWidgets('private memory load error explains retry instead of showing an empty vault', (tester) async {
+  flutterTesting2026x9.testWidgets('private memory load error explains retry instead of showing an empty vault', (tester) async {
     var retried = false;
     await tester.pumpWidget(
       MaterialApp(
@@ -856,13 +856,13 @@ void main() {
       ),
     );
 
-    barqFlutterTest.expect(find.text('تعذر تحميل ذكرياتك'), findsOneWidget);
-    barqFlutterTest.expect(find.textContaining('لم نحذف ذكرياتك المحفوظة.'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('تعذر تحميل ذكرياتك'), findsOneWidget);
+    flutterTesting2026x9.expect(find.textContaining('لم نحذف ذكرياتك المحفوظة.'), findsOneWidget);
     await tester.tap(find.text('إعادة المحاولة'));
-    barqFlutterTest.expect(retried, isTrue);
+    flutterTesting2026x9.expect(retried, flutterTesting2026x9.isTrue);
   });
 
-  barqFlutterTest.testWidgets('private memory photo gallery shows a safe empty state without paging', (tester) async {
+  flutterTesting2026x9.testWidgets('private memory photo gallery shows a safe empty state without paging', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
@@ -874,12 +874,12 @@ void main() {
       ),
     );
 
-    barqFlutterTest.expect(find.byIcon(Icons.photo_library_outlined), findsOneWidget);
-    barqFlutterTest.expect(find.byType(PageView), findsNothing);
-    barqFlutterTest.expect(find.textContaining('/'), findsNothing);
+    flutterTesting2026x9.expect(find.byIcon(Icons.photo_library_outlined), findsOneWidget);
+    flutterTesting2026x9.expect(find.byType(PageView), findsNothing);
+    flutterTesting2026x9.expect(find.textContaining('/'), findsNothing);
   });
 
-  barqFlutterTest.testWidgets('private memory photo gallery pages through multiple zoomable photos', (tester) async {
+  flutterTesting2026x9.testWidgets('private memory photo gallery pages through multiple zoomable photos', (tester) async {
     final photos = [
       {'attachmentId': 'owner-1/private-memories/photo-1'},
       {'attachmentId': 'owner-1/private-memories/photo-2'},
@@ -902,32 +902,32 @@ void main() {
     );
     await tester.pump();
 
-    barqFlutterTest.expect(find.byType(PageView), findsOneWidget);
-    barqFlutterTest.expect(find.byType(InteractiveViewer), findsWidgets);
-    barqFlutterTest.expect(visiblePage, 0);
-    barqFlutterTest.expect(find.text('1 / 3'), findsOneWidget);
+    flutterTesting2026x9.expect(find.byType(PageView), findsOneWidget);
+    flutterTesting2026x9.expect(find.byType(InteractiveViewer), findsWidgets);
+    flutterTesting2026x9.expect(visiblePage, 0);
+    flutterTesting2026x9.expect(find.text('1 / 3'), findsOneWidget);
 
     await tester.drag(find.byType(PageView), const Offset(-700, 0));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(visiblePage, 1);
-    barqFlutterTest.expect(find.text('2 / 3'), findsOneWidget);
+    flutterTesting2026x9.expect(visiblePage, 1);
+    flutterTesting2026x9.expect(find.text('2 / 3'), findsOneWidget);
   });
 
 
-  barqFlutterTest.test('BARQ has exactly the four approved visual identities', () {
-    barqFlutterTest.expect(BarqIdentity.values, [
+  flutterTesting2026x9.test('BARQ has exactly the four approved visual identities', () {
+    flutterTesting2026x9.expect(BarqIdentity.values, [
       BarqIdentity.blueLightning,
       BarqIdentity.butterfly,
       BarqIdentity.purpleShadow,
       BarqIdentity.skyJewel,
     ]);
-    barqFlutterTest.expect(BarqIdentity.label(BarqIdentity.blueLightning), 'البرق الأزرق');
-    barqFlutterTest.expect(BarqIdentity.label(BarqIdentity.butterfly), 'الفراشة');
-    barqFlutterTest.expect(BarqIdentity.label(BarqIdentity.purpleShadow), 'الظل البنفسجي');
-    barqFlutterTest.expect(BarqIdentity.label(BarqIdentity.skyJewel), 'الجوهرة السماوية');
+    flutterTesting2026x9.expect(BarqIdentity.label(BarqIdentity.blueLightning), 'البرق الأزرق');
+    flutterTesting2026x9.expect(BarqIdentity.label(BarqIdentity.butterfly), 'الفراشة');
+    flutterTesting2026x9.expect(BarqIdentity.label(BarqIdentity.purpleShadow), 'الظل البنفسجي');
+    flutterTesting2026x9.expect(BarqIdentity.label(BarqIdentity.skyJewel), 'الجوهرة السماوية');
   });
 
-  barqFlutterTest.test('BARQ identity palettes keep four distinct readable theme foundations', () {
+  flutterTesting2026x9.test('BARQ identity palettes keep four distinct readable theme foundations', () {
     double contrastRatio(Color first, Color second) {
       final a = first.computeLuminance();
       final b = second.computeLuminance();
@@ -939,68 +939,68 @@ void main() {
     final palettes = BarqIdentity.values
         .map(BarqIdentityPalette.forIdentity)
         .toList();
-    barqFlutterTest.expect(BarqIdentity.values, hasLength(4));
-    barqFlutterTest.expect(palettes.map((p) => p.background).toSet().length, 4);
-    barqFlutterTest.expect(palettes.map((p) => p.primary).toSet().length, 4);
+    flutterTesting2026x9.expect(BarqIdentity.values, flutterTesting2026x9.hasLength(4));
+    flutterTesting2026x9.expect(palettes.map((p) => p.background).toSet().length, 4);
+    flutterTesting2026x9.expect(palettes.map((p) => p.primary).toSet().length, 4);
     for (final palette in palettes) {
-      barqFlutterTest.expect(palette.text, isNot(palette.background));
-      barqFlutterTest.expect(palette.primary, isNot(palette.background));
-      barqFlutterTest.expect(palette.secondary, isNot(palette.surface));
-      barqFlutterTest.expect(contrastRatio(palette.text, palette.background), greaterThanOrEqualTo(7));
-      barqFlutterTest.expect(contrastRatio(palette.text, palette.surface), greaterThanOrEqualTo(7));
-      barqFlutterTest.expect(contrastRatio(palette.mutedText, palette.surface), greaterThanOrEqualTo(4.5));
-      barqFlutterTest.expect(contrastRatio(palette.primary, palette.surface), greaterThanOrEqualTo(4.5));
+      flutterTesting2026x9.expect(palette.text, flutterTesting2026x9.isNot(palette.background));
+      flutterTesting2026x9.expect(palette.primary, flutterTesting2026x9.isNot(palette.background));
+      flutterTesting2026x9.expect(palette.secondary, flutterTesting2026x9.isNot(palette.surface));
+      flutterTesting2026x9.expect(contrastRatio(palette.text, palette.background), greaterThanOrEqualTo(7));
+      flutterTesting2026x9.expect(contrastRatio(palette.text, palette.surface), greaterThanOrEqualTo(7));
+      flutterTesting2026x9.expect(contrastRatio(palette.mutedText, palette.surface), greaterThanOrEqualTo(4.5));
+      flutterTesting2026x9.expect(contrastRatio(palette.primary, palette.surface), greaterThanOrEqualTo(4.5));
     }
     final blue = BarqIdentityPalette.forIdentity(BarqIdentity.blueLightning);
-    barqFlutterTest.expect(blue.primary, const Color(0xFFD6AD55));
-    barqFlutterTest.expect(blue.secondary, const Color(0xFF168BFF));
-    barqFlutterTest.expect(blue.background, const Color(0xFF090909));
-    barqFlutterTest.expect(blue.surface, const Color(0xFF171717));
+    flutterTesting2026x9.expect(blue.primary, const Color(0xFFD6AD55));
+    flutterTesting2026x9.expect(blue.secondary, const Color(0xFF168BFF));
+    flutterTesting2026x9.expect(blue.background, const Color(0xFF090909));
+    flutterTesting2026x9.expect(blue.surface, const Color(0xFF171717));
   });
 
-  barqFlutterTest.test('FCM token normalization trims valid tokens and rejects invalid values', () {
-    barqFlutterTest.expect(barqApp.normalizeBarqFcmToken('  fcm-token-123  '), 'fcm-token-123');
-    barqFlutterTest.expect(barqApp.normalizeBarqFcmToken(null), isNull);
-    barqFlutterTest.expect(barqApp.normalizeBarqFcmToken(''), isNull);
-    barqFlutterTest.expect(barqApp.normalizeBarqFcmToken('   '), isNull);
-    barqFlutterTest.expect(barqApp.normalizeBarqFcmToken('token with spaces'), isNull);
-    barqFlutterTest.expect(barqApp.normalizeBarqFcmToken(List.filled(4097, 'x').join()), isNull);
-    barqFlutterTest.expect(barqApp.normalizeBarqFcmToken(List.filled(4096, 'x').join()), hasLength(4096));
+  flutterTesting2026x9.test('FCM token normalization trims valid tokens and rejects invalid values', () {
+    flutterTesting2026x9.expect(barqApp.normalizeBarqFcmToken('  fcm-token-123  '), 'fcm-token-123');
+    flutterTesting2026x9.expect(barqApp.normalizeBarqFcmToken(null), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.normalizeBarqFcmToken(''), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.normalizeBarqFcmToken('   '), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.normalizeBarqFcmToken('token with spaces'), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.normalizeBarqFcmToken(List.filled(4097, 'x').join()), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.normalizeBarqFcmToken(List.filled(4096, 'x').join()), flutterTesting2026x9.hasLength(4096));
   });
 
-  barqFlutterTest.test('foreground push uses generic labels and respects category preferences', () {
-    barqFlutterTest.expect(
+  flutterTesting2026x9.test('foreground push uses generic labels and respects category preferences', () {
+    flutterTesting2026x9.expect(
       barqApp.barqForegroundPushLabel(
         {'type': 'direct_message', 'body': 'secret message', 'sender': 'Private Name'},
         {'messages': true},
       ),
       'وصلتك رسالة جديدة',
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqForegroundPushLabel({'type': 'group_message', 'body': 'secret'}, {'groups': true}),
       'وصلتك رسالة جديدة في مجموعة',
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqForegroundPushLabel({'type': 'status_update', 'body': 'private'}, {'statuses': true}),
       'هناك لحظة جديدة في SPARK',
     );
-    barqFlutterTest.expect(barqApp.barqForegroundPushLabel({'type': 'direct_message'}, {'messages': false}), isNull);
-    barqFlutterTest.expect(barqApp.barqForegroundPushLabel({'type': 'group_message'}, {'groups': false}), isNull);
-    barqFlutterTest.expect(barqApp.barqForegroundPushLabel({'type': 'status_update'}, {'statuses': false}), isNull);
-    barqFlutterTest.expect(barqApp.barqForegroundPushLabel({'type': 'direct_message', 'ephemeral': true}, {'messages': true}), isNull);
-    barqFlutterTest.expect(barqApp.barqForegroundPushLabel({'type': 'group_message', 'temporary': 'true'}, {'groups': true}), isNull);
-    barqFlutterTest.expect(barqApp.barqForegroundPushLabel({'type': 'unknown'}, {}), isNull);
+    flutterTesting2026x9.expect(barqApp.barqForegroundPushLabel({'type': 'direct_message'}, {'messages': false}), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.barqForegroundPushLabel({'type': 'group_message'}, {'groups': false}), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.barqForegroundPushLabel({'type': 'status_update'}, {'statuses': false}), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.barqForegroundPushLabel({'type': 'direct_message', 'ephemeral': true}, {'messages': true}), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.barqForegroundPushLabel({'type': 'group_message', 'temporary': 'true'}, {'groups': true}), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.barqForegroundPushLabel({'type': 'unknown'}, {}), flutterTesting2026x9.isNull);
   });
 
-  barqFlutterTest.test('FCM logout revocation runs only with session and valid token', () async {
+  flutterTesting2026x9.test('FCM logout revocation runs only with session and valid token', () async {
     String? revoked;
     final success = await barqApp.revokeBarqFcmTokenSafely(
       authToken: 'session-token',
       fcmToken: '  device-token  ',
       revoke: (value) async { revoked = value; },
     );
-    barqFlutterTest.expect(success, isTrue);
-    barqFlutterTest.expect(revoked, 'device-token');
+    flutterTesting2026x9.expect(success, flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(revoked, 'device-token');
 
     revoked = null;
     final noSession = await barqApp.revokeBarqFcmTokenSafely(
@@ -1008,111 +1008,111 @@ void main() {
       fcmToken: 'device-token',
       revoke: (value) async { revoked = value; },
     );
-    barqFlutterTest.expect(noSession, isFalse);
-    barqFlutterTest.expect(revoked, isNull);
+    flutterTesting2026x9.expect(noSession, flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(revoked, flutterTesting2026x9.isNull);
 
     final invalidToken = await barqApp.revokeBarqFcmTokenSafely(
       authToken: 'session-token',
       fcmToken: 'invalid token',
       revoke: (value) async { revoked = value; },
     );
-    barqFlutterTest.expect(invalidToken, isFalse);
-    barqFlutterTest.expect(revoked, isNull);
+    flutterTesting2026x9.expect(invalidToken, flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(revoked, flutterTesting2026x9.isNull);
 
     final networkFailure = await barqApp.revokeBarqFcmTokenSafely(
       authToken: 'session-token',
       fcmToken: 'device-token',
       revoke: (_) async { throw Exception('offline'); },
     );
-    barqFlutterTest.expect(networkFailure, isFalse);
+    flutterTesting2026x9.expect(networkFailure, flutterTesting2026x9.isFalse);
   });
 
-  barqFlutterTest.test('FCM registration requires authorized or provisional notification permission', () {
-    barqFlutterTest.expect(barqApp.barqCanRegisterFcmToken(AuthorizationStatus.authorized), isTrue);
-    barqFlutterTest.expect(barqApp.barqCanRegisterFcmToken(AuthorizationStatus.provisional), isTrue);
-    barqFlutterTest.expect(barqApp.barqCanRegisterFcmToken(AuthorizationStatus.denied), isFalse);
-    barqFlutterTest.expect(barqApp.barqCanRegisterFcmToken(AuthorizationStatus.notDetermined), isFalse);
+  flutterTesting2026x9.test('FCM registration requires authorized or provisional notification permission', () {
+    flutterTesting2026x9.expect(barqApp.barqCanRegisterFcmToken(AuthorizationStatus.authorized), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqCanRegisterFcmToken(AuthorizationStatus.provisional), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqCanRegisterFcmToken(AuthorizationStatus.denied), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqCanRegisterFcmToken(AuthorizationStatus.notDetermined), flutterTesting2026x9.isFalse);
   });
 
 }
 )));
-    barqFlutterTest.expect(first, isNot(contains('967770000000')));
-    barqFlutterTest.expect(barqApp.barqPrivateRegistrationUsername('+447911123456'), isNot(first));
+    flutterTesting2026x9.expect(first, flutterTesting2026x9.isNot(flutterTesting2026x9.contains('967770000000')));
+    flutterTesting2026x9.expect(barqApp.barqPrivateRegistrationUsername('+447911123456'), flutterTesting2026x9.isNot(first));
   });
 
-  barqFlutterTest.test('international phone normalization supports Arabic digits and 00 prefix', () {
-    barqFlutterTest.expect(barqApp.normalizeBarqInternationalPhone(' +٩٦٧ ٧٧٠٠٠٠٠٠٠ '), '+967770000000');
-    barqFlutterTest.expect(barqApp.normalizeBarqInternationalPhone('00447911123456'), '+447911123456');
-    barqFlutterTest.expect(barqApp.normalizeBarqRegistrationPhone('٠٧٧٠٠٠٠٠٠٠', '+967'), '+967770000000');
-    barqFlutterTest.expect(barqApp.normalizeBarqRegistrationPhone('0770000000', '+967'), '+967770000000');
-    barqFlutterTest.expect(barqApp.normalizeBarqRegistrationPhone('+447911123456', '+967'), '+447911123456');
-    barqFlutterTest.expect(barqApp.normalizeBarqRegistrationPhone(' +44 7911 123456 ', '+967'), '+447911123456');
-    barqFlutterTest.expect(barqApp.normalizeBarqRegistrationPhone(' 00 44 7911 123456 ', '+967'), '+447911123456');
-    barqFlutterTest.expect(barqApp.normalizeBarqRegistrationPhone(' ٠٧٧٠٠٠٠٠٠٠ ', '+967'), '+967770000000');
+  flutterTesting2026x9.test('international phone normalization supports Arabic digits and 00 prefix', () {
+    flutterTesting2026x9.expect(barqApp.normalizeBarqInternationalPhone(' +٩٦٧ ٧٧٠٠٠٠٠٠٠ '), '+967770000000');
+    flutterTesting2026x9.expect(barqApp.normalizeBarqInternationalPhone('00447911123456'), '+447911123456');
+    flutterTesting2026x9.expect(barqApp.normalizeBarqRegistrationPhone('٠٧٧٠٠٠٠٠٠٠', '+967'), '+967770000000');
+    flutterTesting2026x9.expect(barqApp.normalizeBarqRegistrationPhone('0770000000', '+967'), '+967770000000');
+    flutterTesting2026x9.expect(barqApp.normalizeBarqRegistrationPhone('+447911123456', '+967'), '+447911123456');
+    flutterTesting2026x9.expect(barqApp.normalizeBarqRegistrationPhone(' +44 7911 123456 ', '+967'), '+447911123456');
+    flutterTesting2026x9.expect(barqApp.normalizeBarqRegistrationPhone(' 00 44 7911 123456 ', '+967'), '+447911123456');
+    flutterTesting2026x9.expect(barqApp.normalizeBarqRegistrationPhone(' ٠٧٧٠٠٠٠٠٠٠ ', '+967'), '+967770000000');
   });
 
-  barqFlutterTest.test('registration country codes cover 206 geographic calling codes without duplicates', () {
-    barqFlutterTest.expect(barqIdentity.barqCountryCodes.length, 206);
+  flutterTesting2026x9.test('registration country codes cover 206 geographic calling codes without duplicates', () {
+    flutterTesting2026x9.expect(barqIdentity.barqCountryCodes.length, 206);
     final codes = barqIdentity.barqCountryCodes.map((country) => country.$2).toSet();
-    barqFlutterTest.expect(codes.length, 206);
+    flutterTesting2026x9.expect(codes.length, 206);
     for (final code in [
       '+222', '+223', '+228', '+246', '+247', '+269', '+297', '+298', '+299',
       '+350', '+378', '+383', '+389', '+423', '+501', '+590', '+594', '+596',
       '+672', '+681', '+850', '+972', '+995',
     ]) {
-      barqFlutterTest.expect(codes, contains(code));
+      flutterTesting2026x9.expect(codes, flutterTesting2026x9.contains(code));
     }
     // These are regional prefixes within the shared +1 plan, not country codes.
-    barqFlutterTest.expect(codes, isNot(contains('+1684')));
-    barqFlutterTest.expect(codes, isNot(contains('+1340')));
-    barqFlutterTest.expect(codes, isNot(contains('+1787')));
+    flutterTesting2026x9.expect(codes, flutterTesting2026x9.isNot(flutterTesting2026x9.contains('+1684')));
+    flutterTesting2026x9.expect(codes, flutterTesting2026x9.isNot(flutterTesting2026x9.contains('+1340')));
+    flutterTesting2026x9.expect(codes, flutterTesting2026x9.isNot(flutterTesting2026x9.contains('+1787')));
   });
 
-  barqFlutterTest.test('saved contact comparison normalizes Arabic digits and phone punctuation', () {
-    barqFlutterTest.expect(
+  flutterTesting2026x9.test('saved contact comparison normalizes Arabic digits and phone punctuation', () {
+    flutterTesting2026x9.expect(
       barqApp.normalizeBarqContactPhoneDigits('+٩٦٧ (٧٧) ٠٠٠-٠٠٠١'),
       '967770000001',
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.normalizeBarqContactPhoneDigits('+967 77 000 0001'),
       barqApp.normalizeBarqContactPhoneDigits('+٩٦٧ (٧٧) ٠٠٠-٠٠٠١'),
     );
-    barqFlutterTest.expect(barqApp.normalizeBarqContactPhoneDigits('---'), isEmpty);
+    flutterTesting2026x9.expect(barqApp.normalizeBarqContactPhoneDigits('---'), flutterTesting2026x9.isEmpty);
   });
 
-  barqFlutterTest.test('conversation search matches message text and sender case-insensitively', () {
+  flutterTesting2026x9.test('conversation search flutterTesting2026x9.matches message text and sender case-insensitively', () {
     final messages = [
       {'id': '1', 'body': 'مرحبا يا صديقي', 'display_name': 'Ali'},
       {'id': '2', 'body': 'Good morning', 'display_name': 'Sara'},
       {'id': '3', 'body': 'رسالة أخرى', 'display_name': 'Ali'},
     ];
 
-    barqFlutterTest.expect(barqApp.searchConversationMessages(messages, 'صديقي').map((m) => m['id']), ['1']);
-    barqFlutterTest.expect(barqApp.searchConversationMessages(messages, 'ALI').map((m) => m['id']), ['1', '3']);
-    barqFlutterTest.expect(barqApp.searchConversationMessages(messages, 'not found'), isEmpty);
-    barqFlutterTest.expect(barqApp.searchConversationMessages(messages, '   '), isEmpty);
+    flutterTesting2026x9.expect(barqApp.searchConversationMessages(messages, 'صديقي').map((m) => m['id']), ['1']);
+    flutterTesting2026x9.expect(barqApp.searchConversationMessages(messages, 'ALI').map((m) => m['id']), ['1', '3']);
+    flutterTesting2026x9.expect(barqApp.searchConversationMessages(messages, 'not found'), flutterTesting2026x9.isEmpty);
+    flutterTesting2026x9.expect(barqApp.searchConversationMessages(messages, '   '), flutterTesting2026x9.isEmpty);
   });
 
-  barqFlutterTest.test('offline sync pauses only for network failures, not one rejected message', () {
-    barqFlutterTest.expect(barqApp.barqOfflineSyncShouldPause(Exception('NETWORK_DIAGNOSTIC: SocketException')), isTrue);
-    barqFlutterTest.expect(barqApp.barqOfflineSyncShouldPause(Exception('Reply target not found')), isFalse);
-    barqFlutterTest.expect(barqApp.barqOfflineSyncShouldPause(Exception('Message is too long')), isFalse);
+  flutterTesting2026x9.test('offline sync pauses only for network failures, not one rejected message', () {
+    flutterTesting2026x9.expect(barqApp.barqOfflineSyncShouldPause(Exception('NETWORK_DIAGNOSTIC: SocketException')), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqOfflineSyncShouldPause(Exception('Reply target not found')), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqOfflineSyncShouldPause(Exception('Message is too long')), flutterTesting2026x9.isFalse);
   });
 
-  barqFlutterTest.test('Nearby inbox duplicate IDs must match sender, receiver, and body', () {
+  flutterTesting2026x9.test('Nearby inbox duplicate IDs must match sender, receiver, and body', () {
     final original = <String, dynamic>{
       'id': 'a1b2c3d4e5f60708a1b2c3d4e5f60708',
       'sender_id': 'friend-1',
       'receiver_id': 'me',
       'body': 'hello',
     };
-    barqFlutterTest.expect(barqApp.barqOfflineIncomingMessageMatches(original, Map<String, dynamic>.from(original)), isTrue);
-    barqFlutterTest.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'body': 'tampered'}), isFalse);
-    barqFlutterTest.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'sender_id': 'other'}), isFalse);
-    barqFlutterTest.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'receiver_id': 'other'}), isFalse);
+    flutterTesting2026x9.expect(barqApp.barqOfflineIncomingMessageMatches(original, Map<String, dynamic>.from(original)), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'body': 'tampered'}), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'sender_id': 'other'}), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'receiver_id': 'other'}), flutterTesting2026x9.isFalse);
   });
 
-  barqFlutterTest.test('offline reconciliation removes only an exact server copy', () {
+  flutterTesting2026x9.test('offline reconciliation removes only an exact server copy', () {
     const id = 'a1b2c3d4e5f60708a1b2c3d4e5f60708';
     final queued = <Map<String, dynamic>>[
       {'id': id, 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'hello'},
@@ -1121,10 +1121,10 @@ void main() {
     final server = <Map<String, dynamic>>[
       {'id': id, 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'hello'},
     ];
-    barqFlutterTest.expect(barqApp.barqOfflineItemsNotOnServerPage(queued, server), [queued.last]);
+    flutterTesting2026x9.expect(barqApp.barqOfflineItemsNotOnServerPage(queued, server), [queued.last]);
   });
 
-  barqFlutterTest.test('accepted outbox removal preserves a same-ID entry with changed content or reply target', () {
+  flutterTesting2026x9.test('accepted outbox removal preserves a flutterTesting2026x9.same-ID entry with changed content or reply target', () {
     final accepted = <String, dynamic>{
       'id': 'a1b2c3d4e5f60708a1b2c3d4e5f60708',
       'sender_id': 'me',
@@ -1133,17 +1133,17 @@ void main() {
       'reply_to_id': 'reply-a',
     };
     final changed = {...accepted, 'reply_to_id': 'reply-b'};
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqOfflineQueueWithoutExactMessage([accepted, changed], accepted),
       [changed],
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqOfflineQueueWithoutExactMessage([accepted], accepted),
-      isEmpty,
+      flutterTesting2026x9.isEmpty,
     );
   });
 
-  barqFlutterTest.test('offline reconciliation keeps a same-ID message when its content or parties differ', () {
+  flutterTesting2026x9.test('offline reconciliation keeps a flutterTesting2026x9.same-ID message when its content or parties differ', () {
     const id = 'a1b2c3d4e5f60708a1b2c3d4e5f60708';
     final queued = <Map<String, dynamic>>[
       {'id': id, 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'original'},
@@ -1151,46 +1151,46 @@ void main() {
     final server = <Map<String, dynamic>>[
       {'id': id, 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'tampered'},
     ];
-    barqFlutterTest.expect(barqApp.barqOfflineItemsNotOnServerPage(queued, server), queued);
-    barqFlutterTest.expect(barqApp.barqOfflineItemsNotOnServerPage(queued, [
+    flutterTesting2026x9.expect(barqApp.barqOfflineItemsNotOnServerPage(queued, server), queued);
+    flutterTesting2026x9.expect(barqApp.barqOfflineItemsNotOnServerPage(queued, [
       {...server.single, 'sender_id': 'other', 'body': 'original'},
     ]), queued);
   });
 
-  barqFlutterTest.test('offline queue capacity rejects the first item beyond the limit', () {
-    barqFlutterTest.expect(barqApp.barqOfflineQueueIsFull(0), isFalse);
-    barqFlutterTest.expect(barqApp.barqOfflineQueueIsFull(199), isFalse);
-    barqFlutterTest.expect(barqApp.barqOfflineQueueIsFull(200), isTrue);
-    barqFlutterTest.expect(barqApp.barqOfflineQueueIsFull(201), isTrue);
-    barqFlutterTest.expect(barqApp.barqOfflineQueueIsFull(3, limit: 3), isTrue);
+  flutterTesting2026x9.test('offline queue capacity rejects the first item beyond the limit', () {
+    flutterTesting2026x9.expect(barqApp.barqOfflineQueueIsFull(0), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqOfflineQueueIsFull(199), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqOfflineQueueIsFull(200), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqOfflineQueueIsFull(201), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqOfflineQueueIsFull(3, limit: 3), flutterTesting2026x9.isTrue);
   });
 
-  barqFlutterTest.test('offline queue decoding preserves empty queues and rejects corrupted data', () {
-    barqFlutterTest.expect(barqApp.decodeBarqOfflineQueue(null), isEmpty);
-    barqFlutterTest.expect(barqApp.decodeBarqOfflineQueue(''), isEmpty);
-    barqFlutterTest.expect(barqApp.decodeBarqOfflineQueue('[{"id":"m1","body":"hello"}]'), [
+  flutterTesting2026x9.test('offline queue decoding preserves empty queues and rejects corrupted data', () {
+    flutterTesting2026x9.expect(barqApp.decodeBarqOfflineQueue(null), flutterTesting2026x9.isEmpty);
+    flutterTesting2026x9.expect(barqApp.decodeBarqOfflineQueue(''), flutterTesting2026x9.isEmpty);
+    flutterTesting2026x9.expect(barqApp.decodeBarqOfflineQueue('[{"id":"m1","body":"hello"}]'), [
       {'id': 'm1', 'body': 'hello'},
     ]);
-    barqFlutterTest.expect(() => barqApp.decodeBarqOfflineQueue('{bad json'), throwsFormatException);
-    barqFlutterTest.expect(() => barqApp.decodeBarqOfflineQueue('{"id":"m1"}'), throwsFormatException);
-    barqFlutterTest.expect(() => barqApp.decodeBarqOfflineQueue('[{"id":"m1"}, null]'), throwsFormatException);
-    barqFlutterTest.expect(() => barqApp.decodeBarqOfflineQueue('[{"id":"m1"}, "bad-entry"]'), throwsFormatException);
+    flutterTesting2026x9.expect(() => barqApp.decodeBarqOfflineQueue('{bad json'), throwsFormatException);
+    flutterTesting2026x9.expect(() => barqApp.decodeBarqOfflineQueue('{"id":"m1"}'), throwsFormatException);
+    flutterTesting2026x9.expect(() => barqApp.decodeBarqOfflineQueue('[{"id":"m1"}, null]'), throwsFormatException);
+    flutterTesting2026x9.expect(() => barqApp.decodeBarqOfflineQueue('[{"id":"m1"}, "bad-entry"]'), throwsFormatException);
   });
 
-  barqFlutterTest.test('Nearby outbox duplicate IDs must match sender, receiver, and body', () {
+  flutterTesting2026x9.test('Nearby outbox duplicate IDs must match sender, receiver, and body', () {
     final original = <String, dynamic>{
       'id': 'a1b2c3d4e5f60708a1b2c3d4e5f60708',
       'sender_id': 'me',
       'receiver_id': 'friend-1',
       'body': 'hello',
     };
-    barqFlutterTest.expect(barqApp.barqOfflineIncomingMessageMatches(original, Map<String, dynamic>.from(original)), isTrue);
-    barqFlutterTest.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'body': 'tampered'}), isFalse);
-    barqFlutterTest.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'sender_id': 'other'}), isFalse);
-    barqFlutterTest.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'receiver_id': 'other'}), isFalse);
+    flutterTesting2026x9.expect(barqApp.barqOfflineIncomingMessageMatches(original, Map<String, dynamic>.from(original)), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'body': 'tampered'}), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'sender_id': 'other'}), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqOfflineIncomingMessageMatches(original, {...original, 'receiver_id': 'other'}), flutterTesting2026x9.isFalse);
   });
 
-  barqFlutterTest.test('offline queue reconciliation removes exact matches found on any server page', () {
+  flutterTesting2026x9.test('offline queue reconciliation removes exact flutterTesting2026x9.matches found on any server page', () {
     final queued = [
       {'id': 'offline-old', 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'وصلت دون إنترنت'},
       {'id': 'offline-new', 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'بانتظار المزامنة'},
@@ -1199,11 +1199,11 @@ void main() {
       {'id': 'offline-old', 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'وصلت دون إنترنت'},
     ]);
 
-    barqFlutterTest.expect(remaining.map((item) => item['id']).toList(), ['offline-new']);
-    barqFlutterTest.expect(barqApp.barqOfflineItemsNotOnServerPage(queued, []), same(queued));
+    flutterTesting2026x9.expect(remaining.map((item) => item['id']).toList(), ['offline-new']);
+    flutterTesting2026x9.expect(barqApp.barqOfflineItemsNotOnServerPage(queued, []), flutterTesting2026x9.same(queued));
   });
 
-  barqFlutterTest.test('message merge deduplicates by id and keeps chronological order', () {
+  flutterTesting2026x9.test('message merge deduplicates by id and keeps chronological order', () {
     final merged = barqApp.mergeMessages(
       [
         {'id': 'm2', 'created_at': '2026-11-19 10:02:00', 'body': 'second'},
@@ -1215,95 +1215,95 @@ void main() {
       ],
     );
 
-    barqFlutterTest.expect(merged.map((message) => message['id']).toList(), ['m1', 'm2', 'm3']);
-    barqFlutterTest.expect(merged[1]['body'], 'second updated');
+    flutterTesting2026x9.expect(merged.map((message) => message['id']).toList(), ['m1', 'm2', 'm3']);
+    flutterTesting2026x9.expect(merged[1]['body'], 'second updated');
   });
 
-  barqFlutterTest.test('barqApp.field helper supports API snake_case and camelCase fields', () {
-    barqFlutterTest.expect(barqApp.field({'display_name': 'برق'}, ['displayName', 'display_name']), 'برق');
-    barqFlutterTest.expect(barqApp.field({}, ['username'], 'مستخدم'), 'مستخدم');
+  flutterTesting2026x9.test('barqApp.field helper supports API snake_case and camelCase fields', () {
+    flutterTesting2026x9.expect(barqApp.field({'display_name': 'برق'}, ['displayName', 'display_name']), 'برق');
+    flutterTesting2026x9.expect(barqApp.field({}, ['username'], 'مستخدم'), 'مستخدم');
   });
 
-  barqFlutterTest.test('profile photo path is resolved for group payloads with snake_case fields', () {
-    barqFlutterTest.expect(
+  flutterTesting2026x9.test('profile photo path is resolved for group payloads with snake_case fields', () {
+    flutterTesting2026x9.expect(
       barqApp.profilePhotoPath({
         'sender_id': 'user/with space',
         'photo_updated_at': '2026-11-20 12:00:00',
       }),
       '/api/profile/photo/user%2Fwith%20space',
     );
-    barqFlutterTest.expect(barqApp.profilePhotoPath({'id': 'without-photo'}), isEmpty);
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(barqApp.profilePhotoPath({'id': 'without-photo'}), flutterTesting2026x9.isEmpty);
+    flutterTesting2026x9.expect(
       barqApp.profilePhotoPath({'id': 'friend-1', 'photo_url': '/api/profile/photo/friend-1'}),
       '/api/profile/photo/friend-1',
     );
   });
 
 
-  barqFlutterTest.test('group roles limit promotion to owners and preserve the owner account', () {
-    barqFlutterTest.expect(barqApp.barqCanManageGroupRoles('owner', targetIsOwner: false), isTrue);
-    barqFlutterTest.expect(barqApp.barqCanManageGroupRoles('owner', targetIsOwner: true), isFalse);
-    barqFlutterTest.expect(barqApp.barqCanManageGroupRoles('admin', targetIsOwner: false), isFalse);
-    barqFlutterTest.expect(barqApp.barqCanManageGroupRoles('member', targetIsOwner: false), isFalse);
+  flutterTesting2026x9.test('group roles limit promotion to owners and preserve the owner account', () {
+    flutterTesting2026x9.expect(barqApp.barqCanManageGroupRoles('owner', targetIsOwner: false), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqCanManageGroupRoles('owner', targetIsOwner: true), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqCanManageGroupRoles('admin', targetIsOwner: false), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqCanManageGroupRoles('member', targetIsOwner: false), flutterTesting2026x9.isFalse);
   });
 
-  barqFlutterTest.test('group removal permissions prevent admins removing peers or owners', () {
-    barqFlutterTest.expect(
+  flutterTesting2026x9.test('group removal permissions prevent admins removing peers or owners', () {
+    flutterTesting2026x9.expect(
       barqApp.barqCanRemoveGroupMember('owner', 'admin', targetIsOwner: false, targetIsSelf: false),
-      isTrue,
+      flutterTesting2026x9.isTrue,
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqCanRemoveGroupMember('admin', 'member', targetIsOwner: false, targetIsSelf: false),
-      isTrue,
+      flutterTesting2026x9.isTrue,
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqCanRemoveGroupMember('admin', 'admin', targetIsOwner: false, targetIsSelf: false),
-      isFalse,
+      flutterTesting2026x9.isFalse,
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqCanRemoveGroupMember('member', 'member', targetIsOwner: false, targetIsSelf: false),
-      isFalse,
+      flutterTesting2026x9.isFalse,
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqCanRemoveGroupMember('owner', 'member', targetIsOwner: true, targetIsSelf: false),
-      isFalse,
+      flutterTesting2026x9.isFalse,
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqCanRemoveGroupMember('owner', 'member', targetIsOwner: false, targetIsSelf: true),
-      isFalse,
+      flutterTesting2026x9.isFalse,
     );
   });
 
-  barqFlutterTest.test('only an owner can transfer group ownership to another non-owner member', () {
-    barqFlutterTest.expect(
+  flutterTesting2026x9.test('only an owner can transfer group ownership to another non-owner member', () {
+    flutterTesting2026x9.expect(
       barqApp.barqCanTransferGroupOwnership('owner', targetIsOwner: false, targetIsSelf: false),
-      isTrue,
+      flutterTesting2026x9.isTrue,
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqCanTransferGroupOwnership('admin', targetIsOwner: false, targetIsSelf: false),
-      isFalse,
+      flutterTesting2026x9.isFalse,
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqCanTransferGroupOwnership('member', targetIsOwner: false, targetIsSelf: false),
-      isFalse,
+      flutterTesting2026x9.isFalse,
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqCanTransferGroupOwnership('owner', targetIsOwner: true, targetIsSelf: false),
-      isFalse,
+      flutterTesting2026x9.isFalse,
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqCanTransferGroupOwnership('owner', targetIsOwner: false, targetIsSelf: true),
-      isFalse,
+      flutterTesting2026x9.isFalse,
     );
   });
 
-  barqFlutterTest.test('group members can leave themselves but the owner cannot leave without transfer', () {
-    barqFlutterTest.expect(barqApp.barqCanLeaveGroup(isSelf: true, isOwner: false), isTrue);
-    barqFlutterTest.expect(barqApp.barqCanLeaveGroup(isSelf: true, isOwner: true), isFalse);
-    barqFlutterTest.expect(barqApp.barqCanLeaveGroup(isSelf: false, isOwner: false), isFalse);
+  flutterTesting2026x9.test('group members can leave themselves but the owner cannot leave without transfer', () {
+    flutterTesting2026x9.expect(barqApp.barqCanLeaveGroup(isSelf: true, isOwner: false), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqCanLeaveGroup(isSelf: true, isOwner: true), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqCanLeaveGroup(isSelf: false, isOwner: false), flutterTesting2026x9.isFalse);
   });
 
-  barqFlutterTest.testWidgets('public profile page shows the selected contact details', (tester) async {
+  flutterTesting2026x9.testWidgets('public profile page shows the selected contact details', (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: barqApp.PublicProfilePage(
         person: {
@@ -1317,23 +1317,23 @@ void main() {
       ),
     ));
 
-    barqFlutterTest.expect(find.text('الملف الشخصي'), findsOneWidget);
-    barqFlutterTest.expect(find.text('صديق برق'), findsOneWidget);
-    barqFlutterTest.expect(find.text('@barq_friend'), findsNWidgets(2));
-    barqFlutterTest.expect(find.text('+967700000001'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('الملف الشخصي'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('صديق برق'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('@barq_friend'), findsNWidgets(2));
+    flutterTesting2026x9.expect(find.text('+967700000001'), findsOneWidget);
     // ListView builds off-screen children lazily; scroll to materialize the actions.
     await tester.drag(find.byType(ListView), const Offset(0, -700));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(find.text('حفظ الرقم في جهات الاتصال'), findsOneWidget);
-    barqFlutterTest.expect(find.text('إرسال رسالة'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('حفظ الرقم في جهات الاتصال'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('إرسال رسالة'), findsOneWidget);
     final sendButton = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'إرسال رسالة'),
     );
-    barqFlutterTest.expect(sendButton.onPressed, isNotNull);
+    flutterTesting2026x9.expect(sendButton.onPressed, flutterTesting2026x9.isNotNull);
   });
 
 
-  barqFlutterTest.testWidgets('public profile disables messaging for the current user', (tester) async {
+  flutterTesting2026x9.testWidgets('public profile disables messaging for the current user', (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: barqApp.PublicProfilePage(
         person: {
@@ -1351,10 +1351,10 @@ void main() {
     final sendButton = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'إرسال رسالة'),
     );
-    barqFlutterTest.expect(sendButton.onPressed, isNull);
+    flutterTesting2026x9.expect(sendButton.onPressed, flutterTesting2026x9.isNull);
   });
 
-  barqFlutterTest.testWidgets('public profile accepts nested API user and hides message action by default', (tester) async {
+  flutterTesting2026x9.testWidgets('public profile accepts nested API user and hides message action by default', (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: barqApp.PublicProfilePage(
         person: {
@@ -1368,12 +1368,12 @@ void main() {
       ),
     ));
 
-    barqFlutterTest.expect(find.text('عضو المجموعة'), findsOneWidget);
-    barqFlutterTest.expect(find.text('@group_member'), findsNWidgets(2));
-    barqFlutterTest.expect(find.text('إرسال رسالة'), findsNothing);
+    flutterTesting2026x9.expect(find.text('عضو المجموعة'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('@group_member'), findsNWidgets(2));
+    flutterTesting2026x9.expect(find.text('إرسال رسالة'), findsNothing);
   });
 
-  barqFlutterTest.test('ephemeral messages disappear at their first-read expiry deadline', () {
+  flutterTesting2026x9.test('ephemeral messages disappear at their first-read expiry deadline', () {
     final now = DateTime.utc(2026, 11, 20, 12);
     final nowSeconds = now.millisecondsSinceEpoch ~/ 1000;
     final visible = barqApp.filterExpiredEphemeralMessages([
@@ -1384,10 +1384,10 @@ void main() {
       {'id': 'expired-string', 'body': 'انتهى أيضًا', 'is_ephemeral': true, 'delete_at': (nowSeconds - 1).toString()},
     ], now: now);
 
-    barqFlutterTest.expect(visible.map((message) => message['id']).toList(),
+    flutterTesting2026x9.expect(visible.map((message) => message['id']).toList(),
         ['regular', 'unread', 'active']);
   });
-  barqFlutterTest.testWidgets('own message actions allow copying and confirmed deletion', (tester) async {
+  flutterTesting2026x9.testWidgets('own message actions allow copying and confirmed deletion', (tester) async {
     var deleted = false;
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
@@ -1405,18 +1405,18 @@ void main() {
 
     await tester.tap(find.text('فتح الإجراءات'));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(find.text('نسخ الرسالة'), findsOneWidget);
-    barqFlutterTest.expect(find.text('حذف الرسالة'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('نسخ الرسالة'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('حذف الرسالة'), findsOneWidget);
 
     await tester.tap(find.text('حذف الرسالة'));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(find.text('حذف الرسالة؟'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('حذف الرسالة؟'), findsOneWidget);
     await tester.tap(find.text('حذف').last);
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(deleted, isTrue);
+    flutterTesting2026x9.expect(deleted, flutterTesting2026x9.isTrue);
   });
 
-  barqFlutterTest.testWidgets('other users message actions do not expose delete', (tester) async {
+  flutterTesting2026x9.testWidgets('other users message actions do not expose delete', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
         body: TextButton(
@@ -1433,21 +1433,21 @@ void main() {
 
     await tester.tap(find.text('فتح الإجراءات'));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(find.text('نسخ الرسالة'), findsOneWidget);
-    barqFlutterTest.expect(find.text('حذف الرسالة'), findsNothing);
+    flutterTesting2026x9.expect(find.text('نسخ الرسالة'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('حذف الرسالة'), findsNothing);
   });
 
-  barqFlutterTest.test('quoted reply preview is bounded and handles attachment references', () {
-    barqFlutterTest.expect(barqApp.messageReplyPreview({'reply_to_body': 'رسالة مقتبسة'}), 'رسالة مقتبسة');
-    barqFlutterTest.expect(barqApp.messageReplyPreview({'reply_to_body': List.filled(130, 'x').join()}).length, 121);
-    barqFlutterTest.expect(barqApp.messageReplyPreview({'reply_to_body': '{"attachmentId":"a1"}'}), 'مرفق');
-    barqFlutterTest.expect(barqApp.messageReplyPreview({'reply_to_body': '{"attachment_id":"a2"}'}), 'مرفق');
-    barqFlutterTest.expect(barqApp.messageReplyPreview({'reply_to_body': '{"fileName":"photo.jpg"}'}), 'مرفق');
-    barqFlutterTest.expect(barqApp.messageReplyPreview({'reply_to_body': {'attachmentId': 'a3'}}), 'مرفق');
-    barqFlutterTest.expect(barqApp.messageReplyPreview({'reply_to_body': ''}), 'رسالة');
+  flutterTesting2026x9.test('quoted reply preview is bounded and handles attachment references', () {
+    flutterTesting2026x9.expect(barqApp.messageReplyPreview({'reply_to_body': 'رسالة مقتبسة'}), 'رسالة مقتبسة');
+    flutterTesting2026x9.expect(barqApp.messageReplyPreview({'reply_to_body': List.filled(130, 'x').join()}).length, 121);
+    flutterTesting2026x9.expect(barqApp.messageReplyPreview({'reply_to_body': '{"attachmentId":"a1"}'}), 'مرفق');
+    flutterTesting2026x9.expect(barqApp.messageReplyPreview({'reply_to_body': '{"attachment_id":"a2"}'}), 'مرفق');
+    flutterTesting2026x9.expect(barqApp.messageReplyPreview({'reply_to_body': '{"fileName":"photo.jpg"}'}), 'مرفق');
+    flutterTesting2026x9.expect(barqApp.messageReplyPreview({'reply_to_body': {'attachmentId': 'a3'}}), 'مرفق');
+    flutterTesting2026x9.expect(barqApp.messageReplyPreview({'reply_to_body': ''}), 'رسالة');
   });
 
-  barqFlutterTest.testWidgets('message edit dialog returns trimmed replacement text', (tester) async {
+  flutterTesting2026x9.testWidgets('message edit dialog returns trimmed replacement text', (tester) async {
     String? saved;
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
@@ -1462,14 +1462,14 @@ void main() {
 
     await tester.tap(find.text('فتح التعديل'));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(find.text('تعديل الرسالة'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('تعديل الرسالة'), findsOneWidget);
     await tester.enterText(find.byType(TextField), '  النص الجديد  ');
     await tester.tap(find.text('حفظ'));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(saved, 'النص الجديد');
+    flutterTesting2026x9.expect(saved, 'النص الجديد');
   });
 
-  barqFlutterTest.testWidgets('message action menu invokes the reply callback', (tester) async {
+  flutterTesting2026x9.testWidgets('message action menu invokes the reply callback', (tester) async {
     Map<String, dynamic>? selected;
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
@@ -1488,25 +1488,25 @@ void main() {
 
     await tester.tap(find.text('فتح الإجراءات'));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(find.text('الرد على الرسالة'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('الرد على الرسالة'), findsOneWidget);
     await tester.tap(find.text('الرد على الرسالة'));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(selected?['id'], 'reply-1');
+    flutterTesting2026x9.expect(selected?['id'], 'reply-1');
   });
 
 
-  barqFlutterTest.test('message reaction normalization preserves emoji and reacting user IDs', () {
+  flutterTesting2026x9.test('message reaction normalization preserves emoji and reacting user IDs', () {
     final normalized = barqApp.normalizeMessageReactions([
       {'emoji': '❤️', 'user_id': 'u1'},
       {'emoji': '🔥', 'user_id': 'u2'},
     ]);
-    barqFlutterTest.expect(normalized, hasLength(2));
-    barqFlutterTest.expect(normalized.first['emoji'], '❤️');
-    barqFlutterTest.expect(normalized.last['user_id'], 'u2');
-    barqFlutterTest.expect(barqApp.normalizeMessageReactions(null), isEmpty);
+    flutterTesting2026x9.expect(normalized, flutterTesting2026x9.hasLength(2));
+    flutterTesting2026x9.expect(normalized.first['emoji'], '❤️');
+    flutterTesting2026x9.expect(normalized.last['user_id'], 'u2');
+    flutterTesting2026x9.expect(barqApp.normalizeMessageReactions(null), flutterTesting2026x9.isEmpty);
   });
 
-  barqFlutterTest.testWidgets('reaction chips show counts and allow removing the current user reaction', (tester) async {
+  flutterTesting2026x9.testWidgets('reaction chips show counts and allow removing the current user reaction', (tester) async {
     String? selectedEmoji;
     bool? removing;
     await tester.pumpWidget(MaterialApp(
@@ -1528,14 +1528,14 @@ void main() {
       )),
     ));
 
-    barqFlutterTest.expect(find.text('❤️ 2'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('❤️ 2'), findsOneWidget);
     await tester.tap(find.text('❤️ 2'));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(selectedEmoji, '❤️');
-    barqFlutterTest.expect(removing, isTrue);
+    flutterTesting2026x9.expect(selectedEmoji, '❤️');
+    flutterTesting2026x9.expect(removing, flutterTesting2026x9.isTrue);
   });
 
-  barqFlutterTest.testWidgets('message action sheet exposes reaction and pin actions', (tester) async {
+  flutterTesting2026x9.testWidgets('message action sheet exposes reaction and pin actions', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
         body: TextButton(
@@ -1555,34 +1555,34 @@ void main() {
 
     await tester.tap(find.text('فتح الإجراءات'));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(find.text('إضافة تفاعل'), findsOneWidget);
-    barqFlutterTest.expect(find.text('تثبيت الرسالة'), findsOneWidget);
-    barqFlutterTest.expect(find.text('حفظ في الذكريات الخاصة'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('إضافة تفاعل'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('تثبيت الرسالة'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('حفظ في الذكريات الخاصة'), findsOneWidget);
   });
 
-  barqFlutterTest.test('media duration formatter supports minute and hour lengths', () {
-    barqFlutterTest.expect(barqApp.formatBarqMediaDuration(const Duration(seconds: 0)), '00:00');
-    barqFlutterTest.expect(barqApp.formatBarqMediaDuration(const Duration(minutes: 2, seconds: 9)), '02:09');
-    barqFlutterTest.expect(barqApp.formatBarqMediaDuration(const Duration(hours: 1, minutes: 3, seconds: 5)), '1:03:05');
+  flutterTesting2026x9.test('media duration formatter supports minute and hour lengths', () {
+    flutterTesting2026x9.expect(barqApp.formatBarqMediaDuration(const Duration(seconds: 0)), '00:00');
+    flutterTesting2026x9.expect(barqApp.formatBarqMediaDuration(const Duration(minutes: 2, seconds: 9)), '02:09');
+    flutterTesting2026x9.expect(barqApp.formatBarqMediaDuration(const Duration(hours: 1, minutes: 3, seconds: 5)), '1:03:05');
   });
 
-  barqFlutterTest.test('message links extract only unique safe web URLs and normalize www links', () {
+  flutterTesting2026x9.test('message links extract only unique safe web URLs and normalize www links', () {
     final links = barqApp.extractBarqLinks(
       'زور https://example.com/path، ثم www.openai.com وبعدها https://example.com/path',
     );
-    barqFlutterTest.expect(links, [
+    flutterTesting2026x9.expect(links, [
       Uri.parse('https://example.com/path'),
       Uri.parse('https://www.openai.com'),
     ]);
   });
 
-  barqFlutterTest.test('message link extraction ignores non-web schemes', () {
-    barqFlutterTest.expect(barqApp.extractBarqLinks('javascript:alert(1) file:///tmp/a https://safe.example'), [
+  flutterTesting2026x9.test('message link extraction ignores non-web schemes', () {
+    flutterTesting2026x9.expect(barqApp.extractBarqLinks('javascript:alert(1) file:///tmp/a https://safe.example'), [
       Uri.parse('https://safe.example'),
     ]);
   });
 
-  barqFlutterTest.testWidgets('conversation summary waits for explicit consent before sending messages', (tester) async {
+  flutterTesting2026x9.testWidgets('conversation summary waits for explicit consent before sending messages', (tester) async {
     var requests = 0;
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
@@ -1603,18 +1603,18 @@ void main() {
 
     await tester.tap(find.text('فتح الملخص'));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(requests, 0);
-    barqFlutterTest.expect(find.text('إنشاء الملخص'), findsOneWidget);
+    flutterTesting2026x9.expect(requests, 0);
+    flutterTesting2026x9.expect(find.text('إنشاء الملخص'), findsOneWidget);
 
     await tester.tap(find.text('إنشاء الملخص'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump();
-    barqFlutterTest.expect(requests, 1);
-    barqFlutterTest.expect(find.text('ملخص اختباري'), findsOneWidget);
+    flutterTesting2026x9.expect(requests, 1);
+    flutterTesting2026x9.expect(find.text('ملخص اختباري'), findsOneWidget);
   });
 
-  barqFlutterTest.testWidgets('conversation tools sheet exposes chat tools outside app settings', (tester) async {
+  flutterTesting2026x9.testWidgets('conversation tools sheet exposes chat tools outside app settings', (tester) async {
     var selectedTool = '';
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
@@ -1640,64 +1640,64 @@ void main() {
 
     await tester.tap(find.text('فتح أدوات المحادثة'));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(find.text('أدوات المحادثة'), findsOneWidget);
-    barqFlutterTest.expect(find.text('البحث في المحادثة'), findsOneWidget);
-    barqFlutterTest.expect(find.text('الرسائل المثبتة'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('أدوات المحادثة'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('البحث في المحادثة'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('الرسائل المثبتة'), findsOneWidget);
 
     await tester.tap(find.text('الرسائل المثبتة'));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(selectedTool, 'pinned');
+    flutterTesting2026x9.expect(selectedTool, 'pinned');
   });
 
-  barqFlutterTest.test('private and group message text share the server 5000-character limit', () {
-    barqFlutterTest.expect(barqApp.isBarqMessageTextAllowed('رسالة قصيرة'), isTrue);
-    barqFlutterTest.expect(barqApp.isBarqMessageTextAllowed('  رسالة قصيرة  '), isTrue);
-    barqFlutterTest.expect(barqApp.isBarqMessageTextAllowed(''), isFalse);
-    barqFlutterTest.expect(barqApp.isBarqMessageTextAllowed('   '), isFalse);
-    barqFlutterTest.expect(barqApp.isBarqMessageTextAllowed(List.filled(5000, 'س').join()), isTrue);
-    barqFlutterTest.expect(barqApp.isBarqMessageTextAllowed(List.filled(5001, 'س').join()), isFalse);
+  flutterTesting2026x9.test('private and group message text share the server 5000-character limit', () {
+    flutterTesting2026x9.expect(barqApp.isBarqMessageTextAllowed('رسالة قصيرة'), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.isBarqMessageTextAllowed('  رسالة قصيرة  '), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.isBarqMessageTextAllowed(''), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.isBarqMessageTextAllowed('   '), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.isBarqMessageTextAllowed(List.filled(5000, 'س').join()), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.isBarqMessageTextAllowed(List.filled(5001, 'س').join()), flutterTesting2026x9.isFalse);
   });
 
-  barqFlutterTest.test('translation failures become retryable after a cooldown', () {
+  flutterTesting2026x9.test('translation failures become retryable after a cooldown', () {
     final now = DateTime.utc(2026, 11, 21, 12);
     final retryAfter = {'message-1': now.add(const Duration(minutes: 1))};
-    barqFlutterTest.expect(barqApp.barqTranslationRetryAllowed('message-1', retryAfter, now: now), isFalse);
-    barqFlutterTest.expect(barqApp.barqTranslationRetryAllowed('message-1', retryAfter,
-        now: now.add(const Duration(minutes: 1))), isTrue);
-    barqFlutterTest.expect(barqApp.barqTranslationRetryAllowed('message-2', retryAfter, now: now), isTrue);
-    barqFlutterTest.expect(barqApp.barqTranslationRetryAllowed('', retryAfter, now: now), isFalse);
+    flutterTesting2026x9.expect(barqApp.barqTranslationRetryAllowed('message-1', retryAfter, now: now), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqTranslationRetryAllowed('message-1', retryAfter,
+        now: now.add(const Duration(minutes: 1))), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqTranslationRetryAllowed('message-2', retryAfter, now: now), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqTranslationRetryAllowed('', retryAfter, now: now), flutterTesting2026x9.isFalse);
   });
 
-  barqFlutterTest.test('audio transcription enforces the worker two-megabyte limit', () {
-    barqFlutterTest.expect(barqApp.isBarqTranscriptionSizeAllowed(0), isFalse);
-    barqFlutterTest.expect(barqApp.isBarqTranscriptionSizeAllowed(1), isTrue);
-    barqFlutterTest.expect(barqApp.isBarqTranscriptionSizeAllowed(2 * 1024 * 1024), isTrue);
-    barqFlutterTest.expect(barqApp.isBarqTranscriptionSizeAllowed(2 * 1024 * 1024 + 1), isFalse);
-  });
-
-
-  barqFlutterTest.test('SPARK media extensions map to exact supported MIME types', () {
-    barqFlutterTest.expect(barqApp.barqSparkMediaContentType('jpg'), 'image/jpeg');
-    barqFlutterTest.expect(barqApp.barqSparkMediaContentType('.JPEG'), 'image/jpeg');
-    barqFlutterTest.expect(barqApp.barqSparkMediaContentType('png'), 'image/png');
-    barqFlutterTest.expect(barqApp.barqSparkMediaContentType('webp'), 'image/webp');
-    barqFlutterTest.expect(barqApp.barqSparkMediaContentType('gif'), 'image/gif');
-    barqFlutterTest.expect(barqApp.barqSparkMediaContentType('mp4'), 'video/mp4');
-    barqFlutterTest.expect(barqApp.barqSparkMediaContentType('webm'), 'video/webm');
-    barqFlutterTest.expect(barqApp.barqSparkMediaContentType('MOV'), 'video/quicktime');
-    barqFlutterTest.expect(barqApp.barqSparkMediaContentType('exe'), isNull);
-    barqFlutterTest.expect(barqApp.barqSparkMediaContentType(''), isNull);
-  });
-
-  barqFlutterTest.test('SPARK media client size limit rejects empty and oversized files', () {
-    barqFlutterTest.expect(barqApp.isBarqSparkMediaSizeAllowed(0), isFalse);
-    barqFlutterTest.expect(barqApp.isBarqSparkMediaSizeAllowed(1), isTrue);
-    barqFlutterTest.expect(barqApp.isBarqSparkMediaSizeAllowed(60 * 1024 * 1024), isTrue);
-    barqFlutterTest.expect(barqApp.isBarqSparkMediaSizeAllowed(60 * 1024 * 1024 + 1), isFalse);
+  flutterTesting2026x9.test('audio transcription enforces the worker two-megabyte limit', () {
+    flutterTesting2026x9.expect(barqApp.isBarqTranscriptionSizeAllowed(0), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.isBarqTranscriptionSizeAllowed(1), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.isBarqTranscriptionSizeAllowed(2 * 1024 * 1024), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.isBarqTranscriptionSizeAllowed(2 * 1024 * 1024 + 1), flutterTesting2026x9.isFalse);
   });
 
 
-  barqFlutterTest.test('private memory photo uploads continue after an individual failure', () async {
+  flutterTesting2026x9.test('SPARK media extensions map to exact supported MIME types', () {
+    flutterTesting2026x9.expect(barqApp.barqSparkMediaContentType('jpg'), 'image/jpeg');
+    flutterTesting2026x9.expect(barqApp.barqSparkMediaContentType('.JPEG'), 'image/jpeg');
+    flutterTesting2026x9.expect(barqApp.barqSparkMediaContentType('png'), 'image/png');
+    flutterTesting2026x9.expect(barqApp.barqSparkMediaContentType('webp'), 'image/webp');
+    flutterTesting2026x9.expect(barqApp.barqSparkMediaContentType('gif'), 'image/gif');
+    flutterTesting2026x9.expect(barqApp.barqSparkMediaContentType('mp4'), 'video/mp4');
+    flutterTesting2026x9.expect(barqApp.barqSparkMediaContentType('webm'), 'video/webm');
+    flutterTesting2026x9.expect(barqApp.barqSparkMediaContentType('MOV'), 'video/quicktime');
+    flutterTesting2026x9.expect(barqApp.barqSparkMediaContentType('exe'), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.barqSparkMediaContentType(''), flutterTesting2026x9.isNull);
+  });
+
+  flutterTesting2026x9.test('SPARK media client size limit rejects empty and oversized files', () {
+    flutterTesting2026x9.expect(barqApp.isBarqSparkMediaSizeAllowed(0), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.isBarqSparkMediaSizeAllowed(1), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.isBarqSparkMediaSizeAllowed(60 * 1024 * 1024), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.isBarqSparkMediaSizeAllowed(60 * 1024 * 1024 + 1), flutterTesting2026x9.isFalse);
+  });
+
+
+  flutterTesting2026x9.test('private memory photo uploads continue after an individual failure', () async {
     final attempted = <String>[];
     final photos = [
       {'name': 'one.jpg', 'bytes': <int>[1], 'contentType': 'image/jpeg'},
@@ -1719,11 +1719,11 @@ void main() {
       },
     );
 
-    barqFlutterTest.expect(attempted, ['one.jpg', 'two.png', 'three.webp']);
-    barqFlutterTest.expect(failures, ['two.png']);
+    flutterTesting2026x9.expect(attempted, ['one.jpg', 'two.png', 'three.webp']);
+    flutterTesting2026x9.expect(failures, ['two.png']);
   });
 
-  barqFlutterTest.testWidgets('private memory load error explains retry instead of showing an empty vault', (tester) async {
+  flutterTesting2026x9.testWidgets('private memory load error explains retry instead of showing an empty vault', (tester) async {
     var retried = false;
     await tester.pumpWidget(
       MaterialApp(
@@ -1733,13 +1733,13 @@ void main() {
       ),
     );
 
-    barqFlutterTest.expect(find.text('تعذر تحميل ذكرياتك'), findsOneWidget);
-    barqFlutterTest.expect(find.textContaining('لم نحذف ذكرياتك المحفوظة.'), findsOneWidget);
+    flutterTesting2026x9.expect(find.text('تعذر تحميل ذكرياتك'), findsOneWidget);
+    flutterTesting2026x9.expect(find.textContaining('لم نحذف ذكرياتك المحفوظة.'), findsOneWidget);
     await tester.tap(find.text('إعادة المحاولة'));
-    barqFlutterTest.expect(retried, isTrue);
+    flutterTesting2026x9.expect(retried, flutterTesting2026x9.isTrue);
   });
 
-  barqFlutterTest.testWidgets('private memory photo gallery shows a safe empty state without paging', (tester) async {
+  flutterTesting2026x9.testWidgets('private memory photo gallery shows a safe empty state without paging', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
@@ -1751,12 +1751,12 @@ void main() {
       ),
     );
 
-    barqFlutterTest.expect(find.byIcon(Icons.photo_library_outlined), findsOneWidget);
-    barqFlutterTest.expect(find.byType(PageView), findsNothing);
-    barqFlutterTest.expect(find.textContaining('/'), findsNothing);
+    flutterTesting2026x9.expect(find.byIcon(Icons.photo_library_outlined), findsOneWidget);
+    flutterTesting2026x9.expect(find.byType(PageView), findsNothing);
+    flutterTesting2026x9.expect(find.textContaining('/'), findsNothing);
   });
 
-  barqFlutterTest.testWidgets('private memory photo gallery pages through multiple zoomable photos', (tester) async {
+  flutterTesting2026x9.testWidgets('private memory photo gallery pages through multiple zoomable photos', (tester) async {
     final photos = [
       {'attachmentId': 'owner-1/private-memories/photo-1'},
       {'attachmentId': 'owner-1/private-memories/photo-2'},
@@ -1779,32 +1779,32 @@ void main() {
     );
     await tester.pump();
 
-    barqFlutterTest.expect(find.byType(PageView), findsOneWidget);
-    barqFlutterTest.expect(find.byType(InteractiveViewer), findsWidgets);
-    barqFlutterTest.expect(visiblePage, 0);
-    barqFlutterTest.expect(find.text('1 / 3'), findsOneWidget);
+    flutterTesting2026x9.expect(find.byType(PageView), findsOneWidget);
+    flutterTesting2026x9.expect(find.byType(InteractiveViewer), findsWidgets);
+    flutterTesting2026x9.expect(visiblePage, 0);
+    flutterTesting2026x9.expect(find.text('1 / 3'), findsOneWidget);
 
     await tester.drag(find.byType(PageView), const Offset(-700, 0));
     await tester.pumpAndSettle();
-    barqFlutterTest.expect(visiblePage, 1);
-    barqFlutterTest.expect(find.text('2 / 3'), findsOneWidget);
+    flutterTesting2026x9.expect(visiblePage, 1);
+    flutterTesting2026x9.expect(find.text('2 / 3'), findsOneWidget);
   });
 
 
-  barqFlutterTest.test('BARQ has exactly the four approved visual identities', () {
-    barqFlutterTest.expect(BarqIdentity.values, [
+  flutterTesting2026x9.test('BARQ has exactly the four approved visual identities', () {
+    flutterTesting2026x9.expect(BarqIdentity.values, [
       BarqIdentity.blueLightning,
       BarqIdentity.butterfly,
       BarqIdentity.purpleShadow,
       BarqIdentity.skyJewel,
     ]);
-    barqFlutterTest.expect(BarqIdentity.label(BarqIdentity.blueLightning), 'البرق الأزرق');
-    barqFlutterTest.expect(BarqIdentity.label(BarqIdentity.butterfly), 'الفراشة');
-    barqFlutterTest.expect(BarqIdentity.label(BarqIdentity.purpleShadow), 'الظل البنفسجي');
-    barqFlutterTest.expect(BarqIdentity.label(BarqIdentity.skyJewel), 'الجوهرة السماوية');
+    flutterTesting2026x9.expect(BarqIdentity.label(BarqIdentity.blueLightning), 'البرق الأزرق');
+    flutterTesting2026x9.expect(BarqIdentity.label(BarqIdentity.butterfly), 'الفراشة');
+    flutterTesting2026x9.expect(BarqIdentity.label(BarqIdentity.purpleShadow), 'الظل البنفسجي');
+    flutterTesting2026x9.expect(BarqIdentity.label(BarqIdentity.skyJewel), 'الجوهرة السماوية');
   });
 
-  barqFlutterTest.test('BARQ identity palettes keep four distinct readable theme foundations', () {
+  flutterTesting2026x9.test('BARQ identity palettes keep four distinct readable theme foundations', () {
     double contrastRatio(Color first, Color second) {
       final a = first.computeLuminance();
       final b = second.computeLuminance();
@@ -1816,68 +1816,68 @@ void main() {
     final palettes = BarqIdentity.values
         .map(BarqIdentityPalette.forIdentity)
         .toList();
-    barqFlutterTest.expect(BarqIdentity.values, hasLength(4));
-    barqFlutterTest.expect(palettes.map((p) => p.background).toSet().length, 4);
-    barqFlutterTest.expect(palettes.map((p) => p.primary).toSet().length, 4);
+    flutterTesting2026x9.expect(BarqIdentity.values, flutterTesting2026x9.hasLength(4));
+    flutterTesting2026x9.expect(palettes.map((p) => p.background).toSet().length, 4);
+    flutterTesting2026x9.expect(palettes.map((p) => p.primary).toSet().length, 4);
     for (final palette in palettes) {
-      barqFlutterTest.expect(palette.text, isNot(palette.background));
-      barqFlutterTest.expect(palette.primary, isNot(palette.background));
-      barqFlutterTest.expect(palette.secondary, isNot(palette.surface));
-      barqFlutterTest.expect(contrastRatio(palette.text, palette.background), greaterThanOrEqualTo(7));
-      barqFlutterTest.expect(contrastRatio(palette.text, palette.surface), greaterThanOrEqualTo(7));
-      barqFlutterTest.expect(contrastRatio(palette.mutedText, palette.surface), greaterThanOrEqualTo(4.5));
-      barqFlutterTest.expect(contrastRatio(palette.primary, palette.surface), greaterThanOrEqualTo(4.5));
+      flutterTesting2026x9.expect(palette.text, flutterTesting2026x9.isNot(palette.background));
+      flutterTesting2026x9.expect(palette.primary, flutterTesting2026x9.isNot(palette.background));
+      flutterTesting2026x9.expect(palette.secondary, flutterTesting2026x9.isNot(palette.surface));
+      flutterTesting2026x9.expect(contrastRatio(palette.text, palette.background), greaterThanOrEqualTo(7));
+      flutterTesting2026x9.expect(contrastRatio(palette.text, palette.surface), greaterThanOrEqualTo(7));
+      flutterTesting2026x9.expect(contrastRatio(palette.mutedText, palette.surface), greaterThanOrEqualTo(4.5));
+      flutterTesting2026x9.expect(contrastRatio(palette.primary, palette.surface), greaterThanOrEqualTo(4.5));
     }
     final blue = BarqIdentityPalette.forIdentity(BarqIdentity.blueLightning);
-    barqFlutterTest.expect(blue.primary, const Color(0xFFD6AD55));
-    barqFlutterTest.expect(blue.secondary, const Color(0xFF168BFF));
-    barqFlutterTest.expect(blue.background, const Color(0xFF090909));
-    barqFlutterTest.expect(blue.surface, const Color(0xFF171717));
+    flutterTesting2026x9.expect(blue.primary, const Color(0xFFD6AD55));
+    flutterTesting2026x9.expect(blue.secondary, const Color(0xFF168BFF));
+    flutterTesting2026x9.expect(blue.background, const Color(0xFF090909));
+    flutterTesting2026x9.expect(blue.surface, const Color(0xFF171717));
   });
 
-  barqFlutterTest.test('FCM token normalization trims valid tokens and rejects invalid values', () {
-    barqFlutterTest.expect(barqApp.normalizeBarqFcmToken('  fcm-token-123  '), 'fcm-token-123');
-    barqFlutterTest.expect(barqApp.normalizeBarqFcmToken(null), isNull);
-    barqFlutterTest.expect(barqApp.normalizeBarqFcmToken(''), isNull);
-    barqFlutterTest.expect(barqApp.normalizeBarqFcmToken('   '), isNull);
-    barqFlutterTest.expect(barqApp.normalizeBarqFcmToken('token with spaces'), isNull);
-    barqFlutterTest.expect(barqApp.normalizeBarqFcmToken(List.filled(4097, 'x').join()), isNull);
-    barqFlutterTest.expect(barqApp.normalizeBarqFcmToken(List.filled(4096, 'x').join()), hasLength(4096));
+  flutterTesting2026x9.test('FCM token normalization trims valid tokens and rejects invalid values', () {
+    flutterTesting2026x9.expect(barqApp.normalizeBarqFcmToken('  fcm-token-123  '), 'fcm-token-123');
+    flutterTesting2026x9.expect(barqApp.normalizeBarqFcmToken(null), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.normalizeBarqFcmToken(''), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.normalizeBarqFcmToken('   '), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.normalizeBarqFcmToken('token with spaces'), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.normalizeBarqFcmToken(List.filled(4097, 'x').join()), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.normalizeBarqFcmToken(List.filled(4096, 'x').join()), flutterTesting2026x9.hasLength(4096));
   });
 
-  barqFlutterTest.test('foreground push uses generic labels and respects category preferences', () {
-    barqFlutterTest.expect(
+  flutterTesting2026x9.test('foreground push uses generic labels and respects category preferences', () {
+    flutterTesting2026x9.expect(
       barqApp.barqForegroundPushLabel(
         {'type': 'direct_message', 'body': 'secret message', 'sender': 'Private Name'},
         {'messages': true},
       ),
       'وصلتك رسالة جديدة',
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqForegroundPushLabel({'type': 'group_message', 'body': 'secret'}, {'groups': true}),
       'وصلتك رسالة جديدة في مجموعة',
     );
-    barqFlutterTest.expect(
+    flutterTesting2026x9.expect(
       barqApp.barqForegroundPushLabel({'type': 'status_update', 'body': 'private'}, {'statuses': true}),
       'هناك لحظة جديدة في SPARK',
     );
-    barqFlutterTest.expect(barqApp.barqForegroundPushLabel({'type': 'direct_message'}, {'messages': false}), isNull);
-    barqFlutterTest.expect(barqApp.barqForegroundPushLabel({'type': 'group_message'}, {'groups': false}), isNull);
-    barqFlutterTest.expect(barqApp.barqForegroundPushLabel({'type': 'status_update'}, {'statuses': false}), isNull);
-    barqFlutterTest.expect(barqApp.barqForegroundPushLabel({'type': 'direct_message', 'ephemeral': true}, {'messages': true}), isNull);
-    barqFlutterTest.expect(barqApp.barqForegroundPushLabel({'type': 'group_message', 'temporary': 'true'}, {'groups': true}), isNull);
-    barqFlutterTest.expect(barqApp.barqForegroundPushLabel({'type': 'unknown'}, {}), isNull);
+    flutterTesting2026x9.expect(barqApp.barqForegroundPushLabel({'type': 'direct_message'}, {'messages': false}), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.barqForegroundPushLabel({'type': 'group_message'}, {'groups': false}), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.barqForegroundPushLabel({'type': 'status_update'}, {'statuses': false}), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.barqForegroundPushLabel({'type': 'direct_message', 'ephemeral': true}, {'messages': true}), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.barqForegroundPushLabel({'type': 'group_message', 'temporary': 'true'}, {'groups': true}), flutterTesting2026x9.isNull);
+    flutterTesting2026x9.expect(barqApp.barqForegroundPushLabel({'type': 'unknown'}, {}), flutterTesting2026x9.isNull);
   });
 
-  barqFlutterTest.test('FCM logout revocation runs only with session and valid token', () async {
+  flutterTesting2026x9.test('FCM logout revocation runs only with session and valid token', () async {
     String? revoked;
     final success = await barqApp.revokeBarqFcmTokenSafely(
       authToken: 'session-token',
       fcmToken: '  device-token  ',
       revoke: (value) async { revoked = value; },
     );
-    barqFlutterTest.expect(success, isTrue);
-    barqFlutterTest.expect(revoked, 'device-token');
+    flutterTesting2026x9.expect(success, flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(revoked, 'device-token');
 
     revoked = null;
     final noSession = await barqApp.revokeBarqFcmTokenSafely(
@@ -1885,30 +1885,30 @@ void main() {
       fcmToken: 'device-token',
       revoke: (value) async { revoked = value; },
     );
-    barqFlutterTest.expect(noSession, isFalse);
-    barqFlutterTest.expect(revoked, isNull);
+    flutterTesting2026x9.expect(noSession, flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(revoked, flutterTesting2026x9.isNull);
 
     final invalidToken = await barqApp.revokeBarqFcmTokenSafely(
       authToken: 'session-token',
       fcmToken: 'invalid token',
       revoke: (value) async { revoked = value; },
     );
-    barqFlutterTest.expect(invalidToken, isFalse);
-    barqFlutterTest.expect(revoked, isNull);
+    flutterTesting2026x9.expect(invalidToken, flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(revoked, flutterTesting2026x9.isNull);
 
     final networkFailure = await barqApp.revokeBarqFcmTokenSafely(
       authToken: 'session-token',
       fcmToken: 'device-token',
       revoke: (_) async { throw Exception('offline'); },
     );
-    barqFlutterTest.expect(networkFailure, isFalse);
+    flutterTesting2026x9.expect(networkFailure, flutterTesting2026x9.isFalse);
   });
 
-  barqFlutterTest.test('FCM registration requires authorized or provisional notification permission', () {
-    barqFlutterTest.expect(barqApp.barqCanRegisterFcmToken(AuthorizationStatus.authorized), isTrue);
-    barqFlutterTest.expect(barqApp.barqCanRegisterFcmToken(AuthorizationStatus.provisional), isTrue);
-    barqFlutterTest.expect(barqApp.barqCanRegisterFcmToken(AuthorizationStatus.denied), isFalse);
-    barqFlutterTest.expect(barqApp.barqCanRegisterFcmToken(AuthorizationStatus.notDetermined), isFalse);
+  flutterTesting2026x9.test('FCM registration requires authorized or provisional notification permission', () {
+    flutterTesting2026x9.expect(barqApp.barqCanRegisterFcmToken(AuthorizationStatus.authorized), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqCanRegisterFcmToken(AuthorizationStatus.provisional), flutterTesting2026x9.isTrue);
+    flutterTesting2026x9.expect(barqApp.barqCanRegisterFcmToken(AuthorizationStatus.denied), flutterTesting2026x9.isFalse);
+    flutterTesting2026x9.expect(barqApp.barqCanRegisterFcmToken(AuthorizationStatus.notDetermined), flutterTesting2026x9.isFalse);
   });
 
 }
