@@ -56,6 +56,7 @@ String? barqSparkMediaContentType(String extension) {
     case 'gif':
       return 'image/gif';
     case 'mp4':
+    case 'm4v':
       return 'video/mp4';
     case 'webm':
       return 'video/webm';
