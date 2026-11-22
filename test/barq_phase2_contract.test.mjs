@@ -134,7 +134,7 @@ test("ephemeral messages stay private and start a ten-second expiry on first rec
 test("speech transcription requires authentication, validates audio, rate-limits, and uses Workers AI without persistence", () => {
   assert.ok(worker.includes('path === "/api/transcribe"'));
   const start = worker.indexOf('path === "/api/transcribe"');
-  const end = worker.indexOf("// A single private invite code", start);
+  const end = worker.indexOf("// Directional user blocks", start);
   const route = worker.slice(start, end);
   assert.ok(route.includes('ai.run("@cf/openai/whisper"'));
   assert.ok(route.includes("maxTranscriptionBytes = 2 * 1024 * 1024"));
@@ -339,7 +339,7 @@ test("speech transcription route is behind bearer authentication and never persi
   const authIndex = worker.indexOf("const currentUser = await authenticate(request, env)");
   const unauthorizedIndex = worker.indexOf("if (!currentUser)", authIndex);
   const routeIndex = worker.indexOf('path === "/api/transcribe"');
-  const routeEnd = worker.indexOf("// A single private invite code", routeIndex);
+  const routeEnd = worker.indexOf("// Directional user blocks", routeIndex);
   const route = worker.slice(routeIndex, routeEnd);
   assert.ok(authIndex >= 0 && unauthorizedIndex > authIndex && routeIndex > unauthorizedIndex);
   assert.ok(route.includes("audio/mp4"));
