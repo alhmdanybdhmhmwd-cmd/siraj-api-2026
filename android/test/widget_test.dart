@@ -661,7 +661,8 @@ void main() {
     expect(calls, [('❤️', true), ('🔥', false)]);
   });
 
-  testWidgets('message action sheet exposes reaction and pin actions', (tester) async {
+  testWidgets('message action sheet invokes pin and exposes reaction actions', (tester) async {
+    var pinCalls = 0;
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
         body: TextButton(
@@ -672,7 +673,7 @@ void main() {
             canDelete: false,
             onDelete: () async {},
             onReact: (emoji, remove) async {},
-            onPin: () async {},
+            onPin: () async { pinCalls++; },
             onSaveMemory: () async {},
           ),
           child: const Text('فتح الإجراءات'),
@@ -685,6 +686,9 @@ void main() {
     expect(find.text('إضافة تفاعل'), findsOneWidget);
     expect(find.text('تثبيت الرسالة'), findsOneWidget);
     expect(find.text('حفظ في الذكريات الخاصة'), findsOneWidget);
+    await tester.tap(find.text('تثبيت الرسالة'));
+    await tester.pumpAndSettle();
+    expect(pinCalls, 1);
   });
 
   test('media duration formatter supports minute and hour lengths', () {
