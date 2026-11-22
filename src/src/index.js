@@ -2220,6 +2220,9 @@ export default {
         `).run();
         if (action === "view" && method === "POST") {
           if (status.user_id !== currentUser.sub) {
+            if (await isBlockedPair(currentUser.sub, status.user_id)) {
+              return json({ error: "SPARK status access denied" }, 403);
+            }
             const friendship = await env.DB.prepare(
               `SELECT 1 FROM friendships f
                WHERE f.user_id = ? AND f.friend_id = ?
@@ -2270,6 +2273,9 @@ export default {
         if (!status) return json({ error: "SPARK status not found or expired" }, 404);
         const isOwner = status.user_id === currentUser.sub;
         if (!isOwner) {
+          if (await isBlockedPair(currentUser.sub, status.user_id)) {
+            return json({ error: "SPARK status access denied" }, 403);
+          }
           const friendship = await env.DB.prepare(
             `SELECT 1 FROM friendships f
              WHERE f.user_id = ? AND f.friend_id = ?
@@ -2418,6 +2424,9 @@ export default {
         if (!status) return json({ error: "SPARK status not found or expired" }, 404);
         const isOwner = status.user_id === currentUser.sub;
         if (!isOwner) {
+          if (await isBlockedPair(currentUser.sub, status.user_id)) {
+            return json({ error: "SPARK status access denied" }, 403);
+          }
           const friendship = await env.DB.prepare(
             `SELECT 1 FROM friendships f
              WHERE f.user_id = ? AND f.friend_id = ?
