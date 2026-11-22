@@ -9213,9 +9213,20 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
       if (durationMs < 1000) throw Exception('سجّل ثانية واحدة على الأقل.');
       final file = File(path);
       final bytes = await file.readAsBytes();
-      await Api.uploadSparkAudioReply(statusId: widget.statusId, bytes: bytes, durationMs: durationMs);
-      await _loadReplies();
-      if (mounted) showMsg(context, 'تم إرسال الرد الصوتي.');
+      if (widget.authorId.isEmpty || widget.authorId == widget.currentUserId) {
+        throw Exception('لا يمكن إرسال رد صوتي إلى هذه اللحظة.');
+      }
+      final excerpt = widget.caption.trim().isEmpty
+          ? 'لحظة من SPARK'
+          : widget.caption.trim().replaceAll(RegExp(r'\\s+'), ' ');
+      await Api.sendMessage(widget.authorId, '🎙️ رد صوتي على SPARK\\n$excerpt');
+      await Api.uploadAttachment(
+        bytes: bytes,
+        fileName: 'barq_spark_reply_${DateTime.now().millisecondsSinceEpoch}.m4a',
+        contentType: 'audio/mp4',
+        recipientId: widget.authorId,
+      );
+      if (mounted) showMsg(context, 'وصل ردك الصوتي إلى المحادثة الخاصة مع صاحب SPARK.');
     } catch (error) {
       if (mounted) showMsg(context, cleanError(error));
     } finally {
