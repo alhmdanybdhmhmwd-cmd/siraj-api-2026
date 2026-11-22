@@ -90,6 +90,29 @@ const friendsB = await call("/api/friends", { token: b.token });
 assert.ok(friendsA.friends.some(user => user.id === b.user.id), "contact addition must create the sender's contact link");
 assert.ok(friendsB.friends.some(user => user.id === a.user.id), "contact addition must be reciprocal");
 
+const blockResult = await call("/api/blocks", {
+  method: "POST", token: a.token, body: { userId: b.user.id }, expected: 201
+});
+assert.equal(blockResult.userId, b.user.id, "block endpoint must return the blocked account");
+const blockedList = await call("/api/blocks", { token: a.token });
+assert.ok(blockedList.blockedUsers.some(item => item.userId === b.user.id),
+  "the current account must be able to read its own block list");
+await call("/api/messages?with=" + encodeURIComponent(b.user.id), {
+  token: a.token, expected: 403
+});
+await call("/api/messages", {
+  method: "POST", token: a.token,
+  body: { receiverId: b.user.id, body: "blocked private message attempt" },
+  expected: 403
+});
+await call("/api/blocks?userId=" + encodeURIComponent(b.user.id), {
+  method: "DELETE", token: a.token
+});
+const unblockedList = await call("/api/blocks", { token: a.token });
+assert.ok(!unblockedList.blockedUsers.some(item => item.userId === b.user.id),
+  "unblock must remove only the current account's block record");
+
+
 // A lost response followed by an offline-outbox retry must persist and notify
 // only one message. Reusing an ID for a different sender/recipient is rejected.
 // Keep the id unique across persistent Preview runs so reruns remain idempotent within each attempt.
