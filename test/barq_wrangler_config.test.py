@@ -14,7 +14,11 @@ assert test_config["main"] == prod_config["main"]
 assert test_db["migrations_dir"] == "migrations"
 assert prod_db["migrations_dir"] == "migrations/production"
 production_migrations = sorted(path.name for path in (ROOT / prod_db["migrations_dir"]).glob("*.sql"))
-assert production_migrations == ["0001_recovery_codes.sql", "0002_revoked_sessions.sql"]
+assert production_migrations == [
+    "0001_recovery_codes.sql",
+    "0002_revoked_sessions.sql",
+    "0003_groups_worker_compatibility.sql",
+]
 assert not any("preview" in name.lower() for name in production_migrations)
 assert test_config["workers_dev"] is True
 assert test_db["binding"] == "DB"
