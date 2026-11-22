@@ -2988,7 +2988,11 @@ export default {
         if (!targetUserId || targetUserId.length > 128 || targetUserId === currentUser.sub) {
           return json({ error: "Choose another valid group member as the new owner" }, 400);
         }
-        const results = await env.DB.batch([
+        // A production compatibility VIEW may route this UPDATE through an
+        // INSTEAD OF trigger. SQLite changes() reports zero for view-triggered
+        // writes even when the underlying groups row was updated, so verify
+        // the authoritative owner value instead of relying on meta.changes.
+        await env.DB.batch([
           env.DB.prepare(
             `UPDATE chat_groups
              SET owner_id = ?
@@ -3007,7 +3011,10 @@ export default {
                )`
           ).bind(groupId, currentUser.sub, targetUserId, groupId, targetUserId)
         ]);
-        if (Number(results?.[0]?.meta?.changes || 0) !== 1) {
+        const transferredGroup = await env.DB.prepare(
+          "SELECT owner_id FROM chat_groups WHERE id = ?"
+        ).bind(groupId).first();
+        if (transferredGroup?.owner_id !== targetUserId) {
           return json({ error: "Group not found, ownership changed, or target is not a member" }, 409);
         }
         return json({ message: "Group ownership transferred", ownerId: targetUserId });
