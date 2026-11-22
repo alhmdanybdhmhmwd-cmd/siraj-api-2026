@@ -229,9 +229,10 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
       // Claim each chunk's exact bytes in D1 before touching object storage.
       // Concurrent retries with different bytes cannot overwrite the winner.
       await env.DB.prepare(
-        "INSERT INTO media_upload_chunks (session_id, chunk_number, size, sha256) VALUES (?, ?, ?, ?) " +
+        "INSERT INTO media_upload_chunks (session_id, chunk_number, size, sha256) " +
+        "SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM media_upload_sessions WHERE id = ? AND owner_id = ? AND state = 'uploading') " +
         "ON CONFLICT(session_id, chunk_number) DO NOTHING"
-      ).bind(sessionId, chunkNumber, bytes.byteLength, chunkHash).run();
+      ).bind(sessionId, chunkNumber, bytes.byteLength, chunkHash, sessionId, currentUser.sub).run();
       let existingChunk = await env.DB.prepare(
         "SELECT size, sha256 FROM media_upload_chunks WHERE session_id = ? AND chunk_number = ?"
       ).bind(sessionId, chunkNumber).first();
@@ -277,6 +278,11 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
       } else {
         return json({ error: "Previously staged chunk is temporarily unavailable" }, 503);
       }
+      const stillUploading = await env.DB.prepare("SELECT state FROM media_upload_sessions WHERE id = ? AND owner_id = ?").bind(sessionId, currentUser.sub).first();
+      if (stillUploading?.state !== "uploading") {
+        await storage.delete(stagedKey).catch(() => {});
+        return json({ error: "Upload was aborted while the chunk was being stored" }, 409);
+      }
       const firstChunk = (targetPart - 1) * chunksPerPart + 1;
       const expectedChunks = Math.ceil(Number(session.total_size) / MEDIA_TRANSPORT_CHUNK_SIZE);
       const lastChunk = Math.min(targetPart * chunksPerPart, expectedChunks);
@@ -311,9 +317,16 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
       try { etag = normalizeMultipartEtag(uploaded.headers.get("ETag")); }
       catch (error) { return json({ error: error.message }, 502); }
       await env.DB.prepare(
-        "INSERT INTO media_upload_parts (session_id, part_number, etag, size, sha256) VALUES (?, ?, ?, ?, ?) " +
-        "ON CONFLICT(session_id, part_number) DO UPDATE SET etag = excluded.etag, size = excluded.size, sha256 = excluded.sha256, uploaded_at = CURRENT_TIMESTAMP"
-      ).bind(sessionId, targetPart, etag, partBytes.byteLength, await sha256Hex(partBytes)).run();
+        "INSERT INTO media_upload_parts (session_id, part_number, etag, size, sha256) " +
+        "SELECT ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM media_upload_sessions WHERE id = ? AND owner_id = ? AND state = 'uploading') " +
+        "ON CONFLICT(session_id, part_number) DO NOTHING"
+      ).bind(sessionId, targetPart, etag, partBytes.byteLength, await sha256Hex(partBytes), sessionId, currentUser.sub).run();
+      const partClaim = await env.DB.prepare("SELECT part_number FROM media_upload_parts WHERE session_id = ? AND part_number = ?").bind(sessionId, targetPart).first();
+      const activeAfterPart = await env.DB.prepare("SELECT state FROM media_upload_sessions WHERE id = ? AND owner_id = ?").bind(sessionId, currentUser.sub).first();
+      if (!partClaim || activeAfterPart?.state !== "uploading") {
+        await storage.delete(session.object_key, { uploadId: session.storage_upload_id }).catch(() => {});
+        return json({ error: "Upload was aborted while the part was being stored" }, 409);
+      }
       try {
         // Keep the tiny checksum rows until session cleanup so retries after a
         // committed multipart part can still reject a different payload.
@@ -351,9 +364,16 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
       catch (error) { return json({ error: error.message }, 502); }
       await env.DB.prepare(
         `INSERT INTO media_upload_parts (session_id, part_number, etag, size, sha256)
-         VALUES (?, ?, ?, ?, ?) ON CONFLICT(session_id, part_number) DO UPDATE SET
-         etag = excluded.etag, size = excluded.size, sha256 = excluded.sha256, uploaded_at = CURRENT_TIMESTAMP`
-      ).bind(sessionId, partNumber, etag, bytes.byteLength, partHash).run();
+         SELECT ?, ?, ?, ?, ? WHERE EXISTS (
+           SELECT 1 FROM media_upload_sessions WHERE id = ? AND owner_id = ? AND state = 'uploading'
+         ) ON CONFLICT(session_id, part_number) DO NOTHING`
+      ).bind(sessionId, partNumber, etag, bytes.byteLength, partHash, sessionId, currentUser.sub).run();
+      const partClaim = await env.DB.prepare("SELECT part_number FROM media_upload_parts WHERE session_id = ? AND part_number = ?").bind(sessionId, partNumber).first();
+      const activeAfterPart = await env.DB.prepare("SELECT state FROM media_upload_sessions WHERE id = ? AND owner_id = ?").bind(sessionId, currentUser.sub).first();
+      if (!partClaim || activeAfterPart?.state !== "uploading") {
+        await storage.delete(session.object_key, { uploadId: session.storage_upload_id }).catch(() => {});
+        return json({ error: "Upload was aborted while the part was being stored" }, 409);
+      }
       await env.DB.prepare("UPDATE media_upload_sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = ? AND owner_id = ? AND state = 'uploading'").bind(sessionId, currentUser.sub).run();
       return json({ sessionId, partNumber, etag, size: bytes.byteLength });
     }
@@ -484,12 +504,24 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
 
     if (method === "DELETE" && !action && partNumber === null) {
       if (session.state === "completed") return json({ error: "Completed media cannot be aborted through its upload session" }, 409);
-      const staged = await env.DB.prepare("SELECT chunk_number AS chunkNumber FROM media_upload_chunks WHERE session_id = ?").bind(sessionId).all();
+      // Win the state transition before collecting cleanup rows. This prevents
+      // new chunk/part claims and makes abort mutually exclusive with completion.
+      if (session.state !== "aborted") {
+        const claim = await env.DB.prepare(
+          "UPDATE media_upload_sessions SET state = 'aborted', updated_at = CURRENT_TIMESTAMP " +
+          "WHERE id = ? AND owner_id = ? AND state = 'uploading'"
+        ).bind(sessionId, currentUser.sub).run();
+        if (Number(claim?.meta?.changes || 0) !== 1) {
+          return json({ error: "Upload is completing or cannot be aborted in its current state" }, 409);
+        }
+      }
       const aborted = await storage.delete(session.object_key, { uploadId: session.storage_upload_id });
       if (!aborted.ok && aborted.status !== 404) return json({ error: "Storage could not abort the upload", storageStatus: aborted.status }, 502);
+      // Read rows only after the atomic abort claim; in-flight writers re-check
+      // state after their storage operation and clean up any late-arriving bytes.
+      const staged = await env.DB.prepare("SELECT chunk_number AS chunkNumber FROM media_upload_chunks WHERE session_id = ?").bind(sessionId).all();
       await deleteStagedChunks(storage, env, session, (staged.results || []).map(item => Number(item.chunkNumber)));
       await env.DB.prepare("DELETE FROM media_upload_chunks WHERE session_id = ?").bind(sessionId).run();
-      await env.DB.prepare("UPDATE media_upload_sessions SET state = 'aborted', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND owner_id = ?").bind(sessionId, currentUser.sub).run();
       await env.DB.prepare("DELETE FROM media_upload_parts WHERE session_id = ?").bind(sessionId).run();
       return json({ sessionId, state: "aborted" });
     }
