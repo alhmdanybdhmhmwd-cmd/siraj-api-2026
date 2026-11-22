@@ -1,4 +1,4 @@
-const UPSTREAM = "https://siraj-api.alhmdanybdhmhmwd.workers.dev";
+const UPSTREAM = "https://siraj-api-2026.alhmdanybdhmhmwd.workers.dev";
 
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -49,19 +49,11 @@ module.exports = async (req, res) => {
     return res.send(Buffer.from(responseBody));
   } catch (error) {
     return res.status(502).json({
-      error: "تعذر الاتصال بخادم سراج",
+      error: "تعذر الاتصال بخادم برق",
     });
   }
 };
 
-module.exports.config = {
-  api: {
-    bodyParser: false,
-  },
-};
-
-// Disable Vercel's default JSON body parser so the proxy can forward the
-// original request stream to the Worker without silently sending an empty body.
 module.exports.config = {
   api: {
     bodyParser: false,
