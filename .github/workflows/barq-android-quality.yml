@@ -3,7 +3,7 @@ name: BARQ Android quality gate
 on:
   workflow_dispatch:
   push:
-    branches: ["barq/phase-2-android-ci-2026-11-20"]
+    branches: ["barq/phase-2-android-ci-2026-11-20", "barq/fix-approved-menus-2026-11-22"]
     paths:
       - "android/**"
       - "android/test/**"
