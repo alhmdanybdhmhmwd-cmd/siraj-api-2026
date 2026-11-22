@@ -3760,7 +3760,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         appBar: AppBar(
-          title: Text('برق', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
+          title: Column( crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [ Text('برق', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)), const Text('تواصل بنبض الضوء', style: TextStyle(fontSize: 11, color: Colors.white70)), ]),
         ),
         body: loading
             ? const Center(child: CircularProgressIndicator())
@@ -5283,187 +5283,147 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Widget _accountPage() {
     final displayName = field(me, ['displayName', 'display_name'], 'مستخدم برق');
-    final username = field(me, ['username'], 'siraj_user');
+    final username = field(me, ['username'], 'barq_user');
     final phone = field(me, ['phone'], 'غير مضاف');
+    final palette = Theme.of(context).colorScheme;
+    Widget sectionLabel(String value) => Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(4, 16, 4, 8),
+      child: Text(value, style: TextStyle(
+        color: palette.primary, fontSize: 13, fontWeight: FontWeight.w700,
+      )),
+    );
+    Widget item({
+      required IconData icon,
+      required String title,
+      String? subtitle,
+      required VoidCallback onTap,
+    }) => Card(
+      margin: const EdgeInsets.only(bottom: 7),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 2),
+        leading: Icon(icon, color: palette.primary),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: subtitle == null ? null : Text(subtitle),
+        trailing: const Icon(Icons.chevron_left_rounded),
+        onTap: onTap,
+      ),
+    );
     return ListView(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
       children: [
-        Card(
-          child: ListTile(
-            leading: Icon(Icons.palette_outlined, color: Theme.of(context).colorScheme.primary),
-            title: const Text('هوية برق البصرية'),
-            subtitle: Text('اختر هويتك المفضلة • الحالية: ${BarqIdentity.label(BarqIdentity.selected.value)}'),
-            trailing: const Icon(Icons.chevron_left),
-            onTap: () => _showBarqIdentityPicker(context),
-          ),
-        ),
-        const SizedBox(height: 10),
-        Card(
-          child: ListTile(
-            leading: Icon(Icons.groups_outlined, color: Theme.of(context).colorScheme.primary),
-            title: const Text('المجموعات'),
-            subtitle: const Text('محادثاتك ومجموعاتك على برق'),
-            trailing: const Icon(Icons.chevron_left),
-            onTap: () => Navigator.push(context, MaterialPageRoute(
-              builder: (_) => Scaffold(
-                appBar: AppBar(title: const Text('المجموعات')),
-                body: _groupsPage(),
-                floatingActionButton: FloatingActionButton(
-                  onPressed: createGroupDialog,
-                  child: const Icon(Icons.group_add),
-                ),
-              ),
-            )),
-          ),
-        ),
-        Card(
-          child: ListTile(
-            leading: Icon(Icons.auto_awesome_outlined, color: Theme.of(context).colorScheme.primary),
-            title: const Text('الذكريات الخاصة'),
-            subtitle: const Text('مساحتك الخاصة للصور والرسائل المحفوظة'),
-            trailing: const Icon(Icons.chevron_left),
-            onTap: () => Navigator.push(context, MaterialPageRoute(
-              builder: (_) => Scaffold(
-                appBar: AppBar(title: const Text('الذكريات الخاصة')),
-                body: _memoriesPage(),
-                floatingActionButton: FloatingActionButton(
-                  onPressed: _showPrivateMemoryDialog,
-                  child: const Icon(Icons.add),
-                ),
-              ),
-            )),
-          ),
-        ),
-        const SizedBox(height: 10),
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            gradient: LinearGradient(colors: [Theme.of(context).colorScheme.surface, Theme.of(context).scaffoldBackgroundColor]),
+            gradient: LinearGradient(
+              begin: Alignment.topRight,
+              end: Alignment.bottomLeft,
+              colors: [palette.surface, Theme.of(context).scaffoldBackgroundColor],
+            ),
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4)),
+            border: Border.all(color: palette.primary.withValues(alpha: .38)),
           ),
-          child: Column(
-            children: [
-              Container(
-                width: 90,
-                height: 90,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.55), width: 2),
-                ),
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    CircleAvatar(
-                      radius: 39,
-                      backgroundColor: Theme.of(context).colorScheme.surface,
-                      backgroundImage: field(me, ['photoUrl']).isNotEmpty
-                          ? NetworkImage(
-                              '$apiBase${field(me, ['photoUrl'])}?v=${Uri.encodeComponent(field(me, ['photoUpdatedAt']))}',
-                              headers: {'Authorization': 'Bearer ${Api.token}'},
-                            )
-                          : null,
-                      child: field(me, ['photoUrl']).isEmpty
-                          ? Text(displayName.isNotEmpty ? displayName.characters.first : 'س',
-                              style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 32))
-                          : null,
+          child: Column(children: [
+            Stack(clipBehavior: Clip.none, children: [
+              CircleAvatar(
+                radius: 43,
+                backgroundColor: palette.surface,
+                backgroundImage: field(me, ['photoUrl']).isNotEmpty
+                    ? NetworkImage(
+                        '$apiBase${field(me, ['photoUrl'])}?v=${Uri.encodeComponent(field(me, ['photoUpdatedAt']))}',
+                        headers: {'Authorization': 'Bearer ${Api.token}'},
+                      )
+                    : null,
+                child: field(me, ['photoUrl']).isEmpty
+                    ? Text(displayName.isNotEmpty ? displayName.characters.first : 'ب',
+                        style: TextStyle(color: palette.primary, fontSize: 30))
+                    : null,
+              ),
+              Positioned(
+                bottom: -3, right: -4,
+                child: Material(
+                  color: palette.primary, shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: pickProfilePhoto,
+                    child: const Padding(
+                      padding: EdgeInsets.all(7),
+                      child: Icon(Icons.camera_alt_rounded, size: 16, color: Colors.white),
                     ),
-                    Positioned(
-                      right: -5,
-                      bottom: -5,
-                      child: Material(
-                        color: Theme.of(context).colorScheme.primary,
-                        shape: const CircleBorder(),
-                        child: InkWell(
-                          customBorder: const CircleBorder(),
-                          onTap: pickProfilePhoto,
-                          child: const Padding(
-                            padding: EdgeInsets.all(6),
-                            child: Icon(Icons.camera_alt_rounded, size: 16, color: Colors.white),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 12),
-              Text(displayName, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold)),
-              Text('@$username', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
-              const SizedBox(height: 8),
-              Text(phone, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
-            ],
-          ),
+            ]),
+            const SizedBox(height: 12),
+            Text(displayName, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold)),
+            Text('@$username', style: TextStyle(color: palette.primary)),
+            const SizedBox(height: 5),
+            Text(phone, style: TextStyle(color: palette.onSurface.withValues(alpha: .68))),
+          ]),
         ),
-        const SizedBox(height: 14),
-        const Card(
-                    child: ListTile(
-            leading: Icon(Icons.info_outline),
-            title: Text('حالة الاتصال'),
-            subtitle: Text('متصل بخادم برق'),
-          ),
+        sectionLabel('حسابك'),
+        item(
+          icon: Icons.edit_outlined,
+          title: 'تعديل الملف الشخصي',
+          subtitle: 'الصورة والاسم ورقم الهاتف',
+          onTap: editProfileDialog,
         ),
-        Card(
-                    child: ListTile(
-            leading: const Icon(Icons.edit_outlined),
-            title: const Text('تعديل الملف الشخصي'),
-            subtitle: const Text('تغيير الاسم الظاهر ورقم الهاتف'),
-            trailing: const Icon(Icons.chevron_left),
-            onTap: editProfileDialog,
-          ),
+        item(
+          icon: Icons.auto_awesome_outlined,
+          title: 'الذكريات الخاصة',
+          subtitle: 'مساحتك الخاصة للصور والرسائل المحفوظة',
+          onTap: () => Navigator.push(context, MaterialPageRoute(
+            builder: (_) => Scaffold(
+              appBar: AppBar(title: const Text('الذكريات الخاصة')),
+              body: _memoriesPage(),
+              floatingActionButton: FloatingActionButton(
+                onPressed: _showPrivateMemoryDialog,
+                child: const Icon(Icons.add),
+              ),
+            ),
+          )),
         ),
-        Card(
-                    child: ListTile(
-            leading: const Icon(Icons.key_rounded),
-            title: const Text('رمز استرداد الحساب'),
-            subtitle: const Text('إنشاء رمز جديد بعد تأكيد كلمة المرور'),
-            trailing: const Icon(Icons.chevron_left),
-            onTap: rotateRecoveryCodeDialog,
-          ),
+        item(
+          icon: Icons.groups_outlined,
+          title: 'المجموعات',
+          subtitle: 'محادثاتك ومجموعاتك على برق',
+          onTap: () => Navigator.push(context, MaterialPageRoute(
+            builder: (_) => Scaffold(
+              appBar: AppBar(title: const Text('المجموعات')),
+              body: _groupsPage(),
+              floatingActionButton: FloatingActionButton(
+                onPressed: createGroupDialog,
+                child: const Icon(Icons.group_add),
+              ),
+            ),
+          )),
         ),
-        Card(
-                    child: ListTile(
-            leading: const Icon(Icons.lock_outline),
-            title: const Text('إعدادات الخصوصية'),
-            subtitle: const Text('الظهور في البحث وإشعارات قراءة الرسائل'),
-            trailing: const Icon(Icons.chevron_left),
-            onTap: privacySettingsDialog,
-          ),
+        sectionLabel('إعدادات برق'),
+        item(
+          icon: Icons.palette_outlined,
+          title: 'هوية برق وBARQ Touch',
+          subtitle: 'البرق الأزرق، الفراشة، الظل البنفسجي، الجوهرة السماوية',
+          onTap: () => _showBarqIdentityPicker(context),
         ),
-        Card(
-                    child: ListTile(
-            leading: const Icon(Icons.notifications_outlined),
-            title: const Text('تفضيلات الإشعارات'),
-            subtitle: const Text('الرسائل الخاصة والمجموعات وSPARK'),
-            trailing: const Icon(Icons.chevron_left),
-            onTap: notificationSettingsDialog,
-          ),
+        item(
+          icon: Icons.lock_outline,
+          title: 'الخصوصية والأمان',
+          subtitle: 'الظهور في البحث وإشعارات قراءة الرسائل',
+          onTap: privacySettingsDialog,
         ),
-        Card(
-                    child: SwitchListTile(
-            secondary: const Icon(Icons.flash_on_rounded),
-            title: const Text('وضع البرق'),
-            subtitle: const Text('أولوية للرسائل النصية وتعطيل إرسال الصور والفيديو والملفات لتقليل استهلاك البيانات.'),
-            value: BarqFeatures.lightningMode,
-            activeThumbColor: Theme.of(context).colorScheme.primary,
-            onChanged: (enabled) async {
-              try {
-                await BarqFeatures.setLightningMode(enabled);
-                if (mounted) setState(() {});
-              } catch (e) {
-                if (mounted) showMsg(context, 'تعذر حفظ الإعداد: ${cleanError(e)}');
-              }
-            },
-          ),
+        item(
+          icon: Icons.notifications_outlined,
+          title: 'الإشعارات',
+          subtitle: 'الرسائل الخاصة والمجموعات وSPARK',
+          onTap: notificationSettingsDialog,
         ),
         Card(
-                    child: SwitchListTile(
-            secondary: const Icon(Icons.translate_rounded),
-            title: const Text('الترجمة التلقائية عربي / إنجليزي'),
-            subtitle: const Text('تعرض ترجمة الرسائل بجانب النص الأصلي باستخدام نموذج محلي على الجهاز. يمكنك إيقافها في أي وقت.'),
+          margin: const EdgeInsets.only(bottom: 7),
+          child: SwitchListTile(
+            secondary: Icon(Icons.translate_rounded, color: palette.primary),
+            title: const Text('الترجمة عربي / إنجليزي'),
+            subtitle: const Text('ترجمة الرسائل على الجهاز عند تفعيلها'),
             value: BarqFeatures.autoTranslate,
-            activeThumbColor: Theme.of(context).colorScheme.primary,
+            activeThumbColor: palette.primary,
             onChanged: (enabled) async {
               try {
                 await BarqFeatures.setAutoTranslate(enabled);
@@ -5474,30 +5434,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             },
           ),
         ),
-        Card(
-                    child: ListTile(
-            leading: const Icon(Icons.wifi_tethering),
-            title: const Text('المراسلة دون إنترنت — الأجهزة القريبة'),
-            subtitle: const Text('اكتشاف هاتف صديق قريب ونقل الرسائل النصية دون إنترنت.'),
-            trailing: const Icon(Icons.chevron_left),
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NearbyDevicesPage(user: me, friends: friends))),
-          ),
-        ),
-        Card(
-                    child: ListTile(
-            leading: const Icon(Icons.bolt),
-            title: const Text('رابط الدعوة الخاص'),
-            subtitle: const Text('شارك رابطك الخاص للانضمام إلى برق.'),
-            trailing: const Icon(Icons.chevron_left),
-            onTap: inviteFriendsDialog,
-          ),
-        ),
-        const SizedBox(height: 12),
-        const Card(
-                    child: ListTile(
-            leading: Icon(Icons.info_outline),
-            title: Text('حول برق'),
-            subtitle: Text('المطور: يحيى المهدي'),
+        sectionLabel('عن التطبيق'),
+        item(
+          icon: Icons.info_outline,
+          title: 'حول برق',
+          subtitle: 'التواصل بنبض الضوء',
+          onTap: () => showAboutDialog(
+            context: context,
+            applicationName: 'برق — BARQ',
+            applicationVersion: 'نسخة اختبار',
+            applicationLegalese: 'التواصل بنبض الضوء',
           ),
         ),
         const SizedBox(height: 12),
@@ -5505,7 +5451,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onPressed: () async {
             await Api.logout();
             if (!mounted) return;
-            Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const LoginPage()), (_) => false);
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (_) => const LoginPage()),
+              (_) => false,
+            );
           },
           icon: const Icon(Icons.logout),
           label: const Text('تسجيل الخروج'),
@@ -5513,6 +5463,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ],
     );
   }
+
   Future<void> _showBarqIdentityPicker(BuildContext context) async {
     var draftIdentity = BarqIdentity.selected.value;
     var saving = false;
