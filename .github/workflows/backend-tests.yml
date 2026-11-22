@@ -31,6 +31,8 @@ jobs:
         run: npm test
       - name: Test D1 migration SQL with SQLite
         run: python3 test/migrations.test.py
+      - name: Test production group compatibility against existing D1 schema
+        run: python3 test/production_groups_compat.test.py
       - name: Test D1 schema inspection queries with SQLite
         run: python3 test/d1_schema_inspection.test.py
       - name: Verify test Wrangler config cannot target production
