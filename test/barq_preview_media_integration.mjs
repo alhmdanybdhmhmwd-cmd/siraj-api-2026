@@ -167,7 +167,9 @@ await request("/api/media/" + encodeURIComponent(attachmentId), {
   token: c.token, expected: 403
 });
 // Hiding a message for one account must not revoke the shared attachment.
-// Deleting it as its sender must revoke access for both conversation participants.
+// Deleting it as its sender removes the object immediately; both participants
+// must receive 404 because the storage object no longer exists (410 is reserved
+// for retained objects whose explicit expiry has elapsed).
 await request("/api/messages/" + encodeURIComponent(sessionId) + "?scope=me", {
   method: "DELETE", token: b.token, expected: 200
 });
@@ -178,10 +180,10 @@ await request("/api/messages/" + encodeURIComponent(sessionId), {
   method: "DELETE", token: a.token, expected: 200
 });
 await request("/api/media/" + encodeURIComponent(attachmentId), {
-  token: a.token, expected: 410
+  token: a.token, expected: 404
 });
 await request("/api/media/" + encodeURIComponent(attachmentId), {
-  token: b.token, expected: 410
+  token: b.token, expected: 404
 });
 
 const retry = await json(`/api/media/uploads/${sessionId}/complete`, {
@@ -249,7 +251,7 @@ await json("/api/groups/" + encodeURIComponent(group.group.id) + "/messages/" + 
   method: "PATCH", token: a.token, body: { body: "edited away from the attachment" }, expected: 200
 });
 await request("/api/media/" + encodeURIComponent(groupAttachmentId), {
-  token: b.token, expected: 410
+  token: b.token, expected: 404
 });
 console.log("Preview group media integration passed: group attachment visibility, member SHA-256 download, non-member denial, and revocation after message deletion.");
 
