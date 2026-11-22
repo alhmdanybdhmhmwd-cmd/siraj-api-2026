@@ -7771,8 +7771,8 @@ class _ChatPageState extends State<ChatPage> {
                                                 }
                                               : null,
                                           onReact: m['is_ephemeral'] != true && m['is_offline_pending'] != true
-                                              ? (emoji) async {
-                                                  await Api.reactPrivateMessage(field(m, ['id', 'message_id']), emoji);
+                                              ? (emoji, remove) async {
+                                                  await Api.reactPrivateMessage(field(m, ['id', 'message_id']), emoji, remove: remove);
                                                   if (mounted) await loadMessages(silent: true);
                                                 }
                                               : null,
