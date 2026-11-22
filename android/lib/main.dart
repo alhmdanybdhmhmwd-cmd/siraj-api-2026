@@ -5250,6 +5250,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               builder: (_) => Scaffold(
                 appBar: AppBar(title: const Text('المجموعات')),
                 body: _groupsPage(),
+                floatingActionButton: FloatingActionButton(
+                  onPressed: createGroupDialog,
+                  child: const Icon(Icons.group_add),
+                ),
               ),
             )),
           ),
@@ -5264,6 +5268,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               builder: (_) => Scaffold(
                 appBar: AppBar(title: const Text('الذكريات الخاصة')),
                 body: _memoriesPage(),
+                floatingActionButton: FloatingActionButton(
+                  onPressed: _showPrivateMemoryDialog,
+                  child: const Icon(Icons.add),
+                ),
               ),
             )),
           ),
