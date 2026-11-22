@@ -204,7 +204,7 @@ assert.equal(persistedGroupReply?.reply_to_body, "group-search-needle-" + suffix
   "group reply preview must preserve the target text");
 await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages/" +
   encodeURIComponent(groupInteractionMessage.id), {
-    method: "PATCH", token: a.token, body: { body: "edited group root " + suffix }
+    method: "PATCH", token: a.token, body: { body: "edited group root group-search-needle " + suffix }
   });
 await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages/" +
   encodeURIComponent(groupInteractionMessage.id), {
@@ -218,7 +218,7 @@ await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages/" +
   encodeURIComponent(groupInteractionMessage.id) + "/pin", { method: "POST", token: b.token });
 const groupInteractionPage = await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages", { token: b.token });
 const groupInteraction = groupInteractionPage.messages.find(message => message.id === groupInteractionMessage.id);
-assert.equal(groupInteraction?.body, "edited group root " + suffix,
+assert.equal(groupInteraction?.body, "edited group root group-search-needle " + suffix,
   "group message edits must be returned by the conversation API");
 assert.ok(groupInteraction?.is_pinned, "group pin must be returned by the group conversation API");
 assert.ok(groupInteraction?.reactions?.some(reaction => reaction.emoji === "❤️" && reaction.user_id === b.user.id),
