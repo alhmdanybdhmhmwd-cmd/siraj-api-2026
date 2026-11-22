@@ -16,7 +16,7 @@ jobs:
   deploy-preview-fallback:
     if: github.event_name == 'workflow_dispatch' && inputs.deploy_preview_fallback == true
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.BARQ_CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.BARQ_CLOUDFLARE_ACCOUNT_ID }}
@@ -88,3 +88,18 @@ jobs:
           console.log('Isolated fallback Worker is live and its shared Preview D1 is ready.');
           NODE
           echo "Fallback Preview Worker URL: $BARQ_FALLBACK_PREVIEW_URL" >> "$GITHUB_STEP_SUMMARY"
+      - name: Run account, privacy, contacts, messaging, reactions, pinning, SPARK, and groups integration
+        env:
+          BARQ_PREVIEW_URL: ${{ env.BARQ_FALLBACK_PREVIEW_URL }}
+        run: node test/barq_preview_integration.mjs
+      - name: Run real Preview media upload, resume, integrity, range, and authorization integration
+        env:
+          BARQ_PREVIEW_URL: ${{ env.BARQ_FALLBACK_PREVIEW_URL }}
+          BARQ_PREVIEW_MEDIA_CREDENTIALS_CONFIGURED: "true"
+        run: node test/barq_preview_media_integration.mjs
+      - name: Publish isolated Preview integration summary
+        if: always()
+        run: |
+          echo "### BARQ isolated Preview integration" >> "$GITHUB_STEP_SUMMARY"
+          echo "The account and media suites above target the URL emitted by this run's isolated fallback Worker deployment." >> "$GITHUB_STEP_SUMMARY"
+          echo "No Vercel alias or legacy Worker URL is used by these live integration tests." >> "$GITHUB_STEP_SUMMARY"
