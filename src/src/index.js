@@ -2802,6 +2802,13 @@ export default {
             FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
           )
         `).run();
+        // Distinguish a single-message "hide for me" from clearing the whole
+        // conversation. Legacy rows default to message-level hiding.
+        const hiddenMessageColumns = await env.DB.prepare("PRAGMA table_info(hidden_private_messages)").all();
+        const hiddenMessageColumnNames = new Set((hiddenMessageColumns.results || []).map(column => column.name));
+        if (!hiddenMessageColumnNames.has("hide_reason")) {
+          await env.DB.prepare("ALTER TABLE hidden_private_messages ADD COLUMN hide_reason TEXT NOT NULL DEFAULT 'message'").run();
+        }
         await env.DB.prepare(`
           CREATE TABLE IF NOT EXISTS private_conversation_state (
             user_id TEXT NOT NULL,
@@ -3136,6 +3143,13 @@ export default {
           "SELECT id, body FROM group_messages WHERE id = ? AND group_id = ? AND sender_id = ?"
         ).bind(messageId, groupId, currentUser.sub).first();
         if (!owned) return json({ error: "Message not found or cannot be changed" }, 404);
+        // Clearing a conversation hides its historical messages from this account:
+        // stale edit/delete actions must not mutate those cleared records. A single
+        // "hide for me" remains distinct and does not revoke sender-side deletion.
+        const clearedMessage = await env.DB.prepare(
+          "SELECT 1 FROM hidden_private_messages WHERE user_id = ? AND message_id = ? AND hide_reason = 'clear'"
+        ).bind(currentUser.sub, messageId).first();
+        if (clearedMessage) return json({ error: "Message not found or cannot be changed" }, 404);
         if (method === "PATCH") {
           const body = await readJsonRequestLimited(request);
           const message = String(body.body || "").trim();
@@ -3620,10 +3634,11 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         if (!friendship) return json({ error: "Conversation not found" }, 404);
         const statements = [
           env.DB.prepare(`
-            INSERT OR IGNORE INTO hidden_private_messages (user_id, message_id)
-            SELECT ?, id FROM messages
+            INSERT INTO hidden_private_messages (user_id, message_id, hide_reason)
+            SELECT ?, id, 'clear' FROM messages
             WHERE (sender_id = ? AND receiver_id = ?)
                OR (sender_id = ? AND receiver_id = ?)
+            ON CONFLICT(user_id, message_id) DO UPDATE SET hide_reason = 'clear'
           `).bind(currentUser.sub, currentUser.sub, friendId, friendId, currentUser.sub),
           env.DB.prepare(`
             INSERT INTO private_conversation_state (user_id, peer_id, hidden_at, updated_at)
@@ -3652,7 +3667,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           ).bind(messageId, currentUser.sub, currentUser.sub).first();
           if (!participantMessage) return json({ error: "Message not found" }, 404);
           await env.DB.prepare(
-            "INSERT OR IGNORE INTO hidden_private_messages (user_id, message_id) VALUES (?, ?)"
+            "INSERT INTO hidden_private_messages (user_id, message_id, hide_reason) VALUES (?, ?, 'message') ON CONFLICT(user_id, message_id) DO NOTHING"
           ).bind(currentUser.sub, messageId).run();
           return json({ message: "Message hidden for this account", id: messageId, scope: "me" });
         }
