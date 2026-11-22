@@ -180,6 +180,9 @@ assert.ok(!bAfterDeleteForMe.messages.some(message => message.id === deleteForMe
 const aAfterDeleteForMe = await call("/api/messages?with=" + encodeURIComponent(b.user.id), { token: a.token });
 assert.ok(aAfterDeleteForMe.messages.some(message => message.id === deleteForMeId),
   "delete-for-me must preserve the other participant's message");
+await call("/api/messages/" + encodeURIComponent(deleteForMeId), {
+  method: "DELETE", token: a.token, expected: 200
+});
 
 const conversation = await call("/api/messages?with=" + encodeURIComponent(b.user.id), { token: a.token });
 assert.equal(conversation.messages.filter(message => message.id === clientMessageId).length, 1,
