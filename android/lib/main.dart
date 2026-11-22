@@ -7306,7 +7306,6 @@ class _BarqRemoteVideoThumbnailState extends State<_BarqRemoteVideoThumbnail> {
     }
     final headers = {if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'};
     final bases = <String>[apiBase, if (mediaWorkerBase != apiBase) mediaWorkerBase];
-    Object? lastError;
     for (final base in bases) {
       VideoPlayerController? controller;
       try {
@@ -7324,7 +7323,6 @@ class _BarqRemoteVideoThumbnailState extends State<_BarqRemoteVideoThumbnail> {
         setState(() { _controller = controller; _loading = false; });
         return;
       } catch (error) {
-        lastError = error;
         await controller?.dispose();
       }
     }
