@@ -1676,30 +1676,18 @@ export default {
         });
       }
 
-      // Update current user's editable profile fields
+      // Phone numbers are immutable after registration. Profile edits may only
+      // change the display name; ignore legacy clients that still submit body.phone.
       if (method === "POST" && path === "/api/profile") {
         await ensureProfilePhotos(env);
         const body = await readJsonRequestLimited(request);
         const displayName = String(body.displayName || "").trim();
-        const phone = String(body.phone || "").trim();
         if (!displayName || displayName.length > 60) {
           return json({ error: "Display name must be 1-60 characters" }, 400);
         }
-        if (!/^\+[1-9][0-9]{7,14}$/.test(phone)) {
-          return json({ error: "Enter a valid international phone number including its country code" }, 400);
-        }
-        if (await phoneAlreadyInUse(env, phone, currentUser.sub)) {
-          return json({ error: "Phone number is already in use" }, 409);
-        }
-        const phoneConflict = phone ? phoneConflictCondition("phone", phone) : { sql: "0", bindings: [] };
         const updateResult = await env.DB.prepare(
-          `UPDATE users SET display_name = ?, phone = ?
-           WHERE id = ? AND NOT EXISTS (
-             SELECT 1 FROM users
-             WHERE id != ? AND ${phoneConflict.sql}
-           )`
-        ).bind(displayName, phone || null, currentUser.sub, currentUser.sub,
-          ...phoneConflict.bindings).run();
+          "UPDATE users SET display_name = ? WHERE id = ?"
+        ).bind(displayName, currentUser.sub).run();
         const user = await env.DB.prepare(
           `SELECT u.id, u.username, u.display_name, u.phone,
                   p.updated_at AS photo_updated_at
@@ -1708,7 +1696,7 @@ export default {
         ).bind(currentUser.sub).first();
         if (!user) return json({ error: "User not found" }, 404);
         if (Number(updateResult?.meta?.changes || 0) !== 1) {
-          return json({ error: "Phone number is already in use" }, 409);
+          return json({ error: "User not found" }, 404);
         }
         return json({ user: cleanUser(user), message: "Profile updated" });
       }
