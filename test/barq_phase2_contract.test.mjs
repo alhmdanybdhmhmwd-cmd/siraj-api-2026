@@ -72,6 +72,7 @@ test("private conversation clear/delete is per-account and preserves contacts", 
   assert.ok(worker.includes("chat_hidden"));
   assert.ok(flutterApp.includes("static Future<void> clearPrivateConversation(String friendId)"));
   assert.ok(flutterApp.includes("static Future<void> deletePrivateConversation(String friendId)"));
+  assert.ok(flutterApp.includes("static Future<void> clearConversation(String friendId, String currentUserId)"));
   assert.ok(flutterApp.includes("مسح سجل المحادثة"));
   assert.ok(flutterApp.includes("حذف المحادثة"));
   assert.ok(flutterApp.includes("جهات الاتصال"));
