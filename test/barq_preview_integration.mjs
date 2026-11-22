@@ -98,6 +98,23 @@ const firstMessage = await call("/api/messages", {
   expected: 201
 });
 assert.equal(firstMessage.id, clientMessageId);
+await call("/api/messages/" + encodeURIComponent(clientMessageId) + "/reactions", {
+  method: "POST", token: a.token, body: { emoji: "🔥" }
+});
+await call("/api/messages/" + encodeURIComponent(clientMessageId) + "/pin", {
+  method: "POST", token: a.token
+});
+const interactedPrivate = await call("/api/messages?with=" + encodeURIComponent(b.user.id), { token: a.token });
+const privateInteraction = interactedPrivate.messages.find(message => message.id === clientMessageId);
+assert.ok(privateInteraction?.is_pinned, "private pin must be returned by the conversation API");
+assert.ok(privateInteraction?.reactions?.some(reaction => reaction.emoji === "🔥" && reaction.user_id === a.user.id),
+  "private reaction must be returned by the conversation API");
+await call("/api/messages/" + encodeURIComponent(clientMessageId) + "/pin", {
+  method: "DELETE", token: a.token
+});
+await call("/api/messages/" + encodeURIComponent(clientMessageId) + "/reactions?emoji=" + encodeURIComponent("🔥"), {
+  method: "DELETE", token: a.token
+});
 const retriedMessage = await call("/api/messages", {
   method: "POST", token: a.token,
   body: { receiverId: b.user.id, body: "idempotency integration check", clientMessageId }
@@ -145,14 +162,51 @@ await call("/api/messages/search?with=" + encodeURIComponent(a.user.id) + "&q=in
 await call("/api/messages/search?with=" + encodeURIComponent(b.user.id) + "&q=x", { token: a.token, expected: 400 });
 await call("/api/messages/search?with=" + encodeURIComponent(a.user.id) + "&q=integration", { token: a.token, expected: 403 });
 
+const sparkStatus = await call("/api/statuses", {
+  method: "POST", token: a.token,
+  body: { content: "SPARK integration " + suffix, backgroundKey: "midnight", textColorKey: "white", fontKey: "modern" },
+  expected: 201
+});
+assert.ok(sparkStatus.status?.id, "SPARK text status must return its ID");
+await call("/api/statuses/" + encodeURIComponent(sparkStatus.status.id) + "/reactions", {
+  method: "POST", token: b.token, body: { emoji: "🎉" }
+});
+await call("/api/statuses/" + encodeURIComponent(sparkStatus.status.id) + "/replies", {
+  method: "POST", token: b.token, body: { body: "SPARK reply integration " + suffix }, expected: 201
+});
+const sparkReplies = await call("/api/statuses/" + encodeURIComponent(sparkStatus.status.id) + "/replies", { token: a.token });
+assert.ok(sparkReplies.replies?.some(reply => reply.body === "SPARK reply integration " + suffix),
+  "SPARK replies must persist and be visible to the status owner");
+await call("/api/statuses/" + encodeURIComponent(sparkStatus.status.id) + "/reactions?emoji=" + encodeURIComponent("🎉"), {
+  method: "DELETE", token: b.token
+});
+
 const group = await call("/api/groups", { method: "POST", token: a.token, body: { name: "Search Test " + suffix }, expected: 201 });
 assert.ok(group.group?.id);
 await call("/api/groups/" + encodeURIComponent(group.group.id) + "/members", {
   method: "POST", token: a.token, body: { userId: b.user.id }, expected: 201
 });
-await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages", {
+const groupInteractionMessage = await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages", {
   method: "POST", token: a.token, body: { body: "group-search-needle-" + suffix }, expected: 201
 });
+assert.ok(groupInteractionMessage.id, "group message must return its ID");
+await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages/" +
+  encodeURIComponent(groupInteractionMessage.id) + "/reactions", {
+    method: "POST", token: b.token, body: { emoji: "❤️" }
+  });
+await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages/" +
+  encodeURIComponent(groupInteractionMessage.id) + "/pin", { method: "POST", token: b.token });
+const groupInteractionPage = await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages", { token: b.token });
+const groupInteraction = groupInteractionPage.messages.find(message => message.id === groupInteractionMessage.id);
+assert.ok(groupInteraction?.is_pinned, "group pin must be returned by the group conversation API");
+assert.ok(groupInteraction?.reactions?.some(reaction => reaction.emoji === "❤️" && reaction.user_id === b.user.id),
+  "group reaction must be returned by the group conversation API");
+await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages/" +
+  encodeURIComponent(groupInteractionMessage.id) + "/pin", { method: "DELETE", token: b.token });
+await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages/" +
+  encodeURIComponent(groupInteractionMessage.id) + "/reactions?emoji=" + encodeURIComponent("❤️"), {
+    method: "DELETE", token: b.token
+  });
 await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages", {
   method: "POST", token: a.token, body: { body: "second group-search-needle fixture" }, expected: 201
 });
