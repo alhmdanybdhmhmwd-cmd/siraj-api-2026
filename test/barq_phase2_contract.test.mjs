@@ -195,6 +195,7 @@ test("conversation hub keeps search and the three agreed sections", () => {
   assert.ok(page.includes("المجموعات"));
   assert.ok(page.includes("المكالمات"));
   assert.ok(page.includes("conversationQuery"));
+  assert.ok(!flutterApp.includes("IconButton(onPressed: loadMessages, icon: const Icon(Icons.refresh))"));
 });
 
 test("message actions are opened by long press and include pin, forward, edit, and delete", () => {
