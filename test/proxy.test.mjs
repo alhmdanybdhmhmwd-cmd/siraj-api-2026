@@ -184,6 +184,32 @@ test("media proxy rejects streamed bodies over 4 MiB when Content-Length is abse
   }
 });
 
+test("proxy preserves upstream security headers on API responses", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ ok: true }), {
+    status: 200,
+    headers: {
+      "content-type": "application/json",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "DENY",
+      "referrer-policy": "no-referrer",
+      "content-security-policy": "default-src 'none'",
+      "strict-transport-security": "max-age=31536000"
+    }
+  });
+  try {
+    const res = makeResponse();
+    await handler(makeRequest({ url: "/api/health", method: "GET" }), res);
+    assert.equal(res.headers["x-content-type-options"], "nosniff");
+    assert.equal(res.headers["x-frame-options"], "DENY");
+    assert.equal(res.headers["referrer-policy"], "no-referrer");
+    assert.equal(res.headers["content-security-policy"], "default-src 'none'");
+    assert.equal(res.headers["strict-transport-security"], "max-age=31536000");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("proxy forwards authenticated DELETE requests for device token revocation", async () => {
   const originalFetch = globalThis.fetch;
   let forwarded = null;
