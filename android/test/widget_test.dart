@@ -6,6 +6,14 @@ import 'package:barq/main.dart';
 import 'package:barq/barq_identity.dart';
 
 void main() {
+  test('background work pauses only when the app is hidden or detached', () {
+    expect(barqShouldPauseBackgroundWork(AppLifecycleState.resumed), isFalse);
+    expect(barqShouldPauseBackgroundWork(AppLifecycleState.inactive), isFalse);
+    expect(barqShouldPauseBackgroundWork(AppLifecycleState.hidden), isTrue);
+    expect(barqShouldPauseBackgroundWork(AppLifecycleState.paused), isTrue);
+    expect(barqShouldPauseBackgroundWork(AppLifecycleState.detached), isTrue);
+  });
+
   test('optional realtime connects only with a session, endpoint and resumed app', () {
     expect(barqRealtimeCanConnect(authToken: 'session', appResumed: true, socketUrl: 'wss://example.test'), isTrue);
     expect(barqRealtimeCanConnect(authToken: null, appResumed: true, socketUrl: 'wss://example.test'), isFalse);
