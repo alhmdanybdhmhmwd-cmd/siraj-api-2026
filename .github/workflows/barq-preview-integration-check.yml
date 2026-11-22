@@ -1,18 +1,10 @@
 name: BARQ isolated Preview integration verification
 # Re-run isolated media checks after Preview schema migration and Worker redeploy.
 
+# Manual verification only. The deploy workflow runs these checks after it
+# finishes deploying and probing the isolated Preview Worker, avoiding a push race.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - barq/phase-2-android-ci-2026-11-20
-      - barq/fix-approved-menus-2026-11-22
-      - barq/phase4-messaging-interactions-2026-11-22
-      - barq/phase5-feature-audit-2026-11-22
-    paths:
-      - "test/barq_preview_integration.mjs"
-      - "test/barq_preview_media_integration.mjs"
-      - ".github/workflows/barq-preview-integration-check.yml"
 
 permissions:
   contents: read
