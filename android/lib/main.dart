@@ -2062,9 +2062,9 @@ class Api {
 }
 
 String barqSparkPrivateReplyMessage({required String caption, required String reply}) {
-  final excerpt = caption.trim().replaceAll(RegExp(r'\\s+'), ' ');
+  final excerpt = caption.trim().replaceAll(RegExp(r'\s+'), ' ');
   final context = excerpt.isEmpty ? 'لحظة من SPARK' : excerpt;
-  return '↩️ رد على SPARK\\n$context\\n\\n${reply.trim()}';
+  return '↩️ رد على SPARK\n$context\n\n${reply.trim()}';
 }
 
 String newBarqMessageId() {
