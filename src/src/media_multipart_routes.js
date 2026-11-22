@@ -391,7 +391,14 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
         group_id TEXT, file_name TEXT NOT NULL, content_type TEXT NOT NULL, expires_at TEXT NOT NULL
       )`).run();
       const permanentExpiry = "9999-12-31T23:59:59.999Z";
-      const results = await env.DB.batch([
+      const attachmentBody = JSON.stringify({
+        type: "attachment",
+        attachmentId: session.object_key,
+        fileName: session.file_name,
+        contentType: session.content_type,
+        size: Number(session.total_size)
+      });
+      const completionStatements = [
         env.DB.prepare(
           `INSERT INTO media_access (object_key, owner_id, recipient_id, group_id, file_name, content_type, expires_at)
            VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(object_key) DO UPDATE SET
@@ -401,7 +408,33 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
         ).bind(session.object_key, currentUser.sub, session.recipient_id, session.group_id,
           session.file_name, session.content_type, permanentExpiry),
         env.DB.prepare("UPDATE media_upload_sessions SET state = 'completed', completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND owner_id = ?").bind(sessionId, currentUser.sub)
-      ]);
+      ];
+      // The upload session ID is also the stable message ID. Completion retries
+      // therefore cannot create duplicate attachment messages.
+      if (session.recipient_id) {
+        completionStatements.push(
+          env.DB.prepare(
+            "INSERT OR IGNORE INTO messages (id, sender_id, receiver_id, body) VALUES (?, ?, ?, ?)"
+          ).bind(sessionId, currentUser.sub, session.recipient_id, attachmentBody),
+          env.DB.prepare(`
+            INSERT INTO private_conversation_state (user_id, peer_id, hidden_at, updated_at)
+            VALUES (?, ?, NULL, CURRENT_TIMESTAMP)
+            ON CONFLICT(user_id, peer_id) DO UPDATE SET hidden_at = NULL, updated_at = CURRENT_TIMESTAMP
+          `).bind(currentUser.sub, session.recipient_id),
+          env.DB.prepare(`
+            INSERT INTO private_conversation_state (user_id, peer_id, hidden_at, updated_at)
+            VALUES (?, ?, NULL, CURRENT_TIMESTAMP)
+            ON CONFLICT(user_id, peer_id) DO UPDATE SET hidden_at = NULL, updated_at = CURRENT_TIMESTAMP
+          `).bind(session.recipient_id, currentUser.sub)
+        );
+      } else {
+        completionStatements.push(
+          env.DB.prepare(
+            "INSERT OR IGNORE INTO group_messages (id, group_id, sender_id, body) VALUES (?, ?, ?, ?)"
+          ).bind(sessionId, session.group_id, currentUser.sub, attachmentBody)
+        );
+      }
+      const results = await env.DB.batch(completionStatements);
       if (Number(results?.[1]?.meta?.changes || 0) !== 1) return json({ error: "Media uploaded but final metadata could not be confirmed; recovery is required" }, 503);
       return json({ attachment: { attachmentId: session.object_key, fileName: session.file_name,
         contentType: session.content_type, size: Number(session.total_size),
