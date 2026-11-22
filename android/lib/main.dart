@@ -4113,6 +4113,64 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ),
             ]),
           ),
+          if (statuses.isNotEmpty)
+            SizedBox(
+              height: 104,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                children: [
+                  for (final status in statuses)
+                    GestureDetector(
+                      onTap: () => _openSparkStatus(status),
+                      child: SizedBox(
+                        width: 78,
+                        child: Column(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: LinearGradient(colors: [
+                                  Theme.of(context).colorScheme.primary,
+                                  Theme.of(context).colorScheme.secondary,
+                                ]),
+                                boxShadow: [BoxShadow(
+                                  color: Theme.of(context).colorScheme.primary.withValues(alpha: .18),
+                                  blurRadius: 10,
+                                )],
+                              ),
+                              child: CircleAvatar(
+                                radius: 29,
+                                backgroundColor: Theme.of(context).colorScheme.surface,
+                                child: ClipOval(
+                                  child: field(status, ['photoUrl', 'photo_url']).isEmpty
+                                      ? const Icon(Icons.person, size: 28)
+                                      : Image.network(
+                                          '$apiBase\${field(status, ['photoUrl', 'photo_url'])}?v=\${Uri.encodeComponent(field(status, ['photoUpdatedAt', 'photo_updated_at']))}',
+                                          width: 58,
+                                          height: 58,
+                                          fit: BoxFit.cover,
+                                          headers: {'Authorization': 'Bearer \${Api.token}'},
+                                          errorBuilder: (_, __, ___) => const Icon(Icons.person),
+                                        ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            Text(
+                              field(status, ['displayName', 'display_name', 'username'], 'مستخدم'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           if (statuses.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 45, horizontal: 18),
