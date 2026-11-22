@@ -958,6 +958,39 @@ void main() {
     expect(failures, ['two.png']);
   });
 
+  test('private memory photo uploads enforce byte limits and image MIME types', () async {
+    final attempted = <String>[];
+    final failures = await uploadPrivateMemoryPhotosSequentially(
+      memoryId: 'memory-guard-1',
+      photos: [
+        {'name': 'empty.jpg', 'bytes': <int>[], 'contentType': 'image/jpeg'},
+        {
+          'name': 'oversized.jpg',
+          'bytes': List<int>.filled(4 * 1024 * 1024 + 1, 0),
+          'contentType': 'image/jpeg',
+        },
+        {'name': 'vector.svg', 'bytes': <int>[1, 2], 'contentType': 'image/svg+xml'},
+        {'name': 'valid.png', 'bytes': <int>[3, 4], 'contentType': ' IMAGE/PNG '},
+      ],
+      upload: ({
+        required String memoryId,
+        required List<int> bytes,
+        required String fileName,
+        required String contentType,
+      }) async {
+        attempted.add('$fileName:$contentType');
+      },
+    );
+
+    expect(attempted, ['valid.png:image/png']);
+    expect(failures, ['empty.jpg', 'oversized.jpg', 'vector.svg']);
+    expect(isBarqPrivateMemoryPhotoContentTypeAllowed('image/jpeg'), isTrue);
+    expect(isBarqPrivateMemoryPhotoContentTypeAllowed(' IMAGE/WEBP '), isTrue);
+    expect(isBarqPrivateMemoryPhotoContentTypeAllowed('image/gif'), isFalse);
+    expect(isBarqPrivateMemoryPhotoContentTypeAllowed('image/svg+xml'), isFalse);
+    expect(isBarqPrivateMemoryPhotoContentTypeAllowed('application/octet-stream'), isFalse);
+  });
+
   test('private memory photo uploads read file paths one at a time', () async {
     final directory = await Directory.systemTemp.createTemp('barq-memory-');
     try {
