@@ -560,6 +560,7 @@ class ProfileOwnershipTestDB extends FakeDB {
     statement.run = async () => {
       if (sql.includes("UPDATE users SET display_name = ? WHERE id = ?")) {
         this.profileUpdateParams = statement.params;
+        this.profileUpdateSql = sql;
         assert.match(sql, /WHERE id = \?/);
         return { meta: { changes: 1 } };
       }
