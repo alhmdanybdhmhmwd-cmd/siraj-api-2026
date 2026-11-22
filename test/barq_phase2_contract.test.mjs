@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 const worker = await readFile(new URL("../src/src/index.js", import.meta.url), "utf8");
 const multipartRoutes = await readFile(new URL("../src/src/media_multipart_routes.js", import.meta.url), "utf8");
 const flutterApp = await readFile(new URL("../android/lib/main.dart", import.meta.url), "utf8");
+const identitySource = await readFile(new URL("../android/lib/barq_identity.dart", import.meta.url), "utf8");
 const androidManifest = await readFile(new URL("../android/android/app/src/main/AndroidManifest.xml", import.meta.url), "utf8");
 const testConfig = await readFile(new URL("../wrangler.test.toml", import.meta.url), "utf8");
 const fallbackTestConfig = await readFile(new URL("../wrangler.fallback.test.toml", import.meta.url), "utf8");
@@ -898,4 +899,14 @@ test("private message delete-for-me hides only the authenticated participant cop
   assert.ok(flutterApp.includes("حذف لدي فقط"));
   assert.ok(flutterApp.includes("حذف لدى الجميع"));
   assert.ok(flutterApp.includes("hidePrivateMessageForMe"));
+});
+
+
+test("only bundled BARQ identities can be selected before optional packages are downloaded", () => {
+  assert.match(identitySource, /bool get isBundled => this == BarqIdentity\.blueLightning \|\| this == BarqIdentity\.butterfly/);
+  assert.match(identitySource, /if \(!identity\.isBundled\)/);
+  assert.match(identitySource, /restored != null && restored\.isBundled/);
+  assert.match(flutterApp, /saving \|\| !isAvailable \? null/);
+  assert.match(flutterApp, /تحتاج إلى تنزيل الحزمة قبل التفعيل/);
+  assert.match(flutterApp, /download_for_offline_outlined/);
 });
