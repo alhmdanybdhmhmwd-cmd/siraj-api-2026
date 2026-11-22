@@ -4668,6 +4668,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       MaterialPageRoute(
         builder: (_) => SparkMediaViewer(
           statusId: field(status, ['id']),
+          authorId: field(status, ['userId', 'user_id']),
           media: media,
           author: field(status, ['displayName', 'display_name', 'username'], 'مستخدم برق'),
           caption: field(status, ['content']),
@@ -9082,6 +9083,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
 class SparkMediaViewer extends StatefulWidget {
   final String statusId;
+  final String authorId;
   final List<Map<String, dynamic>> media;
   final String author;
   final String caption;
@@ -9091,7 +9093,7 @@ class SparkMediaViewer extends StatefulWidget {
   final int viewCount;
   final bool showViewCount;
   const SparkMediaViewer({
-    super.key, required this.statusId, required this.media, required this.author, required this.caption,
+    super.key, required this.statusId, required this.authorId, required this.media, required this.author, required this.caption,
     this.backgroundKey = 'midnight', this.textColorKey = 'white', this.fontKey = 'modern',
     this.viewCount = 0, this.showViewCount = false,
   });
@@ -9120,12 +9122,8 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
   }
 
   Future<void> _loadReplies() async {
-    try {
-      final replies = await Api.sparkReplies(widget.statusId);
-      if (mounted) setState(() { _replies = replies; _loadingReplies = false; });
-    } catch (_) {
-      if (mounted) setState(() => _loadingReplies = false);
-    }
+    // Replies are delivered as private chat messages, not public SPARK comments.
+    if (mounted) setState(() => _loadingReplies = false);
   }
 
   Future<void> _react(String emoji) async {
@@ -9142,9 +9140,16 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
     if (value.isEmpty || _sendingReply) return;
     setState(() => _sendingReply = true);
     try {
-      await Api.replyToSpark(widget.statusId, value);
+      if (widget.authorId.isEmpty || widget.authorId == Api.currentUserId) {
+        throw Exception('تعذر تحديد صاحب SPARK لإرسال الرد إلى محادثته.');
+      }
+      final excerpt = widget.caption.trim().isEmpty
+          ? 'لحظة من SPARK'
+          : widget.caption.trim().replaceAll(RegExp(r'\\s+'), ' ');
+      final message = '↩️ رد على SPARK\n$excerpt\n\n$value';
+      await Api.sendMessage(widget.authorId, message);
       _replyController.clear();
-      await _loadReplies();
+      if (mounted) showMsg(context, 'وصل ردك إلى المحادثة الخاصة مع صاحب SPARK.');
     } catch (e) {
       if (mounted) showMsg(context, cleanError(e));
     } finally {
@@ -9336,29 +9341,23 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
                 for (final emoji in ['❤️', '🔥', '😂', '👍'])
                   TextButton(onPressed: () => _react(emoji), child: Text(emoji, style: const TextStyle(fontSize: 24))),
               ]),
-              SizedBox(
-                height: 84,
-                child: _loadingReplies
-                    ? const Center(child: CircularProgressIndicator())
-                    : _replies.isEmpty
-                        ? const Center(child: Text('لا توجد ردود بعد', style: TextStyle(color: Colors.white54)))
-                        : ListView.builder(
-                            itemCount: _replies.length,
-                            itemBuilder: (context, index) {
-                              final reply = _replies[index];
-                              final author = (reply['displayName'] ?? reply['username'] ?? 'مستخدم').toString();
-                              if (reply['kind'] == 'audio') {
-                                return _SparkAudioReplyTile(statusId: widget.statusId, reply: reply, author: author);
-                              }
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 3),
-                                child: Text(
-                                  '$author: ${reply['body'] ?? ''}',
-                                  style: const TextStyle(color: Colors.white70),
-                                ),
-                              );
-                            },
-                          ),
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary.withValues(alpha: .10),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: .22)),
+                ),
+                child: Row(children: [
+                  Icon(Icons.lock_outline_rounded, size: 16, color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: 7),
+                  const Expanded(child: Text(
+                    'ردك سيصل برسالة خاصة إلى محادثتك مع صاحب SPARK',
+                    style: TextStyle(color: Colors.white70, fontSize: 11),
+                  )),
+                ]),
               ),
               if (_recordingAudioReply)
                 Align(
