@@ -7288,7 +7288,7 @@ class _BarqRemoteVideoThumbnail extends StatefulWidget {
 class _BarqRemoteVideoThumbnailState extends State<_BarqRemoteVideoThumbnail> {
   VideoPlayerController? _controller;
   bool _failed = false;
-  bool _loading = true;
+  bool _loading = false;
 
   @override
   void initState() {
@@ -7297,7 +7297,7 @@ class _BarqRemoteVideoThumbnailState extends State<_BarqRemoteVideoThumbnail> {
   }
 
   Future<void> _initialize() async {
-    if (_loading && _controller != null) return;
+    if (_loading) return;
     if (mounted) setState(() { _loading = true; _failed = false; });
     final id = field(widget.attachment, ['attachmentId']);
     if (id.isEmpty) {
@@ -7316,10 +7316,10 @@ class _BarqRemoteVideoThumbnailState extends State<_BarqRemoteVideoThumbnail> {
         await controller.dispose();
         return;
       }
-      setState(() => _controller = controller);
+      setState(() { _controller = controller; _loading = false; });
     } catch (_) {
       await controller.dispose();
-      if (mounted) setState(() => _failed = true);
+      if (mounted) setState(() { _failed = true; _loading = false; });
     }
   }
 
