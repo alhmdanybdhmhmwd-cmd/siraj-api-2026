@@ -59,6 +59,7 @@ jobs:
           PY
           npx --yes wrangler@4 whoami
       - name: Deploy isolated fallback Worker
+        id: deploy
         shell: bash
         run: |
           set -euo pipefail
@@ -66,6 +67,7 @@ jobs:
           URL="$(grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' deploy.log | head -n 1 || true)"
           test -n "$URL"
           echo "BARQ_FALLBACK_PREVIEW_URL=$URL" >> "$GITHUB_ENV"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
       - name: Install fallback Preview-only secrets
         shell: bash
         run: |
@@ -90,7 +92,7 @@ jobs:
           echo "Fallback Preview Worker URL: $BARQ_FALLBACK_PREVIEW_URL" >> "$GITHUB_STEP_SUMMARY"
       - name: Run account, privacy, contacts, messaging, reactions, pinning, SPARK, and groups integration
         env:
-          BARQ_PREVIEW_URL: ${{ env.BARQ_FALLBACK_PREVIEW_URL }}
+          BARQ_PREVIEW_URL: ${{ steps.deploy.outputs.url }}
         run: node test/barq_preview_integration.mjs
       - name: Run real Preview media upload, resume, integrity, range, and authorization integration
         env:
