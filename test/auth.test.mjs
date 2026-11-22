@@ -545,6 +545,7 @@ class ProfileOwnershipTestDB extends FakeDB {
   constructor() {
     super();
     this.profileUpdateParams = null;
+    this.profileUpdateSql = null;
   }
   prepare(sql) {
     const statement = super.prepare(sql);
@@ -581,8 +582,10 @@ test("profile updates are always scoped to the authenticated account despite a s
     })
   }), { DB: db, JWT_SECRET: secret });
   assert.equal(response.status, 200);
+  assert.deepEqual(db.profileUpdateParams, ["Updated Name", user.id]);
   assert.equal(db.profileUpdateParams[1], user.id);
   assert.notEqual(db.profileUpdateParams[1], "victim-account");
+  assert.doesNotMatch(db.profileUpdateSql, /SET[^]*\\bphone\\s*=/i);
 });
 
 test("profile photo reads deny non-friends when the target profile is private", async () => {
