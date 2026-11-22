@@ -3352,8 +3352,12 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
              WHERE id = ? AND (
                (sender_id = ? AND receiver_id = ?) OR
                (sender_id = ? AND receiver_id = ?)
-             )`
-          ).bind(replyToId, currentUser.sub, receiverId, receiverId, currentUser.sub).first();
+             )
+               AND NOT EXISTS (
+                 SELECT 1 FROM hidden_private_messages hm
+                 WHERE hm.user_id = ? AND hm.message_id = messages.id
+               )`
+          ).bind(replyToId, currentUser.sub, receiverId, receiverId, currentUser.sub, currentUser.sub).first();
           if (!target) return json({ error: "Reply target not found in this conversation" }, 404);
           reply = { id: target.id, body: String(target.body || "").slice(0, 500), sender_id: target.sender_id };
         }
@@ -3452,8 +3456,13 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         const messageId = privateInteractionMatch[1];
         const action = privateInteractionMatch[2];
         const target = await env.DB.prepare(
-          "SELECT sender_id, receiver_id FROM messages WHERE id = ? AND (sender_id = ? OR receiver_id = ?)"
-        ).bind(messageId, currentUser.sub, currentUser.sub).first();
+          `SELECT sender_id, receiver_id FROM messages
+           WHERE id = ? AND (sender_id = ? OR receiver_id = ?)
+             AND NOT EXISTS (
+               SELECT 1 FROM hidden_private_messages hm
+               WHERE hm.user_id = ? AND hm.message_id = messages.id
+             )`
+        ).bind(messageId, currentUser.sub, currentUser.sub, currentUser.sub).first();
         if (!target) return json({ error: "Message not found" }, 404);
         const peerId = target.sender_id === currentUser.sub ? target.receiver_id : target.sender_id;
         const friendship = await env.DB.prepare(
