@@ -872,3 +872,17 @@ test("fallback Worker deployment requires explicit manual Preview approval", asy
   assert.match(workflow, /wrangler\.fallback\.test\.toml/);
   assert.doesNotMatch(workflow, /wrangler\.toml\s/);
 });
+
+test("profile updates cannot change the registered phone number", () => {
+  const start = worker.indexOf('// Phone numbers are immutable after registration.');
+  const end = worker.indexOf('// Privacy settings for the authenticated account', start);
+  const route = worker.slice(start, end);
+  assert.ok(start >= 0 && end > start, "Profile update route must exist");
+  assert.ok(route.includes('UPDATE users SET display_name = ? WHERE id = ?'));
+  assert.ok(!route.includes('body.phone'));
+  assert.ok(!route.includes('SET display_name = ?, phone = ?'));
+  assert.ok(route.includes('cleanUser(user)'));
+  assert.ok(main.includes("readOnly: true"));
+  assert.ok(main.includes("رقم الهاتف (ثابت بعد إنشاء الحساب)"));
+  assert.ok(!main.includes("phone: phone,"));
+});
