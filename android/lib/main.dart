@@ -9022,7 +9022,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                                   const Row(children: [
                                                     Icon(Icons.auto_awesome_rounded, size: 14, color: gold),
-                                                    const SizedBox(width: 6),
+                                                    SizedBox(width: 6),
                                                     const Text('رد على SPARK', style: TextStyle(
                                                       color: gold, fontSize: 11, fontWeight: FontWeight.w800,
                                                     )),
