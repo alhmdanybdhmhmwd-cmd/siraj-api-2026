@@ -70,6 +70,7 @@ test("private conversation clear/delete is per-account and preserves contacts", 
   assert.ok(worker.includes("INSERT OR IGNORE INTO hidden_private_messages"));
   assert.ok(worker.includes("hm.user_id = ? AND hm.message_id = messages.id"));
   assert.ok(worker.includes("chat_hidden"));
+  assert.ok(worker.includes("A newly delivered private attachment is new conversation activity"));
   assert.ok(worker.includes("hm.user_id = ? AND hm.message_id = messages.id"));
   assert.ok(previewIntegration.includes("stale edit after clear"),
     "preview integration must reject stale edits after local history clearing");
