@@ -7121,7 +7121,7 @@ class _VideoAttachmentDialogState extends State<_VideoAttachmentDialog> {
       return;
     }
     final headers = {if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'};
-    final bases = <String>[mediaWorkerBase, if (apiBase != mediaWorkerBase) apiBase];
+    final bases = <String>[apiBase, if (mediaWorkerBase != apiBase) mediaWorkerBase];
     Object? lastError;
     for (final base in bases) {
       VideoPlayerController? candidate;
