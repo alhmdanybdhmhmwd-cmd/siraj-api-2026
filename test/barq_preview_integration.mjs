@@ -297,6 +297,58 @@ const friendPhoto = await fetch(new URL(profilePhoto.photoUrl, base), {
 });
 assert.equal(friendPhoto.status, 200, "mutual contact must be allowed to view profile photo");
 assert.ok((await friendPhoto.arrayBuffer()).byteLength > 0);
+const privateMemory = await call("/api/private-memories", {
+  method: "POST", token: a.token,
+  body: { title: "Private vault " + suffix, content: "Only the owner should see this memory." },
+  expected: 201
+});
+assert.ok(privateMemory.memory?.id, "private memory must be created");
+const ownerMemories = await call("/api/private-memories", { token: a.token });
+const otherMemories = await call("/api/private-memories", { token: b.token });
+assert.ok(ownerMemories.memories.some(memory => memory.id === privateMemory.memory.id));
+assert.ok(!otherMemories.memories.some(memory => memory.id === privateMemory.memory.id),
+  "private memories must be isolated by owner");
+
+const memoryPhotoUpload = await fetch(new URL(
+  "/api/private-memories/" + encodeURIComponent(privateMemory.memory.id) + "/media", base
+), {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${a.token}`,
+    "Content-Type": "image/png",
+    "X-File-Name": "barq-private-memory.png"
+  },
+  body: profilePng
+});
+const memoryPhotoRaw = await memoryPhotoUpload.text();
+let memoryPhoto;
+try { memoryPhoto = memoryPhotoRaw ? JSON.parse(memoryPhotoRaw) : {}; }
+catch { throw new Error("Private memory photo upload returned non-JSON response"); }
+assert.equal(memoryPhotoUpload.status, 201,
+  `Private memory photo upload failed: ${JSON.stringify(memoryPhoto)}`);
+assert.ok(memoryPhoto.media?.attachmentId, "private memory photo must return an attachment id");
+const memoryListWithPhoto = await call("/api/private-memories", { token: a.token });
+assert.ok(memoryListWithPhoto.memories.find(memory => memory.id === privateMemory.memory.id)
+  ?.media?.some(media => media.attachmentId === memoryPhoto.media.attachmentId));
+const ownerMemoryPhoto = await fetch(new URL(
+  "/api/media/" + encodeURIComponent(memoryPhoto.media.attachmentId), base
+), { headers: { Authorization: `Bearer ${a.token}` } });
+assert.equal(ownerMemoryPhoto.status, 200, "only the owner should retrieve the private memory photo");
+const otherMemoryPhoto = await fetch(new URL(
+  "/api/media/" + encodeURIComponent(memoryPhoto.media.attachmentId), base
+), { headers: { Authorization: `Bearer ${b.token}` } });
+assert.equal(otherMemoryPhoto.status, 403, "other accounts must not retrieve private memory photos");
+await call("/api/private-memories/" + encodeURIComponent(privateMemory.memory.id), {
+  method: "PATCH", token: a.token,
+  body: { title: "Updated private vault " + suffix, content: "Updated private memory." }
+});
+await call("/api/private-memories/" + encodeURIComponent(privateMemory.memory.id), {
+  method: "DELETE", token: a.token
+});
+const ownerMemoriesAfterDelete = await call("/api/private-memories", { token: a.token });
+assert.ok(!ownerMemoriesAfterDelete.memories.some(memory => memory.id === privateMemory.memory.id),
+  "deleted private memory must disappear from the owner's vault");
+
 await call("/api/privacy", {
   method: "POST", token: a.token, body: { searchable: false, readReceipts: true }
 });
@@ -365,6 +417,6 @@ assert.equal(mediaFetch.status, 200, "authorized mutual contact must be able to 
 assert.match(mediaFetch.headers.get("content-type") || "", /^image\/png/i);
 assert.ok((await mediaFetch.arrayBuffer()).byteLength > 0, "SPARK media response must contain bytes");
 
-console.log("Preview integration passed: legacy/current signup and phone login, profile/privacy/contacts, private message edit/pin/reactions, SPARK text replies/reactions, captioned media upload/feed/download, and access guards.");
+console.log("Preview integration passed: legacy/current signup and phone login, profile/privacy/contacts, private message edit/pin/reactions, private-memory owner isolation/photo access, SPARK text replies/reactions, captioned media upload/feed/download, and access guards.");
 
 }
