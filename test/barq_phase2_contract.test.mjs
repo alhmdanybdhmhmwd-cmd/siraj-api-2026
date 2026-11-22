@@ -234,6 +234,17 @@ test("chat wallpaper is selectable and persists per conversation", () => {
   assert.ok(flutterApp.includes("barq_chat_wallpaper_"));
 });
 
+test("visible private and group reaction chips toggle the current user's reaction", () => {
+  const start = flutterApp.indexOf("Widget messageReactionBar(");
+  const end = flutterApp.indexOf("Future<void> showMessageActions(", start);
+  const reactionBar = flutterApp.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  assert.ok(reactionBar.includes("onReact(entry.key, alreadyReacted)"));
+  assert.ok(reactionBar.includes("onPressed: () async"));
+  assert.ok(flutterApp.includes("Api.reactPrivateMessage("));
+  assert.ok(flutterApp.includes("Api.reactGroupMessage("));
+});
+
 test("private and group reactions are authenticated, conversation-scoped, and idempotent", () => {
   assert.ok(worker.includes("message_reactions"));
   assert.ok(worker.includes("groupInteractionMatch"));
