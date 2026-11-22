@@ -74,7 +74,10 @@ jobs:
       - name: Build arm64 debug APK for diagnostics
         if: github.event_name != 'pull_request'
         working-directory: android
-        run: flutter build apk --debug --target-platform android-arm64
+        run: >-
+          flutter build apk --debug --target-platform android-arm64
+          --dart-define=BARQ_API_BASE=https://siraj-api-2026-git-barq-fix-approved-menus-20-0ffa73-siraj-01fc.vercel.app
+          --dart-define=BARQ_MEDIA_BASE=https://barq-api-phase2-test.alhmdanybdhmhmwd.workers.dev
       - name: Upload arm64 debug diagnostics
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
@@ -86,7 +89,10 @@ jobs:
       - name: Build optimized arm64 release APK for device testing
         if: github.event_name != 'pull_request'
         working-directory: android
-        run: flutter build apk --release --target-platform android-arm64 --split-per-abi
+        run: >-
+          flutter build apk --release --target-platform android-arm64 --split-per-abi
+          --dart-define=BARQ_API_BASE=https://siraj-api-2026-git-barq-fix-approved-menus-20-0ffa73-siraj-01fc.vercel.app
+          --dart-define=BARQ_MEDIA_BASE=https://barq-api-phase2-test.alhmdanybdhmhmwd.workers.dev
       - name: Upload optimized arm64 test APK
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
