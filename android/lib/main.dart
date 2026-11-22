@@ -2136,17 +2136,6 @@ Widget messageReactionBar({
               ),
             ),
           ),
-        IconButton(
-          visualDensity: VisualDensity.compact,
-          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-          padding: EdgeInsets.zero,
-          tooltip: 'إضافة تفاعل',
-          icon: const Icon(Icons.add_reaction_outlined, size: 18, color: Colors.white60),
-          onPressed: () async {
-            final emoji = await showMessageReactionPicker(context);
-            if (emoji != null) await onReaction(emoji, false);
-          },
-        ),
       ],
     ),
   );
