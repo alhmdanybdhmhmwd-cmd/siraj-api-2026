@@ -1079,10 +1079,7 @@ export default {
         };
         const bundle = packages[identity];
         if (!bundle) return json({ error: "Identity package not found" }, 404);
-        return json(bundle, 200, {
-          "Cache-Control": "private, max-age=300",
-          "X-BARQ-Package-Version": bundle.version
-        });
+        return json(bundle);
       }
 
       // Media recipient authorization also observes user blocks before upload sessions are created.
