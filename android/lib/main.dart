@@ -830,8 +830,13 @@ class Api {
     String? inviteCode,
   }) async {
     lastRecoveryCode = null;
+    final privateUsername = barqPrivateRegistrationUsername(phone);
     final data = await request('POST', '/api/register', body: {
+      // Send both legacy and current name keys while API gateways are being aligned.
+      'name': displayName,
       'displayName': displayName,
+      // Phone stays the primary identifier; this private handle satisfies older gateways.
+      'username': privateUsername,
       'password': password,
       'phone': phone,
       if (inviteCode != null && inviteCode.trim().isNotEmpty)
@@ -2756,6 +2761,14 @@ String normalizeBarqRegistrationPhone(String raw, String countryCode) {
   final nationalNumber = value.replaceFirst(RegExp(r'^0+'), '');
   return normalizeBarqInternationalPhone(countryCode + nationalNumber);
 }
+/// Stable private handle for compatibility with API gateways that require a username.
+/// The phone remains the primary login identifier; the handle does not reveal the number.
+String barqPrivateRegistrationUsername(String internationalPhone) {
+  final normalized = normalizeBarqInternationalPhone(internationalPhone);
+  final digest = crypto.sha256.convert(utf8.encode(normalized)).toString();
+  return 'barq${digest.substring(0, 16)}';
+}
+
 /// Canonical digit-only form for comparing saved contact numbers.
 /// Converts Arabic-Indic digits before stripping punctuation.
 String normalizeBarqContactPhoneDigits(String raw) =>
