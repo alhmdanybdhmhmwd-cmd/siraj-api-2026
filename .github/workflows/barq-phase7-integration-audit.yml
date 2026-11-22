@@ -11,6 +11,7 @@ on:
       - "scripts/**"
       - "package.json"
       - ".github/workflows/barq-phase7-integration-audit.yml"
+      - ".github/workflows/barq-preview-fallback-deploy.yml"
   workflow_dispatch:
 
 permissions:
