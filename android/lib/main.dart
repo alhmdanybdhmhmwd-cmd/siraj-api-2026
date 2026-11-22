@@ -7669,7 +7669,7 @@ class _ChatPageState extends State<ChatPage> {
           try {
             if (replySnapshot == null) {
               deliveredNearby = await BarqNearbyService.instance.sendTextMessage(
-                receiverId: friendId, messageId: messageId!, body: text, senderId: widget.currentUserId,
+                receiverId: friendId, messageId: messageId, body: text, senderId: widget.currentUserId,
               );
             }
           } catch (_) {}
