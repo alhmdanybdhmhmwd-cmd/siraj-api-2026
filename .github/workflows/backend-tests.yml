@@ -21,6 +21,10 @@ jobs:
         run: node --check src/src/index.js
       - name: Check standalone Node API syntax
         run: node --check node_server.mjs
+      - name: Check Vercel and legacy proxy syntax
+        run: |
+          node --check "api/[...path].js"
+          node --check server.js
       - name: Audit Worker runtime portability dependencies
         run: npm run audit:runtime-portability
       - name: Run backend authentication tests
