@@ -35,7 +35,8 @@ test("real libSQL applies every isolated Preview migration and supports BARQ dat
     for (const name of [
       "users", "friendships", "messages", "group_messages",
       "message_reactions", "pinned_messages", "ephemeral_messages",
-      "media_upload_sessions", "media_upload_parts", "media_upload_chunks"
+      "media_upload_sessions", "media_upload_parts", "media_upload_chunks",
+      "hidden_private_messages", "private_conversation_state"
     ]) {
       assert.ok(tableNames.has(name), `missing migrated table: ${name}`);
     }
