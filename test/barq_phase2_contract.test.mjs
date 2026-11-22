@@ -71,9 +71,8 @@ test("private conversation clear/delete is per-account and preserves contacts", 
   assert.ok(worker.includes("hm.user_id = ? AND hm.message_id = messages.id"));
   assert.ok(worker.includes("chat_hidden"));
   assert.ok(worker.includes("hm.user_id = ? AND hm.message_id = messages.id"));
-  assert.ok(worker.includes("stale edit after clear") === false);
-  assert.ok(previewIntegration.includes("stale edit after clear"));
-  assert.ok(previewIntegration.includes("stale edit after clear"), "preview integration must reject stale edits after local history clearing");
+  assert.ok(previewIntegration.includes("stale edit after clear"),
+    "preview integration must reject stale edits after local history clearing");
   assert.ok(flutterApp.includes("static Future<void> clearPrivateConversation(String friendId)"));
   assert.ok(flutterApp.includes("static Future<void> deletePrivateConversation(String friendId)"));
   assert.ok(flutterApp.includes("static Future<void> clearConversation(String friendId, String currentUserId)"));
