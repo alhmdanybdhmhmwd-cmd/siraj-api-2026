@@ -39,7 +39,7 @@ jobs:
         run: node test/barq_preview_media_integration.mjs
       - name: Run full account and media integration suite through Vercel Preview proxy
         env:
-          BARQ_PREVIEW_URL: https://siraj-api-2026-pfze9qdaa-siraj-01fc.vercel.app
+          BARQ_PREVIEW_URL: https://siraj-api-2026-git-barq-fix-approved-menus-20-0ffa73-siraj-01fc.vercel.app
         run: |
           set -euo pipefail
           node test/barq_preview_integration.mjs
