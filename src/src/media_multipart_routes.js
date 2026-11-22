@@ -127,7 +127,7 @@ export async function cleanupExpiredUploadSessions(env, now = Date.now()) {
   return { checked: (rows.results || []).length, cleaned };
 }
 
-export async function handleResumableMediaUpload(request, env, currentUser, url, path, method) {
+export async function handleResumableMediaUpload(request, env, currentUser, url, path, method, sendPush = null) {
   const prefix = "/api/media/uploads";
   if (path !== prefix && !path.startsWith(prefix + "/")) return null;
   try {
@@ -436,6 +436,36 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
       }
       const results = await env.DB.batch(completionStatements);
       if (Number(results?.[1]?.meta?.changes || 0) !== 1) return json({ error: "Media uploaded but final metadata could not be confirmed; recovery is required" }, 503);
+
+      // Match the notification behavior of the small-file upload route.
+      // Push failures are non-fatal after the attachment and message are committed.
+      if (typeof sendPush === "function") {
+        try {
+          const sender = await env.DB.prepare(
+            "SELECT display_name FROM users WHERE id = ?"
+          ).bind(currentUser.sub).first();
+          const senderName = sender?.display_name || currentUser.username || "مستخدم برق";
+          if (session.recipient_id) {
+            await sendPush(env, session.recipient_id, currentUser.sub, senderName, "أرسل مرفقًا");
+          } else if (session.group_id) {
+            const [group, recipients] = await Promise.all([
+              env.DB.prepare("SELECT name FROM chat_groups WHERE id = ?").bind(session.group_id).first(),
+              env.DB.prepare("SELECT user_id FROM group_members WHERE group_id = ? AND user_id != ?")
+                .bind(session.group_id, currentUser.sub).all()
+            ]);
+            await Promise.all((recipients.results || []).map(item =>
+              sendPush(env, item.user_id, currentUser.sub, senderName, "أرسل مرفقًا", {
+                category: "groups",
+                groupId: session.group_id,
+                groupName: group?.name || "مجموعة برق"
+              })
+            ));
+          }
+        } catch (notificationError) {
+          console.error("Resumable attachment notification dispatch failed:", notificationError);
+        }
+      }
+
       return json({ attachment: { attachmentId: session.object_key, fileName: session.file_name,
         contentType: session.content_type, size: Number(session.total_size),
         recipientId: session.recipient_id, groupId: session.group_id } }, 201);
