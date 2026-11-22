@@ -9244,6 +9244,7 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
   @override
   Widget build(BuildContext context) {
     final headers = <String, String>{if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'};
+    final canReply = widget.authorId.isNotEmpty && widget.authorId != widget.currentUserId;
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -9372,7 +9373,7 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
                 ),
               Row(children: [
                 Expanded(child: TextField(
-                  controller: _replyController, maxLength: 1000,
+                  controller: _replyController, maxLength: 1000, enabled: canReply,
                   decoration: const InputDecoration(
                     hintText: 'اكتب ردًا...', counterText: '',
                     hintStyle: TextStyle(color: Colors.white54),
@@ -9383,14 +9384,14 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
                 )),
                 IconButton(
                   tooltip: _recordingAudioReply ? 'إيقاف وإرسال الرد الصوتي' : 'تسجيل رد صوتي',
-                  onPressed: _uploadingAudioReply ? null : _toggleAudioReplyRecording,
+                  onPressed: !canReply || _uploadingAudioReply ? null : _toggleAudioReplyRecording,
                   icon: _uploadingAudioReply
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                       : Icon(_recordingAudioReply ? Icons.stop_circle_rounded : Icons.mic_rounded,
                           color: _recordingAudioReply ? Colors.redAccent : Theme.of(context).colorScheme.primary),
                 ),
                 IconButton(
-                  onPressed: _sendingReply ? null : _sendReply,
+                  onPressed: !canReply || _sendingReply ? null : _sendReply,
                   icon: _sendingReply
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                       : const Icon(Icons.send_rounded),
