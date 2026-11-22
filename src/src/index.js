@@ -1051,6 +1051,40 @@ export default {
         return json({ error: "Unauthorized" }, 401);
       }
 
+      // Optional visual identity packages are small, versioned JSON bundles.
+      // They are delivered only to authenticated accounts and do not touch production assets.
+      if (method === "GET" && path.startsWith("/api/identity-packages/")) {
+        const identity = path.slice("/api/identity-packages/".length);
+        const packages = {
+          purpleShadow: {
+            identity: "purpleShadow",
+            version: "1.0.0",
+            palette: {
+              primary: "#9B75F5", secondary: "#D0B7FF", background: "#0B0812",
+              surface: "#191326", text: "#F8F4FF", mutedText: "#BDB3CC",
+              onPrimary: "#160D25", onSecondary: "#21152C", border: "#7A55C7",
+              glow: "#9B35FF", tagline: "قوة في التفاصيل", motif: "diamond_outlined"
+            }
+          },
+          skyJewel: {
+            identity: "skyJewel",
+            version: "1.0.0",
+            palette: {
+              primary: "#A9E8FF", secondary: "#398DFF", background: "#06111D",
+              surface: "#10243B", text: "#F2FBFF", mutedText: "#B7D0DD",
+              onPrimary: "#06202B", onSecondary: "#FFFFFF", border: "#58C8E8",
+              glow: "#6ECFFF", tagline: "صفاء يلامس النجوم", motif: "diamond"
+            }
+          }
+        };
+        const bundle = packages[identity];
+        if (!bundle) return json({ error: "Identity package not found" }, 404);
+        return json(bundle, 200, {
+          "Cache-Control": "private, max-age=300",
+          "X-BARQ-Package-Version": bundle.version
+        });
+      }
+
       // Media recipient authorization also observes user blocks before upload sessions are created.
       if (path === "/api/media/uploads" || path.startsWith("/api/media/uploads/")) {
         await env.DB.prepare(`
