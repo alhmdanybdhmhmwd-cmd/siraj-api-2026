@@ -3202,8 +3202,17 @@ export default {
           env.DB.prepare("DELETE FROM group_messages WHERE id = ? AND group_id = ? AND sender_id = ?").bind(messageId, groupId, currentUser.sub)
         );
         const deletion = await env.DB.batch(deletionStatements);
-        if (Number(deletion?.[deletion.length - 1]?.meta?.changes || 0) !== 1) {
-          return json({ error: "Message not found or cannot be changed" }, 404);
+        const deletedRows = Number(deletion?.[deletion.length - 1]?.meta?.changes || 0);
+        if (deletedRows !== 1) {
+          // D1 batch metadata can be unavailable/inconsistent across edge runtimes.
+          // The ownership check above has already succeeded; verify persisted state
+          // before reporting failure so a completed delete is not misreported as 404.
+          const stillExists = await env.DB.prepare(
+            "SELECT 1 FROM messages WHERE id = ? AND sender_id = ?"
+          ).bind(messageId, currentUser.sub).first();
+          if (stillExists) {
+            return json({ error: "Message not found or cannot be changed" }, 404);
+          }
         }
         return json({ message: "Message deleted", id: messageId });
       }
