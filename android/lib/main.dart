@@ -4669,6 +4669,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         builder: (_) => SparkMediaViewer(
           statusId: field(status, ['id']),
           authorId: field(status, ['userId', 'user_id']),
+          currentUserId: myId,
           media: media,
           author: field(status, ['displayName', 'display_name', 'username'], 'مستخدم برق'),
           caption: field(status, ['content']),
@@ -9084,6 +9085,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 class SparkMediaViewer extends StatefulWidget {
   final String statusId;
   final String authorId;
+  final String currentUserId;
   final List<Map<String, dynamic>> media;
   final String author;
   final String caption;
@@ -9093,7 +9095,7 @@ class SparkMediaViewer extends StatefulWidget {
   final int viewCount;
   final bool showViewCount;
   const SparkMediaViewer({
-    super.key, required this.statusId, required this.authorId, required this.media, required this.author, required this.caption,
+    super.key, required this.statusId, required this.authorId, required this.currentUserId, required this.media, required this.author, required this.caption,
     this.backgroundKey = 'midnight', this.textColorKey = 'white', this.fontKey = 'modern',
     this.viewCount = 0, this.showViewCount = false,
   });
@@ -9140,12 +9142,12 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
     if (value.isEmpty || _sendingReply) return;
     setState(() => _sendingReply = true);
     try {
-      if (widget.authorId.isEmpty || widget.authorId == Api.currentUserId) {
+      if (widget.authorId.isEmpty || widget.authorId == widget.currentUserId) {
         throw Exception('تعذر تحديد صاحب SPARK لإرسال الرد إلى محادثته.');
       }
       final excerpt = widget.caption.trim().isEmpty
           ? 'لحظة من SPARK'
-          : widget.caption.trim().replaceAll(RegExp(r'\\s+'), ' ');
+          : widget.caption.trim().replaceAll(RegExp(r'\s+'), ' ');
       final message = '↩️ رد على SPARK\n$excerpt\n\n$value';
       await Api.sendMessage(widget.authorId, message);
       _replyController.clear();
