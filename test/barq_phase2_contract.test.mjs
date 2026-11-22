@@ -454,7 +454,8 @@ test("SPARK media reads enforce active friend visibility and expire with their s
 test("Android SPARK media flow supports authenticated upload, caption, image/video viewing and paging", () => {
   assert.ok(flutterApp.includes("publishSparkMedia"));
   assert.ok(flutterApp.includes("X-Status-Caption"));
-  assert.ok(flutterApp.includes("FileType.media"));
+  assert.ok(flutterApp.includes("AssetPicker.pickAssets"));
+  assert.ok(flutterApp.includes("RequestType.common"));
   assert.ok(flutterApp.includes("publishSparkMediaDialog"));
   assert.ok(flutterApp.includes("SparkMediaViewer"));
   assert.ok(flutterApp.includes("PageView.builder"));
