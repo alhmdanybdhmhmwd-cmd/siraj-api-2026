@@ -8955,20 +8955,30 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                       children: [
                                         Text(_messageTime(field(m, ['created_at', 'createdAt'])),
                                           style: TextStyle(fontSize: 10, color: Colors.white.withValues(alpha: 0.55))),
-                                        if (m['is_sending'] == true) ...[
+                                        if (mine && m['is_offline_pending'] != true) ...[
                                           const SizedBox(width: 5),
-                                          const SizedBox(width: 10, height: 10,
-                                            child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white70)),
-                                          const SizedBox(width: 3),
-                                          const Text('جارٍ الإرسال', style: TextStyle(fontSize: 9, color: Colors.white60)),
+                                          if (m['is_sending'] == true) ...[
+                                            const SizedBox(width: 10, height: 10,
+                                              child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white70)),
+                                            const SizedBox(width: 3),
+                                            const Text('جارٍ الإرسال', style: TextStyle(fontSize: 9, color: Colors.white60)),
+                                          ] else ...[
+                                            Icon(
+                                              field(m, ['read_at', 'readAt']).isNotEmpty ? Icons.done_all_rounded : Icons.done_rounded,
+                                              size: 13,
+                                              color: field(m, ['read_at', 'readAt']).isNotEmpty
+                                                  ? Theme.of(context).colorScheme.primary
+                                                  : Theme.of(context).colorScheme.onSurface.withValues(alpha: .62),
+                                            ),
+                                            const SizedBox(width: 3),
+                                            Text(
+                                              field(m, ['read_at', 'readAt']).isNotEmpty ? 'تمت المشاهدة' : 'تم الإرسال',
+                                              style: TextStyle(fontSize: 9, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .62)),
+                                            ),
+                                          ],
                                         ],
                                         if (field(m, ['edited_at', 'editedAt']).isNotEmpty)
                                           Text('تم التعديل', style: TextStyle(fontSize: 9, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .54))),
-                                        if (mine) ...[
-                                          const SizedBox(width: 4),
-                                          Icon(field(m, ['read_at', 'readAt']).isNotEmpty ? Icons.done_all : Icons.done,
-                                            size: 13, color: field(m, ['read_at', 'readAt']).isNotEmpty ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface.withValues(alpha: .54)),
-                                        ],
                                       ],
                                     ),
                                     if (m['is_pinned'] == true)
@@ -10169,6 +10179,28 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                             children: [
                               Text(_messageTime(field(m, ['created_at'])),
                                 style: const TextStyle(color: Colors.white54, fontSize: 10)),
+                              if (mine) ...[
+                                const SizedBox(width: 5),
+                                if (m['is_sending'] == true) ...[
+                                  const SizedBox(width: 9, height: 9,
+                                    child: CircularProgressIndicator(strokeWidth: 1.4, color: Colors.white70)),
+                                  const SizedBox(width: 3),
+                                  const Text('جارٍ الإرسال', style: TextStyle(color: Colors.white60, fontSize: 9)),
+                                ] else ...[
+                                  Icon(
+                                    field(m, ['read_at', 'readAt']).isNotEmpty ? Icons.done_all_rounded : Icons.done_rounded,
+                                    size: 13,
+                                    color: field(m, ['read_at', 'readAt']).isNotEmpty
+                                        ? Theme.of(context).colorScheme.primary
+                                        : Theme.of(context).colorScheme.onSurface.withValues(alpha: .62),
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    field(m, ['read_at', 'readAt']).isNotEmpty ? 'تمت المشاهدة' : 'تم الإرسال',
+                                    style: const TextStyle(color: Colors.white60, fontSize: 9),
+                                  ),
+                                ],
+                              ],
                               if (field(m, ['edited_at', 'editedAt']).isNotEmpty) ...[
                                 const SizedBox(width: 5),
                                 const Text('تم التعديل', style: TextStyle(color: Colors.white54, fontSize: 9)),
