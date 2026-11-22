@@ -2060,7 +2060,7 @@ test("recovery migrations create only additive recovery tables", async () => {
 
 test("Wrangler is configured to discover D1 migrations", async () => {
   const config = await readFile(new URL("../wrangler.toml", import.meta.url), "utf8");
-  assert.match(config, /migrations_dir\\s*=\\s*"migrations/production"/);
+  assert.ok(config.includes('migrations_dir = "migrations/production"'));
 });
 
 test("malformed JSON request bodies return 400 instead of 500", async () => {
