@@ -9106,8 +9106,6 @@ class SparkMediaViewer extends StatefulWidget {
 
 class _SparkMediaViewerState extends State<SparkMediaViewer> {
   final TextEditingController _replyController = TextEditingController();
-  List<Map<String, dynamic>> _replies = [];
-  bool _loadingReplies = true;
   bool _sendingReply = false;
   final AudioRecorder _audioRecorder = AudioRecorder();
   Timer? _audioRecordingTimer;
@@ -9120,12 +9118,6 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
   @override
   void initState() {
     super.initState();
-    _loadReplies();
-  }
-
-  Future<void> _loadReplies() async {
-    // Replies are delivered as private chat messages, not public SPARK comments.
-    if (mounted) setState(() => _loadingReplies = false);
   }
 
   Future<void> _react(String emoji) async {
