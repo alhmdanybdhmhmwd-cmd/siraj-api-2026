@@ -1565,6 +1565,21 @@ class Api {
     return response.bodyBytes;
   }
 
+  static Future<List<int>> readAttachmentBytes(String attachmentId) async {
+    final response = await _getMediaResponse(
+      attachmentId,
+      headers: {if (token != null) 'Authorization': 'Bearer $token'},
+      timeout: const Duration(minutes: 3),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('تعذر قراءة الملف للتحويل (' + response.statusCode.toString() + ').');
+    }
+    if (response.bodyBytes.isEmpty || response.bodyBytes.length > maxAttachmentBytes) {
+      throw Exception('حجم الملف غير صالح للتحويل.');
+    }
+    return response.bodyBytes;
+  }
+
   static Future<void> downloadAttachment({
     required String attachmentId,
     required String fileName,
@@ -2270,8 +2285,9 @@ Future<void> showMessageActions(
 
 Future<void> forwardBarqMessage(BuildContext context, Map<String, dynamic> message) async {
   final body = field(message, ['body', 'content', 'message']).trim();
-  if (body.isEmpty) {
-    showMsg(context, 'تحويل المرفقات غير متاح لهذه الرسالة حالياً.');
+  final attachment = _attachmentData(message);
+  if (body.isEmpty && attachment == null) {
+    showMsg(context, 'لا يوجد محتوى قابل للتحويل في هذه الرسالة.');
     return;
   }
   try {
@@ -2308,13 +2324,25 @@ Future<void> forwardBarqMessage(BuildContext context, Map<String, dynamic> messa
       ),
     );
     if (target == null || target['id'] == null || !context.mounted) return;
-    final forwarded = '↪ رسالة محوّلة\\n$body';
-    if (target['type'] == 'group') {
-      await Api.sendGroupMessage(target['id']!, forwarded);
-    } else {
-      await Api.sendMessage(target['id']!, forwarded);
+    if (body.isNotEmpty) {
+      final forwarded = '↪ رسالة محوّلة\\n$body';
+      if (target['type'] == 'group') {
+        await Api.sendGroupMessage(target['id']!, forwarded);
+      } else {
+        await Api.sendMessage(target['id']!, forwarded);
+      }
     }
-    if (context.mounted) showMsg(context, 'تم تحويل الرسالة.');
+    if (attachment != null) {
+      final bytes = await Api.readAttachmentBytes(field(attachment, ['attachmentId']));
+      await Api.uploadAttachment(
+        bytes: bytes,
+        fileName: field(attachment, ['fileName'], 'barq-forwarded-file'),
+        contentType: field(attachment, ['contentType'], 'application/octet-stream'),
+        recipientId: target['type'] == 'person' ? target['id'] : null,
+        groupId: target['type'] == 'group' ? target['id'] : null,
+      );
+    }
+    if (context.mounted) showMsg(context, 'تم تحويل الرسالة ومرفقاتها.');
   } catch (error) {
     if (context.mounted) showMsg(context, cleanError(error));
   }
@@ -7735,7 +7763,7 @@ class _ChatPageState extends State<ChatPage> {
                                           onReply: (message) async {
                                             setState(() => replyToMessage = Map<String, dynamic>.from(message));
                                           },
-                                          onForward: field(m, ['body', 'content', 'message']).trim().isNotEmpty
+                                          onForward: field(m, ['body', 'content', 'message']).trim().isNotEmpty || _attachmentData(m) != null
                                               ? () => forwardBarqMessage(context, m) : null,
                                           onEdit: mine && m['is_ephemeral'] != true && m['is_offline_pending'] != true && _attachmentData(m) == null
                                               ? (body) async {
@@ -8862,7 +8890,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
                                 onReply: (message) async {
                                   setState(() => replyToMessage = Map<String, dynamic>.from(message));
                                 },
-                                onForward: field(m, ['body', 'content', 'message']).trim().isNotEmpty
+                                onForward: field(m, ['body', 'content', 'message']).trim().isNotEmpty || _attachmentData(m) != null
                                     ? () => forwardBarqMessage(context, m) : null,
                                 onEdit: mine && _attachmentData(m) == null
                                     ? (body) async {
