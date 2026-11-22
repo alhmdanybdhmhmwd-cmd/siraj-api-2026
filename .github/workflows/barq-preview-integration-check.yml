@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - barq/phase-2-android-ci-2026-11-20
+      - barq/fix-approved-menus-2026-11-22
     paths:
       - "test/barq_preview_integration.mjs"
       - "test/barq_preview_media_integration.mjs"
