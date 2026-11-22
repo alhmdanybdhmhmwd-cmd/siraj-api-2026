@@ -456,6 +456,9 @@ test("Android SPARK media flow supports authenticated upload, caption, image/vid
   assert.ok(flutterApp.includes("X-Status-Caption"));
   assert.ok(flutterApp.includes("AssetPicker.pickAssets"));
   assert.ok(flutterApp.includes("RequestType.common"));
+  assert.ok(flutterApp.includes("title: 'اختيار صور للذكرى'"));
+  assert.ok(flutterApp.includes("title: 'اختيار صورة الملف الشخصي'"));
+  assert.ok(flutterApp.includes("allowFiles: false"));
   assert.ok(flutterApp.includes("publishSparkMediaDialog"));
   assert.ok(flutterApp.includes("SparkMediaViewer"));
   assert.ok(flutterApp.includes("PageView.builder"));
@@ -463,6 +466,20 @@ test("Android SPARK media flow supports authenticated upload, caption, image/vid
   assert.ok(flutterApp.includes("Api.sparkMediaUri"));
 });
 
+
+test("private and group conversation polling stops in background and resumes cleanly", () => {
+  for (const className of ["_ChatPageState", "_GroupChatPageState"]) {
+    const start = flutterApp.indexOf("class " + className);
+    assert.ok(start >= 0, "Missing " + className);
+    const next = flutterApp.indexOf("\nclass ", start + 1);
+    const stateSource = flutterApp.slice(start, next < 0 ? undefined : next);
+    assert.ok(stateSource.includes("with WidgetsBindingObserver"));
+    assert.ok(stateSource.includes("didChangeAppLifecycleState"));
+    assert.ok(stateSource.includes("_startRefreshTimer"));
+    assert.ok(stateSource.includes("_stopRefreshTimer"));
+    assert.ok(stateSource.includes("barqShouldPauseBackgroundWork(state)"));
+  }
+});
 
 test("SPARK media upload metadata headers are allowed by Worker CORS", () => {
   assert.ok(worker.includes("X-Status-Caption, X-Status-Id"));
