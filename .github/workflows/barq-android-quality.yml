@@ -76,7 +76,7 @@ jobs:
         working-directory: android
         run: flutter build apk --debug --target-platform android-arm64
       - name: Upload arm64 debug diagnostics
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: barq-android-debug-diagnostics-arm64
@@ -84,11 +84,11 @@ jobs:
           if-no-files-found: error
           retention-days: 3
       - name: Build optimized arm64 release APK for device testing
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name != 'pull_request'
         working-directory: android
         run: flutter build apk --release --target-platform android-arm64 --split-per-abi
       - name: Upload optimized arm64 test APK
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: barq-android-test-apk-arm64
