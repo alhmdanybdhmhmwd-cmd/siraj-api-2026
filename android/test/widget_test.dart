@@ -18,14 +18,13 @@ void main() {
   test('SPARK replies are formatted for the author's private chat', () {
     expect(
       barqSparkPrivateReplyMessage(caption: '  مساء الخير  ', reply: '  أهلاً  '),
-      '↩️ رد على SPARK\\nمساء الخير\\n\\nأهلاً',
+      '↩️ رد على SPARK\nمساء الخير\n\nأهلاً',
     );
     expect(
       barqSparkPrivateReplyMessage(caption: '', reply: 'رد مختصر'),
-      '↩️ رد على SPARK\\nلحظة من SPARK\\n\\nرد مختصر',
+      '↩️ رد على SPARK\nلحظة من SPARK\n\nرد مختصر',
     );
   });
-
   test('notification deep links wait until initial app data is ready', () {
     expect(barqCanHandlePendingNotification(
       initialRefreshComplete: false,
