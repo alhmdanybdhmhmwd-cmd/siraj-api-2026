@@ -1,4 +1,5 @@
 name: BARQ Flutter analysis and tests (no APK build)
+# Keep identity-package download code covered by analysis and widget tests.
 
 on:
   push:
