@@ -2377,6 +2377,7 @@ Widget messageReactionBar({
   required BuildContext context,
   required Map<String, dynamic> message,
   required String currentUserId,
+  required Future<void> Function(String emoji, bool remove) onReact,
 }) {
   final reactions = normalizeMessageReactions(message['reactions']);
   final grouped = <String, List<Map<String, dynamic>>>{};
@@ -2401,7 +2402,16 @@ Widget messageReactionBar({
               backgroundColor: entry.value.any((item) => field(item, ['user_id']) == currentUserId)
                   ? Theme.of(context).colorScheme.primary.withValues(alpha: .16) : Theme.of(context).colorScheme.surfaceContainerHighest,
               label: Text('${entry.key} ${entry.value.length}', style: const TextStyle(fontSize: 11)),
-              onPressed: null,
+              onPressed: () async {
+                final alreadyReacted = entry.value.any(
+                  (item) => field(item, ['user_id']) == currentUserId,
+                );
+                try {
+                  await onReact(entry.key, alreadyReacted);
+                } catch (error) {
+                  if (context.mounted) showMsg(context, cleanError(error));
+                }
+              },
             ),
           ),
       ],
@@ -8349,6 +8359,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                         context: context,
                                         message: m,
                                         currentUserId: widget.currentUserId,
+                                        onReact: (emoji, remove) async {
+                                          await Api.reactPrivateMessage(
+                                            field(m, ['id', 'message_id']), emoji, remove: remove,
+                                          );
+                                          if (mounted) await loadMessages(silent: true);
+                                        },
                                       ),
                                   ],
                                 ),
@@ -9475,6 +9491,12 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                             context: context,
                             message: m,
                             currentUserId: widget.currentUserId,
+                            onReact: (emoji, remove) async {
+                              await Api.reactGroupMessage(
+                                groupId, field(m, ['id', 'message_id']), emoji, remove: remove,
+                              );
+                              if (mounted) await loadMessages(silent: true);
+                            },
                           ),
                         ]),
                       ),
