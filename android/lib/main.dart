@@ -6121,7 +6121,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         item(
           icon: Icons.edit_outlined,
           title: 'تعديل الملف الشخصي',
-          subtitle: 'الصورة والاسم ورقم الهاتف',
+          subtitle: 'الصورة والاسم؛ رقم الهاتف ثابت بعد إنشاء الحساب',
           onTap: editProfileDialog,
         ),
         item(
@@ -6225,9 +6225,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           final draftPalette = BarqIdentityPalette.forIdentity(draftIdentity);
           return AlertDialog(
             title: const Text('اختر هوية برق'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+            content: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * 0.62,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(14),
@@ -6354,7 +6359,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     ),
                   );
                 }),
-              ],
+                  ],
+                ),
+              ),
             ),
             actions: [
               TextButton(
