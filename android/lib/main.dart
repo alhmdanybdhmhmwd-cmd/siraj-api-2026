@@ -8131,7 +8131,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       }
       if (mounted) showMsg(context, cleanError(e));
     } finally {
-      if (mounted) setState(() => sending = false);
+      if (mounted) setState(() { sending = false; mediaUploadProgress = null; });
     }
   }
 
@@ -9323,7 +9323,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
     } catch (error) {
       if (mounted) showMsg(context, cleanError(error));
     } finally {
-      if (mounted) setState(() => sending = false);
+      if (mounted) setState(() { sending = false; mediaUploadProgress = null; });
     }
   }
 
