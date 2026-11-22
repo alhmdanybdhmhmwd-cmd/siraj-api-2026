@@ -220,6 +220,32 @@ assert.equal(interactedMessage?.is_pinned, true, "message pin must be persisted 
 assert.ok(interactedMessage?.reactions?.some(reaction => reaction.emoji === "❤️"),
   "message reactions must be visible to conversation participants");
 
+
+const profilePng = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6j8AAAAASUVORK5CYII=",
+  "base64"
+);
+const profileUpload = await fetch(new URL("/api/profile/photo/me", base), {
+  method: "POST",
+  headers: { Authorization: `Bearer ${a.token}`, "Content-Type": "image/png" },
+  body: profilePng
+});
+const profilePhotoRaw = await profileUpload.text();
+let profilePhoto;
+try { profilePhoto = profilePhotoRaw ? JSON.parse(profilePhotoRaw) : {}; }
+catch { throw new Error("Profile photo upload returned non-JSON response"); }
+assert.equal(profileUpload.status, 201, `Profile photo upload failed: ${JSON.stringify(profilePhoto)}`);
+assert.ok(profilePhoto.photoUrl, "profile photo upload must return its private photo URL");
+const friendPhoto = await fetch(new URL(profilePhoto.photoUrl, base), {
+  headers: { Authorization: `Bearer ${b.token}` }
+});
+assert.equal(friendPhoto.status, 200, "mutual contact must be allowed to view profile photo");
+assert.ok((await friendPhoto.arrayBuffer()).byteLength > 0);
+const privatePhoto = await fetch(new URL(profilePhoto.photoUrl, base), {
+  headers: { Authorization: `Bearer ${legacyLogin.token}` }
+});
+assert.equal(privatePhoto.status, 403, "non-contact must not access a private profile photo");
+
 const sparkText = "Preview SPARK text " + suffix;
 const textStatus = await call("/api/statuses", {
   method: "POST", token: a.token,
