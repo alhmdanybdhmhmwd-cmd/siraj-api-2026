@@ -7674,14 +7674,38 @@ class _ChatPageState extends State<ChatPage> {
                                         ]),
                                       ),
                                     if (_attachmentData(m) case final attachment?) ...[
-                                      _attachmentTile(attachment, () async {
-                                        try {
-                                          await Api.downloadAttachment(
-                                            attachmentId: field(attachment, ['attachmentId']),
-                                            fileName: field(attachment, ['fileName'], 'attachment'),
-                                          );
-                                        } catch (e) { if (context.mounted) showMsg(context, cleanError(e)); }
-                                      }),
+                                      GestureDetector(
+                                        onLongPress: () => showMessageActions(
+                                          context,
+                                          message: m,
+                                          canDelete: mine && m['is_ephemeral'] != true && m['is_offline_pending'] != true,
+                                          onDelete: () async {
+                                            await Api.deletePrivateMessage(field(m, ['id', 'message_id']));
+                                            if (mounted) await loadMessages();
+                                          },
+                                          onReply: (message) async {
+                                            setState(() => replyToMessage = Map<String, dynamic>.from(message));
+                                          },
+                                          onReact: (emoji) async {
+                                            await Api.reactPrivateMessage(field(m, ['id', 'message_id']), emoji);
+                                            if (mounted) await loadMessages(silent: true);
+                                          },
+                                          onPin: m['is_ephemeral'] != true && m['is_offline_pending'] != true
+                                              ? () async {
+                                                  await Api.pinPrivateMessage(field(m, ['id', 'message_id']), pinned: m['is_pinned'] != true);
+                                                  if (mounted) await loadMessages(silent: true);
+                                                } : null,
+                                          isPinned: m['is_pinned'] == true,
+                                        ),
+                                        child: _attachmentTile(attachment, () async {
+                                          try {
+                                            await Api.downloadAttachment(
+                                              attachmentId: field(attachment, ['attachmentId']),
+                                              fileName: field(attachment, ['fileName'], 'attachment'),
+                                            );
+                                          } catch (e) { if (context.mounted) showMsg(context, cleanError(e)); }
+                                        }),
+                                      ),
                                       if (field(attachment, ['contentType']).startsWith('audio/'))
                                         TextButton.icon(
                                           onPressed: transcribingMessageIds.contains(field(m, ['id', 'message_id']))
@@ -8778,14 +8802,37 @@ class _GroupChatPageState extends State<GroupChatPage> {
                               ),
                             ),
                           if (_attachmentData(m) case final attachment?) ...[
-                            _attachmentTile(attachment, () async {
-                              try {
-                                await Api.downloadAttachment(
-                                  attachmentId: field(attachment, ['attachmentId']),
-                                  fileName: field(attachment, ['fileName'], 'attachment'),
-                                );
-                              } catch (e) { if (context.mounted) showMsg(context, cleanError(e)); }
-                            }),
+                            GestureDetector(
+                              onLongPress: () => showMessageActions(
+                                context,
+                                message: m,
+                                canDelete: mine,
+                                onDelete: () async {
+                                  await Api.deleteGroupMessage(groupId, field(m, ['id', 'message_id']));
+                                  if (mounted) await loadMessages();
+                                },
+                                onReply: (message) async {
+                                  setState(() => replyToMessage = Map<String, dynamic>.from(message));
+                                },
+                                onReact: (emoji) async {
+                                  await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), emoji);
+                                  if (mounted) await loadMessages(silent: true);
+                                },
+                                onPin: () async {
+                                  await Api.pinGroupMessage(groupId, field(m, ['id', 'message_id']), pinned: m['is_pinned'] != true);
+                                  if (mounted) await loadMessages(silent: true);
+                                },
+                                isPinned: m['is_pinned'] == true,
+                              ),
+                              child: _attachmentTile(attachment, () async {
+                                try {
+                                  await Api.downloadAttachment(
+                                    attachmentId: field(attachment, ['attachmentId']),
+                                    fileName: field(attachment, ['fileName'], 'attachment'),
+                                  );
+                                } catch (e) { if (context.mounted) showMsg(context, cleanError(e)); }
+                              }),
+                            ),
                             if (field(attachment, ['contentType']).startsWith('audio/'))
                               TextButton.icon(
                                 onPressed: transcribingMessageIds.contains(field(m, ['id', 'message_id']))
