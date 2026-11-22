@@ -250,7 +250,7 @@ const groupReplyPage = await call("/api/groups/" + encodeURIComponent(group.grou
 const persistedGroupReply = groupReplyPage.messages.find(message => message.id === groupReply.id);
 assert.equal(persistedGroupReply?.reply_to_id, groupInteractionMessage.id,
   "group reply must remain attached to its target message");
-assert.equal(persistedGroupReply?.reply_to_body, "group-search-needle-" + suffix,
+assert.equal(persistedGroupReply?.reply_to_body, "edited group root group-search-needle " + suffix,
   "group reply preview must preserve the target text");
 await call("/api/groups/" + encodeURIComponent(group.group.id) + "/messages/search?q=x", { token: b.token, expected: 400 });
 
