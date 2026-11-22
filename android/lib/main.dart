@@ -1037,10 +1037,8 @@ class Api {
 
   static Future<Map<String, dynamic>> updateProfile({
     required String displayName,
-    required String phone,
   }) async => _map((await request('POST', '/api/profile', body: {
         'displayName': displayName.trim(),
-        'phone': phone.trim(),
       }))['user']);
 
   static Future<void> uploadProfilePhoto(List<int> bytes, String contentType) async {
@@ -5593,9 +5591,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final nameController = TextEditingController(
       text: field(me, ['displayName', 'display_name']),
     );
-    final phoneController = TextEditingController(
-      text: field(me, ['phone']),
-    );
     bool saving = false;
     await showDialog<void>(
       context: context,
@@ -5613,14 +5608,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ),
               const SizedBox(height: 8),
               TextField(
-                controller: phoneController,
+                controller: TextEditingController(text: field(me, ['phone'])),
+                readOnly: true,
                 keyboardType: TextInputType.phone,
-                maxLength: 25,
-                decoration: inputDecoration('رقم الهاتف', Icons.phone_outlined)
-                    .copyWith(hintText: '+رمز الدولة ورقم الهاتف'),
+                decoration: inputDecoration('رقم الهاتف (ثابت بعد إنشاء الحساب)', Icons.phone_outlined)
+                    .copyWith(
+                      helperText: 'لا يمكن تغيير رقم الهاتف من الملف الشخصي.',
+                      helperStyle: const TextStyle(color: Colors.white60),
+                    ),
               ),
               const SizedBox(height: 6),
-              const Text('اسم المستخدم لا يتغير من هذه الشاشة.',
+              const Text('اسم المستخدم ورقم الهاتف لا يتغيران من هذه الشاشة.',
                   style: TextStyle(color: Colors.white60, fontSize: 12)),
             ],
           ),
@@ -5637,16 +5635,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   showMsg(this.context, 'اكتب الاسم الظاهر أولاً.');
                   return;
                 }
-                final phone = normalizeBarqInternationalPhone(phoneController.text);
-                if (!RegExp(r'^\+[1-9][0-9]{7,14}$').hasMatch(phone)) {
-                  showMsg(this.context, 'أدخل رقم الهاتف مع مفتاح الدولة بصيغة دولية صحيحة.');
-                  return;
-                }
                 setDialog(() => saving = true);
                 try {
                   final updated = await Api.updateProfile(
                     displayName: name,
-                    phone: phone,
                   );
                   if (!mounted || !dialogContext.mounted) return;
                   setState(() => me = updated);
@@ -5666,7 +5658,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
     );
     nameController.dispose();
-    phoneController.dispose();
   }
 
   Future<void> rotateRecoveryCodeDialog() async {
