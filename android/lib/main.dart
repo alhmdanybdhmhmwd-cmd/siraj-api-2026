@@ -3838,10 +3838,26 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             if (value == 2) matchPhoneContacts();
           },
           destinations: const [
-            NavigationDestination(icon: Icon(Icons.chat_bubble_outline), label: 'المحادثات'),
-            NavigationDestination(icon: Icon(Icons.circle_outlined), label: 'SPARK'),
-            NavigationDestination(icon: Icon(Icons.people_outline), label: 'جهات الاتصال'),
-            NavigationDestination(icon: Icon(Icons.person_outline), label: 'حسابي'),
+            NavigationDestination(
+              icon: Icon(Icons.chat_bubble_outline_rounded),
+              selectedIcon: Icon(Icons.chat_bubble_rounded),
+              label: 'المحادثات',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.auto_awesome_outlined),
+              selectedIcon: Icon(Icons.auto_awesome_rounded),
+              label: 'SPARK',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.people_outline_rounded),
+              selectedIcon: Icon(Icons.people_rounded),
+              label: 'جهات الاتصال',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outline_rounded),
+              selectedIcon: Icon(Icons.person_rounded),
+              label: 'حسابي',
+            ),
           ],
         ),
       ),
@@ -4136,6 +4152,24 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  Widget _sparkFeaturePill(IconData icon, String label) {
+    final palette = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: palette.surface.withValues(alpha: .78),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: palette.primary.withValues(alpha: .20)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 13, color: palette.secondary),
+        const SizedBox(width: 5),
+        Text(label, style: TextStyle(color: palette.onSurface.withValues(alpha: .86),
+          fontSize: 10, fontWeight: FontWeight.w600)),
+      ]),
+    );
+  }
+
   Widget _statusesPage() {
     return RefreshIndicator(
       color: Theme.of(context).colorScheme.primary,
@@ -4181,6 +4215,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 const SizedBox(height: 4),
                 const Text('شارك نصاً أو صورة أو فيديو، وأضف تعليقك لتصل اللحظة كاملة إلى أصدقائك.',
                   style: TextStyle(color: Colors.white70, height: 1.45, fontSize: 12)),
+                const SizedBox(height: 14),
+                Wrap(spacing: 7, runSpacing: 7, children: [
+                  _sparkFeaturePill(Icons.timer_outlined, '24 ساعة'),
+                  _sparkFeaturePill(Icons.perm_media_outlined, 'صور وفيديو'),
+                  _sparkFeaturePill(Icons.forum_outlined, 'ردود وتفاعلات'),
+                ]),
               ]),
             ),
           ),
@@ -4206,6 +4246,25 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ),
             ]),
           ),
+          if (statuses.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
+              child: Row(children: [
+                Icon(Icons.auto_awesome_rounded, color: Theme.of(context).colorScheme.secondary, size: 18),
+                const SizedBox(width: 7),
+                const Expanded(child: Text('لحظات الأصدقاء', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14))),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: .12),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: .25)),
+                  ),
+                  child: Text('${statuses.length} لحظة', style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary, fontSize: 10, fontWeight: FontWeight.w700)),
+                ),
+              ]),
+            ),
           if (statuses.isNotEmpty)
             SizedBox(
               height: 104,
