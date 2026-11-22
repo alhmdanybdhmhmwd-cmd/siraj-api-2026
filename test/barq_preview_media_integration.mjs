@@ -49,7 +49,11 @@ const b = await json("/api/register", {
   method: "POST", expected: 201,
   body: { displayName: "Media Recipient " + suffix, username: "mr" + suffix, phone: phone(), password }
 });
-assert.ok(a.token && b.user?.id);
+const c = await json("/api/register", {
+  method: "POST", expected: 201,
+  body: { displayName: "Media Stranger " + suffix, username: "ms" + suffix, phone: phone(), password }
+});
+assert.ok(a.token && b.user?.id && c.token && c.user?.id);
 await json("/api/contacts", {
   method: "POST", token: a.token, expected: 201, body: { userId: b.user.id }
 });
@@ -159,6 +163,9 @@ const recipientDownload = await request("/api/media/" + encodeURIComponent(attac
 });
 assert.equal(createHash("sha256").update(recipientDownload.bytes).digest("hex"), sourceHash,
   "authorized conversation recipient must download the same media");
+await request("/api/media/" + encodeURIComponent(attachmentId), {
+  token: c.token, expected: 403
+});
 
 const retry = await json(`/api/media/uploads/${sessionId}/complete`, {
   method: "POST", token: a.token, expected: 200, body: {}
@@ -218,7 +225,10 @@ const groupDownload = await request("/api/media/" + encodeURIComponent(groupAtta
 });
 assert.equal(createHash("sha256").update(groupDownload.bytes).digest("hex"), groupHash,
   "group member download must exactly match the uploaded bytes");
-console.log("Preview group media integration passed: group attachment message visibility and member SHA-256 download.");
+await request("/api/media/" + encodeURIComponent(groupAttachmentId), {
+  token: c.token, expected: 403
+});
+console.log("Preview group media integration passed: group attachment visibility, member SHA-256 download, and non-member denial.");
 
 console.log("Preview private media integration passed: resumable upload creates one visible chat message, restores a hidden conversation, exact SHA-256 readback, HTTP Range, recipient authorization, and idempotent completion.");
 
