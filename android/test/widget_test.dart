@@ -16,6 +16,23 @@ void main() {
     expect(barqInviteMessage, isNot(contains('رمز دعوة')));
   });
 
+  testWidgets('private memory load failure is distinct from an empty memory list and can retry', (tester) async {
+    var retried = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PrivateMemoryLoadError(onRetry: () => retried = true),
+        ),
+      ),
+    );
+
+    expect(find.text('تعذر تحميل ذكرياتك'), findsOneWidget);
+    expect(find.text('لم نحذف ذكرياتك المحفوظة.'), findsOneWidget);
+    await tester.tap(find.text('إعادة المحاولة'));
+    await tester.pump();
+    expect(retried, isTrue);
+  });
+
   test('private memory photo uploads continue after one photo fails', () async {
     final attempted = <String>[];
     final failed = await uploadPrivateMemoryPhotosSequentially(
