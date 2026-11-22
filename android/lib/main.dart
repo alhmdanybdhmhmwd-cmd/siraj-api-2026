@@ -7643,6 +7643,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       ),
     );
     if (confirmed != true || !mounted) return;
+    _stopRefreshTimer();
     try {
       await Api.clearPrivateConversation(friendId);
       await BarqOfflineQueue.clearConversation(friendId, widget.currentUserId);
@@ -7656,6 +7657,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       showMsg(context, 'تم مسح سجل المحادثة من حسابك فقط.');
     } catch (e) {
       if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) _startRefreshTimer();
     }
   }
 
@@ -7677,6 +7680,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       ),
     );
     if (confirmed != true || !mounted) return;
+    _stopRefreshTimer();
     try {
       await Api.deletePrivateConversation(friendId);
       await BarqOfflineQueue.clearConversation(friendId, widget.currentUserId);
@@ -7684,6 +7688,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       Navigator.pop(context);
     } catch (e) {
       if (mounted) showMsg(context, cleanError(e));
+    } finally {
+      if (mounted) _startRefreshTimer();
     }
   }
 
