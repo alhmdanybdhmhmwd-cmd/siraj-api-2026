@@ -222,6 +222,7 @@ Future<FilePickerResult?> showBarqMediaPicker(
       gridCount: 4,
       pageSize: 80,
       themeColor: Theme.of(context).colorScheme.primary,
+      textDelegate: const ArabicAssetPickerTextDelegate(),
     ),
   );
   if (assets == null || assets.isEmpty || !context.mounted) return null;
