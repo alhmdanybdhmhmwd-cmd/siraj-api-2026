@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:material_ui/material_ui.dart';
 import 'package:nearby_connections/nearby_connections.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -840,6 +841,33 @@ void main() {
 
     expect(attempted, ['one.jpg', 'two.png', 'three.webp']);
     expect(failures, ['two.png']);
+  });
+
+  test('private memory photo uploads read file paths one at a time', () async {
+    final directory = await Directory.systemTemp.createTemp('barq-memory-');
+    try {
+      final file = File('${directory.path}/private.jpg');
+      await file.writeAsBytes([1, 2, 3, 4]);
+      final attempted = <List<int>>[];
+      final failures = await uploadPrivateMemoryPhotosSequentially(
+        memoryId: 'memory-lazy-1',
+        photos: [
+          {'path': file.path, 'size': 4, 'name': 'private.jpg', 'contentType': 'image/jpeg'},
+        ],
+        upload: ({
+          required String memoryId,
+          required List<int> bytes,
+          required String fileName,
+          required String contentType,
+        }) async {
+          attempted.add(List<int>.from(bytes));
+        },
+      );
+      expect(failures, isEmpty);
+      expect(attempted, [[1, 2, 3, 4]]);
+    } finally {
+      await directory.delete(recursive: true);
+    }
   });
 
   testWidgets('private memory load error explains retry instead of showing an empty vault', (tester) async {
