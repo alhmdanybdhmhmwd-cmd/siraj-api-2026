@@ -1927,20 +1927,65 @@ class Api {
   static Future<void> downloadAttachment({
     required String attachmentId,
     required String fileName,
+    void Function(double progress)? onProgress,
   }) async {
+    if (attachmentId.trim().isEmpty) throw Exception('معرّف الملف غير متوفر.');
     final requestHeaders = {if (token != null) 'Authorization': 'Bearer $token'};
-    final response = await _getMediaResponse(
-      attachmentId,
-      headers: requestHeaders,
-      timeout: const Duration(minutes: 3),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('تعذر تنزيل الملف (${response.statusCode}).');
+    final bases = <String>[apiBase, if (mediaWorkerBase != apiBase) mediaWorkerBase];
+    Object? lastError;
+    Uint8List? downloadedBytes;
+    final client = http.Client();
+    try {
+      for (final base in bases) {
+        http.StreamedResponse? response;
+        try {
+          final request = http.Request(
+            'GET',
+            Uri.parse('$base/api/media/${Uri.encodeComponent(attachmentId)}'),
+          )..headers.addAll(requestHeaders);
+          response = await client.send(request).timeout(const Duration(minutes: 3));
+          if (response.statusCode >= 500) {
+            await response.stream.drain<void>();
+            lastError = HttpException('Media gateway returned ${response.statusCode}');
+            continue;
+          }
+          if (response.statusCode < 200 || response.statusCode >= 300) {
+            throw Exception('تعذر تنزيل الملف (${response.statusCode}).');
+          }
+          final total = response.contentLength;
+          if (total != null && (total <= 0 || total > maxAttachmentBytes)) {
+            throw Exception('حجم الملف غير صالح للتنزيل.');
+          }
+          final builder = BytesBuilder(copy: false);
+          var received = 0;
+          onProgress?.call(0);
+          await for (final chunk in response.stream.timeout(const Duration(minutes: 3))) {
+            received += chunk.length;
+            if (received > maxAttachmentBytes || (total != null && received > total)) {
+              throw Exception('تجاوز الملف الحد المسموح أو أرسل الخادم حجماً غير صحيح.');
+            }
+            builder.add(chunk);
+            if (total != null && total > 0) {
+              onProgress?.call((received / total).clamp(0.0, 1.0));
+            }
+          }
+          if (received == 0 || (total != null && received != total)) {
+            throw Exception('انقطع تنزيل الملف قبل اكتماله. أعد المحاولة.');
+          }
+          downloadedBytes = Uint8List.fromList(builder.takeBytes());
+          break;
+        } catch (error) {
+          lastError = error;
+          if (error is Exception && error.toString().contains('تعذر تنزيل الملف')) rethrow;
+        }
+      }
+    } finally {
+      client.close();
     }
-    final saved = await FilePicker.platform.saveFile(
-      fileName: fileName,
-      bytes: response.bodyBytes,
-    );
+    final bytes = downloadedBytes;
+    if (bytes == null) throw lastError ?? const HttpException('تعذر الاتصال بخادم الملفات.');
+    onProgress?.call(1);
+    final saved = await FilePicker.platform.saveFile(fileName: fileName, bytes: bytes);
     if (saved == null) throw Exception('تم إلغاء حفظ الملف.');
   }
 
@@ -6910,12 +6955,12 @@ Map<String, dynamic>? _attachmentData(Map<String, dynamic> message) {
 
 Widget _attachmentTile(
   Map<String, dynamic> attachment,
-  VoidCallback onDownload,
+  Future<void> Function(void Function(double progress) onProgress) onDownload,
 ) => _AttachmentTile(attachment: attachment, onDownload: onDownload);
 
 class _AttachmentTile extends StatefulWidget {
   final Map<String, dynamic> attachment;
-  final VoidCallback onDownload;
+  final Future<void> Function(void Function(double progress) onProgress) onDownload;
 
   const _AttachmentTile({required this.attachment, required this.onDownload});
 
@@ -6934,7 +6979,32 @@ class _AttachmentTileState extends State<_AttachmentTile> {
   Duration _audioDuration = Duration.zero;
   bool _audioLoading = false;
   bool _audioPlaying = false;
+  bool _downloadLoading = false;
+  double _downloadProgress = 0;
+  String? _downloadError;
   String? _audioError;
+
+  Future<void> _download() async {
+    if (_downloadLoading) return;
+    setState(() {
+      _downloadLoading = true;
+      _downloadProgress = 0;
+      _downloadError = null;
+    });
+    try {
+      await widget.onDownload((progress) {
+        if (mounted) setState(() => _downloadProgress = progress.clamp(0.0, 1.0));
+      });
+      if (mounted) showMsg(context, 'اكتمل تنزيل الملف.');
+    } catch (error) {
+      if (mounted) {
+        setState(() => _downloadError = cleanError(error));
+        showMsg(context, _downloadError!);
+      }
+    } finally {
+      if (mounted) setState(() => _downloadLoading = false);
+    }
+  }
 
   String get _contentType => field(widget.attachment, ['contentType']).toLowerCase();
   bool get _isImage => _contentType.startsWith('image/');
@@ -7151,8 +7221,23 @@ class _AttachmentTileState extends State<_AttachmentTile> {
               constraints: const BoxConstraints(maxWidth: 150),
               child: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
             )),
-            IconButton(onPressed: widget.onDownload, icon: const Icon(Icons.download), tooltip: 'تنزيل الملف'),
+            IconButton(onPressed: _downloadLoading ? null : _download, icon: _downloadLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.download), tooltip: 'تنزيل الملف'),
           ]),
+          if (_downloadLoading) ...[
+            const SizedBox(height: 6),
+            Row(children: [
+              Expanded(child: LinearProgressIndicator(value: _downloadProgress > 0 ? _downloadProgress : null)),
+              const SizedBox(width: 8),
+              Text(_downloadProgress > 0 ? '${(_downloadProgress * 100).round()}%' : 'جارٍ التنزيل',
+                style: const TextStyle(fontSize: 10, color: Colors.white70)),
+            ]),
+          ],
+          if (_downloadError != null && !_downloadLoading)
+            TextButton.icon(
+              onPressed: _download,
+              icon: const Icon(Icons.refresh, size: 15),
+              label: const Text('إعادة تنزيل الملف'),
+            ),
           if (_isAudio) ...[
             Row(children: [
               Text(formatBarqMediaDuration(_audioPosition),
@@ -8623,14 +8708,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                                 } : null,
                                           isPinned: m['is_pinned'] == true,
                                         ),
-                                        child: _attachmentTile(attachment, () async {
-                                          try {
-                                            await Api.downloadAttachment(
-                                              attachmentId: field(attachment, ['attachmentId']),
-                                              fileName: field(attachment, ['fileName'], 'attachment'),
-                                            );
-                                          } catch (e) { if (context.mounted) showMsg(context, cleanError(e)); }
-                                        }),
+                                        child: _attachmentTile(attachment, (onProgress) => Api.downloadAttachment(
+                                          attachmentId: field(attachment, ['attachmentId']),
+                                          fileName: field(attachment, ['fileName'], 'attachment'),
+                                          onProgress: onProgress,
+                                        )),
                                       ),
                                       if (field(attachment, ['contentType']).startsWith('audio/'))
                                         TextButton.icon(
@@ -9790,14 +9872,11 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                                 },
                                 isPinned: m['is_pinned'] == true,
                               ),
-                              child: _attachmentTile(attachment, () async {
-                                try {
-                                  await Api.downloadAttachment(
-                                    attachmentId: field(attachment, ['attachmentId']),
-                                    fileName: field(attachment, ['fileName'], 'attachment'),
-                                  );
-                                } catch (e) { if (context.mounted) showMsg(context, cleanError(e)); }
-                              }),
+                              child: _attachmentTile(attachment, (onProgress) => Api.downloadAttachment(
+                                attachmentId: field(attachment, ['attachmentId']),
+                                fileName: field(attachment, ['fileName'], 'attachment'),
+                                onProgress: onProgress,
+                              )),
                             ),
                             if (field(attachment, ['contentType']).startsWith('audio/'))
                               TextButton.icon(
