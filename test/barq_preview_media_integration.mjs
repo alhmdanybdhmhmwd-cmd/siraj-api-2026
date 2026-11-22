@@ -178,11 +178,13 @@ await request("/api/media/" + encodeURIComponent(attachmentId), {
 await request("/api/messages/" + encodeURIComponent(sessionId), {
   method: "DELETE", token: a.token, expected: 200
 });
+// The first authorized read observes expiry, returns 410, and performs
+// immediate object cleanup. A later read sees the already-removed object (404).
 await request("/api/media/" + encodeURIComponent(attachmentId), {
   token: a.token, expected: 410
 });
 await request("/api/media/" + encodeURIComponent(attachmentId), {
-  token: b.token, expected: 410
+  token: b.token, expected: 404
 });
 
 const retry = await json(`/api/media/uploads/${sessionId}/complete`, {
