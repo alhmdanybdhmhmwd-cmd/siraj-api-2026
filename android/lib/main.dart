@@ -1752,12 +1752,9 @@ class Api {
         })
         ..contentLength = bytes.length;
       final responseFuture = client.send(upload);
-      const progressChunkBytes = 64 * 1024;
-      for (var offset = 0; offset < bytes.length; offset += progressChunkBytes) {
-        final end = math.min(offset + progressChunkBytes, bytes.length).toInt();
-        upload.sink.add(bytes.sublist(offset, end));
-        onProgress?.call(end / bytes.length);
-      }
+      // The request sink only queues bytes; it does not report network delivery.
+      // Keep the UI indeterminate until the server confirms the upload.
+      upload.sink.add(bytes);
       await upload.sink.close();
       final streamed = await responseFuture.timeout(const Duration(minutes: 3));
       final response = await http.Response.fromStream(streamed);
@@ -8846,9 +8843,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               Padding(
                 padding: const EdgeInsets.fromLTRB(14, 4, 14, 2),
                 child: Row(children: [
-                  Expanded(child: LinearProgressIndicator(value: mediaUploadProgress!.clamp(0.0, 1.0))),
+                  Expanded(child: LinearProgressIndicator(
+                    value: mediaUploadProgress! <= 0 ? null : mediaUploadProgress!.clamp(0.0, 1.0),
+                  )),
                   const SizedBox(width: 10),
-                  Text('رفع المرفق ${(mediaUploadProgress! * 100).round()}%',
+                  Text(mediaUploadProgress! <= 0
+                      ? 'جارٍ رفع المرفق'
+                      : 'رفع المرفق ${(mediaUploadProgress! * 100).round()}%',
                     style: const TextStyle(fontSize: 11, color: Colors.white70)),
                 ]),
               ),
@@ -9987,9 +9988,13 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
               Padding(
                 padding: const EdgeInsets.fromLTRB(14, 4, 14, 2),
                 child: Row(children: [
-                  Expanded(child: LinearProgressIndicator(value: mediaUploadProgress!.clamp(0.0, 1.0))),
+                  Expanded(child: LinearProgressIndicator(
+                    value: mediaUploadProgress! <= 0 ? null : mediaUploadProgress!.clamp(0.0, 1.0),
+                  )),
                   const SizedBox(width: 10),
-                  Text('رفع المرفق ${(mediaUploadProgress! * 100).round()}%',
+                  Text(mediaUploadProgress! <= 0
+                      ? 'جارٍ رفع المرفق'
+                      : 'رفع المرفق ${(mediaUploadProgress! * 100).round()}%',
                     style: const TextStyle(fontSize: 11, color: Colors.white70)),
                 ]),
               ),
