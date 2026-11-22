@@ -9740,15 +9740,36 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
       return;
     }
     final replySnapshot = replyToMessage == null ? null : Map<String, dynamic>.from(replyToMessage!);
+    final localId = newBarqMessageId();
+    final localMessage = <String, dynamic>{
+      'id': localId,
+      'sender_id': widget.currentUserId,
+      'body': body,
+      if (replySnapshot != null) 'reply_to_id': field(replySnapshot, ['id', 'message_id']),
+      if (replySnapshot != null) 'reply_to_body': field(replySnapshot, ['body', 'content', 'message']),
+      if (replySnapshot != null) 'reply_to_sender_id': field(replySnapshot, ['sender_id']),
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+      'is_sending': true,
+    };
     controller.clear();
-    if (mounted) setState(() => replyToMessage = null);
-    setState(() => sending = true);
+    if (mounted) {
+      setState(() {
+        replyToMessage = null;
+        sending = true;
+        messages = mergeMessages(messages, [localMessage]);
+      });
+    }
     try {
       await Api.sendGroupMessage(groupId, body,
         replyToId: replySnapshot == null ? null : field(replySnapshot, ['id', 'message_id']));
+      if (mounted) setState(() => messages.removeWhere((item) => item['id'] == localId));
       await loadMessages(silent: true);
-    } catch (e) { if (mounted) showMsg(context, cleanError(e)); }
-    finally { if (mounted) setState(() => sending = false); }
+    } catch (e) {
+      if (mounted) {
+        setState(() => messages.removeWhere((item) => item['id'] == localId));
+        showMsg(context, cleanError(e));
+      }
+    } finally { if (mounted) setState(() => sending = false); }
   }
 
   Future<void> _sendVoiceRecording(List<int> bytes, Duration duration) async {
