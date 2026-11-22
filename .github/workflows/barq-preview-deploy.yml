@@ -58,8 +58,8 @@ jobs:
           assert test["d1_databases"][0]["database_id"] != "0db93afd-4bf5-4423-9e25-7a2f4f4bdbe0"
           assert test["vars"]["TIGRIS_BUCKET"] == "barq-preview-media"
           assert test["vars"]["TIGRIS_BUCKET"] != prod["vars"]["TIGRIS_BUCKET"]
-          assert test["migrations_dir"] == "migrations"
-          assert prod["migrations_dir"] == "migrations/production"
+          assert test["d1_databases"][0]["migrations_dir"] == "migrations"
+          assert prod["d1_databases"][0]["migrations_dir"] == "migrations/production"
           assert "routes" not in test
           assert test["workers_dev"] is True
           assert test["name"] != prod["name"]
