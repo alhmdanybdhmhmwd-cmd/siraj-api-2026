@@ -510,6 +510,7 @@ void main() {
           onPressed: () => showMessageActions(
             context,
             message: {'id': 'message-1', 'body': 'رسالة تجريبية'},
+            currentUserId: 'u1',
             canDelete: true,
             onDelete: () async { deleted = true; },
           ),
@@ -538,6 +539,7 @@ void main() {
           onPressed: () => showMessageActions(
             context,
             message: {'id': 'message-2', 'body': 'رسالة صديق'},
+            currentUserId: 'u1',
             canDelete: false,
             onDelete: () async {},
           ),
@@ -592,6 +594,7 @@ void main() {
           onPressed: () => showMessageActions(
             context,
             message: {'id': 'reply-1', 'body': 'رسالة للرد'},
+            currentUserId: 'u1',
             canDelete: false,
             onDelete: () async {},
             onReply: (message) async { selected = message; },
@@ -621,9 +624,7 @@ void main() {
     expect(normalizeMessageReactions(null), isEmpty);
   });
 
-  testWidgets('reaction chips show counts and allow removing the current user reaction', (tester) async {
-    String? selectedEmoji;
-    bool? removing;
+  testWidgets('reaction chips are display-only and new reactions are in the long-press menu', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
         body: messageReactionBar(
@@ -635,19 +636,13 @@ void main() {
               {'emoji': '❤️', 'user_id': 'u2'},
             ],
           },
-          onReaction: (emoji, remove) async {
-            selectedEmoji = emoji;
-            removing = remove;
-          },
         ),
       )),
     ));
 
     expect(find.text('❤️ 2'), findsOneWidget);
-    await tester.tap(find.text('❤️ 2'));
-    await tester.pumpAndSettle();
-    expect(selectedEmoji, '❤️');
-    expect(removing, isTrue);
+    final chip = tester.widget<ActionChip>(find.byType(ActionChip));
+    expect(chip.onPressed, isNull);
   });
 
   testWidgets('message action sheet exposes reaction and pin actions', (tester) async {
@@ -657,9 +652,10 @@ void main() {
           onPressed: () => showMessageActions(
             context,
             message: {'id': 'm1', 'body': 'رسالة'},
+            currentUserId: 'u1',
             canDelete: false,
             onDelete: () async {},
-            onReact: (emoji) async {},
+            onReact: (emoji, remove) async {},
             onPin: () async {},
             onSaveMemory: () async {},
           ),
