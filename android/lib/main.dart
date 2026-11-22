@@ -2105,7 +2105,6 @@ Widget messageReactionBar({
   required BuildContext context,
   required Map<String, dynamic> message,
   required String currentUserId,
-  required Future<void> Function(String emoji, bool remove) onReaction,
   Future<void> Function()? onSaveMemory,
 }) {
   final reactions = normalizeMessageReactions(message['reactions']);
@@ -2131,10 +2130,7 @@ Widget messageReactionBar({
               backgroundColor: entry.value.any((item) => field(item, ['user_id']) == currentUserId)
                   ? Theme.of(context).colorScheme.primary.withValues(alpha: .16) : Theme.of(context).colorScheme.surfaceContainerHighest,
               label: Text('${entry.key} ${entry.value.length}', style: const TextStyle(fontSize: 11)),
-              onPressed: () => onReaction(
-                entry.key,
-                entry.value.any((item) => field(item, ['user_id']) == currentUserId),
-              ),
+              onPressed: null,
             ),
           ),
       ],
@@ -2145,11 +2141,12 @@ Widget messageReactionBar({
 Future<void> showMessageActions(
   BuildContext context, {
   required Map<String, dynamic> message,
+  required String currentUserId,
   required bool canDelete,
   required Future<void> Function() onDelete,
   Future<void> Function(Map<String, dynamic> message)? onReply,
   Future<void> Function(String body)? onEdit,
-  Future<void> Function(String emoji)? onReact,
+  Future<void> Function(String emoji, bool remove)? onReact,
   Future<void> Function()? onPin,
   Future<void> Function()? onSaveMemory,
   Future<void> Function()? onForward,
@@ -2215,7 +2212,11 @@ Future<void> showMessageActions(
   );
   if (action == 'react' && onReact != null && context.mounted) {
     final emoji = await showMessageReactionPicker(context);
-    if (emoji != null) await onReact(emoji);
+    if (emoji != null) {
+      final alreadyReacted = normalizeMessageReactions(message['reactions']).any((reaction) =>
+        field(reaction, ['user_id']) == currentUserId && field(reaction, ['emoji']) == emoji);
+      await onReact(emoji, alreadyReacted);
+    }
   } else if (action == 'pin' && onPin != null) {
     await onPin();
   } else if (action == 'save_memory' && onSaveMemory != null) {
@@ -7700,6 +7701,7 @@ class _ChatPageState extends State<ChatPage> {
                                         onLongPress: () => showMessageActions(
                                           context,
                                           message: m,
+                                          currentUserId: widget.currentUserId,
                                           canDelete: mine && m['is_ephemeral'] != true && m['is_offline_pending'] != true,
                                           onDelete: () async {
                                             await Api.deletePrivateMessage(field(m, ['id', 'message_id']));
@@ -7710,8 +7712,8 @@ class _ChatPageState extends State<ChatPage> {
                                           },
                                           onForward: _attachmentData(m) != null
                                               ? () => forwardBarqMessage(context, m) : null,
-                                          onReact: (emoji) async {
-                                            await Api.reactPrivateMessage(field(m, ['id', 'message_id']), emoji);
+                                          onReact: (emoji, remove) async {
+                                            await Api.reactPrivateMessage(field(m, ['id', 'message_id']), emoji, remove: remove);
                                             if (mounted) await loadMessages(silent: true);
                                           },
                                           onPin: m['is_ephemeral'] != true && m['is_offline_pending'] != true
@@ -7751,6 +7753,7 @@ class _ChatPageState extends State<ChatPage> {
                                         onLongPress: () => showMessageActions(
                                           context,
                                           message: m,
+                                          currentUserId: widget.currentUserId,
                                           canDelete: mine && m['is_ephemeral'] != true && m['is_offline_pending'] != true,
                                           onDelete: () async {
                                             await Api.deletePrivateMessage(field(m, ['id', 'message_id']));
@@ -7831,10 +7834,6 @@ class _ChatPageState extends State<ChatPage> {
                                         context: context,
                                         message: m,
                                         currentUserId: widget.currentUserId,
-                                        onReaction: (emoji, remove) async {
-                                          await Api.reactPrivateMessage(field(m, ['id', 'message_id']), emoji, remove: remove);
-                                          if (mounted) await loadMessages(silent: true);
-                                        },
                                       ),
                                   ],
                                 ),
@@ -8815,6 +8814,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
                               onLongPress: () => showMessageActions(
                                 context,
                                 message: m,
+                                currentUserId: widget.currentUserId,
                                 canDelete: mine,
                                 onDelete: () async {
                                   await Api.deleteGroupMessage(groupId, field(m, ['id', 'message_id']));
@@ -8825,8 +8825,8 @@ class _GroupChatPageState extends State<GroupChatPage> {
                                 },
                                 onForward: _attachmentData(m) != null
                                     ? () => forwardBarqMessage(context, m) : null,
-                                onReact: (emoji) async {
-                                  await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), emoji);
+                                onReact: (emoji, remove) async {
+                                  await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), emoji, remove: remove);
                                   if (mounted) await loadMessages(silent: true);
                                 },
                                 onPin: () async {
@@ -8865,6 +8865,7 @@ class _GroupChatPageState extends State<GroupChatPage> {
                               onLongPress: () => showMessageActions(
                                 context,
                                 message: m,
+                                currentUserId: widget.currentUserId,
                                 canDelete: mine,
                                 onDelete: () async {
                                   await Api.deleteGroupMessage(groupId, field(m, ['id', 'message_id']));
@@ -8881,8 +8882,8 @@ class _GroupChatPageState extends State<GroupChatPage> {
                                         if (mounted) await loadMessages();
                                       }
                                     : null,
-                                onReact: (emoji) async {
-                                  await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), emoji);
+                                onReact: (emoji, remove) async {
+                                  await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), emoji, remove: remove);
                                   if (mounted) await loadMessages(silent: true);
                                 },
                                 onPin: () async {
@@ -8936,10 +8937,6 @@ class _GroupChatPageState extends State<GroupChatPage> {
                             context: context,
                             message: m,
                             currentUserId: widget.currentUserId,
-                            onReaction: (emoji, remove) async {
-                              await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), emoji, remove: remove);
-                              if (mounted) await loadMessages(silent: true);
-                            },
                           ),
                         ]),
                       ),
