@@ -96,6 +96,10 @@ void main() {
     ft.expect(barqNearbyPermissionNamesForAndroidSdk(32), ['location', 'bluetoothAdvertise', 'bluetoothConnect', 'bluetoothScan']);
     ft.expect(barqNearbyPermissionNamesForAndroidSdk(33), ['bluetoothAdvertise', 'bluetoothConnect', 'bluetoothScan', 'nearbyWifiDevices']);
     ft.expect(barqNearbyPermissionNamesForAndroidSdk(37), ['bluetoothAdvertise', 'bluetoothConnect', 'bluetoothScan', 'nearbyWifiDevices']);
+    ft.expect(barqNearbyRequiresLocationService(30), ft.isTrue);
+    ft.expect(barqNearbyRequiresLocationService(32), ft.isTrue);
+    ft.expect(barqNearbyRequiresLocationService(33), ft.isFalse);
+    ft.expect(barqNearbyRequiresLocationService(37), ft.isFalse);
   });
 
   ft.test('Nearby payload transfer treats failure and cancellation as failed', () {
