@@ -3859,6 +3859,23 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
               "INSERT INTO group_messages (id, group_id, sender_id, body) VALUES (?, ?, ?, ?)"
             ).bind(messageId, groupId, currentUser.sub, attachmentBody).run();
           }
+          if (recipientId) {
+            // A newly delivered private attachment is new conversation activity:
+            // restore the chat row for both participants, but leave old locally
+            // hidden messages hidden.
+            await env.DB.batch([
+              env.DB.prepare(`
+                INSERT INTO private_conversation_state (user_id, peer_id, hidden_at, updated_at)
+                VALUES (?, ?, NULL, CURRENT_TIMESTAMP)
+                ON CONFLICT(user_id, peer_id) DO UPDATE SET hidden_at = NULL, updated_at = CURRENT_TIMESTAMP
+              `).bind(currentUser.sub, recipientId),
+              env.DB.prepare(`
+                INSERT INTO private_conversation_state (user_id, peer_id, hidden_at, updated_at)
+                VALUES (?, ?, NULL, CURRENT_TIMESTAMP)
+                ON CONFLICT(user_id, peer_id) DO UPDATE SET hidden_at = NULL, updated_at = CURRENT_TIMESTAMP
+              `).bind(recipientId, currentUser.sub)
+            ]);
+          }
         } catch (error) {
           // Revoke access immediately. If storage deletion fails, schedule a near-immediate
           // retry; successful chat attachments never enter the automatic expiry queue.
