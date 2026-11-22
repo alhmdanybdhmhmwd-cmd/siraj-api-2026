@@ -4029,7 +4029,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           initialRefreshComplete: initialRefreshComplete,
           alreadyHandling: _handlingNotificationTap,
           hasSession: Api.token != null,
-        )) return;
+        )) {
+      return;
+    }
     final route = barqPendingNotificationTap.value;
     if (route == null) return;
     _handlingNotificationTap = true;
