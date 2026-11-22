@@ -100,6 +100,12 @@ assert.equal(attachmentMessages.length, 1, "resumable upload must create exactly
 const attachmentBody = JSON.parse(attachmentMessages[0].body);
 assert.equal(attachmentBody.type, "attachment");
 assert.equal(attachmentBody.attachmentId, attachmentId);
+assert.equal(attachmentBody.fileName, "barq-preview-media.bin");
+assert.equal(attachmentBody.contentType, "application/octet-stream");
+assert.equal(attachmentBody.size, totalSize);
+const recipientChat = await json("/api/messages?with=" + encodeURIComponent(a.user.id), { token: b.token });
+assert.ok((recipientChat.messages || []).some(message => message.id === sessionId),
+  "the recipient must see the uploaded attachment in the conversation");
 const friends = await json("/api/friends", { token: a.token });
 const restoredChat = (friends.friends || []).find(friend => friend.id === b.user.id);
 assert.equal(restoredChat?.chatHidden, false,
