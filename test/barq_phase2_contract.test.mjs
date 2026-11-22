@@ -246,6 +246,20 @@ test("SPARK supports text, captioned media, replies, reactions, and authorized m
   assert.ok(worker.includes("status_media"));
 });
 
+test("SPARK viewers, replies, reactions, and voice replies all enforce block privacy", () => {
+  const viewerStart = worker.indexOf("const sparkViewerMatch");
+  const audioStart = worker.indexOf("const sparkAudioReplyMatch");
+  const interactionStart = worker.indexOf("sparkInteractionMatch =");
+  assert.ok(viewerStart >= 0 && audioStart > viewerStart && interactionStart > audioStart);
+  const viewerRoute = worker.slice(viewerStart, audioStart);
+  const audioRoute = worker.slice(audioStart, interactionStart);
+  const interactionRoute = worker.slice(interactionStart, worker.indexOf("// Ensure privacy preferences", interactionStart));
+  for (const route of [viewerRoute, audioRoute, interactionRoute]) {
+    assert.ok(route.includes("isBlockedPair(currentUser.sub, status.user_id)"));
+    assert.ok(route.includes("SPARK status access denied"));
+  }
+});
+
 test("chat wallpaper is selectable and persists per conversation", () => {
   assert.ok(flutterApp.includes("Icons.wallpaper_outlined"));
   assert.ok(flutterApp.includes("_chooseChatWallpaper"));
