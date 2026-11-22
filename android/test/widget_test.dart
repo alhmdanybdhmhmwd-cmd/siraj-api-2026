@@ -54,39 +54,39 @@ void main() {
 
   __barqFlutterTesting2026.test('notification tap routing validates private chat, group and SPARK destinations', () {
     __barqFlutterTesting2026.expect(
-      barqNotificationRouteFromData({'type': 'direct_message', 'senderId': 'user-7'}),
+      barqApp.barqNotificationRouteFromData({'type': 'direct_message', 'senderId': 'user-7'}),
       {'type': 'direct_message', 'senderId': 'user-7'},
     );
     __barqFlutterTesting2026.expect(
-      barqNotificationRouteFromData({'type': 'group_message', 'groupId': 'group-4'}),
+      barqApp.barqNotificationRouteFromData({'type': 'group_message', 'groupId': 'group-4'}),
       {'type': 'group_message', 'groupId': 'group-4'},
     );
     __barqFlutterTesting2026.expect(
-      barqNotificationRouteFromData({'type': 'status_update'}),
+      barqApp.barqNotificationRouteFromData({'type': 'status_update'}),
       {'type': 'status_update'},
     );
     __barqFlutterTesting2026.expect(
-      barqNotificationRouteFromData({'type': 'status_update', 'statusId': 'spark-9'}),
+      barqApp.barqNotificationRouteFromData({'type': 'status_update', 'statusId': 'spark-9'}),
       {'type': 'status_update', 'statusId': 'spark-9'},
     );
-    __barqFlutterTesting2026.expect(barqNotificationRouteFromData({'type': 'direct_message'}), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(barqNotificationRouteFromData({'type': 'group_message', 'groupId': ' '}), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(barqNotificationRouteFromData({'type': 'unknown', 'senderId': 'user-7'}), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqNotificationRouteFromData({'type': 'direct_message'}), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqNotificationRouteFromData({'type': 'group_message', 'groupId': ' '}), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqNotificationRouteFromData({'type': 'unknown', 'senderId': 'user-7'}), __barqFlutterTesting2026.isNull);
   });
 
   __barqFlutterTesting2026.test('private invite links accept only the BARQ scheme, host and 12-character code', () {
-    __barqFlutterTesting2026.expect(barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef123456')), 'ABCDEF123456');
-    __barqFlutterTesting2026.expect(barqInviteCodeFromUri(Uri.parse('barq://invite?code=abcdef123456')), 'ABCDEF123456');
-    __barqFlutterTesting2026.expect(barqInviteCodeFromUri(Uri.parse('https://invite/abcdef123456')), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(barqInviteCodeFromUri(Uri.parse('barq://other/abcdef123456')), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(barqInviteCodeFromUri(Uri.parse('barq://invite/abc123')), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef12345z')), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef123456/extra')), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(barqInviteCodeFromUri(Uri.parse('barq://invite?code=abcdef123456&code=111111111111')), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef123456?code=abcdef123456')), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(barqInviteCodeFromUri(Uri.parse('barq://invite@evil.example/abcdef123456')), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(barqInviteCodeFromUri(Uri.parse('barq://invite:443/abcdef123456')), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef123456#other')), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef123456')), 'ABCDEF123456');
+    __barqFlutterTesting2026.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite?code=abcdef123456')), 'ABCDEF123456');
+    __barqFlutterTesting2026.expect(barqApp.barqInviteCodeFromUri(Uri.parse('https://invite/abcdef123456')), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://other/abcdef123456')), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite/abc123')), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef12345z')), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef123456/extra')), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite?code=abcdef123456&code=111111111111')), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef123456?code=abcdef123456')), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite@evil.example/abcdef123456')), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite:443/abcdef123456')), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqInviteCodeFromUri(Uri.parse('barq://invite/abcdef123456#other')), __barqFlutterTesting2026.isNull);
   });
 
   __barqFlutterTesting2026.test('Nearby requests only permissions supported by the Android API level', () {
@@ -800,16 +800,16 @@ void main() {
 
 
   __barqFlutterTesting2026.test('SPARK media extensions map to exact supported MIME types', () {
-    __barqFlutterTesting2026.expect(barqSparkMediaContentType('jpg'), 'image/jpeg');
-    __barqFlutterTesting2026.expect(barqSparkMediaContentType('.JPEG'), 'image/jpeg');
-    __barqFlutterTesting2026.expect(barqSparkMediaContentType('png'), 'image/png');
-    __barqFlutterTesting2026.expect(barqSparkMediaContentType('webp'), 'image/webp');
-    __barqFlutterTesting2026.expect(barqSparkMediaContentType('gif'), 'image/gif');
-    __barqFlutterTesting2026.expect(barqSparkMediaContentType('mp4'), 'video/mp4');
-    __barqFlutterTesting2026.expect(barqSparkMediaContentType('webm'), 'video/webm');
-    __barqFlutterTesting2026.expect(barqSparkMediaContentType('MOV'), 'video/quicktime');
-    __barqFlutterTesting2026.expect(barqSparkMediaContentType('exe'), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(barqSparkMediaContentType(''), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqSparkMediaContentType('jpg'), 'image/jpeg');
+    __barqFlutterTesting2026.expect(barqApp.barqSparkMediaContentType('.JPEG'), 'image/jpeg');
+    __barqFlutterTesting2026.expect(barqApp.barqSparkMediaContentType('png'), 'image/png');
+    __barqFlutterTesting2026.expect(barqApp.barqSparkMediaContentType('webp'), 'image/webp');
+    __barqFlutterTesting2026.expect(barqApp.barqSparkMediaContentType('gif'), 'image/gif');
+    __barqFlutterTesting2026.expect(barqApp.barqSparkMediaContentType('mp4'), 'video/mp4');
+    __barqFlutterTesting2026.expect(barqApp.barqSparkMediaContentType('webm'), 'video/webm');
+    __barqFlutterTesting2026.expect(barqApp.barqSparkMediaContentType('MOV'), 'video/quicktime');
+    __barqFlutterTesting2026.expect(barqApp.barqSparkMediaContentType('exe'), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqSparkMediaContentType(''), __barqFlutterTesting2026.isNull);
   });
 
   __barqFlutterTesting2026.test('SPARK media client size limit rejects empty and oversized files', () {
@@ -959,37 +959,37 @@ void main() {
   });
 
   __barqFlutterTesting2026.test('FCM token normalization trims valid tokens and rejects invalid values', () {
-    __barqFlutterTesting2026.expect(normalizeBarqFcmToken('  fcm-token-123  '), 'fcm-token-123');
-    __barqFlutterTesting2026.expect(normalizeBarqFcmToken(null), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(normalizeBarqFcmToken(''), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(normalizeBarqFcmToken('   '), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(normalizeBarqFcmToken('token with spaces'), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(normalizeBarqFcmToken(List.filled(4097, 'x').join()), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(normalizeBarqFcmToken(List.filled(4096, 'x').join()), __barqFlutterTesting2026.hasLength(4096));
+    __barqFlutterTesting2026.expect(barqApp.normalizeBarqFcmToken('  fcm-token-123  '), 'fcm-token-123');
+    __barqFlutterTesting2026.expect(barqApp.normalizeBarqFcmToken(null), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.normalizeBarqFcmToken(''), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.normalizeBarqFcmToken('   '), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.normalizeBarqFcmToken('token with spaces'), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.normalizeBarqFcmToken(List.filled(4097, 'x').join()), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.normalizeBarqFcmToken(List.filled(4096, 'x').join()), __barqFlutterTesting2026.hasLength(4096));
   });
 
   __barqFlutterTesting2026.test('foreground push uses generic labels and respects category preferences', () {
     __barqFlutterTesting2026.expect(
-      barqForegroundPushLabel(
+      barqApp.barqForegroundPushLabel(
         {'type': 'direct_message', 'body': 'secret message', 'sender': 'Private Name'},
         {'messages': true},
       ),
       'وصلتك رسالة جديدة',
     );
     __barqFlutterTesting2026.expect(
-      barqForegroundPushLabel({'type': 'group_message', 'body': 'secret'}, {'groups': true}),
+      barqApp.barqForegroundPushLabel({'type': 'group_message', 'body': 'secret'}, {'groups': true}),
       'وصلتك رسالة جديدة في مجموعة',
     );
     __barqFlutterTesting2026.expect(
-      barqForegroundPushLabel({'type': 'status_update', 'body': 'private'}, {'statuses': true}),
+      barqApp.barqForegroundPushLabel({'type': 'status_update', 'body': 'private'}, {'statuses': true}),
       'هناك لحظة جديدة في SPARK',
     );
-    __barqFlutterTesting2026.expect(barqForegroundPushLabel({'type': 'direct_message'}, {'messages': false}), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(barqForegroundPushLabel({'type': 'group_message'}, {'groups': false}), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(barqForegroundPushLabel({'type': 'status_update'}, {'statuses': false}), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(barqForegroundPushLabel({'type': 'direct_message', 'ephemeral': true}, {'messages': true}), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(barqForegroundPushLabel({'type': 'group_message', 'temporary': 'true'}, {'groups': true}), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(barqForegroundPushLabel({'type': 'unknown'}, {}), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqForegroundPushLabel({'type': 'direct_message'}, {'messages': false}), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqForegroundPushLabel({'type': 'group_message'}, {'groups': false}), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqForegroundPushLabel({'type': 'status_update'}, {'statuses': false}), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqForegroundPushLabel({'type': 'direct_message', 'ephemeral': true}, {'messages': true}), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqForegroundPushLabel({'type': 'group_message', 'temporary': 'true'}, {'groups': true}), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqForegroundPushLabel({'type': 'unknown'}, {}), __barqFlutterTesting2026.isNull);
   });
 
   __barqFlutterTesting2026.test('FCM logout revocation runs only with session and valid token', () async {
@@ -1677,16 +1677,16 @@ void main() {
 
 
   __barqFlutterTesting2026.test('SPARK media extensions map to exact supported MIME types', () {
-    __barqFlutterTesting2026.expect(barqSparkMediaContentType('jpg'), 'image/jpeg');
-    __barqFlutterTesting2026.expect(barqSparkMediaContentType('.JPEG'), 'image/jpeg');
-    __barqFlutterTesting2026.expect(barqSparkMediaContentType('png'), 'image/png');
-    __barqFlutterTesting2026.expect(barqSparkMediaContentType('webp'), 'image/webp');
-    __barqFlutterTesting2026.expect(barqSparkMediaContentType('gif'), 'image/gif');
-    __barqFlutterTesting2026.expect(barqSparkMediaContentType('mp4'), 'video/mp4');
-    __barqFlutterTesting2026.expect(barqSparkMediaContentType('webm'), 'video/webm');
-    __barqFlutterTesting2026.expect(barqSparkMediaContentType('MOV'), 'video/quicktime');
-    __barqFlutterTesting2026.expect(barqSparkMediaContentType('exe'), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(barqSparkMediaContentType(''), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqSparkMediaContentType('jpg'), 'image/jpeg');
+    __barqFlutterTesting2026.expect(barqApp.barqSparkMediaContentType('.JPEG'), 'image/jpeg');
+    __barqFlutterTesting2026.expect(barqApp.barqSparkMediaContentType('png'), 'image/png');
+    __barqFlutterTesting2026.expect(barqApp.barqSparkMediaContentType('webp'), 'image/webp');
+    __barqFlutterTesting2026.expect(barqApp.barqSparkMediaContentType('gif'), 'image/gif');
+    __barqFlutterTesting2026.expect(barqApp.barqSparkMediaContentType('mp4'), 'video/mp4');
+    __barqFlutterTesting2026.expect(barqApp.barqSparkMediaContentType('webm'), 'video/webm');
+    __barqFlutterTesting2026.expect(barqApp.barqSparkMediaContentType('MOV'), 'video/quicktime');
+    __barqFlutterTesting2026.expect(barqApp.barqSparkMediaContentType('exe'), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqSparkMediaContentType(''), __barqFlutterTesting2026.isNull);
   });
 
   __barqFlutterTesting2026.test('SPARK media client size limit rejects empty and oversized files', () {
@@ -1836,37 +1836,37 @@ void main() {
   });
 
   __barqFlutterTesting2026.test('FCM token normalization trims valid tokens and rejects invalid values', () {
-    __barqFlutterTesting2026.expect(normalizeBarqFcmToken('  fcm-token-123  '), 'fcm-token-123');
-    __barqFlutterTesting2026.expect(normalizeBarqFcmToken(null), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(normalizeBarqFcmToken(''), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(normalizeBarqFcmToken('   '), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(normalizeBarqFcmToken('token with spaces'), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(normalizeBarqFcmToken(List.filled(4097, 'x').join()), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(normalizeBarqFcmToken(List.filled(4096, 'x').join()), __barqFlutterTesting2026.hasLength(4096));
+    __barqFlutterTesting2026.expect(barqApp.normalizeBarqFcmToken('  fcm-token-123  '), 'fcm-token-123');
+    __barqFlutterTesting2026.expect(barqApp.normalizeBarqFcmToken(null), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.normalizeBarqFcmToken(''), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.normalizeBarqFcmToken('   '), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.normalizeBarqFcmToken('token with spaces'), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.normalizeBarqFcmToken(List.filled(4097, 'x').join()), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.normalizeBarqFcmToken(List.filled(4096, 'x').join()), __barqFlutterTesting2026.hasLength(4096));
   });
 
   __barqFlutterTesting2026.test('foreground push uses generic labels and respects category preferences', () {
     __barqFlutterTesting2026.expect(
-      barqForegroundPushLabel(
+      barqApp.barqForegroundPushLabel(
         {'type': 'direct_message', 'body': 'secret message', 'sender': 'Private Name'},
         {'messages': true},
       ),
       'وصلتك رسالة جديدة',
     );
     __barqFlutterTesting2026.expect(
-      barqForegroundPushLabel({'type': 'group_message', 'body': 'secret'}, {'groups': true}),
+      barqApp.barqForegroundPushLabel({'type': 'group_message', 'body': 'secret'}, {'groups': true}),
       'وصلتك رسالة جديدة في مجموعة',
     );
     __barqFlutterTesting2026.expect(
-      barqForegroundPushLabel({'type': 'status_update', 'body': 'private'}, {'statuses': true}),
+      barqApp.barqForegroundPushLabel({'type': 'status_update', 'body': 'private'}, {'statuses': true}),
       'هناك لحظة جديدة في SPARK',
     );
-    __barqFlutterTesting2026.expect(barqForegroundPushLabel({'type': 'direct_message'}, {'messages': false}), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(barqForegroundPushLabel({'type': 'group_message'}, {'groups': false}), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(barqForegroundPushLabel({'type': 'status_update'}, {'statuses': false}), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(barqForegroundPushLabel({'type': 'direct_message', 'ephemeral': true}, {'messages': true}), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(barqForegroundPushLabel({'type': 'group_message', 'temporary': 'true'}, {'groups': true}), __barqFlutterTesting2026.isNull);
-    __barqFlutterTesting2026.expect(barqForegroundPushLabel({'type': 'unknown'}, {}), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqForegroundPushLabel({'type': 'direct_message'}, {'messages': false}), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqForegroundPushLabel({'type': 'group_message'}, {'groups': false}), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqForegroundPushLabel({'type': 'status_update'}, {'statuses': false}), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqForegroundPushLabel({'type': 'direct_message', 'ephemeral': true}, {'messages': true}), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqForegroundPushLabel({'type': 'group_message', 'temporary': 'true'}, {'groups': true}), __barqFlutterTesting2026.isNull);
+    __barqFlutterTesting2026.expect(barqApp.barqForegroundPushLabel({'type': 'unknown'}, {}), __barqFlutterTesting2026.isNull);
   });
 
   __barqFlutterTesting2026.test('FCM logout revocation runs only with session and valid token', () async {
