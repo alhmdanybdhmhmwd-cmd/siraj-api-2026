@@ -78,13 +78,42 @@ const sessionId = created.session?.id;
 assert.ok(sessionId, "upload session must be created");
 
 const totalChunks = Math.ceil(totalSize / MiB);
-for (let number = 1; number <= totalChunks; number++) {
+async function uploadChunk(number, bytes, token = a.token, expected = 200) {
+  return request(`/api/media/uploads/${sessionId}/chunks/${number}`, {
+    method: "PUT", token, body: bytes,
+    headers: { "Content-Type": "application/octet-stream" }, expected
+  });
+}
+
+// Simulate a client interruption after two transport chunks, then resume the
+// same idempotent upload session as a fresh request sequence.
+for (let number = 1; number <= 2; number++) {
+  const start = (number - 1) * MiB;
+  await uploadChunk(number, source.slice(start, Math.min(start + MiB, totalSize)));
+}
+const resumed = await json("/api/media/uploads", {
+  method: "POST", token: a.token, expected: 200,
+  headers: { "X-Idempotency-Key": idempotencyKey },
+  body: {
+    size: totalSize, contentType: "application/octet-stream",
+    fileName: "barq-preview-media.bin", recipientId: b.user.id
+  }
+});
+assert.equal(resumed.resumed, true, "restarting the upload declaration must resume the existing session");
+assert.equal(resumed.session?.id, sessionId, "resuming must retain the original upload session ID");
+
+// The recipient cannot mutate the sender-owned upload session.
+await uploadChunk(1, source.slice(0, MiB), b.token, 404);
+// An exact retry is accepted; reusing the same chunk number for different bytes is rejected.
+await uploadChunk(1, source.slice(0, MiB));
+const alteredChunk = source.slice(0, MiB);
+alteredChunk[0] ^= 0xff;
+await uploadChunk(1, alteredChunk, a.token, 409);
+
+for (let number = 3; number <= totalChunks; number++) {
   const start = (number - 1) * MiB;
   const chunk = source.slice(start, Math.min(start + MiB, totalSize));
-  await request(`/api/media/uploads/${sessionId}/chunks/${number}`, {
-    method: "PUT", token: a.token, body: chunk,
-    headers: { "Content-Type": "application/octet-stream" }, expected: 200
-  });
+  await uploadChunk(number, chunk);
 }
 
 const completed = await json(`/api/media/uploads/${sessionId}/complete`, {
