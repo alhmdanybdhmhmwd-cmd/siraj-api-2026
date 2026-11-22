@@ -7613,6 +7613,10 @@ class _ChatPageState extends State<ChatPage> {
       showMsg(context, 'الرسالة طويلة جدًا؛ الحد الأقصى 5000 حرف.');
       return;
     }
+    if (ephemeralMode && replyToMessage != null) {
+      showMsg(context, 'الرسائل المؤقتة لا تدعم الرد على رسالة أخرى. ألغِ الرد أولاً.');
+      return;
+    }
     // حرر حقل الكتابة فور الضغط، ولا تنتظر الشبكة.
     final replySnapshot = replyToMessage == null ? null : Map<String, dynamic>.from(replyToMessage!);
     controller.clear();
@@ -7635,7 +7639,6 @@ class _ChatPageState extends State<ChatPage> {
     setState(() => sending = true);
     try {
       if (ephemeralMode) {
-        if (replySnapshot != null) throw Exception('الرسائل المؤقتة لا تدعم الرد على رسالة أخرى. ألغِ الرد أولاً.');
         await Api.sendEphemeralMessage(friendId, text);
       } else {
         try {
