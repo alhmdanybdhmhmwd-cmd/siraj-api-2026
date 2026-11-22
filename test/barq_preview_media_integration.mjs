@@ -245,8 +245,8 @@ assert.equal(createHash("sha256").update(groupDownload.bytes).digest("hex"), gro
 await request("/api/media/" + encodeURIComponent(groupAttachmentId), {
   token: c.token, expected: 403
 });
-await request("/api/groups/" + encodeURIComponent(group.group.id) + "/messages/" + encodeURIComponent(groupSessionId), {
-  method: "DELETE", token: a.token, expected: 200
+await json("/api/groups/" + encodeURIComponent(group.group.id) + "/messages/" + encodeURIComponent(groupSessionId), {
+  method: "PATCH", token: a.token, body: { body: "edited away from the attachment" }, expected: 200
 });
 await request("/api/media/" + encodeURIComponent(groupAttachmentId), {
   token: b.token, expected: 410
