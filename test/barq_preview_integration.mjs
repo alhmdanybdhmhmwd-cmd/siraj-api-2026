@@ -183,6 +183,12 @@ assert.ok(aAfterDeleteForMe.messages.some(message => message.id === deleteForMeI
 await call("/api/messages/" + encodeURIComponent(deleteForMeId), {
   method: "DELETE", token: a.token, expected: 200
 });
+const aAfterGlobalDelete = await call("/api/messages?with=" + encodeURIComponent(b.user.id), { token: a.token });
+assert.ok(!aAfterGlobalDelete.messages.some(message => message.id === deleteForMeId),
+  "delete-for-everyone must remove the message from the sender's history too");
+const bAfterGlobalDelete = await call("/api/messages?with=" + encodeURIComponent(a.user.id), { token: b.token });
+assert.ok(!bAfterGlobalDelete.messages.some(message => message.id === deleteForMeId),
+  "delete-for-everyone must remove the message from the recipient's history too");
 
 const conversation = await call("/api/messages?with=" + encodeURIComponent(b.user.id), { token: a.token });
 assert.equal(conversation.messages.filter(message => message.id === clientMessageId).length, 1,
