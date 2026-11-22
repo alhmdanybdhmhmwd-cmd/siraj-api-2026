@@ -396,10 +396,10 @@ class _BarqPickedVideoThumbnailState extends State<_BarqPickedVideoThumbnail> {
         await controller.dispose();
         return;
       }
-      setState(() => _controller = controller);
+      setState(() { _controller = controller; _loading = false; });
     } catch (_) {
       await controller.dispose();
-      if (mounted) setState(() => _failed = true);
+      if (mounted) setState(() { _failed = true; _loading = false; });
     }
   }
 
@@ -7288,6 +7288,7 @@ class _BarqRemoteVideoThumbnail extends StatefulWidget {
 class _BarqRemoteVideoThumbnailState extends State<_BarqRemoteVideoThumbnail> {
   VideoPlayerController? _controller;
   bool _failed = false;
+  bool _loading = true;
 
   @override
   void initState() {
@@ -7296,9 +7297,11 @@ class _BarqRemoteVideoThumbnailState extends State<_BarqRemoteVideoThumbnail> {
   }
 
   Future<void> _initialize() async {
+    if (_loading && _controller != null) return;
+    if (mounted) setState(() { _loading = true; _failed = false; });
     final id = field(widget.attachment, ['attachmentId']);
     if (id.isEmpty) {
-      if (mounted) setState(() => _failed = true);
+      if (mounted) setState(() { _failed = true; _loading = false; });
       return;
     }
     final controller = VideoPlayerController.networkUrl(
@@ -7356,7 +7359,11 @@ class _BarqRemoteVideoThumbnailState extends State<_BarqRemoteVideoThumbnail> {
                   color: Colors.white.withValues(alpha: .06),
                   child: Center(
                     child: _failed
-                        ? const Icon(Icons.video_file_outlined, size: 32)
+                        ? IconButton(
+                            tooltip: 'إعادة تحميل معاينة الفيديو',
+                            onPressed: _initialize,
+                            icon: const Icon(Icons.refresh_rounded, size: 30),
+                          )
                         : const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
                   ),
                 ),
