@@ -5824,6 +5824,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final nameController = TextEditingController(
       text: field(me, ['displayName', 'display_name']),
     );
+    final phoneController = TextEditingController(text: field(me, ['phone']));
     bool saving = false;
     await showDialog<void>(
       context: context,
@@ -5831,9 +5832,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         builder: (context, setDialog) => AlertDialog(
           backgroundColor: Theme.of(context).colorScheme.surface,
           title: const Text('تعديل الملف الشخصي'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+          content: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * 0.55,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
               TextField(
                 controller: nameController,
                 maxLength: 60,
@@ -5841,7 +5847,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ),
               const SizedBox(height: 8),
               TextField(
-                controller: TextEditingController(text: field(me, ['phone'])),
+                controller: phoneController,
                 readOnly: true,
                 keyboardType: TextInputType.phone,
                 decoration: inputDecoration('رقم الهاتف (ثابت بعد إنشاء الحساب)', Icons.phone_outlined)
@@ -5853,7 +5859,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               const SizedBox(height: 6),
               const Text('اسم المستخدم ورقم الهاتف لا يتغيران من هذه الشاشة.',
                   style: TextStyle(color: Colors.white60, fontSize: 12)),
-            ],
+                ],
+              ),
+            ),
           ),
           actions: [
             TextButton(
@@ -6036,6 +6044,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
       ),
     );
+    nameController.dispose();
+    phoneController.dispose();
   }
 
   Widget _accountPage() {
