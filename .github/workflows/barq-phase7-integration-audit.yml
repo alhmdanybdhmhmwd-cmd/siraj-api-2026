@@ -1,0 +1,76 @@
+name: BARQ Phase 7 integration audit
+
+on:
+  push:
+    branches: ["barq/phase7-integration-audit-2026-11-22"]
+    paths:
+      - "android/**"
+      - "src/**"
+      - "api/**"
+      - "test/**"
+      - "scripts/**"
+      - "package.json"
+      - ".github/workflows/barq-phase7-integration-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: barq-phase7-integration-audit
+  cancel-in-progress: true
+
+jobs:
+  backend-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install backend test dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund --no-package-lock
+      - name: Check Worker and gateway syntax
+        run: |
+          node --check src/src/index.js
+          node --check node_server.mjs
+          node --check "api/[...path].js"
+      - name: Audit runtime portability
+        run: npm run audit:runtime-portability
+      - name: Run API, proxy, messaging, media and adapter tests
+        run: npm test
+      - name: Validate D1 migrations and schema compatibility
+        run: |
+          python3 test/migrations.test.py
+          python3 test/production_groups_compat.test.py
+          python3 test/group_message_reads.test.py
+          python3 test/private_conversation_visibility.test.py
+          python3 test/d1_schema_inspection.test.py
+      - name: Validate deployment and release safety
+        run: |
+          python3 test/barq_wrangler_config.test.py
+          python3 test/android_release_safety.test.py
+
+  android-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Install Flutter dependencies
+        working-directory: android
+        run: flutter pub get
+      - name: Analyze Android application
+        working-directory: android
+        run: flutter analyze
+      - name: Run Android unit and widget tests
+        working-directory: android
+        run: flutter test
