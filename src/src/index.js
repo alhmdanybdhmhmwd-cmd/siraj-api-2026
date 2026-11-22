@@ -517,6 +517,24 @@ async function consumeRecoveryAttempt(env, scope, identifier, maxAttempts = 5) {
   return Number(row?.attempts || 0) <= maxAttempts;
 }
 
+function parseMessageAttachment(rawBody) {
+  try {
+    const body = JSON.parse(String(rawBody || ""));
+    if (!body || body.type !== "attachment" || typeof body.attachmentId !== "string") return null;
+    const attachmentId = body.attachmentId;
+    if (!attachmentId || attachmentId.length > 512 || attachmentId.startsWith("/") ||
+        attachmentId.includes("\\\\") || attachmentId.split("/").some(part => !part || part === "." || part === "..")) return null;
+    return {
+      attachmentId,
+      fileName: safeFileName(body.fileName || "attachment"),
+      contentType: typeof body.contentType === "string" && body.contentType.length <= 128
+        ? body.contentType : "application/octet-stream"
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
 async function cleanupExpiredMedia(env, now = Date.now()) {
   if (!env.TIGRIS_ACCESS_KEY_ID || !env.TIGRIS_SECRET_ACCESS_KEY) {
     throw new Error("Media storage credentials are not configured");
@@ -3115,7 +3133,7 @@ export default {
         ).bind(groupId, currentUser.sub).first();
         if (!member) return json({ error: "Group not found" }, 404);
         const owned = await env.DB.prepare(
-          "SELECT id FROM group_messages WHERE id = ? AND group_id = ? AND sender_id = ?"
+          "SELECT id, body FROM group_messages WHERE id = ? AND group_id = ? AND sender_id = ?"
         ).bind(messageId, groupId, currentUser.sub).first();
         if (!owned) return json({ error: "Message not found or cannot be changed" }, 404);
         if (method === "PATCH") {
@@ -3129,18 +3147,30 @@ export default {
         }
         // Remove per-message interaction metadata in the same D1 batch as the
         // owned message deletion; these tables intentionally have no message FK.
-        const deletion = await env.DB.batch([
-          env.DB.prepare(
-            "DELETE FROM message_reactions WHERE scope_type = 'group' AND scope_id = ? AND message_id = ?"
-          ).bind(groupId, messageId),
-          env.DB.prepare(
-            "DELETE FROM pinned_messages WHERE scope_type = 'group' AND scope_id = ? AND message_id = ?"
-          ).bind(groupId, messageId),
-          env.DB.prepare(
-            "DELETE FROM group_messages WHERE id = ? AND group_id = ? AND sender_id = ?"
-          ).bind(messageId, groupId, currentUser.sub)
-        ]);
-        if (Number(deletion?.[2]?.meta?.changes || 0) !== 1) {
+        const attachment = parseMessageAttachment(owned.body);
+        const deletionStatements = [];
+        if (attachment) {
+          const expiresAt = new Date().toISOString();
+          await env.DB.prepare("CREATE TABLE IF NOT EXISTS media_expirations (object_key TEXT PRIMARY KEY, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
+          await env.DB.prepare("CREATE TABLE IF NOT EXISTS media_access (object_key TEXT PRIMARY KEY, owner_id TEXT NOT NULL, recipient_id TEXT, group_id TEXT, file_name TEXT NOT NULL, content_type TEXT NOT NULL, expires_at TEXT NOT NULL)").run();
+          deletionStatements.push(
+            env.DB.prepare("INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?) ON CONFLICT(object_key) DO UPDATE SET expires_at = excluded.expires_at").bind(attachment.attachmentId, expiresAt),
+            env.DB.prepare(
+              `INSERT INTO media_access (object_key, owner_id, recipient_id, group_id, file_name, content_type, expires_at)
+               VALUES (?, ?, NULL, ?, ?, ?, ?)
+               ON CONFLICT(object_key) DO UPDATE SET owner_id = excluded.owner_id,
+                 recipient_id = NULL, group_id = excluded.group_id, file_name = excluded.file_name,
+                 content_type = excluded.content_type, expires_at = excluded.expires_at`
+            ).bind(attachment.attachmentId, currentUser.sub, groupId, attachment.fileName, attachment.contentType, expiresAt)
+          );
+        }
+        deletionStatements.push(
+          env.DB.prepare("DELETE FROM message_reactions WHERE scope_type = 'group' AND scope_id = ? AND message_id = ?").bind(groupId, messageId),
+          env.DB.prepare("DELETE FROM pinned_messages WHERE scope_type = 'group' AND scope_id = ? AND message_id = ?").bind(groupId, messageId),
+          env.DB.prepare("DELETE FROM group_messages WHERE id = ? AND group_id = ? AND sender_id = ?").bind(messageId, groupId, currentUser.sub)
+        );
+        const deletion = await env.DB.batch(deletionStatements);
+        if (Number(deletion?.[deletion.length - 1]?.meta?.changes || 0) !== 1) {
           return json({ error: "Message not found or cannot be changed" }, 404);
         }
         return json({ message: "Message deleted", id: messageId });
@@ -3589,7 +3619,7 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           return json({ message: "Message hidden for this account", id: messageId, scope: "me" });
         }
         const owned = await env.DB.prepare(
-          `SELECT id, sender_id, receiver_id FROM messages
+          `SELECT id, sender_id, receiver_id, body FROM messages
            WHERE id = ? AND sender_id = ?
              AND NOT EXISTS (
                SELECT 1 FROM hidden_private_messages hm
@@ -3608,18 +3638,30 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         }
         const scopeId = [owned.sender_id, owned.receiver_id].sort().join(":");
         // Keep deleted content from leaving orphan reactions or personal pins.
-        const deletion = await env.DB.batch([
-          env.DB.prepare(
-            "DELETE FROM message_reactions WHERE scope_type = 'private' AND scope_id = ? AND message_id = ?"
-          ).bind(scopeId, messageId),
-          env.DB.prepare(
-            "DELETE FROM pinned_messages WHERE scope_type = 'private' AND scope_id = ? AND message_id = ?"
-          ).bind(scopeId, messageId),
-          env.DB.prepare(
-            "DELETE FROM messages WHERE id = ? AND sender_id = ?"
-          ).bind(messageId, currentUser.sub)
-        ]);
-        if (Number(deletion?.[2]?.meta?.changes || 0) !== 1) {
+        const attachment = parseMessageAttachment(owned.body);
+        const deletionStatements = [];
+        if (attachment) {
+          const expiresAt = new Date().toISOString();
+          await env.DB.prepare("CREATE TABLE IF NOT EXISTS media_expirations (object_key TEXT PRIMARY KEY, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
+          await env.DB.prepare("CREATE TABLE IF NOT EXISTS media_access (object_key TEXT PRIMARY KEY, owner_id TEXT NOT NULL, recipient_id TEXT, group_id TEXT, file_name TEXT NOT NULL, content_type TEXT NOT NULL, expires_at TEXT NOT NULL)").run();
+          deletionStatements.push(
+            env.DB.prepare("INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?) ON CONFLICT(object_key) DO UPDATE SET expires_at = excluded.expires_at").bind(attachment.attachmentId, expiresAt),
+            env.DB.prepare(
+              `INSERT INTO media_access (object_key, owner_id, recipient_id, group_id, file_name, content_type, expires_at)
+               VALUES (?, ?, ?, NULL, ?, ?, ?)
+               ON CONFLICT(object_key) DO UPDATE SET owner_id = excluded.owner_id,
+                 recipient_id = excluded.recipient_id, group_id = NULL, file_name = excluded.file_name,
+                 content_type = excluded.content_type, expires_at = excluded.expires_at`
+            ).bind(attachment.attachmentId, currentUser.sub, owned.receiver_id, attachment.fileName, attachment.contentType, expiresAt)
+          );
+        }
+        deletionStatements.push(
+          env.DB.prepare("DELETE FROM message_reactions WHERE scope_type = 'private' AND scope_id = ? AND message_id = ?").bind(scopeId, messageId),
+          env.DB.prepare("DELETE FROM pinned_messages WHERE scope_type = 'private' AND scope_id = ? AND message_id = ?").bind(scopeId, messageId),
+          env.DB.prepare("DELETE FROM messages WHERE id = ? AND sender_id = ?").bind(messageId, currentUser.sub)
+        );
+        const deletion = await env.DB.batch(deletionStatements);
+        if (Number(deletion?.[deletion.length - 1]?.meta?.changes || 0) !== 1) {
           return json({ error: "Message not found or cannot be changed" }, 404);
         }
         return json({ message: "Message deleted", id: messageId });
