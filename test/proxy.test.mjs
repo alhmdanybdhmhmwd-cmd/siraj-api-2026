@@ -510,6 +510,60 @@ test("gateway retries a POST only when an idempotency key is supplied", async ()
   }
 });
 
+test("Vercel proxy forwards authenticated private-memory photo uploads", async () => {
+  const originalFetch = globalThis.fetch;
+  let forwarded = null;
+  const bytes = Buffer.from([0xff, 0xd8, 0xff, 0x01]);
+  globalThis.fetch = async (url, options) => {
+    forwarded = { url: String(url), headers: options.headers, body: Buffer.from(options.body) };
+    return new Response(JSON.stringify({ photo: { id: "photo-1" } }), {
+      status: 201, headers: { "content-type": "application/json" }
+    });
+  };
+  try {
+    const res = makeResponse();
+    await handler(makeRequest({
+      url: "/api/private-memories/memory-1/media",
+      method: "POST",
+      headers: {
+        authorization: "Bearer memory-token",
+        "content-type": "image/jpeg",
+        "x-file-name": "memory.jpg",
+        "content-length": String(bytes.length)
+      },
+      chunks: [bytes]
+    }), res);
+    assert.equal(res.statusCode, 201);
+    assert.match(forwarded.url, /\/api\/private-memories\/memory-1\/media$/);
+    assert.equal(forwarded.headers.Authorization, "Bearer memory-token");
+    assert.equal(forwarded.headers["X-File-Name"], "memory.jpg");
+    assert.deepEqual(forwarded.body, bytes);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("SPARK media proxy rejects payloads above the Vercel-safe 4 MiB limit", async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalled = false;
+  globalThis.fetch = async () => { fetchCalled = true; throw new Error("unexpected upstream request"); };
+  try {
+    const res = makeResponse();
+    let streamRead = false;
+    const req = {
+      url: "/api/statuses/media", method: "POST",
+      headers: { "content-length": String(4 * 1024 * 1024 + 1) },
+      async *[Symbol.asyncIterator]() { streamRead = true; }
+    };
+    await handler(req, res);
+    assert.equal(res.statusCode, 413);
+    assert.equal(streamRead, false);
+    assert.equal(fetchCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("private-memory photo proxy rejects oversized uploads before reading", async () => {
   const originalFetch = globalThis.fetch;
   let fetchCalled = false;
