@@ -805,6 +805,25 @@ void main() {
     expect(barqSparkMediaContentType(''), isNull);
   });
 
+  test('gallery media filenames retain the real extension when asset titles omit it', () {
+    expect(
+      barqMediaPickerFileName(title: 'IMG_20261122', path: '/cache/IMG_20261122.jpg', fallbackExtension: 'jpg'),
+      'IMG_20261122.jpg',
+    );
+    expect(
+      barqMediaPickerFileName(title: 'clip', path: '/cache/clip.mp4', fallbackExtension: 'mp4'),
+      'clip.mp4',
+    );
+    expect(
+      barqMediaPickerFileName(title: 'already.png', path: '/cache/image.jpg', fallbackExtension: 'jpg'),
+      'already.png',
+    );
+    expect(
+      barqMediaPickerFileName(title: '', path: '/cache/video.mp4', fallbackExtension: 'mp4'),
+      'barq_media.mp4',
+    );
+  });
+
   test('SPARK media client size limit rejects empty and oversized files', () {
     expect(isBarqSparkMediaSizeAllowed(0), isFalse);
     expect(isBarqSparkMediaSizeAllowed(1), isTrue);
