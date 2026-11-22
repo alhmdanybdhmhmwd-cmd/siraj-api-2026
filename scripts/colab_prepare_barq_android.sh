@@ -53,7 +53,7 @@ yes | sdkmanager --licenses >/dev/null || {
 }
 # Android 17 / API 37 is currently distributed on a preview channel.
 # Channel 3 includes stable packages plus preview/canary packages.
-sdkmanager --channel=3 "platform-tools" "platforms;android-37" "build-tools;37.0.0"
+sdkmanager --channel=3 "platform-tools" "platforms;android-37.0" "build-tools;37.0.0"
 
 # Keep the existing Flutter SDK path and add/update only sdk.dir.
 python3 - "$NATIVE_ROOT/local.properties" "$FLUTTER_ROOT" "$SDK_ROOT" <<'PY'
