@@ -284,7 +284,9 @@ Future<bool?> _showBarqMediaPreview(
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  if (!isVideo && file.path != null)
+                  if (isVideo && file.path != null)
+                    _BarqPickedVideoThumbnail(file: file)
+                  else if (!isVideo && file.path != null)
                     Image.file(
                       File(file.path!),
                       fit: BoxFit.cover,
@@ -296,11 +298,7 @@ Future<bool?> _showBarqMediaPreview(
                   else
                     ColoredBox(
                       color: palette.surfaceContainerHighest,
-                      child: Icon(
-                        isVideo ? Icons.play_circle_fill_rounded : Icons.insert_drive_file_rounded,
-                        size: 38,
-                        color: palette.primary,
-                      ),
+                      child: Icon(Icons.insert_drive_file_rounded, size: 38, color: palette.primary),
                     ),
                   if (isVideo)
                     Align(
@@ -328,6 +326,77 @@ Future<bool?> _showBarqMediaPreview(
       ],
     ),
   );
+}
+
+class _BarqPickedVideoThumbnail extends StatefulWidget {
+  final PlatformFile file;
+  const _BarqPickedVideoThumbnail({required this.file});
+
+  @override
+  State<_BarqPickedVideoThumbnail> createState() => _BarqPickedVideoThumbnailState();
+}
+
+class _BarqPickedVideoThumbnailState extends State<_BarqPickedVideoThumbnail> {
+  VideoPlayerController? _controller;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    final path = widget.file.path;
+    if (path == null || path.isEmpty) {
+      if (mounted) setState(() => _failed = true);
+      return;
+    }
+    final controller = VideoPlayerController.file(File(path));
+    try {
+      await controller.initialize().timeout(const Duration(seconds: 20));
+      await controller.setVolume(0);
+      await controller.pause();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      setState(() => _controller = controller);
+    } catch (_) {
+      await controller.dispose();
+      if (mounted) setState(() => _failed = true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    if (controller == null) {
+      return ColoredBox(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: Center(
+          child: _failed
+              ? const Icon(Icons.video_file_outlined, size: 34)
+              : const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)),
+        ),
+      );
+    }
+    return FittedBox(
+      fit: BoxFit.cover,
+      clipBehavior: Clip.hardEdge,
+      child: SizedBox(
+        width: controller.value.size.width,
+        height: controller.value.size.height,
+        child: VideoPlayer(controller),
+      ),
+    );
+  }
 }
 
 class _BarqMediaChoice extends StatelessWidget {
@@ -6862,31 +6931,9 @@ class _AttachmentTileState extends State<_AttachmentTile> {
     showDialog<void>(
       context: context,
       barrierColor: Colors.black87,
-      builder: (dialogContext) => Dialog(
-        backgroundColor: Colors.black,
-        insetPadding: const EdgeInsets.all(12),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: InteractiveViewer(
-                minScale: 0.7,
-                maxScale: 5,
-                child: Center(
-                  child: Image.memory(bytes, fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined, color: Colors.white70, size: 56)),
-                ),
-              ),
-            ),
-            Positioned(
-              top: 4, right: 4,
-              child: IconButton(
-                tooltip: 'إغلاق المعاينة',
-                onPressed: () => Navigator.pop(dialogContext),
-                icon: const Icon(Icons.close, color: Colors.white),
-              ),
-            ),
-          ],
-        ),
+      builder: (_) => _BarqMediaViewer(
+        imageBytes: bytes,
+        title: field(widget.attachment, ['fileName'], 'صورة'),
       ),
     );
   }
@@ -6947,7 +6994,10 @@ class _AttachmentTileState extends State<_AttachmentTile> {
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => _VideoAttachmentDialog(attachment: widget.attachment),
+      builder: (_) => _BarqMediaViewer(
+        attachment: widget.attachment,
+        title: field(widget.attachment, ['fileName'], 'فيديو'),
+      ),
     );
   }
 
@@ -7084,27 +7134,38 @@ String formatBarqMediaDuration(Duration duration) {
   return '$minutes:$seconds';
 }
 
-class _VideoAttachmentDialog extends StatefulWidget {
-  final Map<String, dynamic> attachment;
-  const _VideoAttachmentDialog({required this.attachment});
+class _BarqMediaViewer extends StatefulWidget {
+  final Map<String, dynamic>? attachment;
+  final Uint8List? imageBytes;
+  final String title;
+
+  const _BarqMediaViewer({
+    this.attachment,
+    this.imageBytes,
+    required this.title,
+  }) : assert(attachment != null || imageBytes != null);
 
   @override
-  State<_VideoAttachmentDialog> createState() => _VideoAttachmentDialogState();
+  State<_BarqMediaViewer> createState() => _BarqMediaViewerState();
 }
 
-class _VideoAttachmentDialogState extends State<_VideoAttachmentDialog> {
+class _BarqMediaViewerState extends State<_BarqMediaViewer> {
   VideoPlayerController? _controller;
-  bool _loading = true;
+  bool _loading = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _initializeVideo();
+    if (widget.attachment != null) {
+      _loading = true;
+      _initializeVideo();
+    }
   }
 
   Future<void> _initializeVideo() async {
-    final id = field(widget.attachment, ['attachmentId']);
+    final attachment = widget.attachment;
+    final id = attachment == null ? '' : field(attachment, ['attachmentId']);
     if (id.isEmpty) {
       if (mounted) {
         setState(() {
@@ -7114,14 +7175,14 @@ class _VideoAttachmentDialogState extends State<_VideoAttachmentDialog> {
       }
       return;
     }
-    final headers = {if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'};
+    final headers = {if (Api.token != null) 'Authorization': 'Bearer \${Api.token}'};
     final bases = <String>[apiBase, if (mediaWorkerBase != apiBase) mediaWorkerBase];
     Object? lastError;
     for (final base in bases) {
       VideoPlayerController? candidate;
       try {
         candidate = VideoPlayerController.networkUrl(
-          Uri.parse('$base/api/media/${Uri.encodeComponent(id)}'),
+          Uri.parse('$base/api/media/\${Uri.encodeComponent(id)}'),
           httpHeaders: headers,
         );
         await candidate.initialize().timeout(const Duration(minutes: 2));
@@ -7158,6 +7219,7 @@ class _VideoAttachmentDialogState extends State<_VideoAttachmentDialog> {
   @override
   Widget build(BuildContext context) {
     final controller = _controller;
+    final isImage = widget.imageBytes != null;
     return Dialog(
       backgroundColor: Colors.black,
       insetPadding: const EdgeInsets.all(12),
@@ -7167,14 +7229,41 @@ class _VideoAttachmentDialogState extends State<_VideoAttachmentDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Row(children: [
-              const Expanded(child: Text('مشغّل الفيديو', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+              Expanded(
+                child: Text(
+                  widget.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+              ),
               IconButton(
-                tooltip: 'إغلاق',
+                tooltip: 'إغلاق العارض',
                 onPressed: () => Navigator.pop(context),
                 icon: const Icon(Icons.close, color: Colors.white),
               ),
             ]),
-            if (_loading)
+            if (isImage)
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * .78,
+                  maxWidth: MediaQuery.of(context).size.width,
+                ),
+                child: InteractiveViewer(
+                  minScale: .7,
+                  maxScale: 5,
+                  child: Image.memory(
+                    widget.imageBytes!,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Icon(
+                      Icons.broken_image_outlined,
+                      color: Colors.white70,
+                      size: 56,
+                    ),
+                  ),
+                ),
+              )
+            else if (_loading)
               const Padding(
                 padding: EdgeInsets.all(32),
                 child: CircularProgressIndicator(),
