@@ -516,12 +516,12 @@ void main() {
     await tester.tap(find.text('فتح الإجراءات'));
     await tester.pumpAndSettle();
     expect(find.text('نسخ الرسالة'), findsOneWidget);
-    expect(find.text('حذف الرسالة'), findsOneWidget);
+    expect(find.text('حذف لدى الجميع'), findsOneWidget);
 
-    await tester.tap(find.text('حذف الرسالة'));
+    await tester.tap(find.text('حذف لدى الجميع'));
     await tester.pumpAndSettle();
     expect(find.text('حذف الرسالة؟'), findsOneWidget);
-    await tester.tap(find.text('حذف').last);
+    await tester.tap(find.text('حذف لدى الجميع').last);
     await tester.pumpAndSettle();
     expect(deleted, isTrue);
   });
@@ -545,7 +545,7 @@ void main() {
     await tester.tap(find.text('فتح الإجراءات'));
     await tester.pumpAndSettle();
     expect(find.text('نسخ الرسالة'), findsOneWidget);
-    expect(find.text('حذف الرسالة'), findsNothing);
+    expect(find.text('حذف لدى الجميع'), findsNothing);
   });
 
   test('quoted reply preview is bounded and handles attachment references', () {
