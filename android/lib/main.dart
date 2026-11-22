@@ -9020,8 +9020,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                                   border: Border.all(color: gold.withValues(alpha: .32)),
                                                 ),
                                                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                                  Row(children: [
-                                                    const Icon(Icons.auto_awesome_rounded, size: 14, color: gold),
+                                                  const Row(children: [
+                                                    Icon(Icons.auto_awesome_rounded, size: 14, color: gold),
                                                     const SizedBox(width: 6),
                                                     const Text('رد على SPARK', style: TextStyle(
                                                       color: gold, fontSize: 11, fontWeight: FontWeight.w800,
