@@ -886,3 +886,16 @@ test("profile updates cannot change the registered phone number", () => {
   assert.ok(flutterApp.includes("رقم الهاتف (ثابت بعد إنشاء الحساب)"));
   assert.ok(!flutterApp.includes("phone: phone,"));
 });
+
+test("private message delete-for-me hides only the authenticated participant copy", () => {
+  const start = worker.indexOf("// A sender may delete only their own private message.");
+  const end = worker.indexOf("// Search only within the authenticated private conversation.", start);
+  const route = worker.slice(start, end);
+  assert.ok(route.includes('url.searchParams.get("scope") === "me"'));
+  assert.ok(route.includes("sender_id = ? OR receiver_id = ?"));
+  assert.ok(route.includes("INSERT OR IGNORE INTO hidden_private_messages"));
+  assert.ok(route.includes('DELETE FROM messages WHERE id = ? AND sender_id = ?'));
+  assert.ok(flutterApp.includes("حذف لدي فقط"));
+  assert.ok(flutterApp.includes("حذف لدى الجميع"));
+  assert.ok(flutterApp.includes("hidePrivateMessageForMe"));
+});
