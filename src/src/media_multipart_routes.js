@@ -373,7 +373,18 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
       let xml;
       try { xml = buildCompleteMultipartXml(parts); }
       catch (error) { return json({ error: error.message }, 409); }
-      await env.DB.prepare("UPDATE media_upload_sessions SET state = 'completing', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND owner_id = ?").bind(sessionId, currentUser.sub).run();
+      // Atomically claim completion. A second request that read the old
+      // "uploading" state must not issue a duplicate storage completion.
+      // A claim older than two minutes is considered abandoned and can be
+      // recovered after a worker crash.
+      const claim = await env.DB.prepare(
+        "UPDATE media_upload_sessions SET state = 'completing', updated_at = CURRENT_TIMESTAMP " +
+        "WHERE id = ? AND owner_id = ? AND (state = 'uploading' OR " +
+        "(state = 'completing' AND updated_at <= datetime('now', '-2 minutes')))"
+      ).bind(sessionId, currentUser.sub).run();
+      if (Number(claim?.meta?.changes || 0) !== 1) {
+        return json({ error: "Media upload completion is already in progress; retry shortly" }, 409);
+      }
       const completed = await storage.request(session.object_key, {
         method: "POST", headers: { "Content-Type": "application/xml" }, body: xml
       }, { uploadId: session.storage_upload_id });
