@@ -3658,12 +3658,8 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         }
         const owned = await env.DB.prepare(
           `SELECT id, sender_id, receiver_id, body FROM messages
-           WHERE id = ? AND sender_id = ?
-             AND NOT EXISTS (
-               SELECT 1 FROM hidden_private_messages hm
-               WHERE hm.user_id = ? AND hm.message_id = messages.id
-             )`
-        ).bind(messageId, currentUser.sub, currentUser.sub).first();
+           WHERE id = ? AND sender_id = ?`
+        ).bind(messageId, currentUser.sub).first();
         if (!owned) return json({ error: "Message not found or cannot be changed" }, 404);
         if (method === "PATCH") {
           const body = await readJsonRequestLimited(request);
