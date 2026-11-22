@@ -3923,6 +3923,12 @@ Future<bool> confirmVoiceTranscription(BuildContext context) async {
 
 String cleanError(Object error) => error.toString().replaceFirst('Exception: ', '');
 
+bool barqCanHandlePendingNotification({
+  required bool initialRefreshComplete,
+  required bool alreadyHandling,
+  required bool hasSession,
+}) => initialRefreshComplete && !alreadyHandling && hasSession;
+
 bool barqHomeCanPop({required int selectedTab, required String conversationQuery}) =>
     selectedTab == 0 && conversationQuery.trim().isEmpty;
 
@@ -4018,7 +4024,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _handlePendingNotificationTap() async {
-    if (!mounted || !initialRefreshComplete || _handlingNotificationTap || Api.token == null) return;
+    if (!mounted ||
+        !barqCanHandlePendingNotification(
+          initialRefreshComplete: initialRefreshComplete,
+          alreadyHandling: _handlingNotificationTap,
+          hasSession: Api.token != null,
+        )) return;
     final route = barqPendingNotificationTap.value;
     if (route == null) return;
     _handlingNotificationTap = true;
