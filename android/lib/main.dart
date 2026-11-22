@@ -1083,6 +1083,17 @@ class Api {
   static Future<List<Map<String, dynamic>>> friends() async =>
       _list((await request('GET', '/api/friends'))['friends']);
 
+  static Future<List<Map<String, dynamic>>> blockedUsers() async =>
+      _list((await request('GET', '/api/blocks'))['blockedUsers']);
+
+  static Future<void> blockUser(String userId) async {
+    await request('POST', '/api/blocks', body: {'userId': userId});
+  }
+
+  static Future<void> unblockUser(String userId) async {
+    await request('DELETE', '/api/blocks?userId=${Uri.encodeQueryComponent(userId)}');
+  }
+
   static Future<List<Map<String, dynamic>>> search(String query) async =>
       _list((await request(
         'GET',
@@ -7499,6 +7510,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   bool sending = false;
   bool refreshing = false;
   bool ephemeralMode = false;
+  bool blockedByMe = false;
   bool hasOlderMessages = false;
   bool loadingOlderMessages = false;
   Color? chatWallpaperColor;
@@ -7521,6 +7533,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     loadMessages();
+    _loadBlockState();
     _loadChatWallpaper();
     nearbySubscription = BarqNearbyService.instance.events.listen((event) {
       if (event['type'] == 'message_received' && event['senderId'] == friendId) {
@@ -7534,6 +7547,53 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     });
     // مزامنة الرسائل عبر REST/Vercel كل 5 ثوانٍ أثناء ظهور التطبيق فقط.
     _startRefreshTimer();
+  }
+
+  Future<void> _loadBlockState() async {
+    try {
+      final blocked = await Api.blockedUsers();
+      if (!mounted) return;
+      setState(() => blockedByMe = blocked.any(
+        (item) => field(item, ['userId', 'user_id']) == friendId,
+      ));
+    } catch (_) {}
+  }
+
+  Future<void> _toggleBlockState() async {
+    final shouldBlock = !blockedByMe;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(shouldBlock ? 'حظر المستخدم؟' : 'إلغاء الحظر؟'),
+        content: Text(shouldBlock
+          ? 'لن تتمكن أنت وهذا المستخدم من تبادل الرسائل الخاصة أثناء تفعيل الحظر.'
+          : 'سيُسمح مجدداً بالتواصل الخاص بينكما.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(shouldBlock ? 'حظر' : 'إلغاء الحظر')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      if (shouldBlock) {
+        await Api.blockUser(friendId);
+        if (!mounted) return;
+        setState(() => blockedByMe = true);
+        showMsg(context, 'تم حظر المستخدم.');
+        Navigator.pop(context);
+      } else {
+        await Api.unblockUser(friendId);
+        if (!mounted) return;
+        setState(() => blockedByMe = false);
+        showMsg(context, 'تم إلغاء الحظر.');
+        await loadMessages(silent: true);
+      }
+    } catch (e) {
+      if (mounted) showMsg(context, cleanError(e));
+    }
   }
 
   void _startRefreshTimer() {
@@ -7720,6 +7780,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   Future<void> send() async {
+    if (blockedByMe) {
+      showMsg(context, 'ألغِ حظر المستخدم أولاً لإرسال الرسائل.');
+      return;
+    }
     final text = controller.text.trim();
     if (text.isEmpty || sending) return;
     if (!isBarqMessageTextAllowed(text)) {
@@ -7807,6 +7871,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   Future<void> _sendVoiceRecording(List<int> bytes, Duration duration) async {
+    if (blockedByMe) {
+      showMsg(context, 'ألغِ حظر المستخدم أولاً لإرسال الرسائل.');
+      return;
+    }
     if (sending) return;
     setState(() => sending = true);
     try {
@@ -7826,6 +7894,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   Future<void> pickAndSendFile() async {
+    if (blockedByMe) {
+      showMsg(context, 'ألغِ حظر المستخدم أولاً لإرسال الرسائل.');
+      return;
+    }
     try {
       final result = await showBarqMediaPicker(
         context, allowMultiple: false, title: 'إرسال وسائط أو ملف', withData: false,
@@ -7938,6 +8010,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   title: 'البحث في المحادثة',
                   subtitle: 'ابحث داخل الرسائل المحمّلة',
                   onTap: () => showConversationSearch(context, (query, before) => Api.searchPrivateMessages(friendId, query, before: before)),
+                ),
+                BarqConversationTool(
+                  icon: blockedByMe ? Icons.lock_open_rounded : Icons.block_rounded,
+                  title: blockedByMe ? 'إلغاء حظر المستخدم' : 'حظر المستخدم',
+                  subtitle: blockedByMe ? 'السماح بالتواصل الخاص مجدداً' : 'منع الرسائل الخاصة بينكما',
+                  onTap: _toggleBlockState,
                 ),
                 BarqConversationTool(
                   icon: Icons.auto_awesome_outlined,
