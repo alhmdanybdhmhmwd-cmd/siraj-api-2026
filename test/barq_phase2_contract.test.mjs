@@ -10,6 +10,7 @@ const fallbackTestConfig = await readFile(new URL("../wrangler.fallback.test.tom
 const productionConfig = await readFile(new URL("../wrangler.toml", import.meta.url), "utf8");
 const replyMigration = await readFile(new URL("../migrations/0004_preview_message_replies.sql", import.meta.url), "utf8");
 const interactionMigration = await readFile(new URL("../migrations/0006_preview_message_reactions_pins.sql", import.meta.url), "utf8");
+const conversationMigration = await readFile(new URL("../migrations/0014_private_conversation_visibility.sql", import.meta.url), "utf8");
 
 function hasPath(path) {
   return worker.includes('path === "' + path + '"') ||
@@ -60,6 +61,20 @@ test("message deletion is authenticated and limited to the author in private and
   assert.ok(flutterApp.includes("deleteGroupMessage"));
   assert.ok(flutterApp.includes("حذف الرسالة"));
   assert.ok(flutterApp.includes("canDelete: mine"));
+});
+
+test("private conversation clear/delete is per-account and preserves contacts", () => {
+  assert.ok(conversationMigration.includes("CREATE TABLE IF NOT EXISTS hidden_private_messages"));
+  assert.ok(conversationMigration.includes("CREATE TABLE IF NOT EXISTS private_conversation_state"));
+  assert.ok(worker.includes('path.match(/^\\/api\\/conversations\\/([^/]+)(\\/clear)?$/)'));
+  assert.ok(worker.includes("INSERT OR IGNORE INTO hidden_private_messages"));
+  assert.ok(worker.includes("hm.user_id = ? AND hm.message_id = messages.id"));
+  assert.ok(worker.includes("chat_hidden"));
+  assert.ok(flutterApp.includes("static Future<void> clearPrivateConversation(String friendId)"));
+  assert.ok(flutterApp.includes("static Future<void> deletePrivateConversation(String friendId)"));
+  assert.ok(flutterApp.includes("مسح سجل المحادثة"));
+  assert.ok(flutterApp.includes("حذف المحادثة"));
+  assert.ok(flutterApp.includes("جهات الاتصال"));
 });
 
 test("private chat exposes the authenticated block and unblock API controls", () => {
