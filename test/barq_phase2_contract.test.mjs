@@ -405,7 +405,7 @@ test("group ownership transfer is conditional, owner-only, and limited to existi
   assert.ok(route.includes("AND EXISTS"));
   assert.ok(route.includes("FROM group_members"));
   assert.ok(route.includes("targetUserId === currentUser.sub"));
-  assert.ok(route.includes("Number(results?.[0]?.meta?.changes || 0) !== 1"));
+  assert.ok(route.includes("transferredGroup?.owner_id !== targetUserId"));
   assert.ok(route.includes("DELETE FROM group_member_roles"));
   assert.ok(flutterApp.includes("transferGroupOwnership"));
   assert.ok(flutterApp.includes("barqCanTransferGroupOwnership"));
