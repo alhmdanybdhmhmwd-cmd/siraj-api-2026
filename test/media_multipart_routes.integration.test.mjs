@@ -63,7 +63,7 @@ class FakeD1 {
           db.mediaAccess.set(objectKey,{object_key:objectKey,owner_id:owner,recipient_id:recipient,group_id:group,file_name:fileName,content_type:contentType,expires_at:expiresAt});
           return {meta:{changes:1}};
         }
-        if(q.startsWith("UPDATE media_upload_sessions SET state = 'completing'")){const r=db.sessions.get(args[0]);if(r)r.state="completing";return {meta:{changes:r?1:0}};}
+        if(q.startsWith("UPDATE media_upload_sessions SET state = 'completing'")){const r=db.sessions.get(args[0]);const now=Date.now();const stale=r&&r.updated_at&&Date.parse(r.updated_at.replace(" ","T")+"Z")<=now-120000;const claimed=Boolean(r&&r.owner_id===args[1]&&(r.state==="uploading"||(r.state==="completing"&&stale)));if(claimed){r.state="completing";r.updated_at=new Date(now).toISOString();}return {meta:{changes:claimed?1:0}};}
         if(q.startsWith("UPDATE media_upload_sessions SET state = 'uploading'")){const r=db.sessions.get(args[0]);if(r)r.state="uploading";return {meta:{changes:r?1:0}};}
         if(q.startsWith("UPDATE media_upload_sessions SET state = 'completed'")){const r=db.sessions.get(args[0]);if(r)r.state="completed";return {meta:{changes:r?1:0}};}
         if(q.startsWith("UPDATE media_upload_sessions SET state = 'aborted'")){const r=db.sessions.get(args[0]);if(r)r.state="aborted";return {meta:{changes:r?1:0}};}
@@ -79,13 +79,13 @@ class FakeD1 {
   async batch(statements){const out=[];for(const s of statements)out.push(await s.run());return out;}
 }
 function fixture(){
-  const DB=new FakeD1(),objects=new Map(),uploads=new Map(),originalFetch=globalThis.fetch; let failDeletes=false;
+  const DB=new FakeD1(),objects=new Map(),uploads=new Map(),originalFetch=globalThis.fetch; let failDeletes=false, completionGate=null;
   globalThis.fetch=async(input,init={})=>{
     const req=input instanceof Request?input:new Request(input,init),u=new URL(req.url);
     const key=decodeURIComponent(u.pathname.split("/").slice(1).join("/")),uploadId=u.searchParams.get("uploadId"),part=Number(u.searchParams.get("partNumber"));
     if(req.method==="POST"&&u.searchParams.has("uploads")){const id="upload-"+(uploads.size+1);uploads.set(id,{key,parts:new Map(),aborted:false});return new Response("<UploadId>"+id+"</UploadId>");}
     if(uploadId&&req.method==="PUT"&&part){const up=uploads.get(uploadId);if(!up||up.aborted)return new Response("",{status:404});const b=new Uint8Array(await req.arrayBuffer()),etag=createHash("md5").update(b).digest("hex");up.parts.set(part,{bytes:b,etag});return new Response("",{headers:{ETag:'"'+etag+'"'}});}
-    if(uploadId&&req.method==="POST"){const up=uploads.get(uploadId);if(!up)return new Response("",{status:404});const list=[...up.parts.entries()].sort((a,b)=>a[0]-b[0]),len=list.reduce((s,x)=>s+x[1].bytes.length,0),out=new Uint8Array(len);let off=0;for(const [,p] of list){out.set(p.bytes,off);off+=p.bytes.length;}objects.set(up.key,out);return new Response("<CompleteMultipartUploadResult/>");}
+    if(uploadId&&req.method==="POST"){const up=uploads.get(uploadId);if(!up)return new Response("",{status:404});if(completionGate){completionGate.startedResolve();await completionGate.promise;}const list=[...up.parts.entries()].sort((a,b)=>a[0]-b[0]),len=list.reduce((s,x)=>s+x[1].bytes.length,0),out=new Uint8Array(len);let off=0;for(const [,p] of list){out.set(p.bytes,off);off+=p.bytes.length;}objects.set(up.key,out);return new Response("<CompleteMultipartUploadResult/>");}
     if(req.method==="DELETE"&&failDeletes)return new Response("storage unavailable",{status:503});
     if(uploadId&&req.method==="DELETE"){const up=uploads.get(uploadId);if(up)up.aborted=true;return new Response(null,{status:204});}
     if(req.method==="PUT"){objects.set(key,new Uint8Array(await req.arrayBuffer()));return new Response("",{status:200});}
@@ -98,7 +98,7 @@ function fixture(){
     const request=new Request("https://preview.invalid"+path,{method,headers:{"Content-Type":"application/json"},body:body===null?undefined:(body instanceof Uint8Array?body:JSON.stringify(body))});
     return handleResumableMediaUpload(request,env,user,new URL(request.url),path,method);
   }
-  return {DB,objects,uploads,call,setFailDeletes(value){failDeletes=value;},restore(){globalThis.fetch=originalFetch;}};
+  return {DB,objects,uploads,call,setFailDeletes(value){failDeletes=value;},holdCompletion(){let release,startedResolve;const promise=new Promise(resolve=>{release=resolve;});const started=new Promise(resolve=>{startedResolve=resolve;});completionGate={promise,startedResolve};return {started,release(){completionGate=null;release();}};},restore(){globalThis.fetch=originalFetch;}};
 }
 const declaration=(size,key="idem-key-0001",extra={})=>({size,contentType:"application/octet-stream",fileName:"payload.bin",recipientId:"friend-1",idempotencyKey:key,...extra});
 const chunk=(data,n)=>data.slice((n-1)*MiB,Math.min(n*MiB,data.length));
@@ -313,4 +313,36 @@ test("cleanup integration: storage failure retains session and chunk metadata fo
   f.setFailDeletes(false);
   const retried=await cleanupExpiredUploadSessions(env,Date.parse("2001-01-01T00:00:00.000Z"));
   assert.equal(retried.cleaned,1);assert.equal(f.DB.sessions.has(id),false);assert.equal(f.objects.has(key),false);
+});
+
+test("route concurrency: only one request can complete a multipart session at a time",async t=>{
+  const f=fixture();t.after(f.restore);
+  const source=Uint8Array.from({length:128},(_,i)=>(i*7)%251);
+  const created=await f.call("/api/media/uploads","POST",declaration(source.length,"complete-race-001"));
+  assert.equal(created.status,201);
+  const id=(await created.json()).session.id;
+  assert.equal((await f.call("/api/media/uploads/"+id+"/chunks/1","PUT",source)).status,200);
+  const gate=f.holdCompletion();
+  const firstPromise=f.call("/api/media/uploads/"+id+"/complete","POST",{});
+  await gate.started;
+  const concurrent=await f.call("/api/media/uploads/"+id+"/complete","POST",{});
+  assert.equal(concurrent.status,409,"a concurrent completion must not call object storage twice");
+  gate.release();
+  const first=await firstPromise;
+  assert.equal(first.status,201,await first.clone().text());
+  assert.equal(f.DB.sessions.get(id).state,"completed");
+  assert.equal(f.objects.size,1,"the final object must be committed exactly once");
+});
+
+test("route recovery: a stale completion claim can be safely retried",async t=>{
+  const f=fixture();t.after(f.restore);
+  const source=Uint8Array.from({length:64},(_,i)=>i);
+  const created=await f.call("/api/media/uploads","POST",declaration(source.length,"complete-stale-001"));
+  const id=(await created.json()).session.id;
+  assert.equal((await f.call("/api/media/uploads/"+id+"/chunks/1","PUT",source)).status,200);
+  f.DB.sessions.get(id).state="completing";
+  f.DB.sessions.get(id).updated_at="2000-01-01 00:00:00";
+  const recovered=await f.call("/api/media/uploads/"+id+"/complete","POST",{});
+  assert.equal(recovered.status,201,await recovered.clone().text());
+  assert.equal(f.DB.sessions.get(id).state,"completed");
 });
