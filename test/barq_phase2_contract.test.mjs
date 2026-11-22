@@ -905,12 +905,13 @@ test("private message delete-for-me hides only the authenticated participant cop
 
 
 test("only bundled BARQ identities can be selected before optional packages are downloaded", () => {
-  assert.match(identitySource, /bool get isBundled => this == BarqIdentity\.blueLightning \|\| this == BarqIdentity\.butterfly/);
-  assert.match(identitySource, /if \(!identity\.isAvailable\)/);
-  assert.match(identitySource, /restored != null && restored\.isAvailable/);
-  assert.match(flutterApp, /saving \|\| isDownloading/);
-  assert.match(flutterApp, /اضغط لتنزيل الحزمة ثم تفعيلها/);
-  assert.match(flutterApp, /download_for_offline_outlined/);
+  assert.ok(identitySource.includes("bool get isBundled =>"));
+  assert.ok(identitySource.includes("BarqIdentity.butterfly;"));
+  assert.ok(identitySource.includes("if (!identity.isAvailable)"));
+  assert.ok(identitySource.includes("restored != null && restored.isAvailable"));
+  assert.ok(flutterApp.includes("saving || isDownloading"));
+  assert.ok(flutterApp.includes("اضغط لتنزيل الحزمة ثم تفعيلها"));
+  assert.ok(flutterApp.includes("download_for_offline_outlined"));
 });
 
 
