@@ -4273,55 +4273,110 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ),
           for (final status in statuses)
             Card(
-              color: Theme.of(context).colorScheme.surface,
-              child: ListTile(
+              margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              clipBehavior: Clip.antiAlias,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(color: Theme.of(context).colorScheme.primary.withValues(alpha: .18)),
+              ),
+              child: InkWell(
                 onTap: () => _openSparkStatus(status),
-                leading: Container(
-                  padding: const EdgeInsets.all(2),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(colors: [Theme.of(context).colorScheme.primary, Theme.of(context).colorScheme.secondary]),
-                  ),
-                  child: CircleAvatar(
-                    radius: 22,
-                    backgroundColor: Theme.of(context).colorScheme.surface,
-                    child: ClipOval(
-                      child: field(status, ['photoUrl', 'photo_url']).isEmpty
-                          ? const Icon(Icons.person)
-                          : Image.network(
-                              '$apiBase${field(status, ['photoUrl', 'photo_url'])}?v=${Uri.encodeComponent(field(status, ['photoUpdatedAt', 'photo_updated_at']))}',
-                              width: 44,
-                              height: 44,
-                              fit: BoxFit.cover,
-                              headers: {'Authorization': 'Bearer ${Api.token}'},
-                              errorBuilder: (_, __, ___) => const Icon(Icons.person),
-                            ),
+                    gradient: LinearGradient(
+                      begin: Alignment.topRight,
+                      end: Alignment.bottomLeft,
+                      colors: [
+                        Theme.of(context).colorScheme.primary.withValues(alpha: .10),
+                        Theme.of(context).colorScheme.surface,
+                        Theme.of(context).colorScheme.secondary.withValues(alpha: .06),
+                      ],
                     ),
                   ),
-                ),
-                title: Text(field(status, ['displayName', 'display_name', 'username'], 'مستخدم برق')),
-                subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    field(status, ['content']).isNotEmpty
-                        ? field(status, ['content'])
-                        : ((status['media'] is List && (status['media'] as List).isNotEmpty)
-                            ? 'اضغط لمشاهدة وسائط SPARK'
-                            : 'لحظة جديدة في SPARK'),
-                    maxLines: 4,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                trailing: status['userId']?.toString() == myId
-                    ? Row(mainAxisSize: MainAxisSize.min, children: [
-                        IconButton(
-                          tooltip: 'المشاهدون',
-                          onPressed: () => _showSparkViewers(field(status, ['id'])),
-                          icon: const Icon(Icons.visibility_outlined),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      Container(
+                        padding: const EdgeInsets.all(2.5),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(colors: [
+                            Theme.of(context).colorScheme.primary,
+                            Theme.of(context).colorScheme.secondary,
+                            gold,
+                          ]),
                         ),
-                        Text((status['viewCount'] ?? 0).toString(), style: const TextStyle(color: Colors.white70)),
-                      ])
-                    : const Icon(Icons.play_circle_outline, size: 24),
+                        child: CircleAvatar(
+                          radius: 23,
+                          backgroundColor: Theme.of(context).colorScheme.surface,
+                          child: ClipOval(
+                            child: field(status, ['photoUrl', 'photo_url']).isEmpty
+                                ? const Icon(Icons.person)
+                                : Image.network(
+                                    '$apiBase${field(status, ['photoUrl', 'photo_url'])}?v=${Uri.encodeComponent(field(status, ['photoUpdatedAt', 'photo_updated_at']))}',
+                                    width: 46,
+                                    height: 46,
+                                    fit: BoxFit.cover,
+                                    headers: {'Authorization': 'Bearer ${Api.token}'},
+                                    errorBuilder: (_, __, ___) => const Icon(Icons.person),
+                                  ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 11),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(field(status, ['displayName', 'display_name', 'username'], 'مستخدم برق'),
+                            maxLines: 1, overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                          const SizedBox(height: 3),
+                          const Text('لحظة على SPARK',
+                            style: TextStyle(color: Colors.white54, fontSize: 11)),
+                        ]),
+                      ),
+                      if (status['userId']?.toString() == myId)
+                        Row(mainAxisSize: MainAxisSize.min, children: [
+                          IconButton(
+                            tooltip: 'المشاهدون',
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => _showSparkViewers(field(status, ['id'])),
+                            icon: Icon(Icons.visibility_outlined, color: Theme.of(context).colorScheme.primary),
+                          ),
+                          Text((status['viewCount'] ?? 0).toString(),
+                            style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                        ])
+                      else
+                        Icon(Icons.play_circle_fill_rounded,
+                          color: Theme.of(context).colorScheme.primary, size: 28),
+                    ]),
+                    if (field(status, ['content']).trim().isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: .16),
+                          borderRadius: BorderRadius.circular(13),
+                        ),
+                        child: Text(field(status, ['content']),
+                          maxLines: 4, overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(height: 1.45, fontSize: 13)),
+                      ),
+                    ],
+                    if (status['media'] is List && (status['media'] as List).isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Row(children: [
+                        Icon(Icons.perm_media_outlined, size: 16,
+                          color: Theme.of(context).colorScheme.primary),
+                        const SizedBox(width: 6),
+                        Text('${(status['media'] as List).length} وسائط مرفقة',
+                          style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 11, fontWeight: FontWeight.w700)),
+                        const Spacer(),
+                        const Text('اضغط للمشاهدة', style: TextStyle(color: Colors.white54, fontSize: 10)),
+                      ]),
+                    ],
+                  ]),
+                ),
               ),
             ),
         ],
