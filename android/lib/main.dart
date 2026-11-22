@@ -254,6 +254,34 @@ Future<FilePickerResult?> showBarqMediaPicker(
   return FilePickerResult(selectedFiles);
 }
 
+Future<void> _openBarqPickedMediaPreview(
+  BuildContext context,
+  PlatformFile file,
+  bool isVideo,
+) async {
+  final path = file.path;
+  if (path == null || path.isEmpty) return;
+  if (isVideo) {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _BarqMediaViewer(videoFile: File(path), title: file.name),
+    );
+    return;
+  }
+  try {
+    final bytes = await readBarqPickedFileBytes(file);
+    if (!context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (_) => _BarqMediaViewer(imageBytes: Uint8List.fromList(bytes), title: file.name),
+    );
+  } catch (error) {
+    if (context.mounted) showMsg(context, cleanError(error));
+  }
+}
+
 Future<bool?> _showBarqMediaPreview(
   BuildContext context,
   List<PlatformFile> files,
@@ -279,36 +307,42 @@ Future<bool?> _showBarqMediaPreview(
             final file = files[index];
             final extension = (file.extension ?? '').toLowerCase();
             final isVideo = videoExtensions.contains(extension);
-            return ClipRRect(
+            return InkWell(
               borderRadius: BorderRadius.circular(12),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (isVideo && file.path != null)
-                    _BarqPickedVideoThumbnail(file: file)
-                  else if (!isVideo && file.path != null)
-                    Image.file(
-                      File(file.path!),
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => ColoredBox(
+              onTap: file.path == null
+                  ? null
+                  : () => _openBarqPickedMediaPreview(context, file, isVideo),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (isVideo && file.path != null)
+                      _BarqPickedVideoThumbnail(file: file)
+                    else if (!isVideo && file.path != null)
+                      Image.file(
+                        File(file.path!),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => ColoredBox(
+                          color: palette.surfaceContainerHighest,
+                          child: Icon(Icons.broken_image_outlined, color: palette.onSurfaceVariant),
+                        ),
+                      )
+                    else
+                      ColoredBox(
                         color: palette.surfaceContainerHighest,
-                        child: Icon(Icons.broken_image_outlined, color: palette.onSurfaceVariant),
+                        child: Icon(Icons.insert_drive_file_rounded, size: 38, color: palette.primary),
                       ),
-                    )
-                  else
-                    ColoredBox(
-                      color: palette.surfaceContainerHighest,
-                      child: Icon(Icons.insert_drive_file_rounded, size: 38, color: palette.primary),
-                    ),
-                  if (isVideo)
-                    Align(
-                      alignment: Alignment.bottomRight,
-                      child: Padding(
-                        padding: const EdgeInsets.all(5),
-                        child: Icon(Icons.play_arrow_rounded, color: palette.onPrimary),
+                    if (isVideo)
+                      Align(
+                        alignment: Alignment.bottomRight,
+                        child: Padding(
+                          padding: const EdgeInsets.all(5),
+                          child: Icon(Icons.play_arrow_rounded, color: palette.onPrimary),
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             );
           },
@@ -7163,13 +7197,15 @@ String formatBarqMediaDuration(Duration duration) {
 class _BarqMediaViewer extends StatefulWidget {
   final Map<String, dynamic>? attachment;
   final Uint8List? imageBytes;
+  final File? videoFile;
   final String title;
 
   const _BarqMediaViewer({
     this.attachment,
     this.imageBytes,
+    this.videoFile,
     required this.title,
-  }) : assert(attachment != null || imageBytes != null);
+  }) : assert(attachment != null || imageBytes != null || videoFile != null);
 
   @override
   State<_BarqMediaViewer> createState() => _BarqMediaViewerState();
@@ -7183,13 +7219,39 @@ class _BarqMediaViewerState extends State<_BarqMediaViewer> {
   @override
   void initState() {
     super.initState();
-    if (widget.attachment != null) {
+    if (widget.attachment != null || widget.videoFile != null) {
       _loading = true;
       _initializeVideo();
     }
   }
 
   Future<void> _initializeVideo() async {
+    if (widget.videoFile != null) {
+      VideoPlayerController? localController;
+      try {
+        localController = VideoPlayerController.file(widget.videoFile!);
+        await localController.initialize().timeout(const Duration(seconds: 30));
+        if (!mounted) {
+          await localController.dispose();
+          return;
+        }
+        await localController.setLooping(false);
+        setState(() {
+          _controller = localController;
+          _loading = false;
+          _error = null;
+        });
+      } catch (error) {
+        await localController?.dispose();
+        if (mounted) {
+          setState(() {
+            _loading = false;
+            _error = cleanError(error);
+          });
+        }
+      }
+      return;
+    }
     final attachment = widget.attachment;
     final id = attachment == null ? '' : field(attachment, ['attachmentId']);
     if (id.isEmpty) {
