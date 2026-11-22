@@ -131,9 +131,13 @@ class ProductionGroupsCompatibilityTests(unittest.TestCase):
                VALUES ('new-message', 'new-group', 'owner-1', 'reply',
                        'legacy-message', 'preserve me', 'owner-1')"""
         )
-        self.db.execute(
+        update_cursor = self.db.execute(
             "UPDATE chat_groups SET owner_id = 'member-1' WHERE id = 'new-group'"
         )
+        # SQLite reports zero affected rows for INSTEAD OF-triggered view writes,
+        # although the underlying groups row was updated. The Worker must verify
+        # the resulting owner by reading the view, not by checking meta.changes.
+        self.assertEqual(update_cursor.rowcount, 0)
 
         self.assertEqual(
             self.db.execute(
