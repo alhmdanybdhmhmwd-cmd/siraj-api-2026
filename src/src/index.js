@@ -3877,6 +3877,19 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
             ]);
           }
         } catch (error) {
+          // Roll back any chat row created before a later metadata/state failure.
+          // The generated message ID and sender scope prevent touching other rows.
+          try {
+            if (recipientId) {
+              await env.DB.prepare(
+                "DELETE FROM messages WHERE id = ? AND sender_id = ?"
+              ).bind(messageId, currentUser.sub).run();
+            } else {
+              await env.DB.prepare(
+                "DELETE FROM group_messages WHERE id = ? AND sender_id = ?"
+              ).bind(messageId, currentUser.sub).run();
+            }
+          } catch (_) {}
           // Revoke access immediately. If storage deletion fails, schedule a near-immediate
           // retry; successful chat attachments never enter the automatic expiry queue.
           let objectDeleted = false;
