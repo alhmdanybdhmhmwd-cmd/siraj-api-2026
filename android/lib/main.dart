@@ -8788,7 +8788,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             ),
           ],
         ),
-        body: Column(
+        body: Container(
+          decoration: barqChatWallpaperDecoration(context, chatWallpaperColor),
+          child: Column(
           children: [
             Expanded(
               child: loading
@@ -9161,7 +9163,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               ),
             ),
           ],
-        ),
+        )),
       ),
     );
   }
@@ -9573,6 +9575,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
   bool sending = false;
   double? mediaUploadProgress;
   bool refreshing = false;
+  Color? chatWallpaperColor;
   bool hasOlderMessages = false;
   bool loadingOlderMessages = false;
   Map<String, dynamic>? olderMessageCursor;
@@ -9585,7 +9588,28 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     loadMessages();
+    _loadGroupWallpaper();
     _startRefreshTimer();
+  }
+
+  Future<void> _loadGroupWallpaper() async {
+    try {
+      final saved = await storage.read(key: 'barq_group_wallpaper_$groupId');
+      final value = saved == null ? null : int.tryParse(saved);
+      if (value != null && mounted) setState(() => chatWallpaperColor = Color(value));
+    } catch (_) {}
+  }
+
+  Future<void> _chooseGroupWallpaper() async {
+    final selected = await showBarqWallpaperPicker(context, chatWallpaperColor);
+    if (selected == null || !mounted) return;
+    setState(() => chatWallpaperColor = selected == Colors.transparent ? null : selected);
+    final key = 'barq_group_wallpaper_$groupId';
+    if (selected == Colors.transparent) {
+      await storage.delete(key: key);
+    } else {
+      await storage.write(key: key, value: selected.toARGB32().toString());
+    }
   }
 
   void _startRefreshTimer() {
@@ -9955,6 +9979,11 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
           ]),
           actions: [
             IconButton(
+              tooltip: 'تغيير خلفية المجموعة',
+              onPressed: _chooseGroupWallpaper,
+              icon: const Icon(Icons.wallpaper_outlined),
+            ),
+            IconButton(
               onPressed: () => showBarqConversationTools(context, [
                 BarqConversationTool(
                   icon: Icons.search,
@@ -9996,7 +10025,9 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
               IconButton(onPressed: widget.onAddMember, icon: const Icon(Icons.person_add_alt_1), tooltip: 'إضافة عضو'),
           ],
         ),
-        body: Column(children: [
+        body: Container(
+          decoration: barqChatWallpaperDecoration(context, chatWallpaperColor),
+          child: Column(children: [
           Expanded(child: loading
             ? const Center(child: CircularProgressIndicator())
             : messages.isEmpty
@@ -10282,7 +10313,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
               ),
             ]),
           )),
-        ]),
+        ])),
       ),
     );
   }
