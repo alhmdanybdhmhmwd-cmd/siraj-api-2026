@@ -5,8 +5,10 @@ const base = process.env.BARQ_PREVIEW_URL;
 if (!base) {
   console.log("Preview integration skipped: BARQ_PREVIEW_URL is not configured.");
 } else {
-  if (!/^https:\/\/[a-z0-9.-]+\.workers\.dev$/i.test(base)) {
-    throw new Error("BARQ_PREVIEW_URL must point to the isolated workers.dev Preview host");
+  const isWorkersPreview = /^https:\/\/[a-z0-9.-]+\.workers\.dev$/i.test(base);
+  const isVercelPreview = /^https:\/\/[a-z0-9.-]+\.vercel\.app$/i.test(base);
+  if (!isWorkersPreview && !isVercelPreview) {
+    throw new Error("BARQ_PREVIEW_URL must target the isolated Worker or its Vercel Preview proxy");
   }
 
 async function call(path, { method = "GET", token, body, expected = 200 } = {}) {
