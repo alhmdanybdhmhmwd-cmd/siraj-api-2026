@@ -2079,6 +2079,73 @@ Map<String, String>? parseBarqSparkPrivateReply(String body) {
   };
 }
 
+BoxDecoration barqChatWallpaperDecoration(BuildContext context, Color? wallpaper) {
+  final base = wallpaper ?? Theme.of(context).scaffoldBackgroundColor;
+  return BoxDecoration(
+    gradient: LinearGradient(
+      begin: Alignment.topRight,
+      end: Alignment.bottomLeft,
+      colors: [
+        Color.lerp(base, Colors.white, .035)!,
+        base,
+        Color.lerp(base, Colors.black, .24)!,
+      ],
+    ),
+  );
+}
+
+Future<Color?> showBarqWallpaperPicker(BuildContext context, Color? selected) {
+  const choices = <Color>[
+    Color(0xFF071A2D), Color(0xFF101827), Color(0xFF1B1630),
+    Color(0xFF172A27), Color(0xFF242424), Color(0xFF0C2940),
+  ];
+  return showModalBottomSheet<Color>(
+    context: context,
+    backgroundColor: Theme.of(context).colorScheme.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (sheetContext) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 22),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('خلفية المحادثة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 5),
+          const Text('ألوان داكنة بتدرجات هادئة تناسب هوية برق.',
+            style: TextStyle(color: Colors.white60, fontSize: 12)),
+          const SizedBox(height: 16),
+          Wrap(spacing: 13, runSpacing: 13, children: [
+            for (final color in choices)
+              InkWell(
+                customBorder: const CircleBorder(),
+                onTap: () => Navigator.pop(sheetContext, color),
+                child: Container(
+                  width: 54, height: 54,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color.lerp(color, Colors.white, .13)!, color, Color.lerp(color, Colors.black, .28)!],
+                    ),
+                    border: Border.all(color: selected == color ? Theme.of(context).colorScheme.primary : Colors.white24, width: selected == color ? 3 : 1),
+                    boxShadow: [BoxShadow(color: color.withValues(alpha: .30), blurRadius: 12)],
+                  ),
+                  child: selected == color ? const Icon(Icons.check_rounded, color: Colors.white) : null,
+                ),
+              ),
+            InkWell(
+              customBorder: const CircleBorder(),
+              onTap: () => Navigator.pop(sheetContext, Colors.transparent),
+              child: const CircleAvatar(radius: 27, child: Icon(Icons.restart_alt_rounded)),
+            ),
+          ]),
+        ]),
+      ),
+    ),
+  );
+}
+
 String newBarqMessageId() {
   final random = math.Random.secure();
   return List.generate(16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
@@ -8626,42 +8693,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   Future<void> _chooseChatWallpaper() async {
-    const choices = <Color>[
-      Color(0xFF071A2D), Color(0xFF101827), Color(0xFF1B1630),
-      Color(0xFF172A27), Color(0xFF242424), Color(0xFF0C2940),
-    ];
-    final selected = await showModalBottomSheet<Color>(
-      context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('خلفية المحادثة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 14),
-            Wrap(spacing: 14, runSpacing: 14, children: [
-              for (final color in choices)
-                InkWell(
-                  customBorder: const CircleBorder(),
-                  onTap: () => Navigator.pop(sheetContext, color),
-                  child: CircleAvatar(
-                    radius: 25, backgroundColor: color,
-                    child: chatWallpaperColor == color ? const Icon(Icons.check, color: Colors.white) : null,
-                  ),
-                ),
-              InkWell(
-                customBorder: const CircleBorder(),
-                onTap: () => Navigator.pop(sheetContext, Colors.transparent),
-                child: const CircleAvatar(radius: 25, child: Icon(Icons.restart_alt_rounded)),
-              ),
-            ]),
-            const SizedBox(height: 8),
-            const Text('اختر لوناً هادئاً أو أعد الخلفية الافتراضية.',
-              style: TextStyle(color: Colors.white60, fontSize: 12)),
-          ]),
-        ),
-      ),
-    );
+    final selected = await showBarqWallpaperPicker(context, chatWallpaperColor);
     if (selected != null && mounted) {
       setState(() => chatWallpaperColor = selected == Colors.transparent ? null : selected);
       final key = 'barq_chat_wallpaper_$friendId';
