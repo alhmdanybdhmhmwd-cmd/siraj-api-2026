@@ -2068,10 +2068,10 @@ String barqSparkPrivateReplyMessage({required String caption, required String re
 }
 
 Map<String, String>? parseBarqSparkPrivateReply(String body) {
-  const prefix = '↩️ رد على SPARK\\n';
+  const prefix = '↩️ رد على SPARK\n';
   if (!body.startsWith(prefix)) return null;
   final content = body.substring(prefix.length);
-  final divider = content.indexOf('\\n\\n');
+  final divider = content.indexOf('\n\n');
   if (divider < 0) return null;
   return {
     'caption': content.substring(0, divider),
