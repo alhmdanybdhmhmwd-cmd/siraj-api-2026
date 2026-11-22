@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:nearby_connections/nearby_connections.dart';
@@ -1018,7 +1019,7 @@ void main() {
       final inMemory = PlatformFile(
         name: 'memory.jpg',
         size: 2,
-        bytes: [1, 2],
+        bytes: Uint8List.fromList([1, 2]),
         path: file.path,
       );
       final onDisk = PlatformFile(
