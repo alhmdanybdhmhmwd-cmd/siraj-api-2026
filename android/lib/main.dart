@@ -7714,6 +7714,8 @@ class _ChatPageState extends State<ChatPage> {
                                           onReply: (message) async {
                                             setState(() => replyToMessage = Map<String, dynamic>.from(message));
                                           },
+                                          onForward: _attachmentData(m) != null
+                                              ? () => forwardBarqMessage(context, m) : null,
                                           onReact: (emoji) async {
                                             await Api.reactPrivateMessage(field(m, ['id', 'message_id']), emoji);
                                             if (mounted) await loadMessages(silent: true);
@@ -8842,6 +8844,8 @@ class _GroupChatPageState extends State<GroupChatPage> {
                                 onReply: (message) async {
                                   setState(() => replyToMessage = Map<String, dynamic>.from(message));
                                 },
+                                onForward: _attachmentData(m) != null
+                                    ? () => forwardBarqMessage(context, m) : null,
                                 onReact: (emoji) async {
                                   await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), emoji);
                                   if (mounted) await loadMessages(silent: true);
