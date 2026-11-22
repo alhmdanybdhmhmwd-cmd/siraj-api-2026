@@ -1064,7 +1064,7 @@ export default {
         `).run();
       }
       // Resumable chat media uploads are isolated behind authenticated session routes.
-      const resumableMediaResponse = await handleResumableMediaUpload(request, env, currentUser, url, path, method);
+      const resumableMediaResponse = await handleResumableMediaUpload(request, env, currentUser, url, path, method, sendSirajPush);
       if (resumableMediaResponse) return resumableMediaResponse;
 
       // Revoke only this bearer token; other device sessions remain valid.
