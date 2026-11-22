@@ -8077,6 +8077,13 @@ class _ChatPageState extends State<ChatPage> {
                                       children: [
                                         Text(_messageTime(field(m, ['created_at', 'createdAt'])),
                                           style: TextStyle(fontSize: 10, color: Colors.white.withValues(alpha: 0.55))),
+                                        if (m['is_sending'] == true) ...[
+                                          const SizedBox(width: 5),
+                                          const SizedBox(width: 10, height: 10,
+                                            child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white70)),
+                                          const SizedBox(width: 3),
+                                          const Text('جارٍ الإرسال', style: TextStyle(fontSize: 9, color: Colors.white60)),
+                                        ],
                                         if (field(m, ['edited_at', 'editedAt']).isNotEmpty)
                                           const Text('تم التعديل', style: TextStyle(fontSize: 9, color: Colors.white54)),
                                         if (mine) ...[
