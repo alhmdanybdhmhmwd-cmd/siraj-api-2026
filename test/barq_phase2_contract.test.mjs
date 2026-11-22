@@ -840,6 +840,9 @@ test("resumable media completion persists one visible private or group attachmen
   assert.ok(multipartRoutes.includes('INSERT INTO private_conversation_state (user_id, peer_id, hidden_at, updated_at)'));
   assert.ok(multipartRoutes.includes('The upload session ID is also the stable message ID'));
   assert.ok(multipartRoutes.includes('ON CONFLICT(user_id, peer_id) DO UPDATE SET hidden_at = NULL'));
+  assert.ok(multipartRoutes.includes('Resumable attachment notification dispatch failed'));
+  assert.ok(multipartRoutes.includes('await sendPush(env, session.recipient_id, currentUser.sub, senderName, "أرسل مرفقًا")'));
+  assert.ok(worker.includes('handleResumableMediaUpload(request, env, currentUser, url, path, method, sendSirajPush)'));
 });
 
 test("Worker CORS matches the public gateway for resumable media and range downloads", () => {
