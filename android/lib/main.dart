@@ -7617,13 +7617,27 @@ class _ChatPageState extends State<ChatPage> {
     final replySnapshot = replyToMessage == null ? null : Map<String, dynamic>.from(replyToMessage!);
     controller.clear();
     if (mounted) setState(() => replyToMessage = null);
+    final messageId = ephemeralMode ? null : newBarqMessageId();
+    final localMessage = messageId == null ? null : <String, dynamic>{
+      'id': messageId,
+      'sender_id': widget.currentUserId,
+      'receiver_id': friendId,
+      'body': text,
+      if (replySnapshot != null) 'reply_to_id': field(replySnapshot, ['id', 'message_id']),
+      if (replySnapshot != null) 'reply_to_body': field(replySnapshot, ['body', 'content', 'message']),
+      if (replySnapshot != null) 'reply_to_sender_id': field(replySnapshot, ['sender_id']),
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+      'is_sending': true,
+    };
+    if (localMessage != null && mounted) {
+      setState(() => messages = mergeMessages(messages, [localMessage]));
+    }
     setState(() => sending = true);
     try {
       if (ephemeralMode) {
         if (replySnapshot != null) throw Exception('الرسائل المؤقتة لا تدعم الرد على رسالة أخرى. ألغِ الرد أولاً.');
         await Api.sendEphemeralMessage(friendId, text);
       } else {
-        final messageId = newBarqMessageId();
         try {
           await Api.sendMessage(friendId, text, clientMessageId: messageId,
             replyToId: replySnapshot == null ? null : field(replySnapshot, ['id', 'message_id']));
@@ -7649,7 +7663,7 @@ class _ChatPageState extends State<ChatPage> {
             }
           } catch (_) {}
           if (mounted) {
-            setState(() => messages = mergeMessages(messages, [{...localMessage, 'is_offline_pending': true}]));
+            setState(() => messages = mergeMessages(messages, [{...localMessage!, 'is_sending': false, 'is_offline_pending': true}]));
             showMsg(context, deliveredNearby
                 ? 'أُرسلت الرسالة عبر الاتصال القريب، وستُزامن مع الخادم عند عودة الإنترنت.'
                 : replyToMessage != null
@@ -7661,8 +7675,15 @@ class _ChatPageState extends State<ChatPage> {
           return;
         }
       }
+      if (localMessage != null && mounted) {
+        setState(() => messages = messages.map((item) => item['id'] == messageId
+          ? {...item, 'is_sending': false} : item).toList());
+      }
       await loadMessages(silent: true);
     } catch (e) {
+      if (messageId != null && mounted) {
+        setState(() => messages.removeWhere((item) => item['id'] == messageId));
+      }
       if (mounted) showMsg(context, cleanError(e));
     } finally {
       if (mounted) setState(() => sending = false);
