@@ -4241,44 +4241,103 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Widget _chatsPage() {
-    if (friends.isEmpty) {
-      return _empty(Icons.chat_bubble_outline, 'لا توجد محادثات بعد', 'ابحث عن شخص وأضفه إلى جهات اتصالك لتبدأ المراسلة.');
-    }
-    return ListView(
-      padding: const EdgeInsets.all(12),
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: Text('محادثاتك', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 21)),
-        ),
-        for (final friend in friends)
-          Card(
-            color: Theme.of(context).colorScheme.surface,
-            child: ListTile(
-              leading: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: () => Navigator.push(context, MaterialPageRoute(
-                  builder: (_) => PublicProfilePage(person: friend, currentUserId: myId, canMessage: true),
-                )),
-                child: personAvatar(friend),
+    final palette = Theme.of(context).colorScheme;
+    return RefreshIndicator(
+      color: palette.primary,
+      onRefresh: refreshAll,
+      child: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 8, 4, 10),
+            child: Row(children: [
+              Expanded(child: Text('محادثاتك',
+                style: TextStyle(color: palette.primary, fontSize: 21, fontWeight: FontWeight.bold))),
+              IconButton(
+                tooltip: 'إنشاء مجموعة',
+                onPressed: createGroupDialog,
+                icon: const Icon(Icons.group_add_rounded),
               ),
-              title: InkWell(
-                onTap: () => Navigator.push(context, MaterialPageRoute(
-                  builder: (_) => PublicProfilePage(person: friend, currentUserId: myId, canMessage: true),
-                )),
-                child: Text(_personName(friend)),
-              ),
-              subtitle: Text('@${_personUsername(friend)}'),
-              trailing: IconButton(
-                tooltip: 'فتح المحادثة',
-                icon: const Icon(Icons.chat_bubble_outline),
-                onPressed: () => Navigator.push(context, MaterialPageRoute(
-                  builder: (_) => ChatPage(friend: friend, currentUserId: myId),
-                )),
-              ),
-            ),
+            ]),
           ),
-      ],
+          Row(children: [
+            Icon(Icons.groups_rounded, color: palette.primary),
+            const SizedBox(width: 8),
+            Text('المجموعات', style: TextStyle(color: palette.primary, fontWeight: FontWeight.w700)),
+            const Spacer(),
+            Text('${groups.length}', style: TextStyle(color: palette.onSurface.withValues(alpha: .65))),
+          ]),
+          if (groups.isEmpty)
+            Card(child: ListTile(
+              leading: const Icon(Icons.group_add_outlined),
+              title: const Text('أنشئ مجموعتك الأولى'),
+              subtitle: const Text('اجمع أصدقاءك في محادثة واحدة'),
+              onTap: createGroupDialog,
+            ))
+          else
+            for (final group in groups)
+              Card(
+                color: palette.surface,
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: palette.primary.withValues(alpha: .14),
+                    child: Icon(Icons.groups_rounded, color: palette.primary),
+                  ),
+                  title: Text(field(group, ['name'], 'مجموعة')),
+                  subtitle: Text('${field(group, ['description'], 'مجموعة برق')} • ${field(group, ['member_count'], '1')} أعضاء'),
+                  trailing: const Icon(Icons.chevron_left_rounded),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => GroupChatPage(
+                      group: group,
+                      currentUserId: myId,
+                      onAddMember: () => addMemberDialog(group),
+                      onGroupChanged: refreshAll,
+                    ),
+                  )),
+                ),
+              ),
+          const SizedBox(height: 14),
+          Row(children: [
+            Icon(Icons.chat_bubble_outline_rounded, color: palette.primary),
+            const SizedBox(width: 8),
+            Text('المحادثات الفردية', style: TextStyle(color: palette.primary, fontWeight: FontWeight.w700)),
+          ]),
+          if (friends.isEmpty)
+            const Card(child: ListTile(
+              leading: Icon(Icons.person_search_outlined),
+              title: Text('لا توجد محادثات بعد'),
+              subtitle: Text('ابحث عن شخص من جهات الاتصال لتبدأ المراسلة.'),
+            ))
+          else
+            for (final friend in friends)
+              Card(
+                color: palette.surface,
+                child: ListTile(
+                  leading: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: () => Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => PublicProfilePage(person: friend, currentUserId: myId, canMessage: true),
+                    )),
+                    child: personAvatar(friend),
+                  ),
+                  title: InkWell(
+                    onTap: () => Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => PublicProfilePage(person: friend, currentUserId: myId, canMessage: true),
+                    )),
+                    child: Text(_personName(friend)),
+                  ),
+                  subtitle: Text('@${_personUsername(friend)}'),
+                  trailing: IconButton(
+                    tooltip: 'فتح المحادثة',
+                    icon: const Icon(Icons.chat_bubble_outline),
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => ChatPage(friend: friend, currentUserId: myId),
+                    )),
+                  ),
+                ),
+              ),
+        ],
+      ),
     );
   }
 
@@ -5378,21 +5437,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               floatingActionButton: FloatingActionButton(
                 onPressed: _showPrivateMemoryDialog,
                 child: const Icon(Icons.add),
-              ),
-            ),
-          )),
-        ),
-        item(
-          icon: Icons.groups_outlined,
-          title: 'المجموعات',
-          subtitle: 'محادثاتك ومجموعاتك على برق',
-          onTap: () => Navigator.push(context, MaterialPageRoute(
-            builder: (_) => Scaffold(
-              appBar: AppBar(title: const Text('المجموعات')),
-              body: _groupsPage(),
-              floatingActionButton: FloatingActionButton(
-                onPressed: createGroupDialog,
-                child: const Icon(Icons.group_add),
               ),
             ),
           )),
