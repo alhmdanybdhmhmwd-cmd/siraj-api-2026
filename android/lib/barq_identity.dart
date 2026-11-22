@@ -101,15 +101,14 @@ enum BarqIdentity {
   }) async {
     if (identity.isBundled) return;
     final response = await http.get(
-      Uri.parse(apiBase + '/api/identity-packages/' + identity.name),
+      Uri.parse('$apiBase/api/identity-packages/${identity.name}'),
       headers: {
-        'Authorization': 'Bearer ' + token,
+        'Authorization': 'Bearer $token',
         'Accept': 'application/json',
       },
     ).timeout(const Duration(seconds: 25));
     if (response.statusCode != 200) {
-      throw StateError('تعذر تنزيل حزمة الهوية (' +
-          response.statusCode.toString() + ').');
+      throw StateError('تعذر تنزيل حزمة الهوية (${response.statusCode}).');
     }
     final decoded = jsonDecode(response.body);
     if (decoded is! Map || decoded['palette'] is! Map) {
@@ -180,7 +179,7 @@ class BarqIdentityPalette {
     if (package != null && package['palette'] is Map) {
       final values = Map<String, dynamic>.from(package['palette'] as Map);
       Color color(String key) => Color(
-          int.parse('FF' + (values[key] as String).substring(1), radix: 16));
+          int.parse('FF${(values[key] as String).substring(1)}', radix: 16));
       final motif = switch (values['motif']) {
         'diamond_outlined' => Icons.diamond_outlined,
         'diamond' => Icons.diamond_rounded,
