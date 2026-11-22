@@ -199,6 +199,19 @@ test("route integration: membership is enforced and abort removes staging only",
   assert.equal(f.DB.sessions.get(id).state,"aborted");
   assert.equal([...f.objects.keys()].some(k=>k.includes(".barq-staging/")),false);
   assert.equal([...f.objects.keys()].some(k=>k.includes("/chat-media/")),false);
+  assert.equal((await f.call("/api/media/uploads/"+id,"DELETE")).status,200,
+    "retrying an already claimed abort must safely finish cleanup");
+});
+
+test("route concurrency: abort cannot take over a completion claim",async t=>{
+  const f=fixture();t.after(f.restore);
+  const created=await f.call("/api/media/uploads","POST",declaration(64,"abort-completing-001"));
+  const id=(await created.json()).session.id;
+  f.DB.sessions.get(id).state="completing";
+  const abort=await f.call("/api/media/uploads/"+id,"DELETE");
+  assert.equal(abort.status,409,"abort must not race with an active completion");
+  assert.equal(f.DB.sessions.get(id).state,"completing");
+  assert.equal(f.uploads.get("upload-1").aborted,false);
 });
 
 
