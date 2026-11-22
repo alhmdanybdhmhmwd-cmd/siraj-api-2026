@@ -882,7 +882,7 @@ test("profile updates cannot change the registered phone number", () => {
   assert.ok(!route.includes('body.phone'));
   assert.ok(!route.includes('SET display_name = ?, phone = ?'));
   assert.ok(route.includes('cleanUser(user)'));
-  assert.ok(main.includes("readOnly: true"));
-  assert.ok(main.includes("رقم الهاتف (ثابت بعد إنشاء الحساب)"));
-  assert.ok(!main.includes("phone: phone,"));
+  assert.ok(flutterApp.includes("readOnly: true"));
+  assert.ok(flutterApp.includes("رقم الهاتف (ثابت بعد إنشاء الحساب)"));
+  assert.ok(!flutterApp.includes("phone: phone,"));
 });
