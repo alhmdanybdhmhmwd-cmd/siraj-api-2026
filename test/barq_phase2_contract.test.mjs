@@ -6,6 +6,7 @@ const worker = await readFile(new URL("../src/src/index.js", import.meta.url), "
 const multipartRoutes = await readFile(new URL("../src/src/media_multipart_routes.js", import.meta.url), "utf8");
 const flutterApp = await readFile(new URL("../android/lib/main.dart", import.meta.url), "utf8");
 const identitySource = await readFile(new URL("../android/lib/barq_identity.dart", import.meta.url), "utf8");
+const previewIntegration = await readFile(new URL("./barq_preview_integration.mjs", import.meta.url), "utf8");
 const androidManifest = await readFile(new URL("../android/android/app/src/main/AndroidManifest.xml", import.meta.url), "utf8");
 const testConfig = await readFile(new URL("../wrangler.test.toml", import.meta.url), "utf8");
 const fallbackTestConfig = await readFile(new URL("../wrangler.fallback.test.toml", import.meta.url), "utf8");
@@ -880,7 +881,8 @@ test("profile updates cannot change the registered phone number", () => {
   const route = worker.slice(start, end);
   assert.ok(start >= 0 && end > start, "Profile update route must exist");
   assert.ok(route.includes('UPDATE users SET display_name = ? WHERE id = ?'));
-  assert.ok(!route.includes('body.phone'));
+  assert.ok(!route.includes('String(body.phone'));
+  assert.ok(!route.includes('phone = ?'));
   assert.ok(!route.includes('SET display_name = ?, phone = ?'));
   assert.ok(route.includes('cleanUser(user)'));
   assert.ok(flutterApp.includes("readOnly: true"));
