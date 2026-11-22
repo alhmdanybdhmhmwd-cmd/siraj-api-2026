@@ -3471,6 +3471,9 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           "SELECT 1 FROM friendships WHERE user_id = ? AND friend_id = ?"
         ).bind(currentUser.sub, peerId).first();
         if (!friendship) return json({ error: "Conversation access denied" }, 403);
+        if (await isBlockedPair(currentUser.sub, peerId)) {
+          return json({ error: "Private communication is unavailable" }, 403);
+        }
         const scopeId = [target.sender_id, target.receiver_id].sort().join(":");
         if (action === "reactions") {
           const allowed = ["👍", "❤️", "😂", "😮", "😢", "😡", "🎉", "🔥"];
