@@ -1079,7 +1079,7 @@ void main() {
     _flutterTest.expect(barqApp.normalizeBarqContactPhoneDigits('---'), _flutterTest.isEmpty);
   });
 
-  _flutterTest.test('conversation search _flutterTest.matches message text and sender case-insensitively', () {
+  _flutterTest.test('conversation search matches message text and sender case-insensitively', () {
     final messages = [
       {'id': '1', 'body': 'مرحبا يا صديقي', 'display_name': 'Ali'},
       {'id': '2', 'body': 'Good morning', 'display_name': 'Sara'},
@@ -1123,7 +1123,7 @@ void main() {
     _flutterTest.expect(barqApp.barqOfflineItemsNotOnServerPage(queued, server), [queued.last]);
   });
 
-  _flutterTest.test('accepted outbox removal preserves a _flutterTest.same-ID entry with changed content or reply target', () {
+  _flutterTest.test('accepted outbox removal preserves a same-ID entry with changed content or reply target', () {
     final accepted = <String, dynamic>{
       'id': 'a1b2c3d4e5f60708a1b2c3d4e5f60708',
       'sender_id': 'me',
@@ -1142,7 +1142,7 @@ void main() {
     );
   });
 
-  _flutterTest.test('offline reconciliation keeps a _flutterTest.same-ID message when its content or parties differ', () {
+  _flutterTest.test('offline reconciliation keeps a same-ID message when its content or parties differ', () {
     const id = 'a1b2c3d4e5f60708a1b2c3d4e5f60708';
     final queued = <Map<String, dynamic>>[
       {'id': id, 'sender_id': 'me', 'receiver_id': 'friend-1', 'body': 'original'},
