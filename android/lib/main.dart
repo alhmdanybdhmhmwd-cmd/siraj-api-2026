@@ -2147,16 +2147,6 @@ Widget messageReactionBar({
             if (emoji != null) await onReaction(emoji, false);
           },
         ),
-        if (onPin != null)
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-            padding: EdgeInsets.zero,
-            tooltip: isPinned ? 'إلغاء تثبيت الرسالة' : 'تثبيت الرسالة',
-            icon: Icon(isPinned ? Icons.push_pin : Icons.push_pin_outlined,
-              size: 17, color: isPinned ? Theme.of(context).colorScheme.primary : Colors.white60),
-            onPressed: onPin,
-          ),
       ],
     ),
   );
@@ -2172,6 +2162,7 @@ Future<void> showMessageActions(
   Future<void> Function(String emoji)? onReact,
   Future<void> Function()? onPin,
   Future<void> Function()? onSaveMemory,
+  Future<void> Function()? onForward,
   bool isPinned = false,
 }) async {
   final action = await showModalBottomSheet<String>(
@@ -2197,6 +2188,12 @@ Future<void> showMessageActions(
               leading: Icon(isPinned ? Icons.push_pin : Icons.push_pin_outlined),
               title: Text(isPinned ? 'إلغاء تثبيت الرسالة' : 'تثبيت الرسالة'),
               onTap: () => Navigator.pop(sheetContext, 'pin'),
+            ),
+          if (onForward != null)
+            ListTile(
+              leading: const Icon(Icons.forward_rounded),
+              title: const Text('تحويل الرسالة'),
+              onTap: () => Navigator.pop(sheetContext, 'forward'),
             ),
           if (onSaveMemory != null)
             ListTile(
@@ -2233,6 +2230,8 @@ Future<void> showMessageActions(
     await onPin();
   } else if (action == 'save_memory' && onSaveMemory != null) {
     await onSaveMemory();
+  } else if (action == 'forward' && onForward != null) {
+    await onForward();
   } else if (action == 'reply' && onReply != null) {
     await onReply(message);
   } else if (action == 'edit' && onEdit != null && context.mounted) {
@@ -2278,6 +2277,60 @@ Future<void> showMessageActions(
     }
   }
 }
+
+
+Future<void> forwardBarqMessage(BuildContext context, Map<String, dynamic> message) async {
+  final body = field(message, ['body', 'content', 'message']).trim();
+  if (body.isEmpty) {
+    showMsg(context, 'تحويل المرفقات غير متاح لهذه الرسالة حالياً.');
+    return;
+  }
+  try {
+    final results = await Future.wait([Api.friends(), Api.groups()]);
+    final contacts = results[0] as List<Map<String, dynamic>>;
+    final groups = results[1] as List<Map<String, dynamic>>;
+    if (!context.mounted) return;
+    final target = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('تحويل الرسالة إلى'),
+        content: SizedBox(
+          width: 360,
+          height: 360,
+          child: ListView(children: [
+            if (contacts.isEmpty && groups.isEmpty)
+              const ListTile(title: Text('لا توجد جهات اتصال أو مجموعات')),
+            for (final person in contacts)
+              ListTile(
+                leading: const CircleAvatar(child: Icon(Icons.person_outline)),
+                title: Text(field(person, ['display_name', 'displayName', 'username'], 'مستخدم برق')),
+                subtitle: Text('@${field(person, ['username'])}'),
+                onTap: () => Navigator.pop(dialogContext, {'type': 'person', 'id': field(person, ['id', 'user_id'])}),
+              ),
+            for (final group in groups)
+              ListTile(
+                leading: const CircleAvatar(child: Icon(Icons.groups_outlined)),
+                title: Text(field(group, ['name'], 'مجموعة')),
+                onTap: () => Navigator.pop(dialogContext, {'type': 'group', 'id': field(group, ['id'])}),
+              ),
+          ]),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء'))],
+      ),
+    );
+    if (target == null || target['id'] == null || !context.mounted) return;
+    final forwarded = '↪ رسالة محوّلة\\n$body';
+    if (target['type'] == 'group') {
+      await Api.sendGroupMessage(target['id']!, forwarded);
+    } else {
+      await Api.sendMessage(target['id']!, forwarded);
+    }
+    if (context.mounted) showMsg(context, 'تم تحويل الرسالة.');
+  } catch (error) {
+    if (context.mounted) showMsg(context, cleanError(error));
+  }
+}
+
 
 Future<String?> showEditMessageDialog(BuildContext context, String initialText) {
   return showDialog<String>(
@@ -3409,6 +3462,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   int selectedTab = 0;
   int selectedConversationSection = 0;
+  String conversationQuery = '';
   late Map<String, dynamic> me = widget.user;
   List<Map<String, dynamic>> friends = [];
   List<Map<String, dynamic>> matchedContacts = [];
@@ -4237,6 +4291,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Widget _chatsPage() {
     final palette = Theme.of(context).colorScheme;
+    final query = conversationQuery.trim().toLowerCase();
+    final visibleFriends = friends.where((person) => query.isEmpty ||
+      _personName(person).toLowerCase().contains(query) ||
+      _personUsername(person).toLowerCase().contains(query) ||
+      field(person, ['phone']).toLowerCase().contains(query)).toList();
+    final visibleGroups = groups.where((group) => query.isEmpty ||
+      field(group, ['name']).toLowerCase().contains(query) ||
+      field(group, ['description']).toLowerCase().contains(query)).toList();
     Widget sectionTile({
       required int index,
       required IconData icon,
@@ -4290,6 +4352,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             child: Text('محادثاتك',
               style: TextStyle(color: palette.primary, fontSize: 21, fontWeight: FontWeight.bold)),
           ),
+          TextField(
+            onChanged: (value) => setState(() => conversationQuery = value),
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: 'ابحث في المحادثات والمجموعات...',
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: conversationQuery.isEmpty ? null : IconButton(
+                tooltip: 'مسح البحث', icon: const Icon(Icons.close_rounded),
+                onPressed: () => setState(() => conversationQuery = ''),
+              ),
+              filled: true, fillColor: palette.surfaceContainerHighest,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+            ),
+          ),
+          const SizedBox(height: 10),
           Row(
             children: [
               sectionTile(index: 0, icon: Icons.chat_bubble_outline_rounded,
@@ -4310,14 +4387,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               Text('المحادثات الفردية',
                 style: TextStyle(color: palette.primary, fontWeight: FontWeight.w700)),
             ]),
-            if (friends.isEmpty)
-              const Card(child: ListTile(
-                leading: Icon(Icons.person_search_outlined),
-                title: Text('لا توجد محادثات بعد'),
-                subtitle: Text('ابحث عن شخص من جهات الاتصال لتبدأ المراسلة.'),
+            if (visibleFriends.isEmpty)
+              Card(child: ListTile(
+                leading: Icon(query.isEmpty ? Icons.person_search_outlined : Icons.search_off_rounded),
+                title: Text(query.isEmpty ? 'لا توجد محادثات بعد' : 'لا توجد نتائج مطابقة'),
+                subtitle: Text(query.isEmpty ? 'ابحث عن شخص من جهات الاتصال لتبدأ المراسلة.' : 'جرّب اسماً أو اسم مستخدم أو رقم هاتف آخر.'),
               ))
             else
-              for (final friend in friends)
+              for (final friend in visibleFriends)
                 Card(
                   color: palette.surface,
                   child: ListTile(
@@ -4354,15 +4431,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 icon: Icon(Icons.group_add_rounded, color: palette.primary),
               ),
             ]),
-            if (groups.isEmpty)
+            if (visibleGroups.isEmpty)
               Card(child: ListTile(
-                leading: const Icon(Icons.group_add_outlined),
-                title: const Text('أنشئ مجموعتك الأولى'),
-                subtitle: const Text('اجمع أصدقاءك في محادثة واحدة'),
-                onTap: createGroupDialog,
+                leading: Icon(query.isEmpty ? Icons.group_add_outlined : Icons.search_off_rounded),
+                title: Text(query.isEmpty ? 'أنشئ مجموعتك الأولى' : 'لا توجد مجموعات مطابقة'),
+                subtitle: Text(query.isEmpty ? 'اجمع أصدقاءك في محادثة واحدة' : 'جرّب اسماً أو وصفاً آخر.'),
+                onTap: query.isEmpty ? createGroupDialog : null,
               ))
             else
-              for (final group in groups)
+              for (final group in visibleGroups)
                 Card(
                   color: palette.surface,
                   child: ListTile(
@@ -7559,6 +7636,8 @@ class _ChatPageState extends State<ChatPage> {
                                           onReply: (message) async {
                                             setState(() => replyToMessage = Map<String, dynamic>.from(message));
                                           },
+                                          onForward: field(m, ['body', 'content', 'message']).trim().isNotEmpty
+                                              ? () => forwardBarqMessage(context, m) : null,
                                           onEdit: mine && m['is_ephemeral'] != true && m['is_offline_pending'] != true && _attachmentData(m) == null
                                               ? (body) async {
                                                   await Api.editPrivateMessage(field(m, ['id', 'message_id']), body);
@@ -8661,6 +8740,8 @@ class _GroupChatPageState extends State<GroupChatPage> {
                                 onReply: (message) async {
                                   setState(() => replyToMessage = Map<String, dynamic>.from(message));
                                 },
+                                onForward: field(m, ['body', 'content', 'message']).trim().isNotEmpty
+                                    ? () => forwardBarqMessage(context, m) : null,
                                 onEdit: mine && _attachmentData(m) == null
                                     ? (body) async {
                                         await Api.editGroupMessage(groupId, field(m, ['id', 'message_id']), body);
