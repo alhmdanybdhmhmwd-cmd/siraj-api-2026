@@ -7322,7 +7322,7 @@ class _BarqRemoteVideoThumbnailState extends State<_BarqRemoteVideoThumbnail> {
         }
         setState(() { _controller = controller; _loading = false; });
         return;
-      } catch (error) {
+      } catch (_) {
         await controller?.dispose();
       }
     }
