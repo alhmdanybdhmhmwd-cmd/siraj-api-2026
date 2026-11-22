@@ -894,6 +894,10 @@ void main() {
       barqMediaPickerFileName(title: '', path: '/cache/video.mp4', fallbackExtension: 'mp4'),
       'barq_media.mp4',
     );
+    expect(
+      barqMediaPickerFileName(title: 'image', path: '/cache/image', fallbackExtension: '.png'),
+      'image.png',
+    );
   });
 
   test('SPARK media client size limit rejects empty and oversized files', () {
