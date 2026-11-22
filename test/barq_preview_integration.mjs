@@ -306,63 +306,6 @@ assert.ok(interactedMessage?.reactions?.some(reaction => reaction.emoji === "❤
   "message reactions must be visible to conversation participants");
 
 
-// Conversation clear/delete are per-account, preserve the other participant's copy,
-// keep the contact, and restore the chat list when a new message arrives.
-const clearFixtureId = randomUUID().replaceAll("-", "");
-const otherSideFixtureId = randomUUID().replaceAll("-", "");
-await call("/api/messages", {
-  method: "POST", token: a.token,
-  body: { receiverId: b.user.id, body: "private clear fixture " + suffix, clientMessageId: clearFixtureId },
-  expected: 201
-});
-await call("/api/messages", {
-  method: "POST", token: b.token,
-  body: { receiverId: a.user.id, body: "other side retained fixture " + suffix, clientMessageId: otherSideFixtureId },
-  expected: 201
-});
-await call("/api/conversations/" + encodeURIComponent(b.user.id) + "/clear", {
-  method: "POST", token: a.token
-});
-const clearedForA = await call("/api/messages?with=" + encodeURIComponent(b.user.id), { token: a.token });
-const retainedForB = await call("/api/messages?with=" + encodeURIComponent(a.user.id), { token: b.token });
-assert.ok(!clearedForA.messages.some(message => message.id === clearFixtureId || message.id === otherSideFixtureId),
-  "clear history must hide both directions from the current account");
-assert.ok(retainedForB.messages.some(message => message.id === clearFixtureId) &&
-  retainedForB.messages.some(message => message.id === otherSideFixtureId),
-  "clear history must not delete the other participant's messages");
-let friendsAfterClear = await call("/api/friends", { token: a.token });
-assert.equal(friendsAfterClear.friends.find(user => user.id === b.user.id)?.chatHidden, false,
-  "clear history must keep the conversation visible");
-
-await call("/api/conversations/" + encodeURIComponent(b.user.id), {
-  method: "DELETE", token: a.token
-});
-const deletedForA = await call("/api/messages?with=" + encodeURIComponent(b.user.id), { token: a.token });
-const retainedAfterDeleteForB = await call("/api/messages?with=" + encodeURIComponent(a.user.id), { token: b.token });
-assert.ok(!deletedForA.messages.some(message => message.id === clearFixtureId || message.id === otherSideFixtureId),
-  "delete conversation must keep the deleted account's history hidden");
-assert.ok(retainedAfterDeleteForB.messages.some(message => message.id === clearFixtureId) &&
-  retainedAfterDeleteForB.messages.some(message => message.id === otherSideFixtureId),
-  "delete conversation must preserve the other participant's history");
-let friendsAfterDelete = await call("/api/friends", { token: a.token });
-assert.equal(friendsAfterDelete.friends.find(user => user.id === b.user.id)?.chatHidden, true,
-  "delete conversation must hide the chat but retain the contact");
-
-const restoredMessageId = randomUUID().replaceAll("-", "");
-await call("/api/messages", {
-  method: "POST", token: b.token,
-  body: { receiverId: a.user.id, body: "new message restores deleted chat " + suffix, clientMessageId: restoredMessageId },
-  expected: 201
-});
-const restoredForA = await call("/api/messages?with=" + encodeURIComponent(b.user.id), { token: a.token });
-assert.ok(restoredForA.messages.some(message => message.id === restoredMessageId),
-  "new incoming messages must appear after a chat was deleted locally");
-assert.ok(!restoredForA.messages.some(message => message.id === clearFixtureId || message.id === otherSideFixtureId),
-  "restoring a chat must not restore previously deleted history");
-const friendsAfterRestore = await call("/api/friends", { token: a.token });
-assert.equal(friendsAfterRestore.friends.find(user => user.id === b.user.id)?.chatHidden, false,
-  "a new message must restore the conversation to the chat list");
-
 const profilePng = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6j8AAAAASUVORK5CYII=",
   "base64"
@@ -548,6 +491,63 @@ await call("/api/messages", {
   body: { receiverId: a.user.id, body: "unblocked message " + suffix },
   expected: 201
 });
+// Conversation clear/delete are per-account, preserve the other participant's copy,
+// keep the contact, and restore the chat list when a new message arrives.
+const clearFixtureId = randomUUID().replaceAll("-", "");
+const otherSideFixtureId = randomUUID().replaceAll("-", "");
+await call("/api/messages", {
+  method: "POST", token: a.token,
+  body: { receiverId: b.user.id, body: "private clear fixture " + suffix, clientMessageId: clearFixtureId },
+  expected: 201
+});
+await call("/api/messages", {
+  method: "POST", token: b.token,
+  body: { receiverId: a.user.id, body: "other side retained fixture " + suffix, clientMessageId: otherSideFixtureId },
+  expected: 201
+});
+await call("/api/conversations/" + encodeURIComponent(b.user.id) + "/clear", {
+  method: "POST", token: a.token
+});
+const clearedForA = await call("/api/messages?with=" + encodeURIComponent(b.user.id), { token: a.token });
+const retainedForB = await call("/api/messages?with=" + encodeURIComponent(a.user.id), { token: b.token });
+assert.ok(!clearedForA.messages.some(message => message.id === clearFixtureId || message.id === otherSideFixtureId),
+  "clear history must hide both directions from the current account");
+assert.ok(retainedForB.messages.some(message => message.id === clearFixtureId) &&
+  retainedForB.messages.some(message => message.id === otherSideFixtureId),
+  "clear history must not delete the other participant's messages");
+let friendsAfterClear = await call("/api/friends", { token: a.token });
+assert.equal(friendsAfterClear.friends.find(user => user.id === b.user.id)?.chatHidden, false,
+  "clear history must keep the conversation visible");
+
+await call("/api/conversations/" + encodeURIComponent(b.user.id), {
+  method: "DELETE", token: a.token
+});
+const deletedForA = await call("/api/messages?with=" + encodeURIComponent(b.user.id), { token: a.token });
+const retainedAfterDeleteForB = await call("/api/messages?with=" + encodeURIComponent(a.user.id), { token: b.token });
+assert.ok(!deletedForA.messages.some(message => message.id === clearFixtureId || message.id === otherSideFixtureId),
+  "delete conversation must keep the deleted account's history hidden");
+assert.ok(retainedAfterDeleteForB.messages.some(message => message.id === clearFixtureId) &&
+  retainedAfterDeleteForB.messages.some(message => message.id === otherSideFixtureId),
+  "delete conversation must preserve the other participant's history");
+let friendsAfterDelete = await call("/api/friends", { token: a.token });
+assert.equal(friendsAfterDelete.friends.find(user => user.id === b.user.id)?.chatHidden, true,
+  "delete conversation must hide the chat but retain the contact");
+
+const restoredMessageId = randomUUID().replaceAll("-", "");
+await call("/api/messages", {
+  method: "POST", token: b.token,
+  body: { receiverId: a.user.id, body: "new message restores deleted chat " + suffix, clientMessageId: restoredMessageId },
+  expected: 201
+});
+const restoredForA = await call("/api/messages?with=" + encodeURIComponent(b.user.id), { token: a.token });
+assert.ok(restoredForA.messages.some(message => message.id === restoredMessageId),
+  "new incoming messages must appear after a chat was deleted locally");
+assert.ok(!restoredForA.messages.some(message => message.id === clearFixtureId || message.id === otherSideFixtureId),
+  "restoring a chat must not restore previously deleted history");
+const friendsAfterRestore = await call("/api/friends", { token: a.token });
+assert.equal(friendsAfterRestore.friends.find(user => user.id === b.user.id)?.chatHidden, false,
+  "a new message must restore the conversation to the chat list");
+
 console.log("Preview integration passed: legacy/current signup and phone login, profile/privacy/contacts, private message edit/pin/reactions, private-memory owner isolation/photo access, SPARK text replies/reactions, captioned media upload/feed/download, ephemeral expiry, blocking, and access guards.");
 
 }
