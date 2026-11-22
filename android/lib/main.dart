@@ -244,6 +244,10 @@ List<String> barqNearbyPermissionNamesForAndroidSdk(int sdkInt) => [
   if (sdkInt >= 33) 'nearbyWifiDevices',
 ];
 
+/// Android 13+ nearby-device permissions no longer require the device location
+/// service to be enabled; Android 12L and earlier still use location discovery.
+bool barqNearbyRequiresLocationService(int sdkInt) => sdkInt <= 32;
+
 /// يتحقق من صلاحية رسالة Nearby الصادرة قبل إرسالها إلى جهاز آخر.
 bool barqNearbyPayloadTransferFailed(PayloadStatus status) =>
     status == PayloadStatus.FAILURE || status == PayloadStatus.CANCELED;
@@ -1849,8 +1853,9 @@ class BarqNearbyService {
       'bluetoothScan': Permission.bluetoothScan,
       'nearbyWifiDevices': Permission.nearbyWifiDevices,
     };
+    final sdkInt = androidInfo.version.sdkInt;
     final requestedPermissions = barqNearbyPermissionNamesForAndroidSdk(
-      androidInfo.version.sdkInt,
+      sdkInt,
     ).map((name) => permissionByName[name]!).toList();
     final permissionResults = await requestedPermissions.request();
     final deniedPermissions = permissionResults.entries
@@ -1862,9 +1867,11 @@ class BarqNearbyService {
         'تعذر تشغيل الاتصال القريب؛ اسمح بأذونات Bluetooth والأجهزة القريبة، وبإذن الموقع على إصدارات Android حتى 12L، ثم أعد المحاولة.',
       );
     }
-    final locationServiceStatus = await Permission.location.serviceStatus;
-    if (!locationServiceStatus.isEnabled) {
-      throw Exception('شغّل خدمة الموقع في إعدادات الهاتف؛ مكتبة Nearby قد تحتاج تفعيلها لاكتشاف الأجهزة، ولا يتم جمع موقعك.');
+    if (barqNearbyRequiresLocationService(sdkInt)) {
+      final locationServiceStatus = await Permission.location.serviceStatus;
+      if (!locationServiceStatus.isEnabled) {
+        throw Exception('شغّل خدمة الموقع في إعدادات الهاتف؛ مكتبة Nearby قد تحتاج تفعيلها لاكتشاف الأجهزة، ولا يتم جمع موقعك.');
+      }
     }
 
     var advertisingStarted = false;
