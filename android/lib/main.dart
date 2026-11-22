@@ -68,6 +68,31 @@ String? barqSparkMediaContentType(String extension) {
 
 bool isBarqSparkMediaSizeAllowed(int byteLength) =>
     byteLength > 0 && byteLength <= maxAttachmentBytes;
+
+/// Preserve the real extension returned by the device gallery. Some Android
+/// providers expose an asset title without its extension, which otherwise
+/// caused valid photos/videos to be uploaded as application/octet-stream.
+String barqMediaPickerFileName({
+  required String title,
+  required String path,
+  required String fallbackExtension,
+}) {
+  final cleanTitle = title.trim();
+  final baseName = cleanTitle.isEmpty ? 'barq_media' : cleanTitle;
+  final hasExtension = baseName.contains('.') &&
+      baseName.split('.').last.trim().isNotEmpty;
+  if (hasExtension) return baseName;
+  final pathName = File(path).uri.pathSegments.isEmpty
+      ? ''
+      : File(path).uri.pathSegments.last;
+  final pathExtension = pathName.contains('.')
+      ? pathName.split('.').last.trim()
+      : '';
+  final extension = pathExtension.isNotEmpty
+      ? pathExtension
+      : fallbackExtension.trim().replaceFirst(RegExp(r'^\\.'), '');
+  return extension.isEmpty ? baseName : '$baseName.$extension';
+}
 const int maxTranscriptionBytes = 2 * 1024 * 1024;
 
 bool isBarqTranscriptionSizeAllowed(int byteLength) =>
@@ -238,9 +263,11 @@ Future<FilePickerResult?> showBarqMediaPicker(
     final file = await asset.file;
     if (file == null) continue;
     selectedFiles.add(PlatformFile(
-      name: asset.title?.trim().isNotEmpty == true
-          ? asset.title!.trim()
-          : 'barq_media_${asset.id}',
+      name: barqMediaPickerFileName(
+        title: asset.title ?? 'barq_media_${asset.id}',
+        path: file.path,
+        fallbackExtension: asset.type == AssetType.video ? 'mp4' : 'jpg',
+      ),
       path: file.path,
       size: await file.length(),
       bytes: withData ? await file.readAsBytes() : null,
@@ -287,7 +314,7 @@ Future<bool?> _showBarqMediaPreview(
   BuildContext context,
   List<PlatformFile> files,
 ) {
-  const videoExtensions = {'mp4', 'mov', 'm4v', 'webm', '3gp', 'mkv'};
+  const videoExtensions = {'mp4', 'mov', 'm4v', 'webm'};
   final palette = Theme.of(context).colorScheme;
   return showDialog<bool>(
     context: context,
@@ -6372,7 +6399,7 @@ String _mimeForExtension(String extension) {
     case 'png': return 'image/png';
     case 'gif': return 'image/gif';
     case 'webp': return 'image/webp';
-    case 'mp4': return 'video/mp4';
+    case 'mp4': case 'm4v': return 'video/mp4';
     case 'mov': return 'video/quicktime';
     case 'mp3': return 'audio/mpeg';
     case 'm4a': return 'audio/mp4';
