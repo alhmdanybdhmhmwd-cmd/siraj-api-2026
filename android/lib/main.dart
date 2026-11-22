@@ -4935,16 +4935,26 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                         ]),
                       ),
                       if (status['userId']?.toString() == myId)
-                        Row(mainAxisSize: MainAxisSize.min, children: [
-                          IconButton(
-                            tooltip: 'المشاهدون',
-                            visualDensity: VisualDensity.compact,
-                            onPressed: () => _showSparkViewers(field(status, ['id'])),
-                            icon: Icon(Icons.visibility_outlined, color: Theme.of(context).colorScheme.primary),
+                        InkWell(
+                          borderRadius: BorderRadius.circular(24),
+                          onTap: () => _showSparkViewers(field(status, ['id'])),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: gold.withValues(alpha: .12),
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(color: gold.withValues(alpha: .35)),
+                            ),
+                            child: Row(mainAxisSize: MainAxisSize.min, children: [
+                              const Icon(Icons.visibility_outlined, color: gold, size: 15),
+                              const SizedBox(width: 6),
+                              Text(
+                                '${status['viewCount'] ?? 0} مشاهدة',
+                                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
+                              ),
+                            ]),
                           ),
-                          Text((status['viewCount'] ?? 0).toString(),
-                            style: const TextStyle(color: Colors.white70, fontSize: 11)),
-                        ])
+                        )
                       else
                         Icon(Icons.play_circle_fill_rounded,
                           color: Theme.of(context).colorScheme.primary, size: 28),
