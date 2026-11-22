@@ -97,7 +97,7 @@ String barqMediaPickerFileName({
       : '';
   final extension = pathExtension.isNotEmpty
       ? pathExtension
-      : fallbackExtension.trim().replaceFirst(RegExp(r'^\\.'), '');
+      : fallbackExtension.trim().replaceFirst(RegExp(r'^\.'), '');
   return extension.isEmpty ? baseName : '$baseName.$extension';
 }
 const int maxTranscriptionBytes = 2 * 1024 * 1024;
