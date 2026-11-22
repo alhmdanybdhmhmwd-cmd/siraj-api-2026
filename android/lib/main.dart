@@ -3754,8 +3754,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _chatsPage(),
       _statusesPage(),
       _friendsPage(),
-      _groupsPage(),
-      _memoriesPage(),
       _accountPage(),
     ];
     return Directionality(
@@ -3763,27 +3761,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       child: Scaffold(
         appBar: AppBar(
           title: Text('برق', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
-          actions: [
-            IconButton(onPressed: refreshAll, icon: Icon(Icons.refresh, color: Theme.of(context).colorScheme.primary), tooltip: 'تحديث'),
-          ],
         ),
         body: loading
             ? const Center(child: CircularProgressIndicator())
             : pages[selectedTab],
-        floatingActionButton: selectedTab >= 1 && selectedTab <= 4
+        floatingActionButton: selectedTab == 1 || selectedTab == 2
             ? FloatingActionButton(
                 backgroundColor: Theme.of(context).colorScheme.primary,
                 foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                onPressed: selectedTab == 1
-                    ? publishStatusDialog
-                    : (selectedTab == 2
-                        ? searchUsers
-                        : (selectedTab == 3 ? createGroupDialog : _showPrivateMemoryDialog)),
-                child: Icon(selectedTab == 1
-                    ? Icons.add
-                    : (selectedTab == 2
-                        ? Icons.person_add
-                        : (selectedTab == 3 ? Icons.group_add : Icons.auto_awesome))),
+                onPressed: selectedTab == 1 ? publishStatusDialog : searchUsers,
+                child: Icon(selectedTab == 1 ? Icons.add : Icons.person_add),
               )
             : null,
         bottomNavigationBar: NavigationBar(
@@ -3797,9 +3784,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           destinations: const [
             NavigationDestination(icon: Icon(Icons.chat_bubble_outline), label: 'المحادثات'),
             NavigationDestination(icon: Icon(Icons.circle_outlined), label: 'SPARK'),
-            NavigationDestination(icon: Icon(Icons.people_outline), label: 'الأشخاص'),
-            NavigationDestination(icon: Icon(Icons.groups_outlined), label: 'المجموعات'),
-            NavigationDestination(icon: Icon(Icons.auto_awesome_outlined), label: 'الذكريات'),
+            NavigationDestination(icon: Icon(Icons.people_outline), label: 'جهات الاتصال'),
             NavigationDestination(icon: Icon(Icons.person_outline), label: 'حسابي'),
           ],
         ),
@@ -4136,7 +4121,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 const SizedBox(height: 12),
                 Text('لا توجد لحظات نشطة في SPARK', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 18)),
                 const SizedBox(height: 6),
-                const Text('انشر أول لحظة في SPARK أو اسحب للأسفل للتحديث.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60)),
+                const Text('انشر أول لحظة في SPARK لتظهر هنا.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60)),
               ]),
             ),
           for (final status in statuses)
@@ -5255,6 +5240,35 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ),
         const SizedBox(height: 10),
+        Card(
+          child: ListTile(
+            leading: Icon(Icons.groups_outlined, color: Theme.of(context).colorScheme.primary),
+            title: const Text('المجموعات'),
+            subtitle: const Text('محادثاتك ومجموعاتك على برق'),
+            trailing: const Icon(Icons.chevron_left),
+            onTap: () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => Scaffold(
+                appBar: AppBar(title: const Text('المجموعات')),
+                body: _groupsPage(),
+              ),
+            )),
+          ),
+        ),
+        Card(
+          child: ListTile(
+            leading: Icon(Icons.auto_awesome_outlined, color: Theme.of(context).colorScheme.primary),
+            title: const Text('الذكريات الخاصة'),
+            subtitle: const Text('مساحتك الخاصة للصور والرسائل المحفوظة'),
+            trailing: const Icon(Icons.chevron_left),
+            onTap: () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => Scaffold(
+                appBar: AppBar(title: const Text('الذكريات الخاصة')),
+                body: _memoriesPage(),
+              ),
+            )),
+          ),
+        ),
+        const SizedBox(height: 10),
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
@@ -5410,13 +5424,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             subtitle: const Text('شارك رابطك الخاص للانضمام إلى برق.'),
             trailing: const Icon(Icons.chevron_left),
             onTap: inviteFriendsDialog,
-          ),
-        ),
-        Card(
-                    child: ListTile(
-            leading: const Icon(Icons.refresh),
-            title: const Text('تحديث البيانات'),
-            onTap: refreshAll,
           ),
         ),
         const SizedBox(height: 12),
