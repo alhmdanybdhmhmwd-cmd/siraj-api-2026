@@ -8834,7 +8834,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                             Theme.of(context).colorScheme.surface,
                                           ],
                                   ),
-                                  borderRadius: BorderRadius.circular(18),
+                                  borderRadius: BorderRadius.only(
+                                    topLeft: const Radius.circular(18),
+                                    topRight: const Radius.circular(18),
+                                    bottomLeft: Radius.circular(mine ? 18 : 5),
+                                    bottomRight: Radius.circular(mine ? 5 : 18),
+                                  ),
                                   border: Border.all(
                                     color: mine
                                         ? Theme.of(context).colorScheme.primary.withValues(alpha: .24)
@@ -10066,7 +10071,12 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                                     Theme.of(context).colorScheme.surface,
                                   ],
                           ),
-                          borderRadius: BorderRadius.circular(18),
+                          borderRadius: BorderRadius.only(
+                            topLeft: const Radius.circular(18),
+                            topRight: const Radius.circular(18),
+                            bottomLeft: Radius.circular(mine ? 18 : 5),
+                            bottomRight: Radius.circular(mine ? 5 : 18),
+                          ),
                           border: Border.all(
                             color: mine
                                 ? Theme.of(context).colorScheme.primary.withValues(alpha: .24)
