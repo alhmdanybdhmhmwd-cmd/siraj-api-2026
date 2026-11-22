@@ -5561,6 +5561,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (result == null || result.files.isEmpty) return;
       final file = result.files.single;
       final bytes = await readBarqPickedFileBytes(file);
+      if (!mounted) return;
       if (bytes.isEmpty) {
         showMsg(context, 'تعذر قراءة الصورة المختارة. جرّب صورة أخرى.');
         return;
@@ -5612,7 +5613,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ],
         ),
       );
-      if (accepted != true || !mounted) return;
+      if (!mounted) return;
+      if (accepted != true) return;
       showMsg(context, 'جارٍ رفع الصورة...');
       await Api.uploadProfilePhoto(bytes, contentType);
       final refreshed = await Api.me();
