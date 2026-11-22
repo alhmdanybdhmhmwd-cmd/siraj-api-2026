@@ -4229,7 +4229,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         builder: (context, setDialog) => AlertDialog(
           backgroundColor: Theme.of(context).colorScheme.surface,
           title: const Text('البحث عن مستخدم'),
-          content: SizedBox(
+          content: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: (MediaQuery.sizeOf(context).height -
+                      MediaQuery.viewInsetsOf(context).bottom - 160)
+                  .clamp(180.0, 520.0),
+            ),
+            child: SizedBox(
             width: double.maxFinite,
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -4245,7 +4251,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     } catch (e) {
                       if (mounted) showMsg(this.context, cleanError(e));
                     }
-                    setDialog(() => busy = false);
+                    if (dialogContext.mounted) setDialog(() => busy = false);
                   },
                 ),
                 const SizedBox(height: 8),
@@ -4260,7 +4266,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       } catch (e) {
                         if (mounted) showMsg(this.context, cleanError(e));
                       }
-                      setDialog(() => busy = false);
+                      if (dialogContext.mounted) setDialog(() => busy = false);
                     },
                     child: const Text('بحث'),
                   ),
@@ -4300,11 +4306,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 ),
               ],
             ),
+            ),
           ),
-          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق'))],
+          actions: [TextButton(onPressed: busy ? null : () => Navigator.pop(dialogContext), child: const Text('إغلاق'))],
         ),
       ),
     );
+    controller.dispose();
   }
 
   @override
@@ -5302,6 +5310,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         backgroundColor: Theme.of(context).colorScheme.surface,
         title: const Text('إنشاء مجموعة'),
         content: Column(
@@ -5350,7 +5359,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         builder: (context, setDialog) => AlertDialog(
           backgroundColor: Theme.of(context).colorScheme.surface,
           title: const Text('إضافة عضو للمجموعة'),
-          content: SizedBox(
+          content: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: (MediaQuery.sizeOf(context).height -
+                      MediaQuery.viewInsetsOf(context).bottom - 150)
+                  .clamp(180.0, 500.0),
+            ),
+            child: SizedBox(
             width: double.maxFinite,
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               TextField(controller: controller, decoration: inputDecoration('اسم المستخدم أو الهاتف', Icons.search)),
@@ -5360,7 +5375,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   setDialog(() => busy = true);
                   try { found = await Api.search(controller.text.trim()); }
                   catch (e) { if (mounted) showMsg(this.context, cleanError(e)); }
-                  setDialog(() => busy = false);
+                  if (dialogContext.mounted) setDialog(() => busy = false);
                 }, child: const Text('بحث'))),
               if (busy) const CircularProgressIndicator(),
               Flexible(child: ListView(shrinkWrap: true, children: found.map((person) {
@@ -5380,8 +5395,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 );
               }).toList())),
             ]),
+            ),
           ),
-          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق'))],
+          actions: [TextButton(onPressed: busy ? null : () => Navigator.pop(dialogContext), child: const Text('إغلاق'))],
         ),
       ),
     );
