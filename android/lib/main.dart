@@ -1598,7 +1598,9 @@ class Api {
     required String contentType,
     String? recipientId,
     String? groupId,
+    void Function(double progress)? onProgress,
   }) async {
+    onProgress?.call(0);
     final fingerprintInput = utf8.encode(
       '${recipientId ?? ''}|${groupId ?? ''}|$fileName|$contentType|${crypto.sha256.convert(bytes)}',
     );
@@ -1620,6 +1622,7 @@ class Api {
     if (session['state'] == 'completed') {
       await request('POST', '/api/media/uploads/${Uri.encodeComponent(sessionId)}/complete');
       await storage.delete(key: resumeStorageKey);
+      onProgress?.call(1);
       return;
     }
     final totalChunks = (bytes.length + 1024 * 1024 - 1) ~/ (1024 * 1024);
@@ -1660,6 +1663,7 @@ class Api {
       if (response == null || response.statusCode < 200 || response.statusCode >= 300) {
         throw Exception('توقف رفع الملف عند الجزء $chunkNumber ويمكن إعادة المحاولة. $lastError');
       }
+      onProgress?.call(endOffset / bytes.length);
     }
 
     final completed = await request(
@@ -1671,6 +1675,7 @@ class Api {
       throw Exception('اكتمل الرفع دون تأكيد بيانات المرفق.');
     }
     await storage.delete(key: resumeStorageKey);
+    onProgress?.call(1);
   }
 
   static Future<void> uploadAttachment({
@@ -1679,6 +1684,7 @@ class Api {
     required String contentType,
     String? recipientId,
     String? groupId,
+    void Function(double progress)? onProgress,
   }) async {
     if ((recipientId == null) == (groupId == null)) {
       throw Exception('حدد محادثة فردية أو مجموعة واحدة.');
@@ -1686,6 +1692,7 @@ class Api {
     if (bytes.isEmpty || bytes.length > maxAttachmentBytes) {
       throw Exception('حجم الملف يجب ألا يتجاوز 60 ميجابايت.');
     }
+    onProgress?.call(0);
     // Preserve the existing fast path for files up to 4 MiB.
     if (bytes.length > proxyMediaThresholdBytes) {
       await _uploadAttachmentResumable(
@@ -1694,24 +1701,43 @@ class Api {
         contentType: contentType,
         recipientId: recipientId,
         groupId: groupId,
+        onProgress: onProgress,
       );
       return;
     }
     final uri = Uri.parse('$apiBase/api/media');
-    final response = await http.post(uri, headers: {
-      if (token != null) 'Authorization': 'Bearer $token',
-      'Content-Type': contentType,
-      'X-File-Name': Uri.encodeComponent(fileName),
-      if (recipientId != null) 'X-Recipient-Id': recipientId,
-      if (groupId != null) 'X-Group-Id': groupId,
-    }, body: bytes).timeout(const Duration(minutes: 3));
-    Map<String, dynamic> data = {};
+    final client = http.Client();
     try {
-      final decoded = jsonDecode(response.body);
-      if (decoded is Map<String, dynamic>) data = decoded;
-    } catch (_) {}
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception((data['error'] ?? 'تعذر إرسال الملف (${response.statusCode})').toString());
+      final upload = http.StreamedRequest('POST', uri)
+        ..headers.addAll({
+          if (token != null) 'Authorization': 'Bearer $token',
+          'Content-Type': contentType,
+          'X-File-Name': Uri.encodeComponent(fileName),
+          if (recipientId != null) 'X-Recipient-Id': recipientId,
+          if (groupId != null) 'X-Group-Id': groupId,
+        })
+        ..contentLength = bytes.length;
+      final responseFuture = client.send(upload);
+      const progressChunkBytes = 64 * 1024;
+      for (var offset = 0; offset < bytes.length; offset += progressChunkBytes) {
+        final end = math.min(offset + progressChunkBytes, bytes.length).toInt();
+        upload.sink.add(bytes.sublist(offset, end));
+        onProgress?.call(end / bytes.length);
+      }
+      await upload.sink.close();
+      final streamed = await responseFuture.timeout(const Duration(minutes: 3));
+      final response = await http.Response.fromStream(streamed);
+      Map<String, dynamic> data = {};
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map<String, dynamic>) data = decoded;
+      } catch (_) {}
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception((data['error'] ?? 'تعذر إرسال الملف (${response.statusCode})').toString());
+      }
+      onProgress?.call(1);
+    } finally {
+      client.close();
     }
   }
 
@@ -7681,6 +7707,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   final Set<String> transcribingMessageIds = {};
   bool loading = true;
   bool sending = false;
+  double? mediaUploadProgress;
   bool refreshing = false;
   bool ephemeralMode = false;
   bool blockedByMe = false;
@@ -8143,12 +8170,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       if (result == null || result.files.isEmpty) return;
       final file = result.files.single;
       final bytes = await readBarqPickedFileBytes(file);
-      setState(() => sending = true);
+      setState(() { sending = true; mediaUploadProgress = 0; });
       await Api.uploadAttachment(
         bytes: bytes,
         fileName: file.name,
         contentType: file.extension == null ? 'application/octet-stream' : _mimeForExtension(file.extension!),
         recipientId: friendId,
+        onProgress: (progress) {
+          if (mounted) setState(() => mediaUploadProgress = progress);
+        },
       );
       await loadMessages();
       if (mounted) showMsg(context, 'تم إرسال الملف.');
@@ -8574,6 +8604,16 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                           },
                         ),
             ),
+            if (mediaUploadProgress != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 4, 14, 2),
+                child: Row(children: [
+                  Expanded(child: LinearProgressIndicator(value: mediaUploadProgress!.clamp(0.0, 1.0))),
+                  const SizedBox(width: 10),
+                  Text('رفع المرفق ${(mediaUploadProgress! * 100).round()}%',
+                    style: const TextStyle(fontSize: 11, color: Colors.white70)),
+                ]),
+              ),
             SafeArea(
               top: false,
               child: Padding(
@@ -9102,6 +9142,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
   final Set<String> transcribingMessageIds = {};
   bool loading = true;
   bool sending = false;
+  double? mediaUploadProgress;
   bool refreshing = false;
   bool hasOlderMessages = false;
   bool loadingOlderMessages = false;
@@ -9294,12 +9335,15 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
       if (result == null || result.files.isEmpty) return;
       final file = result.files.single;
       final bytes = await readBarqPickedFileBytes(file);
-      setState(() => sending = true);
+      setState(() { sending = true; mediaUploadProgress = 0; });
       await Api.uploadAttachment(
         bytes: bytes,
         fileName: file.name,
         contentType: file.extension == null ? 'application/octet-stream' : _mimeForExtension(file.extension!),
         groupId: groupId,
+        onProgress: (progress) {
+          if (mounted) setState(() => mediaUploadProgress = progress);
+        },
       );
       await loadMessages();
       if (mounted) showMsg(context, 'تم إرسال الملف للمجموعة.');
@@ -9704,6 +9748,16 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                     );
                   },
                 )),
+            if (mediaUploadProgress != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 4, 14, 2),
+                child: Row(children: [
+                  Expanded(child: LinearProgressIndicator(value: mediaUploadProgress!.clamp(0.0, 1.0))),
+                  const SizedBox(width: 10),
+                  Text('رفع المرفق ${(mediaUploadProgress! * 100).round()}%',
+                    style: const TextStyle(fontSize: 11, color: Colors.white70)),
+                ]),
+              ),
           SafeArea(top: false, child: Padding(
             padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
             child: Row(children: [
