@@ -1263,15 +1263,16 @@ class Api {
     if (!['image/jpeg', 'image/png', 'image/webp'].contains(contentType)) {
       throw Exception('صيغة صورة الذكرى غير مدعومة.');
     }
-    final response = await http.post(
-      Uri.parse('$mediaWorkerBase/api/private-memories/${Uri.encodeComponent(memoryId)}/media'),
+    final response = await _postMediaPathResponse(
+      '/api/private-memories/${Uri.encodeComponent(memoryId)}/media',
       headers: {
         if (token != null) 'Authorization': 'Bearer $token',
         'Content-Type': contentType,
         'X-File-Name': Uri.encodeComponent(fileName),
       },
-      body: bytes,
-    ).timeout(const Duration(minutes: 2));
+      bytes: bytes,
+      timeout: const Duration(minutes: 2),
+    );
     Map<String, dynamic> data = {};
     try {
       final decoded = jsonDecode(response.body);
@@ -1312,12 +1313,10 @@ class Api {
     if (!RegExp(r'^(image/(jpeg|png|webp|gif)|video/(mp4|webm|quicktime))$').hasMatch(contentType)) {
       throw Exception('نوع الملف غير مدعوم في SPARK.');
     }
-    // Small SPARK media travels through the Vercel proxy so networks that
-    // restrict workers.dev can still publish. Large media stays direct to the
-    // Worker to avoid Vercel's request-body limit.
-    final uploadBase = bytes.length <= proxyMediaThresholdBytes ? apiBase : mediaWorkerBase;
-    final response = await http.post(
-      Uri.parse('$uploadBase/api/statuses/media'),
+    // Small SPARK media travels through Vercel first, with Worker fallback.
+    // Large uploads stay direct to the Worker to avoid Vercel's body-size cap.
+    final response = await _postMediaPathResponse(
+      '/api/statuses/media',
       headers: {
         if (token != null) 'Authorization': 'Bearer $token',
         'Content-Type': contentType,
@@ -1325,8 +1324,9 @@ class Api {
         'X-Status-Caption': caption.trim(),
         if (statusId != null) 'X-Status-Id': statusId,
       },
-      body: bytes,
-    ).timeout(const Duration(minutes: 3));
+      bytes: bytes,
+      timeout: const Duration(minutes: 3),
+    );
     Map<String, dynamic> data = {};
     try {
       final decoded = jsonDecode(response.body);
@@ -1380,12 +1380,16 @@ class Api {
     if (durationMs < 1000 || durationMs > 60000) {
       throw Exception('مدة الرد الصوتي يجب أن تكون بين ثانية و60 ثانية.');
     }
-    final uri = Uri.parse('$mediaWorkerBase/api/statuses/${Uri.encodeComponent(statusId)}/audio-replies');
-    final response = await http.post(uri, headers: {
-      if (token != null) 'Authorization': 'Bearer $token',
-      'Content-Type': 'audio/mp4',
-      'X-Audio-Duration-Ms': durationMs.toString(),
-    }, body: bytes).timeout(const Duration(minutes: 2));
+    final response = await _postMediaPathResponse(
+      '/api/statuses/${Uri.encodeComponent(statusId)}/audio-replies',
+      headers: {
+        if (token != null) 'Authorization': 'Bearer $token',
+        'Content-Type': 'audio/mp4',
+        'X-Audio-Duration-Ms': durationMs.toString(),
+      },
+      bytes: bytes,
+      timeout: const Duration(minutes: 2),
+    );
     Map<String, dynamic> data = {};
     try {
       final decoded = jsonDecode(response.body);
@@ -1397,18 +1401,21 @@ class Api {
   }
 
   static Future<Uint8List> fetchSparkAudioReplyBytes(String statusId, String replyId) async {
-    final uri = Uri.parse('$mediaWorkerBase/api/statuses/${Uri.encodeComponent(statusId)}/audio-replies/${Uri.encodeComponent(replyId)}');
-    final response = await http.get(uri, headers: {
-      if (token != null) 'Authorization': 'Bearer $token',
-    }).timeout(const Duration(minutes: 2));
+    final response = await _getMediaPathResponse(
+      '/api/statuses/${Uri.encodeComponent(statusId)}/audio-replies/${Uri.encodeComponent(replyId)}',
+      headers: {if (token != null) 'Authorization': 'Bearer $token'},
+      timeout: const Duration(minutes: 2),
+    );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('تعذر تشغيل الرد الصوتي (${response.statusCode}).');
     }
     return response.bodyBytes;
   }
 
+  // Route image/video reads through the public Vercel proxy first; it streams
+  // bytes and Range responses while avoiding a direct workers.dev dependency.
   static Uri sparkMediaUri(String attachmentId) => Uri.parse(
-    '$mediaWorkerBase/api/media/${Uri.encodeComponent(attachmentId)}',
+    '$apiBase/api/media/${Uri.encodeComponent(attachmentId)}',
   );
 
   static Future<List<Map<String, dynamic>>> groups() async =>
@@ -1665,20 +1672,45 @@ class Api {
     }
   }
 
-  // Try each configured media gateway once. By default mediaWorkerBase and
-  // apiBase are identical, so retrying the same hostname would add delay without
-  // providing a real failover path.
-  static Future<http.Response> _getMediaResponse(
-    String attachmentId, {
+  // Small binary uploads use Vercel first for restricted networks; large
+  // payloads stay on the Worker because Vercel enforces a smaller request cap.
+  static Future<http.Response> _postMediaPathResponse(
+    String path, {
+    required Map<String, String> headers,
+    required List<int> bytes,
+    Duration timeout = const Duration(minutes: 2),
+  }) async {
+    final bases = bytes.length <= proxyMediaThresholdBytes
+        ? <String>[apiBase, if (mediaWorkerBase != apiBase) mediaWorkerBase]
+        : <String>[mediaWorkerBase];
+    Object? lastError;
+    for (final base in bases) {
+      try {
+        final response = await http.post(
+          Uri.parse('$base$path'),
+          headers: headers,
+          body: bytes,
+        ).timeout(timeout);
+        if (response.statusCode < 500) return response;
+        lastError = HttpException('Media gateway returned ${response.statusCode}');
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError ?? const HttpException('No media gateway is configured');
+  }
+
+  static Future<http.Response> _getMediaPathResponse(
+    String path, {
     Map<String, String> headers = const {},
     Duration timeout = const Duration(minutes: 2),
   }) async {
-    final bases = <String>[mediaWorkerBase, if (apiBase != mediaWorkerBase) apiBase];
+    final bases = <String>[apiBase, if (mediaWorkerBase != apiBase) mediaWorkerBase];
     Object? lastError;
     for (final base in bases) {
       try {
         final response = await http.get(
-          Uri.parse('$base/api/media/${Uri.encodeComponent(attachmentId)}'),
+          Uri.parse('$base$path'),
           headers: headers,
         ).timeout(timeout);
         if (response.statusCode < 500) return response;
@@ -1689,6 +1721,16 @@ class Api {
     }
     throw lastError ?? const HttpException('No media gateway is configured');
   }
+
+  static Future<http.Response> _getMediaResponse(
+    String attachmentId, {
+    Map<String, String> headers = const {},
+    Duration timeout = const Duration(minutes: 2),
+  }) => _getMediaPathResponse(
+    '/api/media/${Uri.encodeComponent(attachmentId)}',
+    headers: headers,
+    timeout: timeout,
+  );
 
   /// يجلب المرفق الصوتي المصرح به ثم يرسله مباشرة إلى مسار التفريغ الصوتي.
   /// لا يُحفظ الملف الصوتي أو النص الناتج في جدول الرسائل العادي.
