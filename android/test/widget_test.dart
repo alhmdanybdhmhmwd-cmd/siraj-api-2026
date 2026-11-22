@@ -25,6 +25,14 @@ void main() {
       '↩️ رد على SPARK\nلحظة من SPARK\n\nرد مختصر',
     );
   });
+  test('SPARK private replies are recognized for their dedicated chat card', () {
+    final parsed = parseBarqSparkPrivateReply(
+      barqSparkPrivateReplyMessage(caption: 'لحظة جميلة', reply: 'أعجبتني'),
+    );
+    expect(parsed, {'caption': 'لحظة جميلة', 'reply': 'أعجبتني'});
+    expect(parseBarqSparkPrivateReply('رسالة عادية'), isNull);
+  });
+
   test('notification deep links wait until initial app data is ready', () {
     expect(barqCanHandlePendingNotification(
       initialRefreshComplete: false,
