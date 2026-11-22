@@ -3724,19 +3724,16 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         }
         deletionStatements.push(
           env.DB.prepare("DELETE FROM message_reactions WHERE scope_type = 'private' AND scope_id = ? AND message_id = ?").bind(scopeId, messageId),
-          env.DB.prepare("DELETE FROM pinned_messages WHERE scope_type = 'private' AND scope_id = ? AND message_id = ?").bind(scopeId, messageId),
-          env.DB.prepare("DELETE FROM messages WHERE id = ? AND sender_id = ?").bind(messageId, currentUser.sub)
+          env.DB.prepare("DELETE FROM pinned_messages WHERE scope_type = 'private' AND scope_id = ? AND message_id = ?").bind(scopeId, messageId)
         );
-        const deletion = await env.DB.batch(deletionStatements);
-        const deletedRows = Number(deletion?.[deletion.length - 1]?.meta?.changes || 0);
-        if (deletedRows !== 1) {
-          // D1 batch metadata can be inconclusive; verify the owned message is gone.
-          const stillExists = await env.DB.prepare(
-            "SELECT 1 FROM messages WHERE id = ? AND sender_id = ?"
-          ).bind(messageId, currentUser.sub).first();
-          if (stillExists) {
-            return json({ error: "Message not found or cannot be changed" }, 404);
-          }
+        if (deletionStatements.length) await env.DB.batch(deletionStatements);
+        // Execute the ownership-scoped message deletion as its own D1 statement.
+        // This avoids relying on the final result metadata of a multi-statement batch.
+        const deletedMessage = await env.DB.prepare(
+          "DELETE FROM messages WHERE id = ? AND sender_id = ? RETURNING id"
+        ).bind(messageId, currentUser.sub).first();
+        if (!deletedMessage) {
+          return json({ error: "Message not found or cannot be changed" }, 404);
         }
         return json({ message: "Message deleted", id: messageId });
       }
