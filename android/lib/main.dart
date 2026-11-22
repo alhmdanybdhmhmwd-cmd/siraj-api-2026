@@ -4959,54 +4959,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  Widget _groupsPage() {
-    return RefreshIndicator(
-      color: Theme.of(context).colorScheme.primary,
-      onRefresh: refreshAll,
-      child: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          Padding(padding: const EdgeInsets.all(12),
-            child: Text('مجموعاتك', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 21))),
-          if (groups.isEmpty)
-            const Padding(padding: EdgeInsets.all(20), child: Text(
-              'لا توجد مجموعات بعد. أنشئ مجموعة وابدأ بإضافة الأشخاص مباشرة.',
-              textAlign: TextAlign.center, style: TextStyle(color: Colors.white60))),
-          for (final group in groups)
-            Card(color: Theme.of(context).colorScheme.surface, child: ListTile(
-              leading: CircleAvatar(backgroundColor: Theme.of(context).colorScheme.surface, child: const Icon(Icons.groups)),
-              title: Text(field(group, ['name'], 'مجموعة')),
-              subtitle: Text('${field(group, ['description'], 'مجموعة برق')} • ${field(group, ['member_count'], '1')} أعضاء'),
-              trailing: const Icon(Icons.chevron_left),
-              onTap: () => Navigator.push(context, MaterialPageRoute(
-                builder: (_) => GroupChatPage(
-                  group: group,
-                  currentUserId: myId,
-                  onAddMember: () => addMemberDialog(group),
-                  onGroupChanged: refreshAll,
-                ))),
-            )),
-        ],
-      ),
-    );
-  }
-
-
-  Widget _empty(IconData icon, String title, String subtitle) => Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 56),
-            const SizedBox(height: 12),
-            Text(title, style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 22)),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(subtitle, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60)),
-            ),
-          ],
-        ),
-      );
-
   Future<void> pickProfilePhoto() async {
     try {
       final result = await FilePicker.platform.pickFiles(
