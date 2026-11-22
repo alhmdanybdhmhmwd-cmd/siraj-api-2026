@@ -3537,6 +3537,17 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
       const privateMessageActionMatch = path.match(/^\/api\/messages\/([^/]+)$/);
       if ((method === "DELETE" || method === "PATCH") && privateMessageActionMatch) {
         const messageId = privateMessageActionMatch[1];
+        // Per-user deletion hides this message only for the authenticated participant.
+        if (method === "DELETE" && url.searchParams.get("scope") === "me") {
+          const participantMessage = await env.DB.prepare(
+            "SELECT id FROM messages WHERE id = ? AND (sender_id = ? OR receiver_id = ?)"
+          ).bind(messageId, currentUser.sub, currentUser.sub).first();
+          if (!participantMessage) return json({ error: "Message not found" }, 404);
+          await env.DB.prepare(
+            "INSERT OR IGNORE INTO hidden_private_messages (user_id, message_id) VALUES (?, ?)"
+          ).bind(currentUser.sub, messageId).run();
+          return json({ message: "Message hidden for this account", id: messageId, scope: "me" });
+        }
         const owned = await env.DB.prepare(
           `SELECT id, sender_id, receiver_id FROM messages
            WHERE id = ? AND sender_id = ?
