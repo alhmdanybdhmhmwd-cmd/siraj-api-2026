@@ -147,32 +147,14 @@ test("speech transcription requires authentication, validates audio, rate-limits
   assert.ok(testConfig.includes("[ai]") && testConfig.includes('binding = "AI"'));
 });
 
-test("private invite codes are stable per account and do not add reward mechanics", () => {
-  assert.ok(worker.includes('path === "/api/referrals"'));
-  assert.ok(worker.includes("CREATE TABLE IF NOT EXISTS user_invite_codes"));
-  assert.ok(worker.includes("SELECT invite_code FROM user_invite_codes WHERE user_id = ?"));
-  assert.ok(!worker.includes("referral_count"));
-  assert.ok(!worker.includes("invite_threshold"));
-});
-
-test("private invite codes are validated and attached to the registering account", () => {
-  const start = worker.indexOf('path === "/api/register"');
-  const end = worker.indexOf("// Recover an account", start);
-  const route = worker.slice(start, end);
-  assert.ok(route.includes('body.inviteCode'));
-  assert.ok(route.includes('SELECT user_id FROM user_invite_codes WHERE invite_code = ?'));
-  assert.ok(route.includes("CREATE TABLE IF NOT EXISTS user_invites"));
-  assert.ok(route.includes("INSERT INTO user_invites (invitee_user_id, inviter_user_id)"));
-  assert.ok(route.includes("registrationStatements.push"));
-  assert.ok(!route.includes("referral_count"));
-  assert.ok(!route.includes("invite_threshold"));
-});
-
-test("Flutter invite deep links reach the registration request", () => {
-  assert.ok(flutterApp.includes("BarqInviteLinks.pendingCode"));
-  assert.ok(flutterApp.includes("inviteCode: inviteCode.text.trim().isEmpty ? null : inviteCode.text.trim()"));
-  assert.ok(flutterApp.includes("'inviteCode': inviteCode.trim().toUpperCase()"));
-  assert.ok(worker.includes('body.inviteCode'));
+test("excluded referral and invitation mechanics are absent from BARQ registration and API", () => {
+  assert.ok(!flutterApp.includes("inviteCode"));
+  assert.ok(!flutterApp.includes("BarqInviteLinks"));
+  assert.ok(!flutterApp.includes("inviteFriendsDialog"));
+  assert.ok(!worker.includes('path === "/api/referrals"'));
+  assert.ok(!worker.includes("body.inviteCode"));
+  assert.ok(!worker.includes("user_invites"));
+  assert.ok(!worker.includes("user_invite_codes"));
 });
 
 test("Android API, media, and realtime origins are selectable for isolated preview builds", () => {
