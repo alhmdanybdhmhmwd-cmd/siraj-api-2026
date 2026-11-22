@@ -4137,8 +4137,45 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         padding: const EdgeInsets.all(12),
         children: [
           Padding(
-            padding: const EdgeInsets.all(8),
-            child: Text('SPARK', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 21, fontWeight: FontWeight.bold)),
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 12),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(22),
+                gradient: LinearGradient(
+                  begin: Alignment.topRight, end: Alignment.bottomLeft,
+                  colors: [
+                    Theme.of(context).colorScheme.primary.withValues(alpha: .28),
+                    Theme.of(context).colorScheme.secondary.withValues(alpha: .12),
+                    Theme.of(context).colorScheme.surface,
+                  ],
+                ),
+                border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: .28)),
+                boxShadow: [BoxShadow(
+                  color: Theme.of(context).colorScheme.primary.withValues(alpha: .12),
+                  blurRadius: 22, spreadRadius: 1,
+                )],
+              ),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Icon(Icons.bolt_rounded, color: Theme.of(context).colorScheme.primary, size: 26),
+                  const SizedBox(width: 8),
+                  Text('SPARK', style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontSize: 23, fontWeight: FontWeight.w900, letterSpacing: 1.5,
+                  )),
+                  const Spacer(),
+                  const Icon(Icons.auto_awesome_rounded, color: gold, size: 20),
+                ]),
+                const SizedBox(height: 7),
+                const Text('لحظاتك… بنبض الضوء',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                const Text('شارك نصاً أو صورة أو فيديو، وأضف تعليقك لتصل اللحظة كاملة إلى أصدقائك.',
+                  style: TextStyle(color: Colors.white70, height: 1.45, fontSize: 12)),
+              ]),
+            ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -7165,6 +7202,7 @@ class _ChatPageState extends State<ChatPage> {
   bool ephemeralMode = false;
   bool hasOlderMessages = false;
   bool loadingOlderMessages = false;
+  Color? chatWallpaperColor;
   Map<String, dynamic>? olderMessageCursor;
   Map<String, dynamic>? replyToMessage;
   Timer? refreshTimer;
@@ -7466,12 +7504,55 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
+  Future<void> _chooseChatWallpaper() async {
+    const choices = <Color>[
+      Color(0xFF071A2D), Color(0xFF101827), Color(0xFF1B1630),
+      Color(0xFF172A27), Color(0xFF242424), Color(0xFF0C2940),
+    ];
+    final selected = await showModalBottomSheet<Color>(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('خلفية المحادثة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 14),
+            Wrap(spacing: 14, runSpacing: 14, children: [
+              for (final color in choices)
+                InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () => Navigator.pop(sheetContext, color),
+                  child: CircleAvatar(
+                    radius: 25, backgroundColor: color,
+                    child: chatWallpaperColor == color ? const Icon(Icons.check, color: Colors.white) : null,
+                  ),
+                ),
+              InkWell(
+                customBorder: const CircleBorder(),
+                onTap: () => Navigator.pop(sheetContext, Colors.transparent),
+                child: const CircleAvatar(radius: 25, child: Icon(Icons.restart_alt_rounded)),
+              ),
+            ]),
+            const SizedBox(height: 8),
+            const Text('اختر لوناً هادئاً أو أعد الخلفية الافتراضية.',
+              style: TextStyle(color: Colors.white60, fontSize: 12)),
+          ]),
+        ),
+      ),
+    );
+    if (selected != null && mounted) {
+      setState(() => chatWallpaperColor = selected == Colors.transparent ? null : selected);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final name = field(person, ['displayName', 'display_name', 'name', 'username'], 'محادثة');
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
+        backgroundColor: chatWallpaperColor ?? Theme.of(context).scaffoldBackgroundColor,
         appBar: AppBar(
           title: InkWell(
             borderRadius: BorderRadius.circular(18),
@@ -7489,6 +7570,11 @@ class _ChatPageState extends State<ChatPage> {
             ]),
           ),
           actions: [
+            IconButton(
+              tooltip: 'تغيير خلفية المحادثة',
+              onPressed: _chooseChatWallpaper,
+              icon: const Icon(Icons.wallpaper_outlined),
+            ),
             IconButton(
               onPressed: () => showBarqConversationTools(context, [
                 BarqConversationTool(
