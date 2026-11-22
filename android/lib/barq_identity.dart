@@ -12,7 +12,7 @@ enum BarqIdentity {
   skyJewel;
 
   bool get isBundled => this == BarqIdentity.blueLightning || this == BarqIdentity.butterfly;
-  bool get isAvailable => isBundled || downloadedPackages.containsKey(name);
+  bool get isAvailable => isBundled || BarqIdentity.downloadedPackages.containsKey(name);
 
   static const _storage = FlutterSecureStorage();
   static const _storageKey = 'barq_visual_identity';
