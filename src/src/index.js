@@ -3143,13 +3143,6 @@ export default {
           "SELECT id, body FROM group_messages WHERE id = ? AND group_id = ? AND sender_id = ?"
         ).bind(messageId, groupId, currentUser.sub).first();
         if (!owned) return json({ error: "Message not found or cannot be changed" }, 404);
-        // Clearing a conversation hides its historical messages from this account:
-        // stale edit/delete actions must not mutate those cleared records. A single
-        // "hide for me" remains distinct and does not revoke sender-side deletion.
-        const clearedMessage = await env.DB.prepare(
-          "SELECT 1 FROM hidden_private_messages WHERE user_id = ? AND message_id = ? AND hide_reason = 'clear'"
-        ).bind(currentUser.sub, messageId).first();
-        if (clearedMessage) return json({ error: "Message not found or cannot be changed" }, 404);
         if (method === "PATCH") {
           const body = await readJsonRequestLimited(request);
           const message = String(body.body || "").trim();
@@ -3676,6 +3669,13 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
            WHERE id = ? AND sender_id = ?`
         ).bind(messageId, currentUser.sub).first();
         if (!owned) return json({ error: "Message not found or cannot be changed" }, 404);
+        // Clearing a conversation hides its historical messages from this account:
+        // stale edit/delete actions must not mutate those cleared records. A single
+        // "hide for me" remains distinct and does not revoke sender-side deletion.
+        const clearedMessage = await env.DB.prepare(
+          "SELECT 1 FROM hidden_private_messages WHERE user_id = ? AND message_id = ? AND hide_reason = 'clear'"
+        ).bind(currentUser.sub, messageId).first();
+        if (clearedMessage) return json({ error: "Message not found or cannot be changed" }, 404);
         if (method === "PATCH") {
           const body = await readJsonRequestLimited(request);
           const message = String(body.body || "").trim();
