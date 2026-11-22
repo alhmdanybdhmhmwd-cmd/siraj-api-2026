@@ -1560,7 +1560,7 @@ class Api {
       timeout: const Duration(minutes: 3),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('تعذر قراءة الملف للتحويل (' + response.statusCode.toString() + ').');
+      throw Exception('تعذر قراءة الملف للتحويل (${response.statusCode}).');
     }
     if (response.bodyBytes.isEmpty || response.bodyBytes.length > maxAttachmentBytes) {
       throw Exception('حجم الملف غير صالح للتحويل.');
@@ -7555,7 +7555,7 @@ class _ChatPageState extends State<ChatPage> {
       if (selected == Colors.transparent) {
         await storage.delete(key: key);
       } else {
-        await storage.write(key: key, value: selected.value.toString());
+        await storage.write(key: key, value: selected.toARGB32().toString());
       }
     }
   }
