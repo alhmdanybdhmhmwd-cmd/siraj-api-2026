@@ -3545,6 +3545,11 @@ Future<bool> confirmVoiceTranscription(BuildContext context) async {
 
 String cleanError(Object error) => error.toString().replaceFirst('Exception: ', '');
 
+bool barqShouldPauseBackgroundWork(AppLifecycleState state) =>
+    state == AppLifecycleState.hidden ||
+    state == AppLifecycleState.paused ||
+    state == AppLifecycleState.detached;
+
 class HomePage extends StatefulWidget {
   final Map<String, dynamic> user;
   const HomePage({super.key, required this.user});
@@ -3583,9 +3588,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     barqPendingNotificationTap.addListener(_handlePendingNotificationTap);
     _syncRealtimeConnection();
     _loadCachedFriends().whenComplete(() { if (mounted) refreshAll(); });
-    offlineSyncTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      BarqOfflineQueue.syncOutbox();
-    });
+    _startOfflineSyncTimer();
   }
 
   @override
@@ -3594,6 +3597,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     barqPendingNotificationTap.removeListener(_handlePendingNotificationTap);
     offlineSyncTimer?.cancel();
     super.dispose();
+  }
+
+  void _startOfflineSyncTimer() {
+    offlineSyncTimer?.cancel();
+    offlineSyncTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      BarqOfflineQueue.syncOutbox();
+    });
+  }
+
+  void _stopOfflineSyncTimer() {
+    offlineSyncTimer?.cancel();
+    offlineSyncTimer = null;
   }
 
   void _syncRealtimeConnection() {
@@ -3611,11 +3626,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      _startOfflineSyncTimer();
       _syncRealtimeConnection();
       BarqOfflineQueue.syncOutbox();
       if (phoneContactsPermissionGranted) matchPhoneContacts(silent: true);
-    } else if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached) {
+    } else if (barqShouldPauseBackgroundWork(state)) {
+      _stopOfflineSyncTimer();
       unawaited(SirajRealtime.instance.stop());
     }
   }
