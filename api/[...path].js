@@ -1,4 +1,4 @@
-const UPSTREAM = "https://siraj-api-2026.alhmdanybdhmhmwd.workers.dev";
+const UPSTREAM = "https://siraj-api.alhmdanybdhmhmwd.workers.dev";
 
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
