@@ -15,6 +15,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:wechat_assets_picker/wechat_assets_picker.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:google_mlkit_translation/google_mlkit_translation.dart';
 import 'package:app_links/app_links.dart';
@@ -205,11 +206,43 @@ Future<FilePickerResult?> showBarqMediaPicker(
     },
   );
   if (choice == null || !context.mounted) return null;
-  return FilePicker.platform.pickFiles(
-    type: choice == 'media' ? FileType.media : FileType.any,
-    allowMultiple: choice == 'media' && allowMultiple,
-    withData: withData,
+  if (choice == 'files') {
+    return FilePicker.platform.pickFiles(
+      type: FileType.any,
+      allowMultiple: allowMultiple,
+      withData: withData,
+    );
+  }
+
+  final assets = await AssetPicker.pickAssets(
+    context,
+    pickerConfig: AssetPickerConfig(
+      maxAssets: allowMultiple ? 10 : 1,
+      requestType: RequestType.common,
+      gridCount: 4,
+      pageSize: 80,
+      themeColor: Theme.of(context).colorScheme.primary,
+    ),
   );
+  if (assets == null || assets.isEmpty || !context.mounted) return null;
+
+  final selectedFiles = <PlatformFile>[];
+  for (final asset in assets) {
+    final file = await asset.file;
+    if (file == null) continue;
+    selectedFiles.add(PlatformFile(
+      name: asset.title?.trim().isNotEmpty == true
+          ? asset.title!.trim()
+          : 'barq_media_${asset.id}',
+      path: file.path,
+      size: await file.length(),
+      bytes: withData ? await file.readAsBytes() : null,
+    ));
+  }
+  if (selectedFiles.isEmpty) {
+    throw Exception('تعذر قراءة الوسائط المختارة من الجهاز.');
+  }
+  return FilePickerResult(selectedFiles);
 }
 
 class _BarqMediaChoice extends StatelessWidget {
@@ -8834,7 +8867,9 @@ class _GroupChatPageState extends State<GroupChatPage> {
 
   Future<void> pickAndSendFile() async {
     try {
-      final result = await FilePicker.platform.pickFiles(withData: true, allowMultiple: false);
+      final result = await showBarqMediaPicker(
+        context, allowMultiple: false, title: 'إرسال وسائط أو ملف للمجموعة', withData: true,
+      );
       if (result == null || result.files.isEmpty) return;
       final file = result.files.single;
       final bytes = file.bytes;
