@@ -29,7 +29,7 @@ void main() {
     ));
   });
 
-  test('SPARK replies are formatted for the author's private chat', () {
+  test('SPARK replies are formatted for the authors private chat', () {
     expect(
       barqSparkPrivateReplyMessage(caption: '  مساء الخير  ', reply: '  أهلاً  '),
       '↩️ رد على SPARK\nمساء الخير\n\nأهلاً',
