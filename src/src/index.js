@@ -3273,6 +3273,16 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         ).bind(groupId, currentUser.sub).first();
         if (!member) return json({ error: "Group not found" }, 404);
         if (method === "GET") {
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS group_message_reads (
+              message_id TEXT NOT NULL,
+              user_id TEXT NOT NULL,
+              read_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              PRIMARY KEY (message_id, user_id),
+              FOREIGN KEY (message_id) REFERENCES group_messages(id) ON DELETE CASCADE,
+              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+          `).run();
           const requestedLimit = Number(url.searchParams.get("limit") || 100);
           const limit = Number.isInteger(requestedLimit)
             ? Math.min(100, Math.max(1, requestedLimit)) : 100;
@@ -3307,14 +3317,22 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           if (messages.length) {
             const ids = messages.map(item => item.id);
             const placeholders = ids.map(() => "?").join(",");
-            const [reactionRows, pinRows] = await Promise.all([
+            await env.DB.prepare(`
+              INSERT OR IGNORE INTO group_message_reads (message_id, user_id)
+              SELECT id, ? FROM group_messages
+              WHERE group_id = ? AND sender_id != ? AND id IN (${placeholders})
+            `).bind(currentUser.sub, groupId, currentUser.sub, ...ids).run();
+            const [reactionRows, pinRows, readRows] = await Promise.all([
               env.DB.prepare(`SELECT mr.message_id, mr.emoji, mr.user_id, u.display_name
                 FROM message_reactions mr JOIN users u ON u.id = mr.user_id
                 WHERE mr.scope_type = 'group' AND scope_id = ? AND message_id IN (${placeholders})`)
                 .bind(groupId, ...ids).all(),
               env.DB.prepare(`SELECT message_id FROM pinned_messages
                 WHERE scope_type = 'group' AND scope_id = ? AND pinned_by = ? AND message_id IN (${placeholders})`)
-                .bind(groupId, currentUser.sub, ...ids).all()
+                .bind(groupId, currentUser.sub, ...ids).all(),
+              env.DB.prepare(`SELECT message_id, COUNT(*) AS seen_count FROM group_message_reads
+                WHERE message_id IN (${placeholders}) GROUP BY message_id`)
+                .bind(...ids).all()
             ]);
             const reactionMap = new Map();
             for (const reaction of reactionRows.results || []) {
@@ -3322,9 +3340,11 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
               reactionMap.get(reaction.message_id).push({ emoji: reaction.emoji, user_id: reaction.user_id, display_name: reaction.display_name });
             }
             const pinnedIds = new Set((pinRows.results || []).map(item => item.message_id));
+            const seenCounts = new Map((readRows.results || []).map(item => [item.message_id, Number(item.seen_count || 0)]));
             for (const item of messages) {
               item.reactions = reactionMap.get(item.id) || [];
               item.is_pinned = pinnedIds.has(item.id);
+              item.seen_count = seenCounts.get(item.id) || 0;
             }
           }
           const oldest = messages[0];
