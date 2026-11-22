@@ -6070,12 +6070,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 ...BarqIdentity.values.map((identity) {
                   final palette = BarqIdentityPalette.forIdentity(identity);
                   final isDraft = draftIdentity == identity;
+                  final isAvailable = identity.isBundled;
                   final isCurrent = BarqIdentity.selected.value == identity;
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(14),
-                      onTap: saving ? null : () => setDialogState(() => draftIdentity = identity),
+                      onTap: saving || !isAvailable ? null : () => setDialogState(() => draftIdentity = identity),
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -6108,14 +6109,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                     style: TextStyle(color: palette.text, fontWeight: FontWeight.w700)),
                                   const SizedBox(height: 3),
                                   Text(
-                                    identity == BarqIdentity.purpleShadow || identity == BarqIdentity.skyJewel
-                                      ? 'هوية إضافية'
-                                      : palette.tagline,
+                                    !isAvailable ? 'تحتاج إلى تنزيل الحزمة قبل التفعيل' : palette.tagline,
                                     style: TextStyle(color: palette.mutedText, fontSize: 11),
                                   ),
                                 ],
                               ),
                             ),
+                            if (!isAvailable)
+                              Icon(Icons.download_for_offline_outlined, color: palette.mutedText, size: 19),
                             if (isCurrent && !isDraft)
                               Icon(Icons.check_circle_outline, color: palette.mutedText, size: 19),
                             if (isDraft)
