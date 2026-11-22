@@ -165,6 +165,63 @@ await call("/api/messages/search?with=" + encodeURIComponent(a.user.id) + "&q=in
 await call("/api/messages/search?with=" + encodeURIComponent(b.user.id) + "&q=x", { token: a.token, expected: 400 });
 await call("/api/messages/search?with=" + encodeURIComponent(a.user.id) + "&q=integration", { token: a.token, expected: 403 });
 
+// Conversation clear/delete are per-account, preserve the other participant's copy,
+// keep the contact, and restore the chat list when a new message arrives.
+const clearFixtureId = randomUUID().replaceAll("-", "");
+const otherSideFixtureId = randomUUID().replaceAll("-", "");
+await call("/api/messages", {
+  method: "POST", token: a.token,
+  body: { receiverId: b.user.id, body: "private clear fixture " + suffix, clientMessageId: clearFixtureId },
+  expected: 201
+});
+await call("/api/messages", {
+  method: "POST", token: b.token,
+  body: { receiverId: a.user.id, body: "other side retained fixture " + suffix, clientMessageId: otherSideFixtureId },
+  expected: 201
+});
+await call("/api/conversations/" + encodeURIComponent(b.user.id) + "/clear", {
+  method: "POST", token: a.token
+});
+const clearedForA = await call("/api/messages?with=" + encodeURIComponent(b.user.id), { token: a.token });
+const retainedForB = await call("/api/messages?with=" + encodeURIComponent(a.user.id), { token: b.token });
+assert.ok(!clearedForA.messages.some(message => message.id === clearFixtureId || message.id === otherSideFixtureId),
+  "clear history must hide both directions from the current account");
+assert.ok(retainedForB.messages.some(message => message.id === clearFixtureId) &&
+  retainedForB.messages.some(message => message.id === otherSideFixtureId),
+  "clear history must not delete the other participant's messages");
+let friendsAfterClear = await call("/api/friends", { token: a.token });
+assert.equal(friendsAfterClear.friends.find(user => user.id === b.user.id)?.chatHidden, false,
+  "clear history must keep the conversation visible");
+
+await call("/api/conversations/" + encodeURIComponent(b.user.id), {
+  method: "DELETE", token: a.token
+});
+const deletedForA = await call("/api/messages?with=" + encodeURIComponent(b.user.id), { token: a.token });
+const retainedAfterDeleteForB = await call("/api/messages?with=" + encodeURIComponent(a.user.id), { token: b.token });
+assert.ok(!deletedForA.messages.some(message => message.id === clearFixtureId || message.id === otherSideFixtureId),
+  "delete conversation must keep the deleted account's history hidden");
+assert.ok(retainedAfterDeleteForB.messages.some(message => message.id === clearFixtureId) &&
+  retainedAfterDeleteForB.messages.some(message => message.id === otherSideFixtureId),
+  "delete conversation must preserve the other participant's history");
+let friendsAfterDelete = await call("/api/friends", { token: a.token });
+assert.equal(friendsAfterDelete.friends.find(user => user.id === b.user.id)?.chatHidden, true,
+  "delete conversation must hide the chat but retain the contact");
+
+const restoredMessageId = randomUUID().replaceAll("-", "");
+await call("/api/messages", {
+  method: "POST", token: b.token,
+  body: { receiverId: a.user.id, body: "new message restores deleted chat " + suffix, clientMessageId: restoredMessageId },
+  expected: 201
+});
+const restoredForA = await call("/api/messages?with=" + encodeURIComponent(b.user.id), { token: a.token });
+assert.ok(restoredForA.messages.some(message => message.id === restoredMessageId),
+  "new incoming messages must appear after a chat was deleted locally");
+assert.ok(!restoredForA.messages.some(message => message.id === clearFixtureId || message.id === otherSideFixtureId),
+  "restoring a chat must not restore previously deleted history");
+const friendsAfterRestore = await call("/api/friends", { token: a.token });
+assert.equal(friendsAfterRestore.friends.find(user => user.id === b.user.id)?.chatHidden, false,
+  "a new message must restore the conversation to the chat list");
+
 const sparkStatus = await call("/api/statuses", {
   method: "POST", token: a.token,
   body: { content: "SPARK integration " + suffix, backgroundKey: "midnight", textColorKey: "white", fontKey: "modern" },
