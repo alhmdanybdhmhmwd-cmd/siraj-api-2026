@@ -422,7 +422,7 @@ void main() {
     flutter_test.expect(barqCanLeaveGroup(isSelf: false, isOwner: false), isFalse);
   });
 
-  testWidgets('public profile page shows the selected contact details', (tester) async {
+  flutter_test.testWidgets('public profile page shows the selected contact details', (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: PublicProfilePage(
         person: {
@@ -452,7 +452,7 @@ void main() {
   });
 
 
-  testWidgets('public profile disables messaging for the current user', (tester) async {
+  flutter_test.testWidgets('public profile disables messaging for the current user', (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: PublicProfilePage(
         person: {
@@ -473,7 +473,7 @@ void main() {
     flutter_test.expect(sendButton.onPressed, isNull);
   });
 
-  testWidgets('public profile accepts nested API user and hides message action by default', (tester) async {
+  flutter_test.testWidgets('public profile accepts nested API user and hides message action by default', (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: PublicProfilePage(
         person: {
@@ -506,7 +506,7 @@ void main() {
     flutter_test.expect(visible.map((message) => message['id']).toList(),
         ['regular', 'unread', 'active']);
   });
-  testWidgets('own message actions allow copying and confirmed deletion', (tester) async {
+  flutter_test.testWidgets('own message actions allow copying and confirmed deletion', (tester) async {
     var deleted = false;
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
@@ -535,7 +535,7 @@ void main() {
     flutter_test.expect(deleted, isTrue);
   });
 
-  testWidgets('other users message actions do not expose delete', (tester) async {
+  flutter_test.testWidgets('other users message actions do not expose delete', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
         body: TextButton(
@@ -566,7 +566,7 @@ void main() {
     flutter_test.expect(messageReplyPreview({'reply_to_body': ''}), 'رسالة');
   });
 
-  testWidgets('message edit dialog returns trimmed replacement text', (tester) async {
+  flutter_test.testWidgets('message edit dialog returns trimmed replacement text', (tester) async {
     String? saved;
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
@@ -588,7 +588,7 @@ void main() {
     flutter_test.expect(saved, 'النص الجديد');
   });
 
-  testWidgets('message action menu invokes the reply callback', (tester) async {
+  flutter_test.testWidgets('message action menu invokes the reply callback', (tester) async {
     Map<String, dynamic>? selected;
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
@@ -625,7 +625,7 @@ void main() {
     flutter_test.expect(normalizeMessageReactions(null), isEmpty);
   });
 
-  testWidgets('reaction chips show counts and allow removing the current user reaction', (tester) async {
+  flutter_test.testWidgets('reaction chips show counts and allow removing the current user reaction', (tester) async {
     String? selectedEmoji;
     bool? removing;
     await tester.pumpWidget(MaterialApp(
@@ -654,7 +654,7 @@ void main() {
     flutter_test.expect(removing, isTrue);
   });
 
-  testWidgets('message action sheet exposes reaction and pin actions', (tester) async {
+  flutter_test.testWidgets('message action sheet exposes reaction and pin actions', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
         body: TextButton(
@@ -701,7 +701,7 @@ void main() {
     ]);
   });
 
-  testWidgets('conversation summary waits for explicit consent before sending messages', (tester) async {
+  flutter_test.testWidgets('conversation summary waits for explicit consent before sending messages', (tester) async {
     var requests = 0;
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
@@ -733,7 +733,7 @@ void main() {
     flutter_test.expect(find.text('ملخص اختباري'), findsOneWidget);
   });
 
-  testWidgets('conversation tools sheet exposes chat tools outside app settings', (tester) async {
+  flutter_test.testWidgets('conversation tools sheet exposes chat tools outside app settings', (tester) async {
     var selectedTool = '';
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
@@ -842,7 +842,7 @@ void main() {
     flutter_test.expect(failures, ['two.png']);
   });
 
-  testWidgets('private memory load error explains retry instead of showing an empty vault', (tester) async {
+  flutter_test.testWidgets('private memory load error explains retry instead of showing an empty vault', (tester) async {
     var retried = false;
     await tester.pumpWidget(
       MaterialApp(
@@ -858,7 +858,7 @@ void main() {
     flutter_test.expect(retried, isTrue);
   });
 
-  testWidgets('private memory photo gallery shows a safe empty state without paging', (tester) async {
+  flutter_test.testWidgets('private memory photo gallery shows a safe empty state without paging', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
@@ -875,7 +875,7 @@ void main() {
     flutter_test.expect(find.textContaining('/'), findsNothing);
   });
 
-  testWidgets('private memory photo gallery pages through multiple zoomable photos', (tester) async {
+  flutter_test.testWidgets('private memory photo gallery pages through multiple zoomable photos', (tester) async {
     final photos = [
       {'attachmentId': 'owner-1/private-memories/photo-1'},
       {'attachmentId': 'owner-1/private-memories/photo-2'},
@@ -1299,7 +1299,7 @@ void main() {
     flutter_test.expect(barqCanLeaveGroup(isSelf: false, isOwner: false), isFalse);
   });
 
-  testWidgets('public profile page shows the selected contact details', (tester) async {
+  flutter_test.testWidgets('public profile page shows the selected contact details', (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: PublicProfilePage(
         person: {
@@ -1329,7 +1329,7 @@ void main() {
   });
 
 
-  testWidgets('public profile disables messaging for the current user', (tester) async {
+  flutter_test.testWidgets('public profile disables messaging for the current user', (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: PublicProfilePage(
         person: {
@@ -1350,7 +1350,7 @@ void main() {
     flutter_test.expect(sendButton.onPressed, isNull);
   });
 
-  testWidgets('public profile accepts nested API user and hides message action by default', (tester) async {
+  flutter_test.testWidgets('public profile accepts nested API user and hides message action by default', (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: PublicProfilePage(
         person: {
@@ -1383,7 +1383,7 @@ void main() {
     flutter_test.expect(visible.map((message) => message['id']).toList(),
         ['regular', 'unread', 'active']);
   });
-  testWidgets('own message actions allow copying and confirmed deletion', (tester) async {
+  flutter_test.testWidgets('own message actions allow copying and confirmed deletion', (tester) async {
     var deleted = false;
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
@@ -1412,7 +1412,7 @@ void main() {
     flutter_test.expect(deleted, isTrue);
   });
 
-  testWidgets('other users message actions do not expose delete', (tester) async {
+  flutter_test.testWidgets('other users message actions do not expose delete', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
         body: TextButton(
@@ -1443,7 +1443,7 @@ void main() {
     flutter_test.expect(messageReplyPreview({'reply_to_body': ''}), 'رسالة');
   });
 
-  testWidgets('message edit dialog returns trimmed replacement text', (tester) async {
+  flutter_test.testWidgets('message edit dialog returns trimmed replacement text', (tester) async {
     String? saved;
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
@@ -1465,7 +1465,7 @@ void main() {
     flutter_test.expect(saved, 'النص الجديد');
   });
 
-  testWidgets('message action menu invokes the reply callback', (tester) async {
+  flutter_test.testWidgets('message action menu invokes the reply callback', (tester) async {
     Map<String, dynamic>? selected;
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
@@ -1502,7 +1502,7 @@ void main() {
     flutter_test.expect(normalizeMessageReactions(null), isEmpty);
   });
 
-  testWidgets('reaction chips show counts and allow removing the current user reaction', (tester) async {
+  flutter_test.testWidgets('reaction chips show counts and allow removing the current user reaction', (tester) async {
     String? selectedEmoji;
     bool? removing;
     await tester.pumpWidget(MaterialApp(
@@ -1531,7 +1531,7 @@ void main() {
     flutter_test.expect(removing, isTrue);
   });
 
-  testWidgets('message action sheet exposes reaction and pin actions', (tester) async {
+  flutter_test.testWidgets('message action sheet exposes reaction and pin actions', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
         body: TextButton(
@@ -1578,7 +1578,7 @@ void main() {
     ]);
   });
 
-  testWidgets('conversation summary waits for explicit consent before sending messages', (tester) async {
+  flutter_test.testWidgets('conversation summary waits for explicit consent before sending messages', (tester) async {
     var requests = 0;
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
@@ -1610,7 +1610,7 @@ void main() {
     flutter_test.expect(find.text('ملخص اختباري'), findsOneWidget);
   });
 
-  testWidgets('conversation tools sheet exposes chat tools outside app settings', (tester) async {
+  flutter_test.testWidgets('conversation tools sheet exposes chat tools outside app settings', (tester) async {
     var selectedTool = '';
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => Scaffold(
@@ -1719,7 +1719,7 @@ void main() {
     flutter_test.expect(failures, ['two.png']);
   });
 
-  testWidgets('private memory load error explains retry instead of showing an empty vault', (tester) async {
+  flutter_test.testWidgets('private memory load error explains retry instead of showing an empty vault', (tester) async {
     var retried = false;
     await tester.pumpWidget(
       MaterialApp(
@@ -1735,7 +1735,7 @@ void main() {
     flutter_test.expect(retried, isTrue);
   });
 
-  testWidgets('private memory photo gallery shows a safe empty state without paging', (tester) async {
+  flutter_test.testWidgets('private memory photo gallery shows a safe empty state without paging', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
@@ -1752,7 +1752,7 @@ void main() {
     flutter_test.expect(find.textContaining('/'), findsNothing);
   });
 
-  testWidgets('private memory photo gallery pages through multiple zoomable photos', (tester) async {
+  flutter_test.testWidgets('private memory photo gallery pages through multiple zoomable photos', (tester) async {
     final photos = [
       {'attachmentId': 'owner-1/private-memories/photo-1'},
       {'attachmentId': 'owner-1/private-memories/photo-2'},
