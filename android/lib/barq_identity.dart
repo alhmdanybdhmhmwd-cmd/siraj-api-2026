@@ -8,6 +8,8 @@ enum BarqIdentity {
   purpleShadow,
   skyJewel;
 
+  bool get isBundled => this == BarqIdentity.blueLightning || this == BarqIdentity.butterfly;
+
   static const _storage = FlutterSecureStorage();
   static const _storageKey = 'barq_visual_identity';
   static final ValueNotifier<BarqIdentity> selected =
@@ -25,16 +27,20 @@ enum BarqIdentity {
   static Future<void> load() async {
     try {
       final saved = await _storage.read(key: _storageKey);
-      selected.value = BarqIdentity.values.firstWhere(
-        (identity) => identity.name == saved,
-        orElse: () => BarqIdentity.blueLightning,
-      );
+      final restored = BarqIdentity.values.where((identity) => identity.name == saved).firstOrNull;
+      // Never activate an optional identity unless its package has actually been downloaded.
+      selected.value = restored != null && restored.isBundled
+          ? restored
+          : BarqIdentity.blueLightning;
     } catch (_) {
       selected.value = BarqIdentity.blueLightning;
     }
   }
 
   static Future<void> set(BarqIdentity identity) async {
+    if (!identity.isBundled) {
+      throw StateError('هذه الهوية تحتاج إلى تنزيل الحزمة أولاً.');
+    }
     await _storage.write(key: _storageKey, value: identity.name);
     selected.value = identity;
   }
