@@ -468,6 +468,12 @@ await call("/api/blocks", {
 const blockedList = await call("/api/blocks", { token: a.token });
 assert.ok(blockedList.blockedUsers.some(user => user.userId === b.user.id),
   "block list must persist the selected user");
+await call("/api/messages/" + encodeURIComponent(clientMessageId) + "/reactions", {
+  method: "POST", token: b.token, body: { emoji: "🔥" }, expected: 403
+});
+await call("/api/messages/" + encodeURIComponent(clientMessageId) + "/pin", {
+  method: "POST", token: a.token, expected: 403
+});
 await call("/api/messages", {
   method: "POST", token: b.token,
   body: { receiverId: a.user.id, body: "blocked message " + suffix },
