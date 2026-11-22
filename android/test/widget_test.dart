@@ -15,6 +15,20 @@ void main() {
     expect(barqInviteMessage, isNot(contains('رمز دعوة')));
   });
 
+  testWidgets('private and group chat wallpaper uses a premium gradient', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(builder: (context) {
+        final decoration = barqChatWallpaperDecoration(
+          context,
+          const Color(0xFF071A2D),
+        );
+        expect(decoration.gradient, isA<LinearGradient>());
+        expect((decoration.gradient! as LinearGradient).colors, hasLength(3));
+        return const SizedBox();
+      }),
+    ));
+  });
+
   test('SPARK replies are formatted for the author's private chat', () {
     expect(
       barqSparkPrivateReplyMessage(caption: '  مساء الخير  ', reply: '  أهلاً  '),
