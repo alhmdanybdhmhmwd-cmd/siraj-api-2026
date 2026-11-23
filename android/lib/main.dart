@@ -1663,6 +1663,13 @@ class Api {
     );
   }
 
+  static Future<void> hideGroupMessageForMe(String groupId, String messageId) async {
+    await request(
+      'DELETE',
+      '/api/groups/${Uri.encodeComponent(groupId)}/messages/${Uri.encodeComponent(messageId)}?scope=me',
+    );
+  }
+
   static Future<Map<String, dynamic>> summarizePrivateConversation(String friendId) {
     return request('POST', '/api/messages/${Uri.encodeComponent(friendId)}/summary');
   }
