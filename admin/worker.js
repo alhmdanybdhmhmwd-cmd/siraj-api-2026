@@ -84,6 +84,15 @@ export function validateImageGenerationInput(value) {
   return { ok: true, value: { prompt } };
 }
 
+export function getUtcDailyWindow(now = Date.now()) {
+  const date = new Date(now);
+  const day = date.toISOString().slice(0, 10);
+  const resetAt = new Date(Date.UTC(
+    date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1
+  )).toISOString();
+  return { day, resetAt };
+}
+
 export function validateGeneratedImage(value, maxImageBytes = 8 * 1024 * 1024) {
   const image = typeof value === "string" ? value : "";
   if (!image || !/^[A-Za-z0-9+/]+={0,2}$/.test(image)) {
@@ -534,6 +543,27 @@ async function handle(request, env) {
     if (!usage) {
       return response({ error: "image_generation_rate_limited", retryAfterSeconds: 60 }, 429, allowedOrigin);
     }
+    const dailyWindow = getUtcDailyWindow();
+    const dailyLimit = 10;
+    const dailyUsage = await env.ADMIN_DB.prepare(`
+      INSERT INTO admin_image_daily_limits (workspace_id, day_utc, action_type, request_count)
+      VALUES (?, ?, 'generation', 1)
+      ON CONFLICT(workspace_id, day_utc, action_type) DO UPDATE SET
+        request_count = request_count + 1, updated_at = CURRENT_TIMESTAMP
+      WHERE request_count < ?
+      RETURNING request_count
+    `).bind(workspace, dailyWindow.day, dailyLimit).first();
+    if (!dailyUsage) {
+      const current = await env.ADMIN_DB.prepare(
+        "SELECT request_count FROM admin_image_daily_limits WHERE workspace_id = ? AND day_utc = ? AND action_type = 'generation'"
+      ).bind(workspace, dailyWindow.day).first();
+      return response({
+        error: "image_generation_daily_limit_reached",
+        dailyLimit,
+        dailyUsed: current?.request_count || dailyLimit,
+        resetsAt: dailyWindow.resetAt
+      }, 429, allowedOrigin);
+    }
     const model = "@cf/black-forest-labs/flux-1-schnell";
     try {
       const generated = await env.ADMIN_AI.run(model, { prompt, steps: 4 });
@@ -551,6 +581,9 @@ async function handle(request, env) {
         imageBytes,
         model,
         generatedAt: new Date().toISOString(),
+        dailyLimit,
+        dailyRemaining: Math.max(0, dailyLimit - dailyUsage.request_count),
+        dailyResetsAt: dailyWindow.resetAt,
         imageStored: false
       }, 200, allowedOrigin);
     } catch (error) {
@@ -599,6 +632,27 @@ async function handle(request, env) {
     if (!usage) {
       return response({ error: "vision_rate_limited", retryAfterSeconds: 60 }, 429, allowedOrigin);
     }
+    const dailyWindow = getUtcDailyWindow();
+    const dailyLimit = 30;
+    const dailyUsage = await env.ADMIN_DB.prepare(`
+      INSERT INTO admin_image_daily_limits (workspace_id, day_utc, action_type, request_count)
+      VALUES (?, ?, 'analysis', 1)
+      ON CONFLICT(workspace_id, day_utc, action_type) DO UPDATE SET
+        request_count = request_count + 1, updated_at = CURRENT_TIMESTAMP
+      WHERE request_count < ?
+      RETURNING request_count
+    `).bind(workspace, dailyWindow.day, dailyLimit).first();
+    if (!dailyUsage) {
+      const current = await env.ADMIN_DB.prepare(
+        "SELECT request_count FROM admin_image_daily_limits WHERE workspace_id = ? AND day_utc = ? AND action_type = 'analysis'"
+      ).bind(workspace, dailyWindow.day).first();
+      return response({
+        error: "vision_daily_limit_reached",
+        dailyLimit,
+        dailyUsed: current?.request_count || dailyLimit,
+        resetsAt: dailyWindow.resetAt
+      }, 429, allowedOrigin);
+    }
     const model = "@cf/meta/llama-3.2-11b-vision-instruct";
     try {
       const generated = await env.ADMIN_AI.run(model, {
@@ -618,6 +672,9 @@ async function handle(request, env) {
         answer: answer.slice(0, 12000),
         model,
         generatedAt: new Date().toISOString(),
+        dailyLimit,
+        dailyRemaining: Math.max(0, dailyLimit - dailyUsage.request_count),
+        dailyResetsAt: dailyWindow.resetAt,
         imageStored: false
       }, 200, allowedOrigin);
     } catch (error) {
