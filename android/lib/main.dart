@@ -1177,11 +1177,32 @@ class Api {
         if (token != null) 'Authorization': 'Bearer $token',
       };
 
-  // A random installation identifier is stored in secure storage. It is not
-  // derived from IMEI, advertising IDs, contacts, or other hardware identifiers.
+  // Random installation ID stored securely; no hardware identifier is collected.
   static Future<String> _installationId() async {
     var value = await storage.read(key: 'barq_installation_id');
-    if (value != null && RegExp(r'^[a-f0-9-]{36}
+    if (value != null && value.length == 36 && value.split('-').length == 5) {
+      return value;
+    }
+    final random = math.Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    bytes[6] = (bytes[6] & 15) | 64;
+    bytes[8] = (bytes[8] & 63) | 128;
+    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    value = hex.substring(0, 8) + '-' + hex.substring(8, 12) + '-' +
+        hex.substring(12, 16) + '-' + hex.substring(16, 20) + '-' +
+        hex.substring(20);
+    await storage.write(key: 'barq_installation_id', value: value);
+    return value;
+  }
+
+  static String get _installationName {
+    if (Platform.isAndroid) return 'هاتف Android';
+    if (Platform.isIOS) return 'هاتف iPhone';
+    if (Platform.isWindows) return 'جهاز Windows';
+    if (Platform.isMacOS) return 'جهاز Mac';
+    if (Platform.isLinux) return 'جهاز Linux';
+    return 'جهاز برق';
+  }
 
   static Future<Map<String, dynamic>> request(
     String method,
