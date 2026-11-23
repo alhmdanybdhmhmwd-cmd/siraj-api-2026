@@ -459,6 +459,22 @@ test("group ownership transfer is conditional, owner-only, and limited to existi
 });
 
 
+test("group invitations are owner/admin controlled, expiring, and open the contact list", () => {
+  const inviteStart = worker.indexOf("const groupInviteCreateMatch");
+  const inviteEnd = worker.indexOf("const groupMemberMatch", inviteStart);
+  const inviteRoute = worker.slice(inviteStart, inviteEnd);
+  assert.ok(inviteStart >= 0 && inviteRoute.includes('actorRole !== "owner" && actorRole !== "admin"'));
+  assert.ok(inviteRoute.includes("group_invites"));
+  assert.ok(inviteRoute.includes("expires_at"));
+  assert.ok(inviteRoute.includes("barq://group/join?code="));
+  assert.ok(worker.includes("groupInviteAcceptMatch"));
+  assert.ok(flutterApp.includes("createGroupInvite"));
+  assert.ok(flutterApp.includes("joinGroupInvite"));
+  assert.ok(flutterApp.includes("AppLinks"));
+  assert.ok(flutterApp.includes("من جهات اتصالك"));
+  assert.ok(flutterApp.includes("onShareInvite"));
+});
+
 test("SPARK media publishing stores private image/video objects with a 24-hour lifetime", () => {
   const uploadStart = worker.indexOf('if (method === "POST" && path === "/api/statuses/media")');
   const uploadEnd = worker.indexOf("// Publish a 24-hour text status", uploadStart);
