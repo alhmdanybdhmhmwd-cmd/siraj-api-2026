@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:barq_admin/security.dart';
+import 'package:barq_admin/security.dart' show createOidcNonce, googleOidcRedirectUri;
 
 void main() {
   test('accepts HTTPS Admin API URLs with an optional path', () {
