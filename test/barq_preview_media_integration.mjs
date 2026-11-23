@@ -15,14 +15,35 @@ if (process.env.BARQ_PREVIEW_MEDIA_CREDENTIALS_CONFIGURED !== "true") {
   console.log("Preview media integration skipped: Preview-only Tigris credentials are not configured.");
 } else {
 async function request(path, { method = "GET", token, body, headers = {}, expected = 200 } = {}) {
-  const response = await fetch(new URL(path, base), {
-    method,
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers
-    },
-    body
-  });
+  const requestHeaders = {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...headers
+  };
+  // Cloudflare's edge can occasionally reset a live Preview connection while
+  // accepting a multi-megabyte chunk. Retry only replay-safe operations:
+  // GET/PUT/DELETE, or POST carrying an explicit idempotency key.
+  const replaySafe = ["GET", "PUT", "DELETE"].includes(method.toUpperCase()) ||
+    Object.keys(requestHeaders).some(name => name.toLowerCase() === "x-idempotency-key");
+  let response;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      response = await fetch(new URL(path, base), {
+        method,
+        headers: requestHeaders,
+        body,
+        signal: AbortSignal.timeout(45_000)
+      });
+      if (replaySafe && [502, 503, 504].includes(response.status) && attempt < 4) {
+        await response.arrayBuffer();
+        await new Promise(resolve => setTimeout(resolve, attempt * 750));
+        continue;
+      }
+      break;
+    } catch (error) {
+      if (!replaySafe || attempt >= 4) throw error;
+      await new Promise(resolve => setTimeout(resolve, attempt * 750));
+    }
+  }
   const bytes = new Uint8Array(await response.arrayBuffer());
   assert.equal(response.status, expected,
     `${method} ${path}: HTTP ${response.status}, ${new TextDecoder().decode(bytes.slice(0, 1200))}`);
