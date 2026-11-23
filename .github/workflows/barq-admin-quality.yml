@@ -184,6 +184,14 @@ jobs:
           cache: true
       - name: Resolve Flutter dependencies
         run: flutter pub get
+      - name: Validate Android AppAuth platform wiring without building an APK
+        run: |
+          test -f android/gradlew
+          grep -q 'applicationId = "com.barq.admin"' android/app/build.gradle.kts
+          grep -q 'manifestPlaceholders["appAuthRedirectScheme"]' android/app/build.gradle.kts
+          grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
+          cd android
+          ./gradlew :app:processDebugManifest
       - name: Enforce Dart formatting
         run: dart format --output=none --set-exit-if-changed lib test
       - name: Analyze Admin mobile app
