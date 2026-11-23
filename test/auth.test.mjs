@@ -2797,7 +2797,7 @@ test("liveness probe stays available without database or secrets", async () => {
 test("API rejects unsupported methods and oversized URLs before database route handling", async () => {
   const env = { DB: new FakeDB(), JWT_SECRET: secret };
   const unsupported = await worker.default.fetch(new Request("https://api.example.test/private", {
-    method: "TRACE"
+    method: "BREW"
   }), env);
   assert.equal(unsupported.status, 405);
   assert.match(unsupported.headers.get("Allow") || "", /GET/);
