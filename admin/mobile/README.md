@@ -16,8 +16,12 @@ Arabic RTL Flutter client for the independent BARQ Admin owner workspace.
 
 1. Create a Google OAuth client for the native Android application in Google Cloud Console. Register the exact Android package name and signing-certificate SHA-1 fingerprint used by the eventual build.
 2. Configure the matching Google native redirect scheme for AppAuth. The app derives the callback as `com.googleusercontent.apps.<client-id-prefix>:/oauth2redirect`; the Android manifest must register that scheme before a device build.
-3. Build the client with the public client identifier:
-   `--dart-define=BARQ_GOOGLE_OIDC_CLIENT_ID=<Google-native-client-id>`.
+3. Set the same public client identifier in the build process environment and Dart compile-time environment. This is required because Android AppAuth reads the redirect scheme from Gradle while Dart builds the redirect URI from `--dart-define`:
+   ```sh
+   export BARQ_GOOGLE_OIDC_CLIENT_ID='<Google-native-client-id>'
+   flutter build apk --dart-define=BARQ_GOOGLE_OIDC_CLIENT_ID="$BARQ_GOOGLE_OIDC_CLIENT_ID"
+   ```
+   Do not omit the `export`: without it, Gradle falls back to `com.barq.admin.auth` while the Dart client expects the Google-derived callback scheme, and Google sign-in will not return to the app.
 4. Configure the dedicated Admin Preview Worker variables/secrets:
    - `BARQ_GOOGLE_OIDC_CLIENT_ID`: the same public Google client ID.
    - `BARQ_ADMIN_OWNER_EMAIL`: the exact Google account email permitted to own this Admin workspace. Google must mark it verified.
