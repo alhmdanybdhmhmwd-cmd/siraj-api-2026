@@ -5689,7 +5689,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<void> addMemberDialog(Map<String, dynamic> group) async {
     final controller = TextEditingController();
-    List<Map<String, dynamic>> found = [];
+    final existingMembers = await Api.groupMembers(field(group, ['id']));
+    final existingIds = existingMembers.map((item) => field(item, ['id', 'user_id'])).toSet();
+    final contactCandidates = friends.map((item) {
+      final nested = item['user'] is Map ? Map<String, dynamic>.from(item['user']) : item;
+      return <String, dynamic>{...item, ...nested};
+    }).where((item) {
+      final id = field(item, ['id', 'user_id', 'friend_id']);
+      return id.isNotEmpty && !existingIds.contains(id);
+    }).toList();
+    List<Map<String, dynamic>> found = List<Map<String, dynamic>>.from(contactCandidates);
     bool busy = false;
     await showDialog<void>(
       context: context,
@@ -5706,7 +5715,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             child: SizedBox(
             width: double.maxFinite,
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextField(controller: controller, decoration: inputDecoration('اسم المستخدم أو الهاتف', Icons.search)),
+              Row(children: [
+                Expanded(child: Text('من جهات اتصالك', style: TextStyle(
+                  color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700))),
+                TextButton.icon(
+                  onPressed: busy ? null : () => setDialog(() => found = List<Map<String, dynamic>>.from(contactCandidates)),
+                  icon: const Icon(Icons.contacts_outlined, size: 17),
+                  label: const Text('جهات الاتصال'),
+                ),
+              ]),
+              TextField(controller: controller, decoration: inputDecoration('البحث باسم المستخدم أو الهاتف', Icons.search)),
               Align(alignment: Alignment.centerLeft, child: TextButton(
                 onPressed: busy ? null : () async {
                   if (controller.text.trim().length < 2) return;
