@@ -9626,6 +9626,37 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     unawaited(_uploadPendingAttachment(local));
   }
 
+  Future<void> pickAndSendMedia() async {
+    if (blockedByMe) { showMsg(context, 'ألغِ حظر المستخدم أولاً لإرسال الرسائل.'); return; }
+    try {
+      final result = await showBarqMediaPicker(
+        context, allowMultiple: false, title: 'اختيار صورة أو فيديو',
+        withData: false, allowFiles: false, requestType: RequestType.common,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.single;
+      final bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
+      final contentType = file.extension == null ? 'application/octet-stream' : _mimeForExtension(file.extension!);
+      if (!mounted) return;
+      final captionController = TextEditingController();
+      final confirmed = await showBarqAttachmentPreview(
+        context, fileName: file.name, contentType: contentType, bytes: bytes,
+        captionController: captionController,
+      );
+      if (!mounted || !confirmed) {
+        captionController.dispose();
+        return;
+      }
+      final local = _newPendingAttachment(bytes, file.name, contentType);
+      (local['local_attachment'] as Map<String, dynamic>)['caption'] = captionController.text.trim();
+      captionController.dispose();
+      setState(() => messages = mergeMessages(messages, [local]));
+      unawaited(_uploadPendingAttachment(local));
+    } catch (error) {
+      if (mounted) showMsg(context, cleanError(error));
+    }
+  }
+
   Future<void> pickAndSendFile() async {
     if (blockedByMe) { showMsg(context, 'ألغِ حظر المستخدم أولاً لإرسال الرسائل.'); return; }
     try {
@@ -10211,8 +10242,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                       ),
                       IconButton(
                         visualDensity: VisualDensity.compact,
-                        tooltip: 'إرفاق صورة أو فيديو',
-                        onPressed: sending ? null : pickAndSendFile,
+                        tooltip: 'اختيار صورة أو فيديو',
+                        onPressed: sending ? null : pickAndSendMedia,
                         icon: const Icon(Icons.photo_camera_outlined, color: Colors.white70),
                       ),
                       ValueListenableBuilder<TextEditingValue>(
@@ -11029,6 +11060,36 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
       duration: duration);
     if (mounted) setState(() => messages = mergeMessages(messages, [local]));
     unawaited(_uploadPendingAttachment(local));
+  }
+
+  Future<void> pickAndSendMedia() async {
+    try {
+      final result = await showBarqMediaPicker(
+        context, allowMultiple: false, title: 'اختيار صورة أو فيديو',
+        withData: false, allowFiles: false, requestType: RequestType.common,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.single;
+      final bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
+      final contentType = file.extension == null ? 'application/octet-stream' : _mimeForExtension(file.extension!);
+      if (!mounted) return;
+      final captionController = TextEditingController();
+      final confirmed = await showBarqAttachmentPreview(
+        context, fileName: file.name, contentType: contentType, bytes: bytes,
+        captionController: captionController,
+      );
+      if (!mounted || !confirmed) {
+        captionController.dispose();
+        return;
+      }
+      final local = _newPendingAttachment(bytes, file.name, contentType);
+      (local['local_attachment'] as Map<String, dynamic>)['caption'] = captionController.text.trim();
+      captionController.dispose();
+      setState(() => messages = mergeMessages(messages, [local]));
+      unawaited(_uploadPendingAttachment(local));
+    } catch (error) {
+      if (mounted) showMsg(context, cleanError(error));
+    }
   }
 
   Future<void> pickAndSendFile() async {
