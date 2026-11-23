@@ -126,8 +126,14 @@ async function processAdminTaskMessage(message, env) {
     message.ack();
     return;
   }
-  if (!env.ADMIN_DB || !env.ADMIN_AI) {
+  if (!env.ADMIN_DB) {
     message.retry({ delaySeconds: 60 });
+    return;
+  }
+  if (!env.ADMIN_AI) {
+    await env.ADMIN_DB.prepare("UPDATE admin_tasks SET next_action = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND workspace_id = ? AND status = 'queued'")
+      .bind("Waiting for the BARQ Admin AI binding to be configured", payload.taskId, payload.workspaceId).run();
+    message.ack();
     return;
   }
 
@@ -143,7 +149,13 @@ async function processAdminTaskMessage(message, env) {
   `).bind(leaseId, payload.taskId, payload.workspaceId).run();
 
   if (!claimed?.meta?.changes) {
-    message.ack();
+    const current = await env.ADMIN_DB.prepare("SELECT status, lease_expires_at FROM admin_tasks WHERE id = ? AND workspace_id = ?")
+      .bind(payload.taskId, payload.workspaceId).first();
+    if (current?.status === "running" && current.lease_expires_at) {
+      message.retry({ delaySeconds: 60 });
+    } else {
+      message.ack();
+    }
     return;
   }
 
@@ -391,7 +403,7 @@ async function handle(request, env) {
         ).bind(workspace, idempotencyKey).first();
         if (existing) {
           let dispatched = false;
-          if (existing.status === "queued" && env.ADMIN_TASK_QUEUE) {
+          if (existing.status === "queued" && env.ADMIN_TASK_QUEUE && env.ADMIN_AI) {
             await env.ADMIN_TASK_QUEUE.send({ taskId: existing.id, workspaceId: workspace });
             dispatched = true;
           }
@@ -407,7 +419,7 @@ async function handle(request, env) {
       "SELECT id, title, description, status, priority, checkpoint_version, next_action, created_at FROM admin_tasks WHERE id = ?"
     ).bind(id).first();
     let dispatched = false;
-    if (env.ADMIN_TASK_QUEUE) {
+    if (env.ADMIN_TASK_QUEUE && env.ADMIN_AI) {
       await env.ADMIN_TASK_QUEUE.send({ taskId: id, workspaceId: workspace });
       dispatched = true;
     }
