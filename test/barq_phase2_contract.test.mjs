@@ -465,7 +465,8 @@ test("SPARK media publishing stores private image/video objects with a 24-hour l
   assert.ok(uploadStart >= 0 && uploadEnd > uploadStart);
   assert.ok(uploadRoute.includes("image\\/") && uploadRoute.includes("video\\/"));
   assert.ok(uploadRoute.includes("60 * 1024 * 1024"));
-  assert.ok(uploadRoute.includes("Date.now() + 24 * 60 * 60 * 1000"));
+  assert.ok(worker.includes("const SPARK_STATUS_TTL_MS = 24 * 60 * 60 * 1000"));
+  assert.ok(uploadRoute.includes("Date.now() + SPARK_STATUS_TTL_MS"));
   assert.ok(uploadRoute.includes("CREATE TABLE IF NOT EXISTS status_media"));
   assert.ok(uploadRoute.includes("INSERT INTO media_access"));
   assert.ok(uploadRoute.includes("INSERT INTO media_expirations"));
@@ -729,6 +730,8 @@ test("SPARK view tracking is unique per viewer and only the owner can inspect vi
   assert.ok(flutterApp.includes("sparkViewers"));
   assert.ok(flutterApp.includes("مشاهدو SPARK"));
   assert.ok(flutterApp.includes("viewCount"));
+  assert.ok(flutterApp.includes("onShowViewers: () => _showSparkViewers(statusId)"));
+  assert.ok(flutterApp.includes("اكتب ردك على SPARK..."));
 });
 
 
@@ -742,8 +745,9 @@ test("SPARK media uploads validate file signatures and enforce the ten-item serv
   const uploadEnd = worker.indexOf("// Publish a 24-hour text status", uploadStart);
   const uploadRoute = worker.slice(uploadStart, uploadEnd);
   assert.ok(uploadRoute.includes("SELECT COUNT(*) AS count FROM status_media WHERE status_id = ?"));
-  assert.ok(uploadRoute.includes("existingMediaCount?.count || 0) >= 10"));
-  assert.ok(uploadRoute.includes("WHERE (SELECT COUNT(*) FROM status_media WHERE status_id = ?) < 10"));
+  assert.ok(worker.includes("const SPARK_MEDIA_PER_STATUS = 10"));
+  assert.ok(uploadRoute.includes("existingMediaCount?.count || 0) >= SPARK_MEDIA_PER_STATUS"));
+  assert.ok(uploadRoute.includes("WHERE (SELECT COUNT(*) FROM status_media WHERE status_id = ?) < ${SPARK_MEDIA_PER_STATUS}"));
   assert.ok(uploadRoute.includes("savedRows?.[mediaInsertIndex]?.meta?.changes || 0) !== 1"));
   assert.ok(uploadRoute.includes("at most 10 media files"));
 });
