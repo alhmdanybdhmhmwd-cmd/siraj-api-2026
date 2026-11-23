@@ -162,3 +162,5 @@ jobs:
           echo "### BARQ isolated Preview integration" >> "$GITHUB_STEP_SUMMARY"
           echo "The account and media suites above target the URL emitted by this run's isolated fallback Worker deployment." >> "$GITHUB_STEP_SUMMARY"
           echo "No Vercel alias or legacy Worker URL is used by these live integration tests." >> "$GITHUB_STEP_SUMMARY"
+
+# Build request marker: run the isolated Preview verification and ARM64 APK artifact pipeline.
