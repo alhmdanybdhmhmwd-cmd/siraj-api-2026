@@ -656,11 +656,12 @@ async function handle(request, env) {
     if (!canTransitionTask(task.status, nextStatus)) {
       return response({ error: "invalid_status_transition", from: task.status, to: nextStatus }, 409, allowedOrigin);
     }
-    const changed = await env.ADMIN_DB.prepare(
-      "UPDATE admin_tasks SET status = ?, lease_owner = CASE WHEN ? = 'running' THEN lease_owner ELSE NULL END,
+    const changed = await env.ADMIN_DB.prepare(`
+      UPDATE admin_tasks SET status = ?,
+        lease_owner = CASE WHEN ? = 'running' THEN lease_owner ELSE NULL END,
         lease_expires_at = CASE WHEN ? = 'running' THEN lease_expires_at ELSE NULL END,
-        updated_at = CURRENT_TIMESTAMP WHERE id = ? AND workspace_id = ? AND status = ?"
-    ).bind(nextStatus, nextStatus, nextStatus, taskId, workspace, task.status).run();
+        updated_at = CURRENT_TIMESTAMP WHERE id = ? AND workspace_id = ? AND status = ?
+    `).bind(nextStatus, nextStatus, nextStatus, taskId, workspace, task.status).run();
     if (!changed?.meta?.changes) {
       const current = await env.ADMIN_DB.prepare(
         "SELECT status FROM admin_tasks WHERE id = ? AND workspace_id = ?"
