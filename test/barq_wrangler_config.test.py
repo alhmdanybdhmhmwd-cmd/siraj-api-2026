@@ -20,6 +20,7 @@ assert production_migrations == [
     "0003_groups_worker_compatibility.sql",
     "0004_private_conversation_visibility.sql",
     "0005_hidden_ephemeral_messages.sql",
+    "0006_device_sessions.sql",
 ]
 assert not any("preview" in name.lower() for name in production_migrations)
 assert test_config["workers_dev"] is True
