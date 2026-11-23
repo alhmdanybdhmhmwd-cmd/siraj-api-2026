@@ -34,5 +34,6 @@ jobs:
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add admin/mobile/lib admin/mobile/test
             git commit -m "Format BARQ Admin Flutter source"
+            git pull --rebase origin barq-admin-foundation-2026-11-23
             git push origin HEAD:barq-admin-foundation-2026-11-23
           fi
