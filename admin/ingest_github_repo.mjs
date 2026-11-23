@@ -14,6 +14,27 @@ const SECRET_CONTENT = [
   /(?:api[_-]?key|access[_-]?token|client[_-]?secret)\s*[:=]\s*["'][^"']{12,}["']/i
 ];
 
+export function selectIndexBatch(entries, startAfter = "", limit = MAX_FILES_PER_RUN) {
+  if (typeof startAfter !== "string" || startAfter.length > 160 ||
+      startAfter.startsWith("/") || startAfter.split("/").some(part => part === "..") ||
+      !Number.isSafeInteger(limit) || limit < 1 || limit > 1000) {
+    throw new TypeError("invalid_index_batch");
+  }
+  const ordered = (entries || [])
+    .filter(entry => entry && typeof entry.path === "string" && entry.path > startAfter)
+    .sort((a, b) => a.path.localeCompare(b.path));
+  const selected = ordered.slice(0, limit);
+  const remaining = ordered.length - selected.length;
+  return {
+    selected,
+    eligibleAfterCursor: ordered.length,
+    remaining,
+    nextStartAfter: remaining > 0 && selected.length
+      ? selected[selected.length - 1].path
+      : null
+  };
+}
+
 export function summarizeIndexCoverage(eligibleFiles, processedFiles) {
   if (!Number.isSafeInteger(eligibleFiles) || eligibleFiles < 0 ||
       !Number.isSafeInteger(processedFiles) || processedFiles < 0 ||
@@ -114,7 +135,7 @@ async function githubJson(url, token) {
   return response.json();
 }
 
-export async function ingestRepository({ repository, ref = "HEAD", githubToken, adminApiUrl, ownerToken }) {
+export async function ingestRepository({ repository, ref = "HEAD", startAfter = "", githubToken, adminApiUrl, ownerToken }) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository || "") ||
       !githubToken || !adminApiUrl || !ownerToken) {
     throw new Error("missing_ingestion_configuration");
@@ -135,7 +156,8 @@ export async function ingestRepository({ repository, ref = "HEAD", githubToken, 
   const eligibleEntries = (tree.tree || []).filter(item =>
     item.type === "blob" && shouldIndexPath(item.path) && item.size <= 120000
   );
-  const selectedEntries = eligibleEntries.slice(0, MAX_FILES_PER_RUN);
+  const batch = selectIndexBatch(eligibleEntries, startAfter, MAX_FILES_PER_RUN);
+  const selectedEntries = batch.selected;
   for (const entry of selectedEntries) {
     if (entry.type !== "blob" || !shouldIndexPath(entry.path) || entry.size > 120000) {
       skipped++;
@@ -176,7 +198,10 @@ export async function ingestRepository({ repository, ref = "HEAD", githubToken, 
   }
   return {
     repository, revision, indexed, skipped,
-    ...summarizeIndexCoverage(eligibleEntries.length, selectedEntries.length)
+    ...summarizeIndexCoverage(batch.eligibleAfterCursor, selectedEntries.length),
+    remainingFiles: batch.remaining,
+    complete: batch.remaining === 0,
+    nextStartAfter: batch.nextStartAfter
   };
 }
 
@@ -184,6 +209,7 @@ async function main() {
   const result = await ingestRepository({
     repository: process.env.BARQ_ADMIN_GITHUB_REPOSITORY,
     ref: process.env.BARQ_ADMIN_GITHUB_REF || "HEAD",
+    startAfter: process.env.BARQ_ADMIN_GITHUB_START_AFTER || "",
     githubToken: process.env.BARQ_ADMIN_GITHUB_TOKEN,
     adminApiUrl: process.env.BARQ_ADMIN_API_URL,
     ownerToken: process.env.BARQ_ADMIN_OWNER_TOKEN
