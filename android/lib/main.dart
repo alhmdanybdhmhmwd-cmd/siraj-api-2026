@@ -4493,11 +4493,29 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _loadCachedFriends() async {
     try {
       final raw = await storage.read(key: 'barq_cached_friends');
-      if (raw != null) {
-        final decoded = jsonDecode(raw);
-        if (decoded is List && mounted) {
-          setState(() => friends = decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList());
-        }
+      final cachedGroups = await storage.read(key: 'barq_cached_groups');
+      final cachedStatuses = await storage.read(key: 'barq_cached_statuses');
+      if (mounted) {
+        setState(() {
+          if (raw != null) {
+            final decoded = jsonDecode(raw);
+            if (decoded is List) {
+              friends = decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+            }
+          }
+          if (cachedGroups != null) {
+            final decoded = jsonDecode(cachedGroups);
+            if (decoded is List) {
+              groups = decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+            }
+          }
+          if (cachedStatuses != null) {
+            final decoded = jsonDecode(cachedStatuses);
+            if (decoded is List) {
+              statuses = decoded.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+            }
+          }
+        });
       }
     } catch (_) {
       // Cached data is optional; continue with the signed-in user and refresh online.
@@ -4524,8 +4542,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       await storage.write(key: 'barq_cached_user', value: jsonEncode(me));
       try {
         statuses = await Api.statuses();
+        await storage.write(key: 'barq_cached_statuses', value: jsonEncode(statuses));
       } catch (_) {
-        statuses = [];
+        // Keep the last local snapshot visible while the network is unavailable.
       }
       try {
         privacySettings = await Api.privacy();
@@ -4540,8 +4559,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       }
       try {
         groups = await Api.groups();
+        await storage.write(key: 'barq_cached_groups', value: jsonEncode(groups));
       } catch (_) {
-        // لا نعطل المحادثات الفردية إذا لم تُنشر واجهة المجموعات على الخادم بعد.
+        // Keep cached groups visible until the next successful online refresh.
       }
       try {
         memories = await Api.privateMemories();
