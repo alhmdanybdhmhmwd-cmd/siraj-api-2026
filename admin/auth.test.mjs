@@ -53,6 +53,8 @@ test("Google ID token rejects wrong audience, issuer, owner, expiry and unverifi
     { exp: now - 1 },
     { email_verified: false },
     { iat: now + 120 },
+    { iat: now - 3601, exp: now + 300 },
+    { iat: now, exp: now + 3601 },
     { nbf: now + 120 },
     { nbf: "not-a-timestamp" },
     { sub: "" },
