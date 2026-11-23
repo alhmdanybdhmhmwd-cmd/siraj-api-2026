@@ -1963,7 +1963,7 @@ export default {
           ).bind(currentUser.sub).first();
           if (Number(activeStatuses?.count || 0) >= SPARK_MAX_ACTIVE_STATUSES) {
             return json({
-              error: "You can have up to 5 active SPARKs. They expire after 24 hours.",
+              error: "يمكنك الاحتفاظ بـ 5 حالات SPARK نشطة كحد أقصى، وتنتهي كل حالة بعد 24 ساعة.",
               code: "SPARK_ACTIVE_LIMIT",
               maxActive: SPARK_MAX_ACTIVE_STATUSES,
               durationHours: 24
@@ -1991,7 +1991,7 @@ export default {
         const mediaId = crypto.randomUUID();
         const objectKey = currentUser.sub + "/" + crypto.randomUUID();
         const suppliedName = safeFileName(request.headers.get("X-File-Name") || "spark-media");
-        const expiresAt = existingStatusExpiry || new Date(Date.now() + SPARK_STATUS_TTL_MS).toISOString();
+        const expiresAt = existingStatusExpiry || new Date(Date.now() + SPARK_STATUS_TTL_MS).toISOString().slice(0, 19).replace("T", " ");
             const storageUrl = createObjectStorageUrl(env, objectKey);
         const storage = createS3ObjectStorageProvider(env, AwsClient);
         const putResponse = await storage.fetch(storageUrl, {
