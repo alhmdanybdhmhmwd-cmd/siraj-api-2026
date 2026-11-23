@@ -10221,10 +10221,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                 foregroundColor: Theme.of(context).colorScheme.onPrimary,
                               ),
                               onPressed: sending ? null : send,
-                              icon: sending
-                                  ? const SizedBox(width: 18, height: 18,
-                                      child: CircularProgressIndicator(strokeWidth: 2))
-                                  : const Icon(Icons.send_rounded),
+                              icon: const Icon(Icons.send_rounded),
                             ),
                           );
                         },
