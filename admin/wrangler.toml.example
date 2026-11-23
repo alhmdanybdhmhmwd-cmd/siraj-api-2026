@@ -26,7 +26,8 @@ queue = "barq-admin-preview-tasks"
 
 [[queues.consumers]]
 queue = "barq-admin-preview-tasks"
-max_batch_size = 5
+max_batch_size = 1
+# Each AI task gets its own delivery; avoid serial work hidden inside a multi-message batch.
 max_batch_timeout = 5
 max_retries = 5
 dead_letter_queue = "barq-admin-preview-dlq"
