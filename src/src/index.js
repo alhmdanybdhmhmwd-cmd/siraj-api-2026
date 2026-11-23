@@ -1239,6 +1239,7 @@ export default {
         await addDelete("chat_groups", "owner_id = ?", currentUser.sub);
         await addDelete("device_tokens", "user_id = ?", currentUser.sub);
         await addDelete("notification_preferences", "user_id = ?", currentUser.sub);
+        await addDelete("transcription_rate_limits", "user_id = ?", currentUser.sub);
         await addDelete("user_privacy", "user_id = ?", currentUser.sub);
         await addDelete("account_security", "user_id = ?", currentUser.sub);
         await addDelete("recovery_codes", "user_id = ?", currentUser.sub);
