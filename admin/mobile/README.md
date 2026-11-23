@@ -1,11 +1,38 @@
 # BARQ Admin Mobile
 
-Initial Arabic RTL Flutter client for the BARQ Admin owner workspace.
+Arabic RTL Flutter client for the independent BARQ Admin owner workspace.
+
+## Current prototype capabilities
 
 - Dark electric-blue and gold visual system.
 - Dashboard, task list, and owner approvals.
-- Secure storage for the owner session token.
-- Cached workspace snapshots and local offline task outbox.
+- Secure local storage for the temporary owner bearer token.
+- Cached workspace snapshots and a local offline task outbox.
 - Refresh/resume synchronization with the Admin API.
+- GitHub Actions quality checks and an installable Android **debug APK** artifact.
 
-This is an early client shell, not a release APK. The trusted owner sign-in flow, dedicated Admin API deployment, queue bindings, and cross-device acceptance tests are still required before installation as an operational administration app.
+## Build and test
+
+From this directory:
+
+```sh
+flutter pub get
+dart format lib test
+flutter analyze
+flutter test
+flutter create --platforms=android --org com.barq .
+flutter build apk --debug
+```
+
+The CI workflow uploads `app-debug.apk` as the `barq-admin-debug-apk` artifact for seven days after a successful build. This is a debug/testing artifact, not a signed production release.
+
+## Setup and security status
+
+- The API URL and temporary owner bearer token are currently configured manually in the app.
+- The trusted owner sign-in, server-backed device sessions, refresh-token rotation, and device revocation are not implemented yet.
+- The dedicated Admin API Preview, D1, Queue, and AI bindings must be configured and verified separately.
+- The current BARQ Brain worker creates server-side assistant drafts; it does not autonomously edit BARQ source code or deploy.
+- Do not put signing secrets, provider secrets, or GitHub tokens in the APK.
+- Do not connect this app to the BARQ consumer database or reuse consumer-user sessions.
+
+This build is suitable for internal UI and integration testing only. It is not production-ready.
