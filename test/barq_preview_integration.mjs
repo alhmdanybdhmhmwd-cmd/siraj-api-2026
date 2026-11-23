@@ -11,8 +11,12 @@ if (!base) {
     throw new Error("BARQ_PREVIEW_URL must target the isolated Worker or its Vercel Preview proxy");
   }
 
+async function fetchWithTimeout(input, init = {}) {
+  return fetch(input, { ...init, signal: init.signal ?? AbortSignal.timeout(20000) });
+}
+
 async function call(path, { method = "GET", token, body, expected = 200 } = {}) {
-  const response = await fetch(new URL(path, base), {
+  const response = await fetchWithTimeout(new URL(path, base), {
     signal: AbortSignal.timeout(20000),
     method,
     headers: {
@@ -357,7 +361,7 @@ const profilePng = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6j8AAAAASUVORK5CYII=",
   "base64"
 );
-const profileUpload = await fetch(new URL("/api/profile/photo/me", base), {
+const profileUpload = await fetchWithTimeout(new URL("/api/profile/photo/me", base), {
   method: "POST",
   headers: { Authorization: `Bearer ${a.token}`, "Content-Type": "image/png" },
   body: profilePng
@@ -368,7 +372,7 @@ try { profilePhoto = profilePhotoRaw ? JSON.parse(profilePhotoRaw) : {}; }
 catch { throw new Error("Profile photo upload returned non-JSON response"); }
 assert.equal(profileUpload.status, 201, `Profile photo upload failed: ${JSON.stringify(profilePhoto)}`);
 assert.ok(profilePhoto.photoUrl, "profile photo upload must return its private photo URL");
-const friendPhoto = await fetch(new URL(profilePhoto.photoUrl, base), {
+const friendPhoto = await fetchWithTimeout(new URL(profilePhoto.photoUrl, base), {
   headers: { Authorization: `Bearer ${b.token}` }
 });
 assert.equal(friendPhoto.status, 200, "mutual contact must be allowed to view profile photo");
@@ -385,7 +389,7 @@ assert.ok(ownerMemories.memories.some(memory => memory.id === privateMemory.memo
 assert.ok(!otherMemories.memories.some(memory => memory.id === privateMemory.memory.id),
   "private memories must be isolated by owner");
 
-const memoryPhotoUpload = await fetch(new URL(
+const memoryPhotoUpload = await fetchWithTimeout(new URL(
   "/api/private-memories/" + encodeURIComponent(privateMemory.memory.id) + "/media", base
 ), {
   method: "POST",
@@ -406,11 +410,11 @@ assert.ok(memoryPhoto.media?.attachmentId, "private memory photo must return an 
 const memoryListWithPhoto = await call("/api/private-memories", { token: a.token });
 assert.ok(memoryListWithPhoto.memories.find(memory => memory.id === privateMemory.memory.id)
   ?.media?.some(media => media.attachmentId === memoryPhoto.media.attachmentId));
-const ownerMemoryPhoto = await fetch(new URL(
+const ownerMemoryPhoto = await fetchWithTimeout(new URL(
   "/api/media/" + encodeURIComponent(memoryPhoto.media.attachmentId), base
 ), { headers: { Authorization: `Bearer ${a.token}` } });
 assert.equal(ownerMemoryPhoto.status, 200, "only the owner should retrieve the private memory photo");
-const otherMemoryPhoto = await fetch(new URL(
+const otherMemoryPhoto = await fetchWithTimeout(new URL(
   "/api/media/" + encodeURIComponent(memoryPhoto.media.attachmentId), base
 ), { headers: { Authorization: `Bearer ${b.token}` } });
 assert.equal(otherMemoryPhoto.status, 404, "private memory photos must be indistinguishable from missing media to other accounts");
@@ -428,7 +432,7 @@ assert.ok(!ownerMemoriesAfterDelete.memories.some(memory => memory.id === privat
 await call("/api/privacy", {
   method: "POST", token: a.token, body: { searchable: false, readReceipts: true }
 });
-const privatePhoto = await fetch(new URL(profilePhoto.photoUrl, base), {
+const privatePhoto = await fetchWithTimeout(new URL(profilePhoto.photoUrl, base), {
   headers: { Authorization: `Bearer ${legacyLogin.token}` }
 });
 assert.equal(privatePhoto.status, 403, "non-contact must not access a private profile photo");
@@ -462,7 +466,7 @@ const tinyPng = Buffer.from(
   "base64"
 );
 const mediaCaption = "Preview SPARK media caption " + suffix;
-const mediaResponse = await fetch(new URL("/api/statuses/media", base), {
+const mediaResponse = await fetchWithTimeout(new URL("/api/statuses/media", base), {
   method: "POST",
   headers: {
     Authorization: `Bearer ${a.token}`,
@@ -486,7 +490,7 @@ assert.equal(visibleMediaStatus.content, mediaCaption, "SPARK feed must return m
 assert.ok(visibleMediaStatus.media?.some(media => media.caption === mediaCaption),
   "SPARK feed must return caption attached to the media item");
 const mediaKey = mediaData.status.media.attachmentId;
-const mediaFetch = await fetch(new URL("/api/media/" + encodeURIComponent(mediaKey), base), {
+const mediaFetch = await fetchWithTimeout(new URL("/api/media/" + encodeURIComponent(mediaKey), base), {
   headers: { Authorization: `Bearer ${b.token}` }
 });
 assert.equal(mediaFetch.status, 200, "authorized mutual contact must be able to load SPARK media");
