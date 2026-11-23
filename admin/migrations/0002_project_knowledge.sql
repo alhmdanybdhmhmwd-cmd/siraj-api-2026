@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS admin_project_knowledge (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (workspace_id) REFERENCES admin_workspaces(id) ON DELETE CASCADE,
-  UNIQUE (workspace_id, source_path, content_hash)
+  UNIQUE (workspace_id, source_path, source_revision)
 );
 
 CREATE INDEX IF NOT EXISTS idx_admin_knowledge_workspace_updated
