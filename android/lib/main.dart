@@ -6837,6 +6837,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                   leading: const Icon(Icons.phone_android_rounded),
                                   title: Text(device['deviceName']?.toString() ?? 'جهاز برق'),
                                   subtitle: Text('آخر نشاط: ${device['lastSeenAt'] ?? 'غير معروف'}'),
+                                  trailing: IconButton(
+                                    tooltip: 'إنهاء جلسة هذا الجهاز',
+                                    icon: const Icon(Icons.logout_rounded),
+                                    onPressed: () async {
+                                      final deviceId = device['deviceId']?.toString() ?? '';
+                                      if (deviceId.isEmpty) return;
+                                      try {
+                                        await Api.revokeDeviceSession(deviceId);
+                                        if (!devicesContext.mounted) return;
+                                        Navigator.pop(devicesContext);
+                                        showMsg(dialogContext, 'تم إنهاء جلسة الجهاز. حدّث قائمة الأجهزة للتأكد.');
+                                      } catch (error) {
+                                        if (devicesContext.mounted) showMsg(devicesContext, cleanError(error));
+                                      }
+                                    },
+                                  ),
                                 );
                               },
                             ),
