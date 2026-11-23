@@ -29,6 +29,9 @@ const json = (data, status = 200) =>
 const SPARK_STATUS_BACKGROUNDS = new Set(["electric_blue", "violet", "gold", "midnight"]);
 const SPARK_STATUS_TEXT_COLORS = new Set(["white", "black", "gold"]);
 const SPARK_STATUS_FONTS = new Set(["modern", "classic", "mono"]);
+const SPARK_STATUS_TTL_MS = 24 * 60 * 60 * 1000;
+const SPARK_POSTS_PER_RATE_WINDOW = 10;
+const SPARK_MEDIA_PER_STATUS = 10;
 
 async function rollbackSparkMediaUpload(env, storage, storageUrl, objectKey) {
   let objectDeleted = false;
@@ -1893,7 +1896,7 @@ export default {
         if (!env.TIGRIS_ACCESS_KEY_ID || !env.TIGRIS_SECRET_ACCESS_KEY) {
           return json({ error: "Media storage credentials are not configured" }, 503);
         }
-        const statusAllowed = await consumeLoginAttempt(env, "status", currentUser.sub, 10);
+        const statusAllowed = await consumeLoginAttempt(env, "status", currentUser.sub, SPARK_POSTS_PER_RATE_WINDOW);
         if (!statusAllowed) {
           return new Response(JSON.stringify({ error: "Too many status posts. Please try again in 15 minutes." }), {
             status: 429, headers: { ...corsHeaders, "Retry-After": "900" }
@@ -1967,14 +1970,14 @@ export default {
           const existingMediaCount = await env.DB.prepare(
             "SELECT COUNT(*) AS count FROM status_media WHERE status_id = ?"
           ).bind(requestedStatusId).first();
-          if (Number(existingMediaCount?.count || 0) >= 10) {
+          if (Number(existingMediaCount?.count || 0) >= SPARK_MEDIA_PER_STATUS) {
             return json({ error: "A SPARK status can contain at most 10 media files" }, 409);
           }
         }
         const mediaId = crypto.randomUUID();
         const objectKey = currentUser.sub + "/" + crypto.randomUUID();
         const suppliedName = safeFileName(request.headers.get("X-File-Name") || "spark-media");
-        const expiresAt = existingStatusExpiry || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+        const expiresAt = existingStatusExpiry || new Date(Date.now() + SPARK_STATUS_TTL_MS).toISOString();
             const storageUrl = createObjectStorageUrl(env, objectKey);
         const storage = createS3ObjectStorageProvider(env, AwsClient);
         const putResponse = await storage.fetch(storageUrl, {
@@ -2004,7 +2007,7 @@ export default {
             // Enforce the 10-file ceiling atomically in D1 as well as with the
             // early count check above, so concurrent uploads cannot exceed it.
             env.DB.prepare(
-              "INSERT INTO status_media (id, status_id, object_key, file_name, content_type, size, caption, created_at) SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM status_media WHERE status_id = ?) < 10"
+              "INSERT INTO status_media (id, status_id, object_key, file_name, content_type, size, caption, created_at) SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM status_media WHERE status_id = ?) < ${SPARK_MEDIA_PER_STATUS}"
             ).bind(mediaId, id, objectKey, suppliedName, contentType, bytes.byteLength, caption, new Date().toISOString(), id),
             env.DB.prepare(
               "INSERT INTO media_expirations (object_key, expires_at) SELECT ?, ? WHERE EXISTS (SELECT 1 FROM status_media WHERE object_key = ?)"
@@ -2052,7 +2055,7 @@ export default {
       // Publish a 24-hour text status
       if (method === "POST" && path === "/api/statuses") {
         // Prevent authenticated accounts from flooding friends with statuses.
-        const statusAllowed = await consumeLoginAttempt(env, "status", currentUser.sub, 10);
+        const statusAllowed = await consumeLoginAttempt(env, "status", currentUser.sub, SPARK_POSTS_PER_RATE_WINDOW);
         if (!statusAllowed) {
           return new Response(JSON.stringify({ error: "Too many status posts. Please try again in 15 minutes." }), {
             status: 429,
@@ -2092,11 +2095,12 @@ export default {
         await ensureSparkStatusStyleColumns(env);
 
         const id = crypto.randomUUID();
+        const expiresAt = new Date(Date.now() + SPARK_STATUS_TTL_MS).toISOString();
         await env.DB.prepare(
           `INSERT INTO status_posts
              (id, user_id, content, expires_at, background_key, text_color_key, font_key)
-           VALUES (?, ?, ?, datetime('now', '+24 hours'), ?, ?, ?)`
-        ).bind(id, currentUser.sub, content, backgroundKey, textColorKey, fontKey).run();
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
+        ).bind(id, currentUser.sub, content, expiresAt, backgroundKey, textColorKey, fontKey).run();
 
         // Status persistence is authoritative; push failures must not undo it.
         try {
