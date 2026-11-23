@@ -1,0 +1,39 @@
+name: BARQ Admin one-time formatter
+
+on:
+  push:
+    branches:
+      - "barq-admin-foundation-2026-11-23"
+    paths:
+      - "admin/mobile/lib/**"
+      - "admin/mobile/test/**"
+      - ".github/workflows/barq-admin-format-once.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: barq-admin-foundation-2026-11-23
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.50.1"
+          channel: stable
+          cache: true
+      - name: Format Flutter source
+        working-directory: admin/mobile
+        run: dart format lib test
+      - name: Commit formatting if needed
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add admin/mobile/lib admin/mobile/test
+            git commit -m "Format BARQ Admin Flutter source"
+            git pull --rebase origin barq-admin-foundation-2026-11-23
+            git push origin HEAD:barq-admin-foundation-2026-11-23
+          fi
