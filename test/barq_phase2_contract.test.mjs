@@ -828,7 +828,7 @@ test("SPARK view tracking is unique per viewer and only the owner can inspect vi
   assert.ok(flutterApp.includes("widget.showViewCount &&"));
   assert.ok(flutterApp.includes("if (canReply)"));
   assert.ok(flutterApp.includes("if (!canReply) return;"));
-  assert.ok(flutterApp.includes("قائمة خاصة لا يراها إلا صاحب الحالة"));
+  assert.ok(flutterApp.includes("قائمة خاصة لا يراها إلا صاحب SPARK"));
   assert.ok(flutterApp.includes("لا توجد مشاهدات حتى الآن"));
   assert.ok(flutterApp.includes("اكتب ردك على SPARK..."));
 });
