@@ -311,7 +311,7 @@ async function handle(request, env) {
     return response({ approval: { id, status: "pending", ...parsed.value } }, 201, allowedOrigin);
   }
 
-  const approvalMatch = url.pathname.match(/^\\/v1\\/approvals\\/([0-9a-f-]{36})$/i);
+  const approvalMatch = url.pathname.match(/^\/v1\/approvals\/([0-9a-f-]{36})$/i);
   if (request.method === "PATCH" && approvalMatch) {
     const parsed = validateApprovalDecision(await readJson(request));
     if (!parsed.ok) return response({ error: parsed.error }, 400, allowedOrigin);
