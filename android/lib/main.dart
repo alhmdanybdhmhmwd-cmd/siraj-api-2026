@@ -8842,6 +8842,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     try {
       await Api.deletePrivateConversation(friendId);
       await BarqOfflineQueue.clearConversation(friendId, widget.currentUserId);
+      await storage.delete(key: _messageCacheKey);
       if (!mounted) return;
       Navigator.pop(context);
     } catch (e) {
@@ -10306,8 +10307,19 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
         if (BarqFeatures.autoTranslate) _translateMessages(data);
       }
     } catch (e) {
+      final message = cleanError(e).toLowerCase();
+      final accessRevoked = message.contains('403') ||
+          message.contains('not a member') ||
+          message.contains('عضوًا في المجموعة') ||
+          message.contains('غير مصرح');
+      if (accessRevoked) {
+        await storage.delete(key: _messageCacheKey);
+      }
       if (mounted) {
-        setState(() => loading = false);
+        setState(() {
+          loading = false;
+          if (accessRevoked) messages = [];
+        });
         if (!silent) showMsg(context, cleanError(e));
       }
     } finally { refreshing = false; }
