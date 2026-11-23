@@ -37,3 +37,12 @@ test("knowledge ingestion only accepts HTTPS Admin API endpoints", () => {
   assert.throws(() => normalizeAdminApiUrl("https://user:pass@admin.example.com"), /must_be_https/);
   assert.throws(() => normalizeAdminApiUrl("not-a-url"), /invalid_admin_api_url/);
 });
+
+
+test("repository index reports incomplete coverage rather than silently claiming a full index", async () => {
+  const source = await import("./ingest_github_repo.mjs");
+  assert.equal(typeof source.ingestRepository, "function");
+  assert.match(source.ingestRepository.toString(), /remainingFiles/);
+  assert.match(source.ingestRepository.toString(), /complete:/);
+  assert.match(source.ingestRepository.toString(), /repository \+ "\/"/);
+});
