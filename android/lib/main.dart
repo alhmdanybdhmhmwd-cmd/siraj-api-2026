@@ -10151,6 +10151,11 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                                 message: m,
                                 currentUserId: widget.currentUserId,
                                 canDelete: mine,
+                                canDeleteForMe: true,
+                                onDeleteForMe: () async {
+                                  await Api.hideGroupMessageForMe(groupId, field(m, ['id', 'message_id']));
+                                  if (mounted) await loadMessages();
+                                },
                                 onDelete: () async {
                                   await Api.deleteGroupMessage(groupId, field(m, ['id', 'message_id']));
                                   if (mounted) await loadMessages();
@@ -10199,6 +10204,11 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                                 message: m,
                                 currentUserId: widget.currentUserId,
                                 canDelete: mine,
+                                canDeleteForMe: true,
+                                onDeleteForMe: () async {
+                                  await Api.hideGroupMessageForMe(groupId, field(m, ['id', 'message_id']));
+                                  if (mounted) await loadMessages();
+                                },
                                 onDelete: () async {
                                   await Api.deleteGroupMessage(groupId, field(m, ['id', 'message_id']));
                                   if (mounted) await loadMessages();
