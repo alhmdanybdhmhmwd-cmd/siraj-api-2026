@@ -31,6 +31,9 @@ Accepted bearer tokens must be issued by a trusted server-side identity componen
 - `POST /v1/tasks` (supports `X-Idempotency-Key`)
 - `POST /v1/tasks/:id/checkpoints` (requires `expectedVersion`)
 - `PATCH /v1/tasks/:id/status` (validated state transitions)
+- `PATCH /v1/workspace` (optimistic project/phase position sync)
+- `GET /v1/approvals`, `POST /v1/approvals`, `PATCH /v1/approvals/:id` (owner-reviewed action previews)
+- `GET /v1/audit` (latest append-only audit events)
 
 The checkpoint API stores step input/output references, completed step, next action, and monotonically increasing version. Clients must reload after a version conflict rather than overwrite a newer checkpoint.
 
