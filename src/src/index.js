@@ -114,23 +114,7 @@ async function getSessionVersion(env, userId) {
   return Number(row?.session_version || 0);
 }
 
-async function ensureDeviceSessions(env) {
-  await env.DB.prepare(`
-    CREATE TABLE IF NOT EXISTS device_sessions (
-      user_id TEXT NOT NULL,
-      device_id TEXT NOT NULL,
-      device_name TEXT NOT NULL DEFAULT 'جهاز غير معروف',
-      first_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      revoked_at TEXT,
-      PRIMARY KEY (user_id, device_id),
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-  `).run();
-}
-
 async function registerDeviceSession(env, userId, deviceId, deviceName = "جهاز غير معروف") {
-  await ensureDeviceSessions(env);
   const existing = await env.DB.prepare(
     "SELECT device_id FROM device_sessions WHERE user_id = ? AND device_id = ? AND revoked_at IS NULL"
   ).bind(userId, deviceId).first();
@@ -270,7 +254,6 @@ async function authenticate(request, env) {
       return null;
     }
     if (payload.did) {
-      await ensureDeviceSessions(env);
       const device = await env.DB.prepare(
         "SELECT device_id FROM device_sessions WHERE user_id = ? AND device_id = ? AND revoked_at IS NULL"
       ).bind(payload.sub, payload.did).first();
