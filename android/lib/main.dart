@@ -7363,25 +7363,48 @@ class _BarqVoiceRecordButtonState extends State<BarqVoiceRecordButton> {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (_recording)
-          Padding(
-            padding: const EdgeInsets.only(left: 2),
-            child: Text(formatBarqMediaDuration(_elapsed),
-              style: const TextStyle(color: Colors.redAccent, fontSize: 10)),
-          ),
-        IconButton(
-          tooltip: _recording ? 'إنهاء التسجيل وإرساله' : 'تسجيل رسالة صوتية',
-          onPressed: _busy || (widget.disabled && !_recording) ? null : _toggleRecording,
-          icon: _busy
-              ? const SizedBox(width: 20, height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2))
-              : Icon(_recording ? Icons.stop_circle_rounded : Icons.mic_none_rounded,
-                  color: _recording ? Colors.redAccent : Theme.of(context).colorScheme.primary),
-        ),
-        if (_recording)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+            decoration: BoxDecoration(
+              color: Colors.redAccent.withValues(alpha: .08),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: Colors.redAccent.withValues(alpha: .24)),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.fiber_manual_record_rounded, color: Colors.redAccent, size: 9),
+              const SizedBox(width: 5),
+              for (final height in const [7.0, 12.0, 17.0, 10.0, 20.0, 13.0, 8.0, 16.0, 11.0, 19.0, 9.0])
+                Container(
+                  width: 2.5, height: height,
+                  margin: const EdgeInsets.symmetric(horizontal: 1),
+                  decoration: BoxDecoration(color: Colors.redAccent.withValues(alpha: .78), borderRadius: BorderRadius.circular(4)),
+                ),
+              const SizedBox(width: 6),
+              Text(formatBarqMediaDuration(_elapsed),
+                style: const TextStyle(color: Colors.redAccent, fontSize: 11, fontFeatures: [FontFeature.tabularFigures()])),
+              IconButton(
+                tooltip: 'إلغاء التسجيل', visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                onPressed: _busy ? null : _cancelRecording,
+                icon: const Icon(Icons.delete_outline_rounded, color: Colors.white70, size: 19),
+              ),
+              IconButton(
+                tooltip: 'إرسال التسجيل الصوتي', visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                onPressed: _busy ? null : _toggleRecording,
+                icon: _busy
+                    ? const SizedBox(width: 17, height: 17, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.send_rounded, color: Colors.redAccent, size: 19),
+              ),
+            ]),
+          )
+        else
           IconButton(
-            tooltip: 'إلغاء التسجيل',
-            onPressed: _busy ? null : _cancelRecording,
-            icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+            tooltip: 'تسجيل رسالة صوتية',
+            onPressed: _busy || widget.disabled ? null : _toggleRecording,
+            icon: _busy
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                : Icon(Icons.mic_none_rounded, color: Theme.of(context).colorScheme.primary),
           ),
       ],
     );
@@ -9011,20 +9034,23 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       return;
     }
     if (sending) return;
-    setState(() => sending = true);
+    setState(() { sending = true; mediaUploadProgress = 0; });
     try {
       await Api.uploadAttachment(
         bytes: bytes,
         fileName: 'barq_voice_${DateTime.now().millisecondsSinceEpoch}.m4a',
         contentType: 'audio/mp4',
         recipientId: friendId,
+        onProgress: (progress) {
+          if (mounted) setState(() => mediaUploadProgress = progress);
+        },
       );
       await loadMessages();
       if (mounted) showMsg(context, 'تم إرسال التسجيل الصوتي (${formatBarqMediaDuration(duration)}).');
     } catch (error) {
       if (mounted) showMsg(context, cleanError(error));
     } finally {
-      if (mounted) setState(() => sending = false);
+      if (mounted) setState(() { sending = false; mediaUploadProgress = null; });
     }
   }
 
@@ -10197,20 +10223,23 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
 
   Future<void> _sendVoiceRecording(List<int> bytes, Duration duration) async {
     if (sending) return;
-    setState(() => sending = true);
+    setState(() { sending = true; mediaUploadProgress = 0; });
     try {
       await Api.uploadAttachment(
         bytes: bytes,
         fileName: 'barq_voice_${DateTime.now().millisecondsSinceEpoch}.m4a',
         contentType: 'audio/mp4',
         groupId: groupId,
+        onProgress: (progress) {
+          if (mounted) setState(() => mediaUploadProgress = progress);
+        },
       );
       await loadMessages();
       if (mounted) showMsg(context, 'تم إرسال التسجيل الصوتي (${formatBarqMediaDuration(duration)}) للمجموعة.');
     } catch (error) {
       if (mounted) showMsg(context, cleanError(error));
     } finally {
-      if (mounted) setState(() => sending = false);
+      if (mounted) setState(() { sending = false; mediaUploadProgress = null; });
     }
   }
 
