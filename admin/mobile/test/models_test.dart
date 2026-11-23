@@ -25,4 +25,19 @@ void main() {
     expect(approval.preview['summary'], 'Review post');
     expect(approval.status, 'pending');
   });
+
+  test('offline outbox drafts restore beside cached tasks and deduplicate', () {
+    const cached = [AdminTask(id: 'server-1', title: 'Server task', status: 'queued')];
+    final pending = [
+      {'idempotencyKey': 'offline-1', 'title': '  Draft task  '},
+      {'idempotencyKey': 'offline-1', 'title': 'Duplicate draft'},
+      {'idempotencyKey': '', 'title': 'Invalid draft'},
+      {'idempotencyKey': 'offline-2', 'title': '   '},
+    ];
+    final merged = mergeOutboxDrafts(cached, pending);
+    expect(merged.map((task) => task.id).toList(), ['local-offline-1', 'server-1']);
+    expect(merged.first.title, 'Draft task');
+    expect(merged.first.status, 'draft_offline');
+    expect(merged.first.nextAction, 'سيتم الإرسال عند عودة الاتصال');
+  });
 }
