@@ -4262,7 +4262,10 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
               SizedBox(
                 height: 52,
                 child: FilledButton(
-                  style: FilledButton.styleFrom(backgroundColor: photoPalette.primary, foregroundColor: photoPalette.onPrimary),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                  ),
                   onPressed: busy ? null : submit,
                   child: busy
                       ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
