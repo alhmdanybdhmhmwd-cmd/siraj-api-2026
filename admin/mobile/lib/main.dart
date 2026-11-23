@@ -59,6 +59,7 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
   static const _cacheWorkspace = 'barq_admin_workspace_cache';
   static const _cacheTasks = 'barq_admin_tasks_cache';
   static const _cacheApprovals = 'barq_admin_approvals_cache';
+  static const _cacheAudit = 'barq_admin_audit_cache';
   static const _outboxKey = 'barq_admin_task_outbox';
 
   String _apiBase = '';
@@ -67,6 +68,7 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
   Map<String, dynamic> _workspace = {};
   List<AdminTask> _tasks = [];
   List<AdminApproval> _approvals = [];
+  List<Map<String, dynamic>> _auditEvents = [];
   int _tab = 0;
   bool _loading = true;
   bool _online = false;
@@ -135,14 +137,18 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
       final workspaceData = jsonDecode(workspaceResponse.body) as Map<String, dynamic>;
       final taskData = await _getJson('/v1/tasks');
       final approvalData = await _getJson('/v1/approvals');
+      final auditData = await _getJson('/v1/audit');
       _workspace = Map<String, dynamic>.from(workspaceData['workspace'] as Map? ?? {});
       _tasks = (taskData['tasks'] as List? ?? [])
         .whereType<Map>().map((item) => AdminTask.fromJson(Map<String, dynamic>.from(item))).toList();
       _approvals = (approvalData['approvals'] as List? ?? [])
         .whereType<Map>().map((item) => AdminApproval.fromJson(Map<String, dynamic>.from(item))).toList();
+      _auditEvents = (auditData['events'] as List? ?? [])
+        .whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
       await prefs.setString(_cacheWorkspace, jsonEncode(_workspace));
       await prefs.setString(_cacheTasks, jsonEncode(_tasks.map((task) => task.toJson()).toList()));
       await prefs.setString(_cacheApprovals, jsonEncode(approvalData['approvals'] ?? []));
+      await prefs.setString(_cacheAudit, jsonEncode(_auditEvents));
       _online = true;
       _connectionMessage = 'متصل ومتزامن';
     } catch (error) {
@@ -162,6 +168,9 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
         _tasks = (jsonDecode(tasks) as List).whereType<Map>()
           .map((item) => AdminTask.fromJson(Map<String, dynamic>.from(item))).toList();
       }
+      final audit = prefs.getString(_cacheAudit);
+      if (audit != null) _auditEvents = (jsonDecode(audit) as List).whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item)).toList();
       final approvals = prefs.getString(_cacheApprovals);
       if (approvals != null) {
         _approvals = (jsonDecode(approvals) as List).whereType<Map>()
@@ -387,7 +396,7 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
         onRefresh: _load,
         child: _loading && _tasks.isEmpty
           ? const Center(child: CircularProgressIndicator())
-          : IndexedStack(index: _tab, children: [_dashboard(), _tasksView(), _approvalsView()]),
+          : IndexedStack(index: _tab, children: [_dashboard(), _tasksView(), _approvalsView(), _auditView()]),
       ),
       floatingActionButton: _tab == 1
         ? FloatingActionButton.extended(onPressed: () => _showCreateTask(),
@@ -403,6 +412,7 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
           NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'الرئيسية'),
           NavigationDestination(icon: Icon(Icons.task_alt), label: 'المهام'),
           NavigationDestination(icon: Icon(Icons.verified_user_outlined), label: 'الموافقات'),
+          NavigationDestination(icon: Icon(Icons.receipt_long_outlined), label: 'السجل'),
         ],
       ),
     );
@@ -592,6 +602,46 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
           ]),
         ),
       )),
+    ],
+  );
+
+  Widget _auditView() => ListView(
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+    children: [
+      const Text('سجل النشاط والتدقيق', style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 6),
+      const Text('سجل للقراءة فقط للأحداث المسجلة على مساحة إدارة BARQ.',
+        style: TextStyle(color: Colors.white60)),
+      const SizedBox(height: 14),
+      if (_auditEvents.isEmpty)
+        _emptyState('لا توجد أحداث مسجلة', 'ستظهر هنا تغييرات مساحة العمل والمهام والموافقات')
+      else
+        ..._auditEvents.map((event) {
+          final created = (event['created_at'] ?? '').toString();
+          final details = event['details'] is Map
+              ? Map<String, dynamic>.from(event['details'] as Map)
+              : <String, dynamic>{};
+          return Card(
+            margin: const EdgeInsets.only(bottom: 9),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text((event['event_type'] ?? 'event').toString(),
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: _gold)),
+                const SizedBox(height: 5),
+                Text('الهدف: ${event['target_type'] ?? '-'} / ${event['target_id'] ?? '-'}',
+                  style: const TextStyle(fontSize: 12, color: Colors.white70)),
+                if (details.isNotEmpty)
+                  Text(details.entries.map((entry) => '${entry.key}: ${entry.value}').join(' • '),
+                    maxLines: 3, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, color: Colors.white54)),
+                if (created.isNotEmpty)
+                  Align(alignment: AlignmentDirectional.centerStart,
+                    child: Text(created, style: const TextStyle(fontSize: 10, color: Colors.white38))),
+              ]),
+            ),
+          );
+        }),
     ],
   );
 
