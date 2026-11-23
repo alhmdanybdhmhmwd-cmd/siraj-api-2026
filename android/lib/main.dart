@@ -3073,16 +3073,28 @@ Future<void> showMessageActions(
     final emoji = action.substring(6);
     final alreadyReacted = normalizeMessageReactions(message['reactions']).any((reaction) =>
       field(reaction, ['user_id']) == currentUserId && field(reaction, ['emoji']) == emoji);
-    await onReact(emoji, alreadyReacted);
+    try {
+      await onReact(emoji, alreadyReacted);
+    } catch (error) {
+      if (context.mounted) showMsg(context, cleanError(error));
+    }
   } else if (action == 'react' && onReact != null && context.mounted) {
     final emoji = await showMessageReactionPicker(context);
     if (emoji != null) {
       final alreadyReacted = normalizeMessageReactions(message['reactions']).any((reaction) =>
         field(reaction, ['user_id']) == currentUserId && field(reaction, ['emoji']) == emoji);
-      await onReact(emoji, alreadyReacted);
+      try {
+        await onReact(emoji, alreadyReacted);
+      } catch (error) {
+        if (context.mounted) showMsg(context, cleanError(error));
+      }
     }
   } else if (action == 'pin' && onPin != null) {
-    await onPin();
+    try {
+      await onPin();
+    } catch (error) {
+      if (context.mounted) showMsg(context, cleanError(error));
+    }
   } else if (action == 'save_memory' && onSaveMemory != null) {
     await onSaveMemory();
   } else if (action == 'forward' && onForward != null) {
