@@ -2956,7 +2956,7 @@ export default {
         return json({ group: { id, name, description, owner_id: currentUser.sub, member_count: 1 } }, 201);
       }
 
-      const groupInviteCreateMatch = path.match(/^\\/api\\/groups\\/([^/]+)\\/invites$/);
+      const groupInviteCreateMatch = path.match(new RegExp("^/api/groups/([^/]+)/invites$"));
       if (method === "POST" && groupInviteCreateMatch) {
         const groupId = groupInviteCreateMatch[1];
         const group = await env.DB.prepare(
@@ -2982,7 +2982,7 @@ export default {
         }, 201);
       }
 
-      const groupInviteAcceptMatch = path.match(/^\\/api\\/groups\\/invites\\/([^/]+)\\/accept$/);
+      const groupInviteAcceptMatch = path.match(new RegExp("^/api/groups/invites/([^/]+)/accept$"));
       if (method === "POST" && groupInviteAcceptMatch) {
         const token = groupInviteAcceptMatch[1];
         const invite = await env.DB.prepare(
