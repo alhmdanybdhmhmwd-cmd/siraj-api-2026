@@ -348,7 +348,7 @@ class _AdminHomePageState extends State<AdminHomePage>
           nonce: nonce,
         ),
       );
-      final idToken = result?.idToken;
+      final idToken = result.idToken;
       if (idToken == null || idToken.isEmpty) {
         throw Exception('لم يُرجع Google إثبات هوية صالحًا');
       }
