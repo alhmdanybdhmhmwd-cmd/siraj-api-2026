@@ -41,7 +41,7 @@ async function googleJwks(fetcher = fetch, nowMs = Date.now()) {
     cachedJwks = body.keys;
     cachedJwksAt = nowMs;
   }
-  return cachedJwks;
+  return body.keys;
 }
 
 export async function verifyGoogleIdToken(idToken, expectedNonce, env, options = {}) {
