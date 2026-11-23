@@ -187,9 +187,9 @@ jobs:
       - name: Validate Android AppAuth platform wiring without building an APK
         run: |
           test -f android/gradlew
-          grep -q 'applicationId = "com.barq.admin"' android/app/build.gradle.kts
-          grep -q 'manifestPlaceholders["appAuthRedirectScheme"]' android/app/build.gradle.kts
-          grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
+          grep -Fq 'applicationId = "com.barq.admin"' android/app/build.gradle.kts
+          grep -Fq 'manifestPlaceholders["appAuthRedirectScheme"]' android/app/build.gradle.kts
+          grep -Fq 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
           sdk_path="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
           printf "flutter.sdk=%s\nsdk.dir=%s\n" "$FLUTTER_ROOT" "$sdk_path" > android/local.properties
           cd android
