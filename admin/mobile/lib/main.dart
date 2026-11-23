@@ -412,7 +412,7 @@ class _AdminHomePageState extends State<AdminHomePage>
       final remaining = <Map<String, dynamic>>[];
       for (final item in pending) {
         try {
-          final response = await http
+          Future<http.Response> sendPendingTask() => http
               .post(
                 Uri.parse(_base + '/v1/tasks'),
                 headers: {
@@ -426,8 +426,13 @@ class _AdminHomePageState extends State<AdminHomePage>
                 }),
               )
               .timeout(const Duration(seconds: 18));
-          if (response.statusCode < 200 || response.statusCode >= 300)
+          var response = await sendPendingTask();
+          if (response.statusCode == 401 && await _refreshSession()) {
+            response = await sendPendingTask();
+          }
+          if (response.statusCode < 200 || response.statusCode >= 300) {
             remaining.add(item);
+          }
         } catch (_) {
           remaining.add(item);
         }
