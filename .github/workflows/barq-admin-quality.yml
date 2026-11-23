@@ -37,7 +37,7 @@ jobs:
           from pathlib import Path
           db = sqlite3.connect(":memory:")
           db.executescript(Path("admin/migrations/0001_admin_workspace.sql").read_text())
-db.executescript(Path("admin/migrations/0002_project_knowledge.sql").read_text())
+          db.executescript(Path("admin/migrations/0002_project_knowledge.sql").read_text())
           names = {row[0] for row in db.execute(
               "SELECT name FROM sqlite_master WHERE type IN ('table','trigger')"
           )}
