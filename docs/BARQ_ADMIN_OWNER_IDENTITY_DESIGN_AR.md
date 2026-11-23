@@ -1,7 +1,7 @@
 # تصميم هوية المالك وجلسات BARQ Admin
 
 **النطاق:** المرحلة 1 من BARQ Admin فقط  
-**الحالة:** تصميم تنفيذي مقترح؛ لم يُنفّذ أو يُنشر بعد  
+**الحالة:** اعتمد المالك Google OIDC + PKCE؛ نُفذ أساس الخادم ومخطط الجلسات، وربط تطبيق الهاتف والاختبارات قيد الاستكمال. لم يُنشر أو يُختبر على جهاز بعد  
 **الفرع:** `barq-admin-foundation-2026-11-23`
 
 ## الهدف
@@ -16,9 +16,9 @@
 - لا يوجد سجل أجهزة/جلسات على الخادم، ولا refresh-token rotation أو device revocation.
 - لا توجد بيئة Admin Preview موثقة ومختبرة لتشغيل تدفق الهوية كاملًا.
 
-## البنية المستهدفة
+## القرار المعتمد\n\nاعتمد المالك Google OpenID Connect باستخدام Authorization Code + PKCE عبر AppAuth. يُسمح لحساب Google واحد فقط من خلال `BARQ_ADMIN_OWNER_EMAIL` مع التحقق من `email_verified=true`، ويمكن تثبيت قيمة `sub` عبر `BARQ_ADMIN_OWNER_SUBJECT` بعد أول تهيئة. لا تُطلب صلاحيات Gmail أو Drive.\n\n## البنية المستهدفة
 
-1. **مزود هوية موثوق (OIDC)**: يتحقق من هوية المالك عبر Authorization Code + PKCE في تطبيق الهاتف. لا تُخزن كلمة مرور المالك في BARQ Admin.
+1. **Google OIDC**: يستخدم تطبيق الهاتف Authorization Code + PKCE عبر AppAuth، مع `openid`, `email`, `profile` فقط. لا تُخزن كلمة مرور المالك في BARQ Admin.
 2. **Admin identity exchange**: يتحقق خادم BARQ Admin من توقيع ورمز هوية المزود، ثم يطابق issuer وaudience وsubject مع إعدادات المالك المسموح به. لا يقبل التطبيق اختيار subject أو role.
 3. **جلسة Admin مستقلة**: يصدر الخادم access token قصير العمر، ويربطه بسجل جلسة وجهاز على قاعدة Admin D1 فقط.
 4. **Refresh rotation**: يصدر refresh token عشوائي عالي العشوائية، ولا يخزن الخادم قيمته الخام؛ يخزن hash فقط. كل استخدام ناجح يستبدل الرمز ذريًا، وإعادة استخدام رمز قديم تبطل سلسلة الجلسة وتُسجل حدثًا أمنيًا.
