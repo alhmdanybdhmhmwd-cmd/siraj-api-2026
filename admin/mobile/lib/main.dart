@@ -219,17 +219,7 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
         body: jsonEncode({'sessionId': _sessionId, 'refreshToken': _refreshToken}),
       ).timeout(const Duration(seconds: 18));
       if (response.statusCode != 200) {
-        if (_sessionId.isNotEmpty && _refreshToken.isNotEmpty && _apiBase.isNotEmpty) {
-      try {
-        await http.post(Uri.parse(_base + '/v1/auth/logout'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'sessionId': _sessionId, 'refreshToken': _refreshToken}),
-        ).timeout(const Duration(seconds: 8));
-      } catch (_) {}
-    }
-    await _secure.delete(key: 'barq_admin_owner_token');
-    await _secure.delete(key: 'barq_admin_refresh_token');
-    await _secure.delete(key: 'barq_admin_session_id');
+        await _secure.delete(key: 'barq_admin_owner_token');
         await _secure.delete(key: 'barq_admin_refresh_token');
         await _secure.delete(key: 'barq_admin_session_id');
         _token = '';
@@ -238,9 +228,11 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
         return false;
       }
       final data = Map<String, dynamic>.from(jsonDecode(response.body) as Map);
-      _token = (data['accessToken'] ?? '').toString();
-      _refreshToken = (data['refreshToken'] ?? '').toString();
-      if (_token.isEmpty || _refreshToken.isEmpty) return false;
+      final nextAccess = (data['accessToken'] ?? '').toString();
+      final nextRefresh = (data['refreshToken'] ?? '').toString();
+      if (nextAccess.isEmpty || nextRefresh.isEmpty) return false;
+      _token = nextAccess;
+      _refreshToken = nextRefresh;
       await _secure.write(key: 'barq_admin_owner_token', value: _token);
       await _secure.write(key: 'barq_admin_refresh_token', value: _refreshToken);
       return true;
@@ -429,7 +421,18 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
     );
     if (confirmed != true) return;
     final prefs = await SharedPreferences.getInstance();
+    if (_sessionId.isNotEmpty && _refreshToken.isNotEmpty && _apiBase.isNotEmpty) {
+      try {
+        await http.post(
+          Uri.parse(_base + '/v1/auth/logout'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'sessionId': _sessionId, 'refreshToken': _refreshToken}),
+        ).timeout(const Duration(seconds: 8));
+      } catch (_) {}
+    }
     await _secure.delete(key: 'barq_admin_owner_token');
+    await _secure.delete(key: 'barq_admin_refresh_token');
+    await _secure.delete(key: 'barq_admin_session_id');
     for (final key in [_cacheWorkspace, _cacheTasks, _cacheApprovals, _cacheAudit, _outboxKey]) {
       await prefs.remove(key);
     }
@@ -964,7 +967,7 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
                 border: Border.all(color: _blue.withValues(alpha: .25)),
               ),
               child: const Text(
-                'اتفاق المالك: المرحلة الأولى فقط حاليًا. لا يبدأ فهم أو فهرسة كود BARQ قبل إذن صريح. لا دمج أو نشر أو تغيير إنتاج دون موافقة محددة. BARQ هو المنتج، وSPARK ميزة القصص، وBARQ Admin تطبيق الإدارة المستقل. مزود تسجيل الدخول لم يُعتمد بعد؛ لا تفترض Google أو غيره.',
+                'اتفاق المالك: المرحلة الأولى فقط حاليًا. لا يبدأ فهم أو فهرسة كود BARQ قبل إذن صريح. لا دمج أو نشر أو تغيير إنتاج دون موافقة محددة. BARQ هو المنتج، وSPARK ميزة القصص، وBARQ Admin تطبيق الإدارة المستقل. اعتمد المالك Google OIDC مع PKCE لتسجيل الدخول؛ يجب أن يتحقق الخادم من الهوية والجلسة قبل السماح بالوصول.',
                 style: TextStyle(fontSize: 12, height: 1.5, color: Colors.white70),
               ),
             ),
