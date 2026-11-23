@@ -6,6 +6,7 @@ function makeHarness({ preference = null, devices = [{ fcm_token: "device-token-
   const calls = [];
   const deleted = [];
   const errors = [];
+  const warnings = [];
   let fcmIndex = 0;
   const db = {
     prepare(sql) {
@@ -49,7 +50,10 @@ function makeHarness({ preference = null, devices = [{ fcm_token: "device-token-
       }
     },
     now: () => 1_800_000_000_000,
-    logger: { error: (...args) => errors.push(args) }
+    logger: {
+      error: (...args) => errors.push(args),
+      warn: (...args) => warnings.push(args)
+    }
   };
   const env = {
     DB: db,
@@ -61,7 +65,7 @@ function makeHarness({ preference = null, devices = [{ fcm_token: "device-token-
       project_id: "barq-test-project"
     })
   };
-  return { env, dependencies, calls, deleted, errors };
+  return { env, dependencies, calls, deleted, errors, warnings };
 }
 
 test("disabled notification preference prevents all device deliveries", async () => {
@@ -152,4 +156,6 @@ test("missing service credentials safely skip delivery", async () => {
   delete h.env.FCM_SERVICE_ACCOUNT_JSON;
   await sendBarqPushNotification(h.env, "recipient-1", "sender-1", "Sender", "hello", {}, h.dependencies);
   assert.equal(h.calls.length, 0);
+  assert.equal(h.warnings.length, 1);
+  assert.match(String(h.warnings[0][0]), /FCM_SERVICE_ACCOUNT_JSON/);
 });
