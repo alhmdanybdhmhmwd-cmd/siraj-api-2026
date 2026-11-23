@@ -2805,7 +2805,7 @@ class BarqReplyPreview extends StatelessWidget {
           constraints: const BoxConstraints.tightFor(width: 34, height: 34),
           onPressed: onClose,
           icon: const Icon(Icons.close_rounded, size: 18),
-          tooltip: 'إلغاء الاقتباس',
+          tooltip: 'إلغاء الرد',
         ),
       ]),
     );
