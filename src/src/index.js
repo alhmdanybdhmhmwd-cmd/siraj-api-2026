@@ -3139,6 +3139,25 @@ export default {
           "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?"
         ).bind(groupId, currentUser.sub).first();
         if (!member) return json({ error: "Group not found" }, 404);
+        if (method === "DELETE" && url.searchParams.get("scope") === "me") {
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS group_hidden_messages (
+              group_id TEXT NOT NULL,
+              message_id TEXT NOT NULL,
+              user_id TEXT NOT NULL,
+              hidden_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              PRIMARY KEY (group_id, message_id, user_id)
+            )
+          `).run();
+          const target = await env.DB.prepare(
+            "SELECT id FROM group_messages WHERE id = ? AND group_id = ?"
+          ).bind(messageId, groupId).first();
+          if (!target) return json({ error: "Message not found" }, 404);
+          await env.DB.prepare(
+            "INSERT OR IGNORE INTO group_hidden_messages (group_id, message_id, user_id) VALUES (?, ?, ?)"
+          ).bind(groupId, messageId, currentUser.sub).run();
+          return json({ message: "Message hidden for this account", id: messageId, scope: "me" });
+        }
         const owned = await env.DB.prepare(
           "SELECT id, body FROM group_messages WHERE id = ? AND group_id = ? AND sender_id = ?"
         ).bind(messageId, groupId, currentUser.sub).first();
@@ -3281,6 +3300,15 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         if (!member) return json({ error: "Group not found" }, 404);
         if (method === "GET") {
           await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS group_hidden_messages (
+              group_id TEXT NOT NULL,
+              message_id TEXT NOT NULL,
+              user_id TEXT NOT NULL,
+              hidden_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              PRIMARY KEY (group_id, message_id, user_id)
+            )
+          `).run();
+          await env.DB.prepare(`
             CREATE TABLE IF NOT EXISTS group_message_reads (
               message_id TEXT NOT NULL,
               user_id TEXT NOT NULL,
@@ -3309,15 +3337,21 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
               FROM group_messages gm
               JOIN users u ON u.id = gm.sender_id
               LEFT JOIN profile_photos p ON p.user_id = u.id
-              WHERE gm.group_id = ? ${cursorClause}
+              WHERE gm.group_id = ?
+                AND NOT EXISTS (
+                  SELECT 1 FROM group_hidden_messages ghm
+                  WHERE ghm.group_id = gm.group_id
+                    AND ghm.message_id = gm.id
+                    AND ghm.user_id = ?
+                ) ${cursorClause}
               ORDER BY gm.created_at DESC, gm.id DESC
               LIMIT ?
             )
             ORDER BY created_at ASC, id ASC
           `);
           const result = before
-            ? await statement.bind(groupId, before, before, beforeId, limit + 1).all()
-            : await statement.bind(groupId, limit + 1).all();
+            ? await statement.bind(groupId, currentUser.sub, before, before, beforeId, limit + 1).all()
+            : await statement.bind(groupId, currentUser.sub, limit + 1).all();
           const rows = result.results || [];
           const hasMore = rows.length > limit;
           const messages = hasMore ? rows.slice(1) : rows;
