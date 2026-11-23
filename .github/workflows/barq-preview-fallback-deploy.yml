@@ -68,6 +68,18 @@ jobs:
           print("Fallback guard passed: distinct Preview Worker; shared isolated Preview D1/media only; no production route, database, bucket, or cron.")
           PY
           npx --yes wrangler@4 whoami
+      - name: Verify Cloudflare workers.dev account subdomain
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESPONSE="$(curl --connect-timeout 10 --max-time 20 --silent --show-error \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain")"
+          echo "$RESPONSE" | jq '{success, errors, result}'
+          echo "$RESPONSE" | jq -e '.success == true and (.result.subdomain | type == "string" and length > 0)' >/dev/null
+          SUBDOMAIN="$(echo "$RESPONSE" | jq -r '.result.subdomain')"
+          echo "Verified workers.dev account subdomain: $SUBDOMAIN"
+          echo "BARQ_WORKERS_DEV_SUBDOMAIN=$SUBDOMAIN" >> "$GITHUB_ENV"
       - name: Deploy isolated fallback Worker
         id: deploy
         shell: bash
