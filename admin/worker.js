@@ -584,7 +584,11 @@ async function handle(request, env) {
         INSERT INTO admin_owner_sessions
           (id, owner_subject, device_id, refresh_token_hash, refresh_expires_at)
         VALUES (?, ?, ?, ?, datetime('now', '+30 days'))
-      `).bind(sessionId, identity.subject, deviceId, refreshHash)
+      `).bind(sessionId, identity.subject, deviceId, refreshHash),
+      env.ADMIN_DB.prepare(`
+        INSERT INTO admin_owner_refresh_token_history (token_hash, session_id)
+        VALUES (?, ?)
+      `).bind(refreshHash, sessionId)
     ]);
     const workspace = await ensureWorkspace(env, { subject: identity.subject });
     await audit(env, workspace, { subject: identity.subject, deviceId },
@@ -619,27 +623,55 @@ async function handle(request, env) {
     }
     const suppliedHash = await authSha256Hex(body.refreshToken);
     if (suppliedHash !== session.refresh_token_hash) {
-      await env.ADMIN_DB.prepare(
-        "UPDATE admin_owner_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE id = ? AND revoked_at IS NULL"
-      ).bind(session.id).run();
-      await audit(env, workspaceId(session.owner_subject),
-        { subject: session.owner_subject, deviceId: session.device_id },
-        "auth.refresh_replay_detected", "session", session.id, {});
-      return response({ error: "refresh_reuse_detected_session_revoked" }, 401, allowedOrigin);
+      const previouslyUsed = await env.ADMIN_DB.prepare(`
+        SELECT 1 FROM admin_owner_refresh_token_history
+        WHERE session_id = ? AND token_hash = ?
+      `).bind(session.id, suppliedHash).first();
+      if (previouslyUsed) {
+        await env.ADMIN_DB.prepare(
+          "UPDATE admin_owner_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE id = ? AND revoked_at IS NULL"
+        ).bind(session.id).run();
+        await audit(env, workspaceId(session.owner_subject),
+          { subject: session.owner_subject, deviceId: session.device_id },
+          "auth.refresh_replay_detected", "session", session.id, {});
+        return response({ error: "refresh_reuse_detected_session_revoked" }, 401, allowedOrigin);
+      }
+      return response({ error: "refresh_token_invalid" }, 401, allowedOrigin);
     }
     const nextRefresh = createRefreshToken();
     const nextHash = await authSha256Hex(nextRefresh);
-    const rotated = await env.ADMIN_DB.prepare(`
-      UPDATE admin_owner_sessions SET refresh_token_hash = ?,
-        refresh_version = refresh_version + 1, last_used_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND refresh_token_hash = ? AND revoked_at IS NULL
-        AND refresh_expires_at > CURRENT_TIMESTAMP
-    `).bind(nextHash, session.id, suppliedHash).run();
-    if (!rotated?.meta?.changes) {
-      await env.ADMIN_DB.prepare(
-        "UPDATE admin_owner_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE id = ? AND revoked_at IS NULL"
-      ).bind(session.id).run();
-      return response({ error: "refresh_reuse_detected_session_revoked" }, 401, allowedOrigin);
+    const rotated = await env.ADMIN_DB.batch([
+      env.ADMIN_DB.prepare(`
+        UPDATE admin_owner_sessions SET refresh_token_hash = ?,
+          refresh_version = refresh_version + 1, last_used_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND refresh_token_hash = ? AND revoked_at IS NULL
+          AND refresh_expires_at > CURRENT_TIMESTAMP
+      `).bind(nextHash, session.id, suppliedHash),
+      env.ADMIN_DB.prepare(`
+        INSERT INTO admin_owner_refresh_token_history (token_hash, session_id)
+        SELECT ?, ? FROM admin_owner_sessions
+        WHERE id = ? AND refresh_token_hash = ? AND revoked_at IS NULL
+      `).bind(nextHash, session.id, session.id, nextHash),
+      env.ADMIN_DB.prepare(`
+        UPDATE admin_owner_refresh_token_history SET used_at = CURRENT_TIMESTAMP
+        WHERE session_id = ? AND token_hash = ?
+      `).bind(session.id, suppliedHash)
+    ]);
+    if (!rotated?.[0]?.meta?.changes) {
+      const previouslyUsed = await env.ADMIN_DB.prepare(`
+        SELECT 1 FROM admin_owner_refresh_token_history
+        WHERE session_id = ? AND token_hash = ?
+      `).bind(session.id, suppliedHash).first();
+      if (previouslyUsed) {
+        await env.ADMIN_DB.prepare(
+          "UPDATE admin_owner_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE id = ? AND revoked_at IS NULL"
+        ).bind(session.id).run();
+        await audit(env, workspaceId(session.owner_subject),
+          { subject: session.owner_subject, deviceId: session.device_id },
+          "auth.refresh_replay_detected", "session", session.id, {});
+        return response({ error: "refresh_reuse_detected_session_revoked" }, 401, allowedOrigin);
+      }
+      return response({ error: "refresh_token_invalid" }, 401, allowedOrigin);
     }
     const accessToken = await createAdminAccessToken(
       env.BARQ_ADMIN_JWT_SECRET, session.owner_subject, session.id, session.device_id
