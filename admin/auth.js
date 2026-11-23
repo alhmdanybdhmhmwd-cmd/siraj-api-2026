@@ -79,10 +79,12 @@ export async function verifyGoogleIdToken(idToken, expectedNonce, env, options =
   const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
   if (!["https://accounts.google.com", "accounts.google.com"].includes(claims.iss) ||
       !audiences.includes(env.BARQ_GOOGLE_OIDC_CLIENT_ID) ||
+      (audiences.length > 1 && claims.azp !== env.BARQ_GOOGLE_OIDC_CLIENT_ID) ||
       (claims.azp !== undefined && claims.azp !== env.BARQ_GOOGLE_OIDC_CLIENT_ID) ||
       !Number.isSafeInteger(claims.exp) || claims.exp <= now ||
       !Number.isSafeInteger(claims.iat) || claims.iat > now + 60 ||
-      typeof claims.sub !== "string" || claims.email_verified !== true ||
+      (claims.nbf !== undefined && (!Number.isSafeInteger(claims.nbf) || claims.nbf > now)) ||
+      typeof claims.sub !== "string" || claims.sub.length === 0 || claims.email_verified !== true ||
       (env.BARQ_ADMIN_OWNER_SUBJECT && claims.sub !== env.BARQ_ADMIN_OWNER_SUBJECT) ||
       (env.BARQ_ADMIN_OWNER_EMAIL && String(claims.email || "").toLowerCase() !== env.BARQ_ADMIN_OWNER_EMAIL.toLowerCase()) ||
       !constantTimeEqual(claims.nonce || "", expectedNonce)) {
