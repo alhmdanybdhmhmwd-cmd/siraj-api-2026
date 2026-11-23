@@ -156,6 +156,7 @@ jobs:
           assert config["queues"]["producers"][0]["binding"] == "ADMIN_TASK_QUEUE"
           consumer = config["queues"]["consumers"][0]
           assert consumer["queue"] == "barq-admin-preview-tasks"
+assert consumer["max_batch_size"] == 1, "Long-running AI tasks must use isolated queue deliveries"
           assert consumer["dead_letter_queue"] == "barq-admin-preview-dlq"
           assert config["ai"]["binding"] == "ADMIN_AI"
           assert config["observability"]["enabled"] is True
