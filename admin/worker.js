@@ -43,6 +43,10 @@ export function canTransitionTask(from, to) {
   return TASK_STATUSES.has(from) && TASK_STATUSES.has(to) && Boolean(TRANSITIONS[from]?.has(to));
 }
 
+export function canManuallySetTaskStatus(status) {
+  return TASK_STATUSES.has(status) && status !== "running" && status !== "completed";
+}
+
 export function validateCheckpointInput(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return { ok: false, error: "invalid_body" };
@@ -642,7 +646,7 @@ async function handle(request, env) {
     const taskId = statusMatch[1];
     const body = await readJson(request);
     const nextStatus = body?.status;
-    if (nextStatus === "running" || nextStatus === "completed") {
+    if (!canManuallySetTaskStatus(nextStatus)) {
       return response({ error: "status_requires_server_worker" }, 409, allowedOrigin);
     }
     const task = await env.ADMIN_DB.prepare(
