@@ -43,6 +43,20 @@ test("phase 2 core API route paths remain present", () => {
   }
 });
 
+test("registration throttles repeated attempts per phone and per trusted network without a shared unknown-IP bucket", () => {
+  const start = worker.indexOf('if (method === "POST" && path === "/api/register")');
+  const end = worker.indexOf('// Login', start);
+  const route = worker.slice(start, end);
+  assert.ok(start >= 0 && end > start, "registration route must exist");
+  assert.ok(route.includes('consumeLoginAttempt(env, "register-phone", phone, 5)'));
+  assert.ok(route.includes('consumeLoginAttempt(env, "register-client", registrationIp, 20)'));
+  assert.ok(route.includes('request.headers.get("CF-Connecting-IP")'));
+  assert.ok(!route.includes('|| "unknown"'), "missing edge IP must not throttle every user in one shared bucket");
+  assert.ok(route.indexOf('register-phone') < route.indexOf('hashPassword(password, salt)'));
+  assert.ok(route.indexOf('register-client') < route.indexOf('hashPassword(password, salt)'));
+  assert.ok(route.includes('"Retry-After": "900"'));
+});
+
 test("message deletion is authenticated and limited to the author in private and group chats", () => {
   const privateStart = worker.indexOf("privateMessageActionMatch");
   const privateEnd = worker.indexOf("// Get conversation messages", privateStart);
