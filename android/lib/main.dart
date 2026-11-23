@@ -10058,6 +10058,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
   bool _autoOlderArmed = false;
   Map<String, dynamic>? olderMessageCursor;
   Map<String, dynamic>? replyToMessage;
+  double _replySwipeDistance = 0;
   Timer? refreshTimer;
   String get groupId => field(widget.group, ['id']);
 
