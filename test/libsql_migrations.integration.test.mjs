@@ -17,7 +17,7 @@ test("real libSQL applies every isolated Preview migration and supports BARQ dat
       .filter(name => name.endsWith(".sql"))
       .sort();
 
-    assert.equal(migrations.length, 15, "all 15 Preview migrations must be exercised");
+    assert.equal(migrations.length, 16, "all 16 Preview migrations must be exercised");
 
     for (const migration of migrations) {
       const sql = readFileSync(join(migrationsDirectory, migration), "utf8");
@@ -41,6 +41,8 @@ test("real libSQL applies every isolated Preview migration and supports BARQ dat
       assert.ok(tableNames.has(name), `missing migrated table: ${name}`);
     }
 
+    const sessionColumns = await client.execute("PRAGMA table_info(media_upload_sessions)");
+    assert.ok(sessionColumns.rows.some(row => row.name === "caption"), "resumable media sessions must persist captions");
     const chunkColumns = await client.execute("PRAGMA table_info(media_upload_chunks)");
     const partColumns = await client.execute("PRAGMA table_info(media_upload_parts)");
     assert.ok(chunkColumns.rows.some(row => row.name === "sha256"), "transport chunks must persist SHA-256 checksums");
