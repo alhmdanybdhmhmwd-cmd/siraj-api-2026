@@ -7847,9 +7847,9 @@ class _AttachmentTileState extends State<_AttachmentTile> {
               return GestureDetector(
                 onTap: () => _openImage(snapshot.data!),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.memory(snapshot.data!, width: 76, height: 76, fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const SizedBox(width: 76, height: 76, child: Icon(Icons.broken_image_outlined))),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.memory(snapshot.data!, width: 244, height: 176, fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const SizedBox(width: 244, height: 176, child: Icon(Icons.broken_image_outlined))),
                 ),
               );
             }
@@ -7871,8 +7871,8 @@ class _AttachmentTileState extends State<_AttachmentTile> {
               onPressed: () => setState(() => _loadPreview()),
               icon: const Icon(Icons.refresh));
           }
-          return const SizedBox(width: 76, height: 76,
-            child: Center(child: CircularProgressIndicator(strokeWidth: 2)));
+          return SizedBox(width: _isImage ? 244 : 76, height: _isImage ? 176 : 76,
+            child: const Center(child: CircularProgressIndicator(strokeWidth: 2)));
         },
       );
     } else if (_isAudio) {
@@ -7937,22 +7937,55 @@ class _AttachmentTileState extends State<_AttachmentTile> {
     }
 
     return Container(
-      constraints: const BoxConstraints(maxWidth: 290),
+      constraints: BoxConstraints(maxWidth: _isImage ? 260 : 290),
       padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(10)),
+      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(12)),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(mainAxisSize: MainAxisSize.min, children: [
-            leading,
-            const SizedBox(width: 9),
-            Flexible(child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 150),
-              child: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
-            )),
-            IconButton(onPressed: _downloadLoading ? null : _download, icon: _downloadLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.download), tooltip: 'تنزيل الملف'),
-          ]),
+          if (_isImage) ...[
+            Stack(
+              alignment: Alignment.bottomRight,
+              children: [
+                leading,
+                Padding(
+                  padding: const EdgeInsets.all(7),
+                  child: Material(
+                    color: Colors.black.withValues(alpha: .58),
+                    shape: const CircleBorder(),
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: _downloadLoading ? null : _download,
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: _downloadLoading
+                            ? SizedBox(width: 20, height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  value: _downloadProgress > 0 ? _downloadProgress : null,
+                                  color: Colors.white,
+                                ))
+                            : const Icon(Icons.download_rounded, size: 20, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 5),
+            Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11, color: Colors.white70)),
+          ] else
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              leading,
+              const SizedBox(width: 9),
+              Flexible(child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 150),
+                child: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis),
+              )),
+              IconButton(onPressed: _downloadLoading ? null : _download, icon: _downloadLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.download_rounded), tooltip: 'تنزيل الملف'),
+            ]),
           if (_downloadLoading) ...[
             const SizedBox(height: 6),
             Row(children: [
