@@ -1028,7 +1028,10 @@ async function handle(request, env) {
         knowledge
       );
       const messages = [
-        base[0],
+        {
+          role: "system",
+          content: base[0].content + "\n\nCURRENT WORKSPACE AND VERIFIED RETRIEVED SOURCES:\n" + base[1].content
+        },
         ...history.map(item => ({ role: item.role, content: item.content })),
         { role: "user", content: parsed.value.message }
       ];
