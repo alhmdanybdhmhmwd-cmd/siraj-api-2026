@@ -101,6 +101,128 @@ export function validateApprovalDecision(value) {
   return { ok: true, value: { status: value.status, note } };
 }
 
+export function buildAssistantMessages(task, workspace) {
+  return [
+    {
+      role: "system",
+      content: "You are BARQ Brain, the project assistant for BARQ. Help the owner analyze, plan, and draft useful work. You have no authority to publish, spend money, deploy, modify production data, contact people, or execute external actions. Never claim an action was performed when you only prepared a recommendation. Separate verified facts from assumptions. Give a concise result and a concrete next step."
+    },
+    {
+      role: "user",
+      content: [
+        "Workspace project: " + String(workspace.current_project || "BARQ"),
+        "Current phase: " + String(workspace.current_phase || "not set"),
+        "Task: " + String(task.title || ""),
+        "Details: " + String(task.description || ""),
+        "Return a practical result, note assumptions and risks, and identify any owner approval needed."
+      ].join("\\n")
+    }
+  ];
+}
+
+async function processAdminTaskMessage(message, env) {
+  const payload = message.body;
+  if (!payload || typeof payload.taskId !== "string" || typeof payload.workspaceId !== "string") {
+    message.ack();
+    return;
+  }
+  if (!env.ADMIN_DB || !env.ADMIN_AI) {
+    message.retry({ delaySeconds: 60 });
+    return;
+  }
+
+  const leaseId = crypto.randomUUID();
+  const claimed = await env.ADMIN_DB.prepare(`
+    UPDATE admin_tasks SET status = 'running', lease_owner = ?,
+      lease_expires_at = datetime('now', '+10 minutes'),
+      attempt_count = attempt_count + 1, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND workspace_id = ? AND (
+      status = 'queued' OR
+      (status = 'running' AND lease_expires_at IS NOT NULL AND lease_expires_at < CURRENT_TIMESTAMP)
+    )
+  `).bind(leaseId, payload.taskId, payload.workspaceId).run();
+
+  if (!claimed?.meta?.changes) {
+    message.ack();
+    return;
+  }
+
+  const task = await env.ADMIN_DB.prepare(`
+    SELECT id, title, description, checkpoint_version, attempt_count
+    FROM admin_tasks WHERE id = ? AND workspace_id = ? AND lease_owner = ?
+  `).bind(payload.taskId, payload.workspaceId, leaseId).first();
+  const workspace = await env.ADMIN_DB.prepare(`
+    SELECT current_project, current_phase FROM admin_workspaces WHERE id = ?
+  `).bind(payload.workspaceId).first();
+
+  try {
+    if (!task || !workspace) throw new Error("task_context_missing");
+    const model = env.BARQ_ADMIN_AI_MODEL || "@cf/meta/llama-3.1-8b-instruct";
+    const generated = await env.ADMIN_AI.run(model, {
+      messages: buildAssistantMessages(task, workspace),
+      max_tokens: 1800
+    });
+    const answer = typeof generated?.response === "string"
+      ? generated.response.trim()
+      : typeof generated === "string" ? generated.trim() : "";
+    if (!answer) throw new Error("assistant_empty_result");
+
+    const output = JSON.stringify({
+      answer: answer.slice(0, 24000),
+      model,
+      generatedAt: new Date().toISOString(),
+      executionMode: "server-side-assistant-draft"
+    });
+    const nextVersion = task.checkpoint_version + 1;
+    const checkpointId = crypto.randomUUID();
+    const results = await env.ADMIN_DB.batch([
+      env.ADMIN_DB.prepare(`
+        UPDATE admin_tasks SET status = 'completed', checkpoint_version = ?,
+          last_checkpoint_id = ?, next_action = 'Review the assistant result',
+          lease_owner = NULL, lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND workspace_id = ? AND lease_owner = ? AND checkpoint_version = ?
+      `).bind(nextVersion, checkpointId, task.id, payload.workspaceId, leaseId, task.checkpoint_version),
+      env.ADMIN_DB.prepare(`
+        INSERT INTO admin_task_checkpoints
+          (id, task_id, sequence, input_json, output_json, completed_step, next_action, created_by)
+        SELECT ?, ?, ?, '{}', ?, 'BARQ Brain generated a server-side result',
+          'Review the assistant result', 'barq-brain-worker'
+        WHERE EXISTS (
+          SELECT 1 FROM admin_tasks WHERE id = ? AND last_checkpoint_id = ?
+            AND checkpoint_version = ? AND status = 'completed'
+        )
+      `).bind(checkpointId, task.id, nextVersion, output, task.id, checkpointId, nextVersion)
+    ]);
+    if (!results?.[0]?.meta?.changes || !results?.[1]?.meta?.changes) {
+      throw new Error("task_lease_or_checkpoint_conflict");
+    }
+    await audit(env, payload.workspaceId,
+      { subject: "barq-brain-worker", deviceId: "server-worker" },
+      "task.server_execution.completed", "task", task.id,
+      { checkpointVersion: nextVersion, model });
+    message.ack();
+  } catch (error) {
+    console.error("BARQ Brain task execution failed:", error);
+    const terminal = Number(task?.attempt_count || 1) >= 5;
+    await env.ADMIN_DB.prepare(`
+      UPDATE admin_tasks SET status = ?, lease_owner = NULL, lease_expires_at = NULL,
+        next_action = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND workspace_id = ? AND lease_owner = ?
+    `).bind(terminal ? "failed" : "queued",
+      terminal ? "Review the failure and retry manually" : "Waiting for server worker retry",
+      payload.taskId, payload.workspaceId, leaseId).run();
+    if (terminal) {
+      await audit(env, payload.workspaceId,
+        { subject: "barq-brain-worker", deviceId: "server-worker" },
+        "task.server_execution.failed", "task", payload.taskId,
+        { attempts: task?.attempt_count || 1 });
+      message.ack();
+    } else {
+      message.retry({ delaySeconds: Math.min(300, 15 * Number(task?.attempt_count || 1)) });
+    }
+  }
+}
+
 async function verifyOwnerToken(request, env) {
   const authorization = request.headers.get("Authorization") || "";
   if (!authorization.startsWith("Bearer ")) return null;
@@ -267,7 +389,15 @@ async function handle(request, env) {
         const existing = await env.ADMIN_DB.prepare(
           "SELECT id, title, status, checkpoint_version FROM admin_tasks WHERE workspace_id = ? AND idempotency_key = ?"
         ).bind(workspace, idempotencyKey).first();
-        if (existing) return response({ task: existing, duplicate: true }, 200, allowedOrigin);
+        if (existing) {
+          let dispatched = false;
+          if (existing.status === "queued" && env.ADMIN_TASK_QUEUE) {
+            await env.ADMIN_TASK_QUEUE.send({ taskId: existing.id, workspaceId: workspace });
+            dispatched = true;
+          }
+          return response({ task: existing, duplicate: true,
+            execution: dispatched ? "queued_for_server_worker" : "persisted_waiting_for_queue" }, 200, allowedOrigin);
+        }
       }
       throw error;
     }
@@ -276,7 +406,12 @@ async function handle(request, env) {
     const task = await env.ADMIN_DB.prepare(
       "SELECT id, title, description, status, priority, checkpoint_version, next_action, created_at FROM admin_tasks WHERE id = ?"
     ).bind(id).first();
-    return response({ task }, 201, allowedOrigin);
+    let dispatched = false;
+    if (env.ADMIN_TASK_QUEUE) {
+      await env.ADMIN_TASK_QUEUE.send({ taskId: id, workspaceId: workspace });
+      dispatched = true;
+    }
+    return response({ task, execution: dispatched ? "queued_for_server_worker" : "persisted_waiting_for_queue" }, 201, allowedOrigin);
   }
 
   if (request.method === "GET" && url.pathname === "/v1/approvals") {
@@ -411,9 +546,13 @@ export default {
     try {
       return await handle(request, env);
     } catch (error) {
-      // Keep secrets and raw SQL details out of client responses.
       console.error("BARQ Admin request failed:", error);
       return response({ error: "internal_error" }, 500);
+    }
+  },
+  async queue(batch, env) {
+    for (const message of batch.messages) {
+      await processAdminTaskMessage(message, env);
     }
   }
 };
