@@ -47,7 +47,7 @@ async function googleJwks(fetcher = fetch, nowMs = Date.now()) {
 export async function verifyGoogleIdToken(idToken, expectedNonce, env, options = {}) {
   if (typeof idToken !== "string" || idToken.length > 12000 ||
       typeof expectedNonce !== "string" || expectedNonce.length < 32 || expectedNonce.length > 256 ||
-      !env.BARQ_GOOGLE_OIDC_CLIENT_ID || !env.BARQ_ADMIN_OWNER_SUBJECT) {
+      !env.BARQ_GOOGLE_OIDC_CLIENT_ID || (!env.BARQ_ADMIN_OWNER_SUBJECT && !env.BARQ_ADMIN_OWNER_EMAIL)) {
     throw new Error("invalid_identity_request");
   }
   const parts = idToken.split(".");
@@ -75,8 +75,9 @@ export async function verifyGoogleIdToken(idToken, expectedNonce, env, options =
       (audiences.length > 1 && claims.azp !== env.BARQ_GOOGLE_OIDC_CLIENT_ID) ||
       !Number.isSafeInteger(claims.exp) || claims.exp <= now ||
       !Number.isSafeInteger(claims.iat) || claims.iat > now + 60 ||
-      typeof claims.sub !== "string" || claims.sub !== env.BARQ_ADMIN_OWNER_SUBJECT ||
-      claims.email_verified !== true ||
+      typeof claims.sub !== "string" || claims.email_verified !== true ||
+      (env.BARQ_ADMIN_OWNER_SUBJECT && claims.sub !== env.BARQ_ADMIN_OWNER_SUBJECT) ||
+      (env.BARQ_ADMIN_OWNER_EMAIL && String(claims.email || "").toLowerCase() !== env.BARQ_ADMIN_OWNER_EMAIL.toLowerCase()) ||
       !constantTimeEqual(claims.nonce || "", expectedNonce)) {
     throw new Error("google_identity_claims_rejected");
   }
