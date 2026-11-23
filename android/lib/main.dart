@@ -6822,16 +6822,24 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               CircleAvatar(
                 radius: 43,
                 backgroundColor: palette.surface,
-                backgroundImage: field(me, ['photoUrl']).isNotEmpty
-                    ? NetworkImage(
-                        '$apiBase${field(me, ['photoUrl'])}?v=${Uri.encodeComponent(field(me, ['photoUpdatedAt']))}',
-                        headers: {'Authorization': 'Bearer ${Api.token}'},
-                      )
-                    : null,
-                child: field(me, ['photoUrl']).isEmpty
-                    ? Text(displayName.isNotEmpty ? displayName.characters.first : 'ب',
-                        style: TextStyle(color: palette.primary, fontSize: 30))
-                    : null,
+                child: ClipOval(
+                  child: field(me, ['photoUrl']).isNotEmpty
+                      ? Image.network(
+                          '$apiBase${field(me, ['photoUrl'])}?v=${Uri.encodeComponent(field(me, ['photoUpdatedAt']))}',
+                          width: 86,
+                          height: 86,
+                          fit: BoxFit.cover,
+                          headers: {if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'},
+                          errorBuilder: (_, __, ___) => Center(
+                            child: Text(displayName.isNotEmpty ? displayName.characters.first : 'ب',
+                                style: TextStyle(color: palette.primary, fontSize: 30)),
+                          ),
+                        )
+                      : Center(
+                          child: Text(displayName.isNotEmpty ? displayName.characters.first : 'ب',
+                              style: TextStyle(color: palette.primary, fontSize: 30)),
+                        ),
+                ),
               ),
               Positioned(
                 bottom: -3, right: -4,
