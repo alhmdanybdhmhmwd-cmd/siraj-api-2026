@@ -772,6 +772,228 @@ class _AdminHomePageState extends State<AdminHomePage>
     return bytes;
   }
 
+  Future<void> _showBrainChat() async {
+    if (_token.isEmpty || !_online) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('اتصل بخادم BARQ Admin أولًا لبدء محادثة محفوظة')),
+      );
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    String? conversationId = prefs.getString('barq_admin_brain_conversation_id');
+    final controller = TextEditingController();
+    final messages = <Map<String, String>>[];
+    var sending = false;
+
+    if (conversationId != null && conversationId.isNotEmpty) {
+      try {
+        final history = await _getJson(
+          '/v1/brain/conversations/$conversationId/messages',
+        );
+        for (final item in (history['messages'] as List? ?? const [])) {
+          if (item is Map) {
+            messages.add({
+              'role': (item['role'] ?? 'assistant').toString(),
+              'content': (item['content'] ?? '').toString(),
+            });
+          }
+        }
+      } catch (_) {
+        conversationId = null;
+        await prefs.remove('barq_admin_brain_conversation_id');
+      }
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          Future<void> sendMessage() async {
+            final prompt = controller.text.trim();
+            if (prompt.isEmpty || sending) return;
+            controller.clear();
+            setDialogState(() {
+              messages.add({'role': 'user', 'content': prompt});
+              sending = true;
+            });
+            try {
+              Future<http.Response> submit() => http
+                  .post(
+                    Uri.parse(_base + '/v1/brain/chat'),
+                    headers: _headers,
+                    body: jsonEncode({
+                      'message': prompt,
+                      if (conversationId != null) 'conversationId': conversationId,
+                    }),
+                  )
+                  .timeout(const Duration(seconds: 90));
+              var response = await submit();
+              if (response.statusCode == 401 && await _refreshSession()) {
+                response = await submit();
+              }
+              final data = Map<String, dynamic>.from(
+                jsonDecode(response.body) as Map,
+              );
+              if (response.statusCode != 200) {
+                throw Exception(
+                  (data['error'] ?? 'تعذر الحصول على رد المساعد').toString(),
+                );
+              }
+              conversationId = (data['conversationId'] ?? '').toString();
+              if (conversationId == null || conversationId!.isEmpty) {
+                throw Exception('لم يُرجع الخادم رقم المحادثة');
+              }
+              await prefs.setString(
+                'barq_admin_brain_conversation_id',
+                conversationId!,
+              );
+              var answer = (data['answer'] ?? '').toString();
+              final sources = data['sources'];
+              if (sources is List && sources.isNotEmpty) {
+                final references = sources.whereType<Map>().map((source) {
+                  final path = (source['sourcePath'] ?? '').toString();
+                  final revision = (source['sourceRevision'] ?? '').toString();
+                  return revision.isEmpty ? '• ' + path : '• ' + path + ' @ ' + revision;
+                }).join('\n');
+                answer += '\n\nالمصادر التي استند إليها:\n' + references;
+              }
+              setDialogState(() {
+                messages.add({'role': 'assistant', 'content': answer});
+              });
+            } catch (error) {
+              setDialogState(() {
+                messages.add({
+                  'role': 'error',
+                  'content': error.toString().replaceFirst('Exception: ', ''),
+                });
+              });
+            } finally {
+              setDialogState(() => sending = false);
+            }
+          }
+
+          return Dialog(
+            insetPadding: const EdgeInsets.all(12),
+            child: SizedBox(
+              width: 620,
+              height: MediaQuery.of(dialogContext).size.height * .82,
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        const CircleAvatar(
+                          backgroundColor: Color(0x332785FF),
+                          child: Icon(Icons.auto_awesome, color: _blue),
+                        ),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            'محادثة BARQ Brain',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: sending
+                              ? null
+                              : () async {
+                                  conversationId = null;
+                                  messages.clear();
+                                  await prefs.remove('barq_admin_brain_conversation_id');
+                                  setDialogState(() {});
+                                },
+                          child: const Text('محادثة جديدة'),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(dialogContext),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                    const Divider(),
+                    Expanded(
+                      child: messages.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'ابدأ بسؤالي عن برق أو اطلب مني مراجعة مشكلة أو بناء ميزة. سأستند إلى مصادر المشروع المفهرسة وأوضح ما لم أتحقق منه.',
+                                textAlign: TextAlign.center,
+                              ),
+                            )
+                          : ListView.builder(
+                              itemCount: messages.length,
+                              itemBuilder: (context, index) {
+                                final item = messages[index];
+                                final role = item['role'];
+                                final isOwner = role == 'user';
+                                final isError = role == 'error';
+                                return Align(
+                                  alignment: isOwner
+                                      ? Alignment.centerLeft
+                                      : Alignment.centerRight,
+                                  child: Container(
+                                    constraints: const BoxConstraints(maxWidth: 520),
+                                    margin: const EdgeInsets.symmetric(vertical: 5),
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: isError
+                                          ? Colors.red.withValues(alpha: .15)
+                                          : isOwner
+                                              ? _blue.withValues(alpha: .20)
+                                              : _surface,
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    child: SelectableText(item['content'] ?? ''),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                    if (sending)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                            SizedBox(width: 10),
+                            Text('BARQ Brain يراجع سياق المشروع ويكتب الرد...'),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: controller,
+                      minLines: 1,
+                      maxLines: 4,
+                      textInputAction: TextInputAction.newline,
+                      decoration: const InputDecoration(
+                        hintText: 'اكتب رسالتك إلى BARQ Brain...',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: sending ? null : sendMessage,
+                        icon: const Icon(Icons.send),
+                        label: const Text('إرسال'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    controller.dispose();
+  }
+
   Future<void> _showImageGeneration() async {
     if (_apiBase.isEmpty || _token.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1468,6 +1690,12 @@ class _AdminHomePageState extends State<AdminHomePage>
                   ),
                 ),
                 const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: _showBrainChat,
+                  icon: const Icon(Icons.chat_bubble_outline),
+                  label: const Text('تحدث مع BARQ Brain'),
+                ),
+                const SizedBox(height: 8),
                 OutlinedButton.icon(
                   onPressed: () => _showCreateTask(assistant: true),
                   icon: const Icon(Icons.add),
