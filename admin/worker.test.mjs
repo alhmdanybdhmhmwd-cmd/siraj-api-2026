@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, knowledgeSearchTerms, rankKnowledgeChunks, validateAdminAccessClaims, processAdminDeadLetterMessage, renewAdminTaskLease } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, validateAdminAccessClaims, processAdminDeadLetterMessage, renewAdminTaskLease } from "./worker.js";
 
 test("task input is normalized and bounded", () => {
   assert.deepEqual(validateTaskInput({ title: "  Prepare global launch  ", priority: "high" }), {
@@ -305,4 +305,15 @@ test("knowledge ranking prefers title/path evidence and safely bounds result cou
   assert.equal(ranked.length, 3);
   assert.equal(ranked[0].source_path, "docs/barq-chat.md");
   assert.ok(ranked[0].matched_terms >= 1);
+});
+
+
+test("BARQ Brain chat input is bounded and conversation-scoped", () => {
+  assert.deepEqual(validateBrainChatInput({ message: "  كيف نطور برق؟  " }), {
+    ok: true, value: { message: "كيف نطور برق؟", conversationId: null }
+  });
+  assert.equal(validateBrainChatInput({ message: " " }).ok, false);
+  assert.equal(validateBrainChatInput({ message: "x".repeat(8001) }).ok, false);
+  assert.equal(validateBrainChatInput({ message: "hello", conversationId: "bad-id" }).ok, false);
+  assert.equal(validateBrainChatInput(null).ok, false);
 });
