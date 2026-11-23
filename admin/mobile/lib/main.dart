@@ -834,19 +834,23 @@ class _AdminHomePageState extends State<AdminHomePage>
               final data = Map<String, dynamic>.from(
                 jsonDecode(response.body) as Map,
               );
+              final returnedConversationId =
+                  (data['conversationId'] ?? '').toString();
+              if (returnedConversationId.isNotEmpty) {
+                conversationId = returnedConversationId;
+                await prefs.setString(
+                  'barq_admin_brain_conversation_id',
+                  returnedConversationId,
+                );
+              }
               if (response.statusCode != 200) {
                 throw Exception(
                   (data['error'] ?? 'تعذر الحصول على رد المساعد').toString(),
                 );
               }
-              conversationId = (data['conversationId'] ?? '').toString();
               if (conversationId == null || conversationId!.isEmpty) {
                 throw Exception('لم يُرجع الخادم رقم المحادثة');
               }
-              await prefs.setString(
-                'barq_admin_brain_conversation_id',
-                conversationId!,
-              );
               var answer = (data['answer'] ?? '').toString();
               final sources = data['sources'];
               if (sources is List && sources.isNotEmpty) {
@@ -906,7 +910,9 @@ class _AdminHomePageState extends State<AdminHomePage>
                           child: const Text('محادثة جديدة'),
                         ),
                         IconButton(
-                          onPressed: () => Navigator.pop(dialogContext),
+                          onPressed: sending
+                              ? null
+                              : () => Navigator.pop(dialogContext),
                           icon: const Icon(Icons.close),
                         ),
                       ],
