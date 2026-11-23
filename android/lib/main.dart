@@ -2695,6 +2695,28 @@ Widget messageReactionBar({
   );
 }
 
+Widget _barqMessageActionIcon(
+  BuildContext context,
+  IconData icon, {
+  bool destructive = false,
+}) {
+  final theme = Theme.of(context);
+  return Container(
+    width: 38,
+    height: 38,
+    decoration: BoxDecoration(
+      color: theme.colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(12),
+    ),
+    alignment: Alignment.center,
+    child: Icon(
+      icon,
+      size: 21,
+      color: destructive ? theme.colorScheme.error : theme.colorScheme.onSurface,
+    ),
+  );
+}
+
 Future<void> showMessageActions(
   BuildContext context, {
   required Map<String, dynamic> message,
@@ -2714,68 +2736,143 @@ Future<void> showMessageActions(
   final action = await showModalBottomSheet<String>(
     context: context,
     backgroundColor: Theme.of(context).colorScheme.surface,
-    builder: (sheetContext) => SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-            leading: const Icon(Icons.copy_rounded),
-            title: const Text('نسخ الرسالة'),
-            onTap: () => Navigator.pop(sheetContext, 'copy'),
-          ),
-          if (onReact != null)
-            ListTile(
-              leading: const Icon(Icons.add_reaction_outlined),
-              title: const Text('إضافة تفاعل'),
-              onTap: () => Navigator.pop(sheetContext, 'react'),
-            ),
-          if (onPin != null)
-            ListTile(
-              leading: Icon(isPinned ? Icons.push_pin : Icons.push_pin_outlined),
-              title: Text(isPinned ? 'إلغاء تثبيت الرسالة' : 'تثبيت الرسالة'),
-              onTap: () => Navigator.pop(sheetContext, 'pin'),
-            ),
-          if (onForward != null)
-            ListTile(
-              leading: const Icon(Icons.forward_rounded),
-              title: const Text('تحويل الرسالة'),
-              onTap: () => Navigator.pop(sheetContext, 'forward'),
-            ),
-          if (onSaveMemory != null)
-            ListTile(
-              leading: const Icon(Icons.bookmark_add_outlined),
-              title: const Text('حفظ في الذكريات الخاصة'),
-              onTap: () => Navigator.pop(sheetContext, 'save_memory'),
-            ),
-          if (onReply != null)
-            ListTile(
-              leading: const Icon(Icons.reply_rounded),
-              title: const Text('الرد على الرسالة'),
-              onTap: () => Navigator.pop(sheetContext, 'reply'),
-            ),
-          if (onEdit != null)
-            ListTile(
-              leading: const Icon(Icons.edit_rounded),
-              title: const Text('تعديل الرسالة'),
-              onTap: () => Navigator.pop(sheetContext, 'edit'),
-            ),
-          if (canDeleteForMe && onDeleteForMe != null)
-            ListTile(
-              leading: const Icon(Icons.visibility_off_outlined),
-              title: const Text('حذف لدي فقط'),
-              onTap: () => Navigator.pop(sheetContext, 'delete_me'),
-            ),
-          if (canDelete)
-            ListTile(
-              leading: const Icon(Icons.delete_forever_outlined, color: Colors.redAccent),
-              title: const Text('حذف لدى الجميع'),
-              onTap: () => Navigator.pop(sheetContext, 'delete'),
-            ),
-        ],
-      ),
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
+    builder: (sheetContext) {
+      final theme = Theme.of(sheetContext);
+      Widget item({
+        required String value,
+        required IconData icon,
+        required String label,
+        bool destructive = false,
+      }) {
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
+          minLeadingWidth: 48,
+          leading: _barqMessageActionIcon(
+            sheetContext,
+            icon,
+            destructive: destructive,
+          ),
+          title: Text(
+            label,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              fontWeight: FontWeight.w500,
+              color: destructive ? theme.colorScheme.error : theme.colorScheme.onSurface,
+            ),
+          ),
+          onTap: () => Navigator.pop(sheetContext, value),
+        );
+      }
+
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(Icons.bolt_rounded, color: theme.colorScheme.onSurface, size: 23),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'خيارات الرسالة',
+                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    const Spacer(),
+                    Text(
+                      'برق',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (onReact != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      for (final emoji in ['👍', '❤️', '😂', '😮', '😢', '🔥'])
+                        InkWell(
+                          borderRadius: BorderRadius.circular(22),
+                          onTap: () => Navigator.pop(sheetContext, 'emoji:$emoji'),
+                          child: Padding(
+                            padding: const EdgeInsets.all(7),
+                            child: Text(emoji, style: const TextStyle(fontSize: 25)),
+                          ),
+                        ),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(22),
+                        onTap: () => Navigator.pop(sheetContext, 'react'),
+                        child: Padding(
+                          padding: const EdgeInsets.all(7),
+                          child: Icon(Icons.add_rounded, color: theme.colorScheme.onSurfaceVariant, size: 25),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.5)),
+              item(value: 'reply', icon: Icons.reply_rounded, label: 'الرد على الرسالة'),
+              item(value: 'copy', icon: Icons.copy_all_outlined, label: 'نسخ الرسالة'),
+              if (onForward != null)
+                item(value: 'forward', icon: Icons.forward_rounded, label: 'تحويل الرسالة'),
+              if (onEdit != null)
+                item(value: 'edit', icon: Icons.edit_outlined, label: 'تعديل الرسالة'),
+              if (onPin != null)
+                item(
+                  value: 'pin',
+                  icon: isPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+                  label: isPinned ? 'إلغاء تثبيت الرسالة' : 'تثبيت الرسالة',
+                ),
+              if (onSaveMemory != null)
+                item(value: 'save_memory', icon: Icons.bookmark_border_rounded, label: 'حفظ في الذكريات الخاصة'),
+              if (canDeleteForMe && onDeleteForMe != null)
+                item(value: 'delete_me', icon: Icons.visibility_off_outlined, label: 'حذف لدي فقط'),
+              if (canDelete)
+                item(
+                  value: 'delete',
+                  icon: Icons.delete_outline_rounded,
+                  label: 'حذف لدى الجميع',
+                  destructive: true,
+                ),
+            ],
+          ),
+        ),
+      );
+    },
   );
-  if (action == 'react' && onReact != null && context.mounted) {
+  if (action != null && action.startsWith('emoji:') && onReact != null) {
+    final emoji = action.substring(6);
+    final alreadyReacted = normalizeMessageReactions(message['reactions']).any((reaction) =>
+      field(reaction, ['user_id']) == currentUserId && field(reaction, ['emoji']) == emoji);
+    await onReact(emoji, alreadyReacted);
+  } else if (action == 'react' && onReact != null && context.mounted) {
     final emoji = await showMessageReactionPicker(context);
     if (emoji != null) {
       final alreadyReacted = normalizeMessageReactions(message['reactions']).any((reaction) =>
@@ -2853,7 +2950,6 @@ Future<void> showMessageActions(
     }
   }
 }
-
 
 Future<void> forwardBarqMessage(BuildContext context, Map<String, dynamic> message) async {
   final body = field(message, ['body', 'content', 'message']).trim();
