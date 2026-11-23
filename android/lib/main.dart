@@ -4825,7 +4825,51 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         },
         child: Scaffold(
         appBar: AppBar(
-          title: Column( crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [ Text('برق', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)), const Text('تواصل بنبض الضوء', style: TextStyle(fontSize: 11, color: Colors.white70)), ]),
+          titleSpacing: 16,
+          title: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary.withValues(alpha: .13),
+                  borderRadius: BorderRadius.circular(13),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: .32),
+                  ),
+                ),
+                child: Icon(
+                  Icons.bolt_rounded,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 25,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'برق',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 19,
+                      height: 1.05,
+                    ),
+                  ),
+                  Text(
+                    'تواصل بنبض الضوء',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .62),
+                      height: 1.2,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
         body: loading
             ? const Center(child: CircularProgressIndicator())
