@@ -5332,23 +5332,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  Widget _sparkFeaturePill(IconData icon, String label) {
-    final palette = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-      decoration: BoxDecoration(
-        color: palette.surface.withValues(alpha: .78),
-        borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: palette.primary.withValues(alpha: .20)),
-      ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 13, color: palette.secondary),
-        const SizedBox(width: 5),
-        Text(label, style: TextStyle(color: palette.onSurface.withValues(alpha: .86),
-          fontSize: 10, fontWeight: FontWeight.w600)),
-      ]),
-    );
-  }
 
   Widget _statusesPage() {
     final palette = Theme.of(context).colorScheme;
@@ -10415,94 +10398,122 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
             width: double.infinity, padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
             decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, border: Border(top: BorderSide(color: Theme.of(context).colorScheme.primary.withValues(alpha: .2)))),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              if (canReply)
-                Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-                  for (final emoji in ['❤️', '🔥', '😂', '👍'])
-                    TextButton(
-                      onPressed: _sendingReply ? null : () => _react(emoji),
-                      child: Text(emoji, style: const TextStyle(fontSize: 24)),
-                    ),
-                ])
-              else
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 9),
-                  child: Text(
-                    'هذه حالتك أنت — أدوات الرد والتفاعل غير ظاهرة للمالك',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .62),
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
               if (canReply) ...[
-                Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary.withValues(alpha: .10),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: .22)),
-                  ),
-                  child: Row(children: [
-                    Icon(Icons.lock_outline_rounded, size: 16, color: Theme.of(context).colorScheme.primary),
-                    const SizedBox(width: 7),
-                    const Expanded(child: Text(
-                      'ردك سيصل برسالة خاصة إلى محادثتك مع صاحب SPARK',
-                      style: TextStyle(color: Colors.white70, fontSize: 11),
-                    )),
-                  ]),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    for (final emoji in ['❤️', '🔥', '😂', '👍', '😍'])
+                      Material(
+                        color: Theme.of(context).colorScheme.primary.withValues(alpha: .10),
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: _sendingReply ? null : () => _react(emoji),
+                          child: Padding(
+                            padding: const EdgeInsets.all(9),
+                            child: Text(emoji, style: const TextStyle(fontSize: 21)),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
+                const SizedBox(height: 9),
                 if (_recordingAudioReply)
                   Align(
                     alignment: Alignment.centerRight,
-                    child: Text('جارٍ التسجيل ${_recordingClock(_recordingSeconds)} / 01:00',
-                      style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                  ),
-                Row(children: [
-                  Expanded(child: Container(
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .62),
-                      borderRadius: BorderRadius.circular(26),
-                      border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: .24)),
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 7),
+                      child: Text('جارٍ التسجيل ${_recordingClock(_recordingSeconds)} / 01:00',
+                        style: const TextStyle(color: Colors.white70, fontSize: 12)),
                     ),
-                    child: TextField(
-                      controller: _replyController,
-                      maxLength: 1000,
-                      minLines: 1,
-                      maxLines: 4,
-                      textCapitalization: TextCapitalization.sentences,
-                      textInputAction: TextInputAction.send,
-                      decoration: InputDecoration(
-                        hintText: 'اكتب ردك على SPARK...',
-                        counterText: '',
-                        hintStyle: TextStyle(color: Colors.white.withValues(alpha: .56), fontSize: 13),
-                        prefixIcon: Icon(Icons.chat_bubble_outline_rounded,
-                          color: Theme.of(context).colorScheme.primary, size: 19),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  ),
+                Container(
+                  padding: const EdgeInsetsDirectional.only(start: 7, end: 6, top: 5, bottom: 5),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .58),
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(color: gold.withValues(alpha: .72), width: 1.15),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Theme.of(context).colorScheme.primary.withValues(alpha: .13),
+                        blurRadius: 15,
+                        spreadRadius: 1,
                       ),
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
-                      onSubmitted: (_) => _sendReply(),
+                    ],
+                  ),
+                  child: Row(children: [
+                    Container(
+                      width: 36, height: 36,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Theme.of(context).colorScheme.primary.withValues(alpha: .13),
+                      ),
+                      child: Icon(Icons.bolt_rounded,
+                        color: Theme.of(context).colorScheme.primary, size: 21),
                     ),
-                  )),
-                  IconButton(
-                    tooltip: _recordingAudioReply ? 'إيقاف وإرسال الرد الصوتي' : 'تسجيل رد صوتي',
-                    onPressed: _uploadingAudioReply ? null : _toggleAudioReplyRecording,
-                    icon: _uploadingAudioReply
-                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                        : Icon(_recordingAudioReply ? Icons.stop_circle_rounded : Icons.mic_rounded,
-                            color: _recordingAudioReply ? Colors.redAccent : Theme.of(context).colorScheme.primary),
-                  ),
-                  IconButton(
-                    onPressed: _sendingReply ? null : _sendReply,
-                    icon: _sendingReply
-                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.send_rounded),
-                  ),
-                ]),
-              ],
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: TextField(
+                        controller: _replyController,
+                        maxLength: 1000,
+                        minLines: 1,
+                        maxLines: 3,
+                        textCapitalization: TextCapitalization.sentences,
+                        textInputAction: TextInputAction.send,
+                        decoration: InputDecoration(
+                          hintText: 'رد على الحالة...',
+                          counterText: '',
+                          hintStyle: TextStyle(color: Colors.white.withValues(alpha: .58), fontSize: 13),
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 9, horizontal: 4),
+                        ),
+                        style: const TextStyle(color: Colors.white, fontSize: 14),
+                        onSubmitted: (_) => _sendReply(),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: _recordingAudioReply ? 'إيقاف وإرسال الرد الصوتي' : 'تسجيل رد صوتي',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: _uploadingAudioReply ? null : _toggleAudioReplyRecording,
+                      icon: _uploadingAudioReply
+                          ? const SizedBox(width: 17, height: 17, child: CircularProgressIndicator(strokeWidth: 2))
+                          : Icon(_recordingAudioReply ? Icons.stop_circle_rounded : Icons.mic_none_rounded,
+                              color: _recordingAudioReply ? Colors.redAccent : Theme.of(context).colorScheme.primary,
+                              size: 21),
+                    ),
+                    Material(
+                      color: Theme.of(context).colorScheme.primary,
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: _sendingReply ? null : _sendReply,
+                        child: SizedBox(
+                          width: 42, height: 42,
+                          child: Center(
+                            child: _sendingReply
+                                ? const SizedBox(width: 18, height: 18,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : const Icon(Icons.send_rounded, color: Colors.white, size: 20),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ]),
+                ),
+              ] else
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    const Icon(Icons.visibility_rounded, color: gold, size: 17),
+                    const SizedBox(width: 7),
+                    Text(
+                      'اضغط على عدد المشاهدات لمعرفة من شاهد حالتك',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white.withValues(alpha: .78), fontSize: 11),
+                    ),
+                  ]),
+                ),
             ]),
           ),
         ]),
