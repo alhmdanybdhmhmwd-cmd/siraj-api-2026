@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models.dart';
@@ -417,6 +418,156 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
     return answer;
   }
 
+  Future<Uint8List> _requestImageGeneration(String prompt) async {
+    if (_apiBase.isEmpty || _token.isEmpty || !isValidAdminApiBase(_apiBase)) {
+      throw Exception('أكمل إعداد اتصال HTTPS وجلسة المالك أولًا');
+    }
+    final response = await http.post(
+      Uri.parse(_base + '/v1/brain/generate-image'),
+      headers: _headers,
+      body: jsonEncode({'prompt': prompt.trim()}),
+    ).timeout(const Duration(seconds: 180));
+    dynamic data;
+    try {
+      data = jsonDecode(response.body);
+    } on FormatException {
+      throw Exception('استجابة الخادم غير مفهومة؛ تحقق من اتصال Preview ثم أعد المحاولة');
+    }
+    if (response.statusCode != 200) {
+      final message = data is Map && data['error'] == 'admin_ai_unavailable'
+          ? 'خدمة الذكاء الاصطناعي غير مهيأة على الخادم بعد'
+          : data is Map && data['error'] == 'invalid_image_prompt'
+              ? 'اكتب وصفًا للصورة لا يتجاوز 1600 حرف'
+              : data is Map && data['error'] == 'image_generation_rate_limited'
+                  ? 'وصلت إلى الحد المؤقت: صورتان في الدقيقة. انتظر قليلًا ثم حاول مجددًا'
+                  : data is Map && data['error'] == 'image_generation_failed'
+                      ? 'تعذر إنشاء الصورة؛ تحقق من تفعيل Workers AI ثم أعد المحاولة'
+                      : 'تعذر إنشاء الصورة (' + response.statusCode.toString() + ')';
+      throw Exception(message);
+    }
+    final imageUri = data is Map ? (data['image'] ?? '').toString() : '';
+    const prefix = 'data:image/jpeg;base64,';
+    if (!imageUri.startsWith(prefix)) throw Exception('لم يُرجع المساعد ملف صورة صالحًا');
+    final bytes = base64Decode(imageUri.substring(prefix.length));
+    if (bytes.length < 4 || bytes.length > 8 * 1024 * 1024 ||
+        bytes[0] != 0xff || bytes[1] != 0xd8 || bytes[2] != 0xff) {
+      throw Exception('ملف الصورة الناتج غير صالح أو يتجاوز الحجم المسموح');
+    }
+    return bytes;
+  }
+
+  Future<void> _showImageGeneration() async {
+    if (_apiBase.isEmpty || _token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('اضبط اتصال الخادم وجلسة المالك أولًا')),
+      );
+      return;
+    }
+    final promptController = TextEditingController();
+    Uint8List? generatedBytes;
+    bool busy = false;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: _surface,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(18, 18, 18, MediaQuery.of(context).viewInsets.bottom + 20),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * .86),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('إنشاء صورة مع BARQ Brain',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    const Text('اكتب وصفًا واضحًا للصورة. سيُنشئها المساعد ثم يعرضها هنا لتتمكن من مشاركتها أو إرسالها من هاتفك.',
+                      style: TextStyle(color: Colors.white60, fontSize: 12)),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: promptController,
+                      maxLines: 4,
+                      maxLength: 1600,
+                      decoration: const InputDecoration(
+                        labelText: 'صف الصورة التي تريد إنشاءها',
+                        hintText: 'مثال: مشهد سينمائي لمدينة مستقبلية يضيئها البرق الأزرق...',
+                      ),
+                    ),
+                    if (generatedBytes != null) ...[
+                      const SizedBox(height: 10),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.memory(generatedBytes!, fit: BoxFit.contain,
+                          height: 300, width: double.infinity),
+                      ),
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          try {
+                            await Share.shareXFiles([
+                              XFile.fromData(generatedBytes!, mimeType: 'image/jpeg',
+                                name: 'barq-brain-image.jpg'),
+                            ], text: 'صورة أنشأها BARQ Brain');
+                          } catch (error) {
+                            if (mounted) ScaffoldMessenger.of(this.context).showSnackBar(
+                              SnackBar(content: Text('تعذرت مشاركة الصورة: ' + error.toString())),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.share_outlined),
+                        label: const Text('مشاركة الصورة أو إرسالها'),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: busy ? null : () async {
+                        final prompt = promptController.text.trim();
+                        if (prompt.isEmpty) {
+                          ScaffoldMessenger.of(this.context).showSnackBar(
+                            const SnackBar(content: Text('اكتب وصف الصورة أولًا')),
+                          );
+                          return;
+                        }
+                        setSheetState(() { busy = true; generatedBytes = null; });
+                        try {
+                          final image = await _requestImageGeneration(prompt);
+                          if (sheetContext.mounted) setSheetState(() {
+                            generatedBytes = image;
+                            busy = false;
+                          });
+                        } catch (error) {
+                          if (sheetContext.mounted) setSheetState(() => busy = false);
+                          if (mounted) ScaffoldMessenger.of(this.context).showSnackBar(
+                            SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+                          );
+                        }
+                      },
+                      icon: busy
+                        ? const SizedBox(width: 18, height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.auto_awesome),
+                      label: Text(busy ? 'جارٍ إنشاء الصورة...' :
+                        generatedBytes == null ? 'أنشئ الصورة' : 'أنشئ صورة أخرى'),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: busy ? null : () => Navigator.pop(sheetContext),
+                      child: const Text('إغلاق'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    promptController.dispose();
+  }
+
   Future<void> _showVisionAnalysis() async {
     if (_apiBase.isEmpty || _token.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -704,6 +855,9 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
             const SizedBox(height: 8),
             OutlinedButton.icon(onPressed: _showVisionAnalysis,
               icon: const Icon(Icons.image_search_outlined), label: const Text('أرسل صورة لتحليلها')),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(onPressed: _showImageGeneration,
+              icon: const Icon(Icons.auto_awesome), label: const Text('اطلب من المساعد إنشاء صورة')),
           ]),
         )),
         const SizedBox(height: 18),
