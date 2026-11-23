@@ -97,14 +97,17 @@ test("BARQ Brain prompts include current workspace context and no execution auth
 test("vision requests accept bounded JPEG PNG and WebP data URLs only", () => {
   const valid = validateVisionInput({
     prompt: "What is in this picture?",
-    image: "data:image/jpeg;base64,AAAA"
+    image: "data:image/jpeg;base64,/9j/2Q=="
   });
   assert.equal(valid.ok, true);
   assert.equal(valid.value.mimeType, "image/jpeg");
-  assert.equal(valid.value.imageBytes, 3);
+  assert.equal(valid.value.imageBytes, 4);
+  assert.equal(validateVisionInput({ prompt: "describe", image: "data:image/jpeg;base64,iVBORw0KGgo=" }).error, "invalid_image_or_prompt");
+  assert.equal(validateVisionInput({ prompt: "describe", image: "data:image/png;base64,iVBORw0KGgo=" }).ok, true);
+  assert.equal(validateVisionInput({ prompt: "describe", image: "data:image/webp;base64,UklGRgAAAABXRUJQ" }).ok, true);
   assert.equal(validateVisionInput({ prompt: "describe", image: "data:image/png;base64,AB==" }).error, "invalid_image_or_prompt");
   assert.equal(validateVisionInput({ prompt: "describe", image: "https://example.com/a.jpg" }).ok, false);
-  assert.equal(validateVisionInput({ prompt: "", image: "data:image/png;base64,AAAA" }).ok, false);
+  assert.equal(validateVisionInput({ prompt: "", image: "data:image/png;base64,iVBORw0KGgo=" }).ok, false);
   assert.equal(validateVisionInput({
     prompt: "describe", image: "data:image/svg+xml;base64,AAAA"
   }).ok, false);
