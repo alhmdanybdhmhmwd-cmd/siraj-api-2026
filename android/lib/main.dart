@@ -10422,15 +10422,17 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
       if (widget.authorId.isEmpty || widget.authorId == widget.currentUserId) {
         throw Exception('لا يمكن إرسال رد صوتي إلى هذه اللحظة.');
       }
-      await Api.sendMessage(widget.authorId, barqSparkPrivateReplyMessage(
-        caption: widget.caption,
-        reply: '🎙️ أرسل رداً صوتياً على هذه اللحظة.',
-      ));
+      // The attachment upload creates the private-chat message itself.
+      // Sending a separate text message here caused duplicate/orphan replies.
       await Api.uploadAttachment(
         bytes: bytes,
         fileName: 'barq_spark_reply_${DateTime.now().millisecondsSinceEpoch}.m4a',
         contentType: 'audio/mp4',
         recipientId: widget.authorId,
+        caption: barqSparkPrivateReplyMessage(
+          caption: widget.caption,
+          reply: '🎙️ رد صوتي على SPARK',
+        ),
       );
       if (mounted) showMsg(context, 'وصل ردك الصوتي إلى المحادثة الخاصة مع صاحب SPARK.');
     } catch (error) {
