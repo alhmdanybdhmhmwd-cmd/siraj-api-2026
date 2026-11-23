@@ -4406,6 +4406,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   List<Map<String, dynamic>> memories = [];
   bool memoriesLoadFailed = false;
   bool loading = true;
+  bool _deletingAccount = false;
   bool initialRefreshComplete = false;
   Map<String, dynamic> privacySettings = {'searchable': true, 'readReceipts': true};
   Map<String, dynamic> notificationPrefs = {'messages': true, 'groups': true, 'statuses': true};
@@ -6929,7 +6930,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             foregroundColor: palette.error,
             side: BorderSide(color: palette.error.withValues(alpha: .65)),
           ),
-          onPressed: () async {
+          onPressed: _deletingAccount ? null : () async {
             final confirmController = TextEditingController();
             final confirmedUsername = await showDialog<String>(
               context: context,
@@ -6962,6 +6963,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             );
             confirmController.dispose();
             if (confirmedUsername == null || confirmedUsername.trim().isEmpty || !mounted) return;
+            if (confirmedUsername.trim().toLowerCase() != username.toLowerCase()) {
+              showMsg(context, 'اسم المستخدم غير مطابق؛ لم يتم حذف الحساب.');
+              return;
+            }
+            setState(() => _deletingAccount = true);
             try {
               await Api.deleteAccount(confirmedUsername.trim());
               if (!mounted) return;
@@ -6971,11 +6977,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 (_) => false,
               );
             } catch (error) {
-              if (mounted) showMsg(context, cleanError(error));
+              if (mounted) {
+                setState(() => _deletingAccount = false);
+                showMsg(context, cleanError(error));
+              }
             }
           },
-          icon: const Icon(Icons.delete_forever_outlined),
-          label: const Text('حذف الحساب نهائياً'),
+          icon: _deletingAccount
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.delete_forever_outlined),
+          label: Text(_deletingAccount ? 'جارٍ حذف الحساب...' : 'حذف الحساب نهائياً'),
         ),
         const SizedBox(height: 12),
         OutlinedButton.icon(
