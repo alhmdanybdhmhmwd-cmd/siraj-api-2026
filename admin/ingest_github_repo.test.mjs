@@ -5,7 +5,8 @@ import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdmin
 test("repository ingestion allowlists project files and excludes secrets/build output", () => {
   assert.equal(shouldIndexPath("docs/BARQ_PRODUCT.md"), true);
   assert.equal(shouldIndexPath("src/src/index.js"), true);
-  assert.equal(shouldIndexPath("android/app/src/main/AndroidManifest.xml"), true);\n  assert.equal(shouldIndexPath("android/app/build.gradle.kts"), true);\n  assert.equal(shouldIndexPath("scripts/check_schema.py"), true);\n  assert.equal(shouldIndexPath("secrets/private_notes.md"), false);\n  assert.equal(shouldIndexPath("admin/pubspec.lock"), false);
+  assert.equal(shouldIndexPath("android/app/src/main/AndroidManifest.xml"), true);
+  assert.equal(shouldIndexPath("android/app/build.gradle.kts"), true);\n  assert.equal(shouldIndexPath("scripts/check_schema.py"), true);\n  assert.equal(shouldIndexPath("secrets/private_notes.md"), false);\n  assert.equal(shouldIndexPath("admin/pubspec.lock"), false);
   assert.equal(shouldIndexPath("android/app/google-services.json"), false);
   assert.equal(shouldIndexPath(".env.production"), false);
   assert.equal(shouldIndexPath("android/build/app.apk"), false);
