@@ -319,7 +319,7 @@ test("private and group attachments appear locally before background upload", ()
   assert.ok(flutterApp.includes("contentType: contentType,"));
   assert.ok(flutterApp.includes("رفع المرفق"));
   // The only remaining preview invocation belongs to SPARK publishing, not chat media.
-  assert.equal((flutterApp.match(/showBarqAttachmentPreview\(/g) || []).length, 2);
+  assert.equal((flutterApp.match(/showBarqAttachmentPreview\(/g) || []).length, 1);
 });
 
 test("message reactions and bidirectional swipe-to-reply stay available in both chat types", () => {
