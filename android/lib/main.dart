@@ -4834,10 +4834,25 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         context: context,
         backgroundColor: Theme.of(context).colorScheme.surface,
         builder: (context) => SafeArea(
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              ListTile(title: Text('مشاهدو SPARK', style: TextStyle(color: Theme.of(context).colorScheme.primary))),
+          child: SizedBox(
+            height: MediaQuery.sizeOf(context).height * .62,
+            child: Column(children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 18, 18, 10),
+                child: Row(children: [
+                  Icon(Icons.visibility_outlined, color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: 9),
+                  Expanded(child: Text('مشاهدو SPARK',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
+                  Text('${viewers.length}',
+                    style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w800)),
+                ]),
+              ),
+              const Divider(height: 1),
+              Expanded(child: ListView(
+                children: [
+              if (viewers.isEmpty)
+                const ListTile(title: Text('لم يشاهدها أحد بعد', style: TextStyle(color: Colors.white60))),
               if (viewers.isEmpty)
                 const ListTile(title: Text('لم يشاهدها أحد بعد', style: TextStyle(color: Colors.white60))),
               for (final viewer in viewers)
@@ -4846,7 +4861,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   title: Text(field(viewer, ['displayName', 'username'], 'مستخدم برق')),
                   subtitle: Text(field(viewer, ['viewedAt'])),
                 ),
-            ],
+                ],
+              )),
+            ]),
           ),
         ),
       );
@@ -4875,7 +4892,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           backgroundKey: field(status, ['backgroundKey', 'background_key'], 'midnight'),
           textColorKey: field(status, ['textColorKey', 'text_color_key'], 'white'),
           viewCount: int.tryParse((status['viewCount'] ?? 0).toString()) ?? 0,
-          showViewCount: status['userId']?.toString() == myId,
+          showViewCount: field(status, ['userId', 'user_id']) == myId,
+          onShowViewers: () => _showSparkViewers(statusId),
           fontKey: field(status, ['fontKey', 'font_key'], 'modern'),
         ),
       ),
@@ -9302,10 +9320,11 @@ class SparkMediaViewer extends StatefulWidget {
   final String fontKey;
   final int viewCount;
   final bool showViewCount;
+  final Future<void> Function()? onShowViewers;
   const SparkMediaViewer({
     super.key, required this.statusId, required this.authorId, required this.currentUserId, required this.media, required this.author, required this.caption,
     this.backgroundKey = 'midnight', this.textColorKey = 'white', this.fontKey = 'modern',
-    this.viewCount = 0, this.showViewCount = false,
+    this.viewCount = 0, this.showViewCount = false, this.onShowViewers,
   });
 
   @override
@@ -9463,20 +9482,29 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
             Padding(
               padding: const EdgeInsetsDirectional.only(end: 12),
               child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-                  decoration: BoxDecoration(
-                    color: gold.withValues(alpha: .14),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: widget.onShowViewers,
                     borderRadius: BorderRadius.circular(22),
-                    border: Border.all(color: gold.withValues(alpha: .42)),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: gold.withValues(alpha: .14),
+                        borderRadius: BorderRadius.circular(22),
+                        border: Border.all(color: gold.withValues(alpha: .42)),
+                      ),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.visibility_outlined, size: 17, color: gold),
+                        const SizedBox(width: 7),
+                        Text('${widget.viewCount} مشاهدة', style: const TextStyle(
+                          color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800,
+                        )),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.chevron_right_rounded, size: 16, color: gold),
+                      ]),
+                    ),
                   ),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.visibility_outlined, size: 16, color: gold),
-                    const SizedBox(width: 6),
-                    Text('${widget.viewCount}', style: const TextStyle(
-                      color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800,
-                    )),
-                  ]),
                 ),
               ),
             ),
@@ -9580,15 +9608,31 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
                       style: const TextStyle(color: Colors.white70, fontSize: 12)),
                   ),
                 Row(children: [
-                  Expanded(child: TextField(
-                    controller: _replyController, maxLength: 1000,
-                    decoration: const InputDecoration(
-                      hintText: 'اكتب ردًا...', counterText: '',
-                      hintStyle: TextStyle(color: Colors.white54),
-                      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                  Expanded(child: Container(
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .62),
+                      borderRadius: BorderRadius.circular(26),
+                      border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: .24)),
                     ),
-                    style: const TextStyle(color: Colors.white),
-                    onSubmitted: (_) => _sendReply(),
+                    child: TextField(
+                      controller: _replyController,
+                      maxLength: 1000,
+                      minLines: 1,
+                      maxLines: 4,
+                      textCapitalization: TextCapitalization.sentences,
+                      textInputAction: TextInputAction.send,
+                      decoration: InputDecoration(
+                        hintText: 'اكتب ردك على SPARK...',
+                        counterText: '',
+                        hintStyle: TextStyle(color: Colors.white.withValues(alpha: .56), fontSize: 13),
+                        prefixIcon: Icon(Icons.chat_bubble_outline_rounded,
+                          color: Theme.of(context).colorScheme.primary, size: 19),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                      onSubmitted: (_) => _sendReply(),
+                    ),
                   )),
                   IconButton(
                     tooltip: _recordingAudioReply ? 'إيقاف وإرسال الرد الصوتي' : 'تسجيل رد صوتي',
