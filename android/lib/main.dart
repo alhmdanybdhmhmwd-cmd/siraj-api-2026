@@ -9494,10 +9494,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       final bytes = await readBarqPickedFileBytes(file);
       final contentType = file.extension == null
           ? 'application/octet-stream' : _mimeForExtension(file.extension!);
-      if (!await showBarqAttachmentPreview(
-        context, fileName: file.name, contentType: contentType, bytes: bytes,
-      )) return;
       if (!mounted) return;
+      final confirmed = await showBarqAttachmentPreview(
+        context, fileName: file.name, contentType: contentType, bytes: bytes,
+      );
+      if (!mounted || !confirmed) {
+        return;
+      }
       setState(() { sending = true; mediaUploadProgress = 0; });
       await Api.uploadAttachment(
         bytes: bytes,
@@ -10830,10 +10833,13 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
       final bytes = await readBarqPickedFileBytes(file);
       final contentType = file.extension == null
           ? 'application/octet-stream' : _mimeForExtension(file.extension!);
-      if (!await showBarqAttachmentPreview(
-        context, fileName: file.name, contentType: contentType, bytes: bytes,
-      )) return;
       if (!mounted) return;
+      final confirmed = await showBarqAttachmentPreview(
+        context, fileName: file.name, contentType: contentType, bytes: bytes,
+      );
+      if (!mounted || !confirmed) {
+        return;
+      }
       setState(() { sending = true; mediaUploadProgress = 0; });
       await Api.uploadAttachment(
         bytes: bytes,
