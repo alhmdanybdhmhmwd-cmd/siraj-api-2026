@@ -16,6 +16,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: barq-admin-quality-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   admin-quality:
     runs-on: ubuntu-latest
