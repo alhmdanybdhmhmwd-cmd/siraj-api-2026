@@ -1007,7 +1007,7 @@ async function handle(request, env) {
     const historyRows = await env.ADMIN_DB.prepare(`
       SELECT role, content FROM admin_brain_messages
       WHERE conversation_id = ? AND workspace_id = ?
-      ORDER BY created_at DESC LIMIT 20
+      ORDER BY created_at DESC, id DESC LIMIT 12
     `).bind(conversationId, workspace).all();
     const history = (historyRows.results || []).reverse();
     const userMessageId = crypto.randomUUID();
@@ -1032,7 +1032,7 @@ async function handle(request, env) {
           role: "system",
           content: base[0].content + "\n\nCURRENT WORKSPACE AND VERIFIED RETRIEVED SOURCES:\n" + base[1].content
         },
-        ...history.map(item => ({ role: item.role, content: item.content })),
+        ...history.map(item => ({ role: item.role, content: String(item.content || '').slice(-1800) })),
         { role: "user", content: parsed.value.message }
       ];
       const model = env.BARQ_ADMIN_AI_MODEL || "@cf/meta/llama-3.1-8b-instruct";
@@ -1078,7 +1078,7 @@ async function handle(request, env) {
     const rows = await env.ADMIN_DB.prepare(`
       SELECT id, role, content, source_refs_json, model, created_at
       FROM admin_brain_messages WHERE conversation_id = ? AND workspace_id = ?
-      ORDER BY created_at ASC LIMIT 100
+      ORDER BY created_at ASC, id ASC LIMIT 100
     `).bind(conversationId, workspace).all();
     return response({ conversationId, messages: rows.results || [] }, 200, allowedOrigin);
   }
