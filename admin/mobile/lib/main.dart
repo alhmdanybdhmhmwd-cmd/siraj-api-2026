@@ -491,7 +491,7 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
                 border: Border.all(color: _blue.withValues(alpha: .25)),
               ),
               child: const Text(
-                'اتفاق المالك: المرحلة الأولى فقط حاليًا. لا يبدأ فهم أو فهرسة كود BARQ قبل إذن صريح. لا دمج أو نشر أو تغيير إنتاج دون موافقة محددة. BARQ هو المنتج، وSPARK ميزة القصص، وBARQ Admin تطبيق الإدارة المستقل.',
+                'اتفاق المالك: المرحلة الأولى فقط حاليًا. لا يبدأ فهم أو فهرسة كود BARQ قبل إذن صريح. لا دمج أو نشر أو تغيير إنتاج دون موافقة محددة. BARQ هو المنتج، وSPARK ميزة القصص، وBARQ Admin تطبيق الإدارة المستقل. مزود تسجيل الدخول لم يُعتمد بعد؛ لا تفترض Google أو غيره.',
                 style: TextStyle(fontSize: 12, height: 1.5, color: Colors.white70),
               ),
             ),
