@@ -101,7 +101,8 @@ test("Google ID token rejects tampered signatures and unauthorized azp", async (
   const item = await fixture();
   const env = { BARQ_GOOGLE_OIDC_CLIENT_ID: clientId, BARQ_ADMIN_OWNER_SUBJECT: ownerSub };
   const parts = item.token.split(".");
-  const tampered = parts[0] + "." + parts[1] + "." + (parts[2].slice(0, -1) + (parts[2].endsWith("A") ? "B" : "A"));
+  const changedSignature = (parts[2][0] === "A" ? "B" : "A") + parts[2].slice(1);
+  const tampered = parts[0] + "." + parts[1] + "." + changedSignature;
   await assert.rejects(() => verifyGoogleIdToken(tampered, nonce, env, {
     fetcher: item.fetcher, nowMs: now * 1000
   }), /invalid_google_signature/);
