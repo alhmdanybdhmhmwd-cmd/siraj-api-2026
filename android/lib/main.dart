@@ -9483,6 +9483,34 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         ),
                         const SizedBox(width: 7),
                         ActionChip(
+                          avatar: const Icon(Icons.push_pin_outlined, size: 17),
+                          label: const Text('المثبتة'),
+                          onPressed: () => showBarqMessageCollectionDialog(
+                            context,
+                            title: 'الرسائل المثبتة',
+                            messages: messages,
+                            attachmentsOnly: false,
+                          ),
+                        ),
+                        const SizedBox(width: 7),
+                        ActionChip(
+                          avatar: const Icon(Icons.perm_media_outlined, size: 17),
+                          label: const Text('الوسائط'),
+                          onPressed: () => showBarqMessageCollectionDialog(
+                            context,
+                            title: 'الوسائط والملفات',
+                            messages: messages,
+                            attachmentsOnly: true,
+                          ),
+                        ),
+                        const SizedBox(width: 7),
+                        ActionChip(
+                          avatar: const Icon(Icons.wallpaper_outlined, size: 17),
+                          label: const Text('الخلفية'),
+                          onPressed: _chooseChatWallpaper,
+                        ),
+                        const SizedBox(width: 7),
+                        ActionChip(
                           avatar: const Icon(Icons.cleaning_services_outlined, size: 17),
                           label: const Text('مسح السجل'),
                           onPressed: _clearConversationHistory,
