@@ -504,6 +504,10 @@ async function handle(request, env) {
       }, 200, allowedOrigin);
     } catch (error) {
       console.error("BARQ Brain image analysis failed:", error);
+      const message = String(error?.message || error || "");
+      if (/license|agreement|5016/i.test(message)) {
+        return response({ error: "vision_model_license_required" }, 503, allowedOrigin);
+      }
       return response({ error: "vision_analysis_failed" }, 502, allowedOrigin);
     }
   }
