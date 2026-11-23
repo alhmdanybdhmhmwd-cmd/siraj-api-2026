@@ -9450,56 +9450,58 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
                 for (final emoji in ['❤️', '🔥', '😂', '👍'])
                   TextButton(onPressed: () => _react(emoji), child: Text(emoji, style: const TextStyle(fontSize: 24))),
               ]),
-              Container(
-                width: double.infinity,
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: .10),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: .22)),
-                ),
-                child: Row(children: [
-                  Icon(Icons.lock_outline_rounded, size: 16, color: Theme.of(context).colorScheme.primary),
-                  const SizedBox(width: 7),
-                  const Expanded(child: Text(
-                    'ردك سيصل برسالة خاصة إلى محادثتك مع صاحب SPARK',
-                    style: TextStyle(color: Colors.white70, fontSize: 11),
-                  )),
-                ]),
-              ),
-              if (_recordingAudioReply)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Text('جارٍ التسجيل ${_recordingClock(_recordingSeconds)} / 01:00',
-                    style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                ),
-              Row(children: [
-                Expanded(child: TextField(
-                  controller: _replyController, maxLength: 1000, enabled: canReply,
-                  decoration: const InputDecoration(
-                    hintText: 'اكتب ردًا...', counterText: '',
-                    hintStyle: TextStyle(color: Colors.white54),
-                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+              if (canReply) ...[
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: .10),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: .22)),
                   ),
-                  style: const TextStyle(color: Colors.white),
-                  onSubmitted: (_) => _sendReply(),
-                )),
-                IconButton(
-                  tooltip: _recordingAudioReply ? 'إيقاف وإرسال الرد الصوتي' : 'تسجيل رد صوتي',
-                  onPressed: !canReply || _uploadingAudioReply ? null : _toggleAudioReplyRecording,
-                  icon: _uploadingAudioReply
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : Icon(_recordingAudioReply ? Icons.stop_circle_rounded : Icons.mic_rounded,
-                          color: _recordingAudioReply ? Colors.redAccent : Theme.of(context).colorScheme.primary),
+                  child: Row(children: [
+                    Icon(Icons.lock_outline_rounded, size: 16, color: Theme.of(context).colorScheme.primary),
+                    const SizedBox(width: 7),
+                    const Expanded(child: Text(
+                      'ردك سيصل برسالة خاصة إلى محادثتك مع صاحب SPARK',
+                      style: TextStyle(color: Colors.white70, fontSize: 11),
+                    )),
+                  ]),
                 ),
-                IconButton(
-                  onPressed: !canReply || _sendingReply ? null : _sendReply,
-                  icon: _sendingReply
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.send_rounded),
-                ),
-              ]),
+                if (_recordingAudioReply)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text('جارٍ التسجيل ${_recordingClock(_recordingSeconds)} / 01:00',
+                      style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                  ),
+                Row(children: [
+                  Expanded(child: TextField(
+                    controller: _replyController, maxLength: 1000,
+                    decoration: const InputDecoration(
+                      hintText: 'اكتب ردًا...', counterText: '',
+                      hintStyle: TextStyle(color: Colors.white54),
+                      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                    ),
+                    style: const TextStyle(color: Colors.white),
+                    onSubmitted: (_) => _sendReply(),
+                  )),
+                  IconButton(
+                    tooltip: _recordingAudioReply ? 'إيقاف وإرسال الرد الصوتي' : 'تسجيل رد صوتي',
+                    onPressed: _uploadingAudioReply ? null : _toggleAudioReplyRecording,
+                    icon: _uploadingAudioReply
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : Icon(_recordingAudioReply ? Icons.stop_circle_rounded : Icons.mic_rounded,
+                            color: _recordingAudioReply ? Colors.redAccent : Theme.of(context).colorScheme.primary),
+                  ),
+                  IconButton(
+                    onPressed: _sendingReply ? null : _sendReply,
+                    icon: _sendingReply
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.send_rounded),
+                  ),
+                ]),
+              ],
             ]),
           ),
         ]),
