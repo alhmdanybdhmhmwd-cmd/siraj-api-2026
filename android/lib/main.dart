@@ -5800,7 +5800,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Widget _friendsPage() {
     return ListView(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(9),
       children: [
         Row(
           children: [
@@ -7786,7 +7786,7 @@ Widget _barqAttachmentTile(Map<String, dynamic> attachment,
     final isVideo = type.startsWith('video/');
     final isAudio = type.startsWith('audio/');
     return Container(
-      constraints: BoxConstraints(maxWidth: isImage || isVideo ? 260 : 290),
+      constraints: BoxConstraints(maxWidth: isImage || isVideo ? 250 : 260),
       padding: const EdgeInsets.all(7),
       decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(14)),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -8279,7 +8279,7 @@ class _AttachmentTileState extends State<_AttachmentTile> {
     }
 
     return Container(
-      constraints: BoxConstraints(maxWidth: _isImage ? 260 : 290),
+      constraints: BoxConstraints(maxWidth: _isImage ? 250 : 260),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(12)),
       child: Column(
@@ -8353,7 +8353,7 @@ class _AttachmentTileState extends State<_AttachmentTile> {
               child: _BarqWaveform(
                 phase: _audioPosition.inMilliseconds / 135,
                 color: Theme.of(context).colorScheme.primary,
-                count: 30,
+                count: 23,
               ),
             ),
             Row(children: [
@@ -9585,11 +9585,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     }
   }
 
-  Map<String, dynamic> _newPendingAttachment(Uint8List bytes, String fileName, String contentType) => {
+  Map<String, dynamic> _newPendingAttachment(Uint8List bytes, String fileName, String contentType, {Duration? duration}) => {
     'id': newBarqMessageId(), 'sender_id': widget.currentUserId, 'receiver_id': friendId,
     'body': '', 'created_at': DateTime.now().toUtc().toIso8601String(), 'is_sending': true,
     'local_attachment': {'type':'attachment','fileName':fileName,'contentType':contentType,
-      'size':bytes.length,'localBytes':bytes,'localUploadProgress':0.0},
+      'size':bytes.length,'localBytes':bytes,'localUploadProgress':0.0,
+      if (duration != null) 'duration': duration.inMilliseconds},
   };
 
   Future<void> _uploadPendingAttachment(Map<String, dynamic> message) async {
@@ -9619,7 +9620,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   Future<void> _sendVoiceRecording(List<int> bytes, Duration duration) async {
     if (blockedByMe) { showMsg(context, 'ألغِ حظر المستخدم أولاً لإرسال الرسائل.'); return; }
     final local = _newPendingAttachment(Uint8List.fromList(bytes),
-      'barq_voice_${DateTime.now().millisecondsSinceEpoch}.m4a', 'audio/mp4');
+      'barq_voice_${DateTime.now().millisecondsSinceEpoch}.m4a', 'audio/mp4',
+      duration: duration);
     if (mounted) setState(() => messages = mergeMessages(messages, [local]));
     unawaited(_uploadPendingAttachment(local));
   }
@@ -9805,7 +9807,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                             return Align(
                               alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
                               child: Container(
-                                constraints: const BoxConstraints(maxWidth: 292),
+                                constraints: const BoxConstraints(maxWidth: 280),
                                 margin: const EdgeInsets.symmetric(vertical: 4),
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                 decoration: BoxDecoration(
@@ -10989,11 +10991,12 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
     } finally { if (mounted) setState(() => sending = false); }
   }
 
-  Map<String, dynamic> _newPendingAttachment(Uint8List bytes, String fileName, String contentType) => {
+  Map<String, dynamic> _newPendingAttachment(Uint8List bytes, String fileName, String contentType, {Duration? duration}) => {
     'id': newBarqMessageId(), 'sender_id': widget.currentUserId, 'group_id': groupId,
     'body': '', 'created_at': DateTime.now().toUtc().toIso8601String(), 'is_sending': true,
     'local_attachment': {'type':'attachment','fileName':fileName,'contentType':contentType,
-      'size':bytes.length,'localBytes':bytes,'localUploadProgress':0.0},
+      'size':bytes.length,'localBytes':bytes,'localUploadProgress':0.0,
+      if (duration != null) 'duration': duration.inMilliseconds},
   };
 
   Future<void> _uploadPendingAttachment(Map<String, dynamic> message) async {
@@ -11022,7 +11025,8 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
 
   Future<void> _sendVoiceRecording(List<int> bytes, Duration duration) async {
     final local = _newPendingAttachment(Uint8List.fromList(bytes),
-      'barq_voice_${DateTime.now().millisecondsSinceEpoch}.m4a', 'audio/mp4');
+      'barq_voice_${DateTime.now().millisecondsSinceEpoch}.m4a', 'audio/mp4',
+      duration: duration);
     if (mounted) setState(() => messages = mergeMessages(messages, [local]));
     unawaited(_uploadPendingAttachment(local));
   }
