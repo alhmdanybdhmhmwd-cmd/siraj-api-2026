@@ -107,7 +107,65 @@ jobs:
               RETURNING request_count
           """).fetchone()
           assert blocked_image is None, "Image generation rate limit allowed a third request"
-          print("Admin schema, immutable audit, vision and image-generation rate-limit checks passed.")
+          db.execute("""
+              INSERT INTO admin_owner_devices (id, owner_subject, device_name, platform)
+              VALUES ('device:test', 'test', 'CI device', 'android')
+          """)
+          db.execute("""
+              INSERT INTO admin_owner_sessions
+                (id, owner_subject, device_id, refresh_token_hash, refresh_expires_at)
+              VALUES ('session:test', 'test', 'device:test', 'hash-v1', datetime('now', '+30 days'))
+          """)
+          db.execute("""
+              INSERT INTO admin_owner_refresh_token_history (token_hash, session_id)
+              VALUES ('hash-v1', 'session:test')
+          """)
+          db.execute("""
+              UPDATE admin_owner_sessions SET refresh_token_hash='hash-v2'
+              WHERE id='session:test' AND refresh_token_hash='hash-v1'
+          """)
+          db.execute("""
+              INSERT INTO admin_owner_refresh_token_history (token_hash, session_id)
+              VALUES ('hash-v2', 'session:test')
+          """)
+          history_count = db.execute("""
+              SELECT COUNT(*) FROM admin_owner_refresh_token_history
+              WHERE session_id='session:test'
+          """).fetchone()[0]
+          assert history_count == 2, "Refresh-token history did not retain used hashes"
+          nonce = "a" * 64
+          db.execute("""
+              INSERT INTO admin_oidc_nonce_uses (nonce_hash, owner_subject, expires_at)
+              VALUES (?, 'test', datetime('now', '+10 minutes'))
+          """, (nonce,))
+          try:
+              db.execute("""
+                  INSERT INTO admin_oidc_nonce_uses (nonce_hash, owner_subject, expires_at)
+                  VALUES (?, 'test', datetime('now', '+10 minutes'))
+              """, (nonce,))
+              raise AssertionError("OIDC nonce replay unexpectedly succeeded")
+          except sqlite3.IntegrityError:
+              pass
+          for _ in range(5):
+              row = db.execute("""
+                  INSERT INTO admin_auth_rate_limits (bucket_key, window_start, request_count)
+                  VALUES ('oidc-test', 100, 1)
+                  ON CONFLICT(bucket_key, window_start) DO UPDATE SET
+                    request_count = request_count + 1
+                  WHERE request_count < 5
+                  RETURNING request_count
+              """).fetchone()
+              assert row is not None
+          blocked_auth = db.execute("""
+              INSERT INTO admin_auth_rate_limits (bucket_key, window_start, request_count)
+              VALUES ('oidc-test', 100, 1)
+              ON CONFLICT(bucket_key, window_start) DO UPDATE SET
+                request_count = request_count + 1
+              WHERE request_count < 5
+              RETURNING request_count
+          """).fetchone()
+          assert blocked_auth is None, "Auth rate limit allowed a sixth request"
+          print("Admin schema, immutable audit, image limits, OIDC nonce, refresh history and auth throttling checks passed.")
           PY
 
   admin-mobile-quality:
