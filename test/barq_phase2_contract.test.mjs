@@ -990,6 +990,25 @@ test("fallback Worker deployment requires explicit manual Preview approval", asy
   assert.doesNotMatch(workflow, /wrangler\.toml\s/);
 });
 
+test("profile photo uploads use cache-busting timestamps and the profile avatar always has a fallback", () => {
+  const start = worker.indexOf('const profilePhotoPrefix = "/api/profile/photo/";');
+  const end = worker.indexOf("// Phone numbers are immutable after registration.", start);
+  const route = worker.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  assert.ok(route.includes("detectProfileImageType(bytes) !== contentType"));
+  assert.ok(route.includes("strftime('%Y-%m-%d %H:%M:%f', 'now')"),
+    "photo updates need sub-second timestamps so rapid replacements invalidate cached images");
+  assert.ok(route.includes("ON CONFLICT(user_id) DO UPDATE"));
+  assert.ok(route.includes("if (targetUserId !== currentUser.sub)"));
+  assert.ok(flutterApp.includes("Future<void> pickProfilePhoto()"));
+  assert.ok(flutterApp.includes("Api.uploadProfilePhoto(bytes, contentType)"));
+  assert.ok(flutterApp.includes("errorBuilder: (_, __, ___) => Center("),
+    "the profile avatar must show the user's initial if the photo cannot load");
+  assert.ok(flutterApp.includes("ClipOval("));
+  assert.ok(flutterApp.includes("معاينة صورة الملف الشخصي"));
+  assert.ok(flutterApp.includes("تم تحديث صورة الملف الشخصي."));
+});
+
 test("profile updates cannot change the registered phone number", () => {
   const start = worker.indexOf('// Phone numbers are immutable after registration.');
   const end = worker.indexOf('// Privacy settings for the authenticated account', start);
