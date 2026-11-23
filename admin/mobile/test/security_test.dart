@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:barq_admin/security.dart';
-import 'package:barq_admin/security.dart' show createOidcNonce, googleOidcRedirectUri;
+import 'package:barq_admin/security.dart' show isValidAdminApiBase, createOidcNonce, googleOidcRedirectUri;
 
 void main() {
   test('accepts HTTPS Admin API URLs with an optional path', () {
