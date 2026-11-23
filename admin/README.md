@@ -42,3 +42,9 @@ The checkpoint API stores step input/output references, completed step, next act
 ## Not implemented yet
 
 Durable Queue/worker execution, assistant tool orchestration, project knowledge ingestion, cross-device UI, push notifications, owner approval decision endpoints, device/session management, and the growth-campaign workspace are follow-on work. A queued task is persisted but is not yet executed by a background worker. No production data or services are changed by this foundation.
+
+## Flutter owner app (initial client shell)
+
+The independent Flutter client is under `admin/mobile`. It includes an Arabic RTL owner dashboard, task list, approvals view, secure token storage, cached workspace/task/approval snapshots, and a local outbox for tasks created while offline. The outbox synchronizes with the server on the next successful app refresh/resume.
+
+Important offline boundary: a task created while the phone has no connection remains a local draft until it can reach the Admin API. Once a task has been accepted by the server queue, its analysis/drafting work runs server-side and can continue while the phone is offline. The current client uses a temporary owner-session-token setup screen; a proper owner sign-in/token issuer and device-session revocation are not implemented yet.
