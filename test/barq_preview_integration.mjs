@@ -12,7 +12,31 @@ if (!base) {
   }
 
 async function fetchWithTimeout(input, init = {}) {
-  return fetch(input, { ...init, signal: init.signal ?? AbortSignal.timeout(20000) });
+  const method = String(init.method || "GET").toUpperCase();
+  const headers = new Headers(init.headers || {});
+  const replaySafe = ["GET", "HEAD", "PUT", "DELETE"].includes(method) ||
+    headers.has("X-Idempotency-Key");
+  const maxAttempts = replaySafe && !init.signal ? 4 : 1;
+  let lastError;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const response = await fetch(input, {
+        ...init,
+        signal: init.signal ?? AbortSignal.timeout(45000)
+      });
+      if (replaySafe && [502, 503, 504].includes(response.status) && attempt < maxAttempts) {
+        await response.arrayBuffer();
+        await new Promise(resolve => setTimeout(resolve, attempt * 750));
+        continue;
+      }
+      return response;
+    } catch (error) {
+      lastError = error;
+      if (attempt >= maxAttempts) throw error;
+      await new Promise(resolve => setTimeout(resolve, attempt * 750));
+    }
+  }
+  throw lastError;
 }
 
 async function call(path, { method = "GET", token, body, expected = 200 } = {}) {
