@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl, summarizeIndexCoverage } from "./ingest_github_repo.mjs";
+import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl, summarizeIndexCoverage, selectIndexBatch } from "./ingest_github_repo.mjs";
 
 test("repository ingestion allowlists project files and excludes secrets/build output", () => {
   assert.equal(shouldIndexPath("docs/BARQ_PRODUCT.md"), true);
@@ -54,4 +54,21 @@ test("index coverage reports remaining files and rejects impossible counts", () 
     complete: true
   });
   assert.throws(() => summarizeIndexCoverage(10, 11), /invalid_index_coverage/);
+});
+
+
+test("repository indexing can continue in ordered batches without skipping files", () => {
+  const entries = ["z.md", "a.md", "d.md", "b.md", "c.md"].map(path => ({ path }));
+  const first = selectIndexBatch(entries, "", 2);
+  assert.deepEqual(first.selected.map(item => item.path), ["a.md", "b.md"]);
+  assert.equal(first.remaining, 3);
+  assert.equal(first.nextStartAfter, "b.md");
+  const second = selectIndexBatch(entries, first.nextStartAfter, 2);
+  assert.deepEqual(second.selected.map(item => item.path), ["c.md", "d.md"]);
+  assert.equal(second.remaining, 1);
+  const last = selectIndexBatch(entries, second.nextStartAfter, 2);
+  assert.deepEqual(last.selected.map(item => item.path), ["z.md"]);
+  assert.equal(last.remaining, 0);
+  assert.equal(last.nextStartAfter, null);
+  assert.throws(() => selectIndexBatch(entries, "../unsafe", 2), /invalid_index_batch/);
 });
