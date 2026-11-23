@@ -118,7 +118,11 @@ export async function ingestRepository({ repository, ref = "HEAD", githubToken, 
   if (tree.truncated) throw new Error("repository_tree_truncated_refusing_partial_index");
   let indexed = 0;
   let skipped = 0;
-  for (const entry of (tree.tree || []).filter(item => item.type === "blob" && shouldIndexPath(item.path) && item.size <= 120000).slice(0, MAX_FILES_PER_RUN)) {
+  const eligibleEntries = (tree.tree || []).filter(item =>
+    item.type === "blob" && shouldIndexPath(item.path) && item.size <= 120000
+  );
+  const selectedEntries = eligibleEntries.slice(0, MAX_FILES_PER_RUN);
+  for (const entry of selectedEntries) {
     if (entry.type !== "blob" || !shouldIndexPath(entry.path) || entry.size > 120000) {
       skipped++;
       continue;
@@ -146,7 +150,7 @@ export async function ingestRepository({ repository, ref = "HEAD", githubToken, 
         },
         body: JSON.stringify({
           sourceType: inferSourceType(entry.path),
-          sourcePath: chunks.length === 1 ? entry.path : entry.path + "#chunk-" + (index + 1),
+          sourcePath: repository + "/" + (chunks.length === 1 ? entry.path : entry.path + "#chunk-" + (index + 1)),
           sourceRevision: revision,
           title: entry.path + (chunks.length > 1 ? " (part " + (index + 1) + ")" : ""),
           content: chunks[index]
@@ -156,7 +160,13 @@ export async function ingestRepository({ repository, ref = "HEAD", githubToken, 
       indexed++;
     }
   }
-  return { repository, revision, indexed, skipped };
+  return {
+    repository, revision, indexed, skipped,
+    eligibleFiles: eligibleEntries.length,
+    processedFiles: selectedEntries.length,
+    remainingFiles: Math.max(0, eligibleEntries.length - selectedEntries.length),
+    complete: eligibleEntries.length <= selectedEntries.length
+  };
 }
 
 async function main() {
