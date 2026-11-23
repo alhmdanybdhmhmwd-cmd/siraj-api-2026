@@ -782,7 +782,7 @@ void main() {
 
     await tester.tap(find.text('فتح الإجراءات'));
     await tester.pumpAndSettle();
-    expect(find.text('إضافة تفاعل'), findsOneWidget);
+    expect(find.byIcon(Icons.add_rounded), findsOneWidget);
     expect(find.text('تثبيت الرسالة'), findsOneWidget);
     expect(find.text('حفظ في الذكريات الخاصة'), findsOneWidget);
     await tester.tap(find.text('تثبيت الرسالة'));
