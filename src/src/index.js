@@ -257,9 +257,9 @@ function normalizeInternationalPhone(value) {
     const code = digit.charCodeAt(0);
     return String(code >= 0x06f0 ? code - 0x06f0 : code - 0x0660);
   });
-  raw = raw.replace(/[\\s().-]/g, "");
+  raw = raw.replace(/[\s().-]/g, "");
   if (raw.startsWith("00")) raw = "+" + raw.slice(2);
-  if (!raw.startsWith("+") || !/^\\+[1-9][0-9]{7,14}$/.test(raw)) return "";
+  if (!raw.startsWith("+") || !/^\+[1-9][0-9]{7,14}$/.test(raw)) return "";
   return raw;
 }
 
