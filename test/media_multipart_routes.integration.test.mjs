@@ -22,7 +22,7 @@ class FakeD1 {
         if(q.includes("FROM group_members")) return db.groups.has(args.join(":"))?{1:1}:null;
         if(q.includes("FROM media_upload_sessions")&&q.includes("idempotency_key")){
           const r=[...db.sessions.values()].find(x=>x.owner_id===args[0]&&x.idempotency_key===args[1]);
-          return r?{id:r.id,state:r.state,size:r.total_size,expectedParts:r.expected_parts,expiresAt:r.expires_at,recipientId:r.recipient_id,groupId:r.group_id,contentType:r.content_type,fileName:r.file_name}:null;
+          return r?{id:r.id,state:r.state,size:r.total_size,expectedParts:r.expected_parts,expiresAt:r.expires_at,recipientId:r.recipient_id,groupId:r.group_id,contentType:r.content_type,fileName:r.file_name,caption:r.caption||""}:null;
         }
         if(q.includes("FROM media_upload_sessions")&&q.includes("WHERE id = ? AND owner_id = ?")){
           const r=db.sessions.get(args[0]);return r&&r.owner_id===args[1]?{...r}:null;
@@ -43,8 +43,8 @@ class FakeD1 {
       async run(){
         const q=sql.replace(/\s+/g," ").trim();
         if(q.startsWith("INSERT INTO media_upload_sessions")){
-          const [id,owner,recipient,group,objectKey,uploadId,fileName,type,size,partSize,expected,idempotency,expires]=args;
-          db.sessions.set(id,{id,owner_id:owner,recipient_id:recipient,group_id:group,object_key:objectKey,storage_upload_id:uploadId,file_name:fileName,content_type:type,total_size:size,part_size:partSize,expected_parts:expected,idempotency_key:idempotency,state:"uploading",expires_at:expires});
+          const [id,owner,recipient,group,objectKey,uploadId,fileName,type,caption,size,partSize,expected,idempotency,expires]=args;
+          db.sessions.set(id,{id,owner_id:owner,recipient_id:recipient,group_id:group,object_key:objectKey,storage_upload_id:uploadId,file_name:fileName,content_type:type,caption,total_size:size,part_size:partSize,expected_parts:expected,idempotency_key:idempotency,state:"uploading",expires_at:expires});
           return {meta:{changes:1}};
         }
         if(q.startsWith("INSERT INTO media_upload_chunks")){
@@ -102,7 +102,7 @@ function fixture(){
   }
   return {DB,objects,uploads,call,setFailDeletes(value){failDeletes=value;},holdCompletion(){let release,startedResolve;const promise=new Promise(resolve=>{release=resolve;});const started=new Promise(resolve=>{startedResolve=resolve;});completionGate={promise,startedResolve};return {started,release(){completionGate=null;release();}};},restore(){globalThis.fetch=originalFetch;}};
 }
-const declaration=(size,key="idem-key-0001",extra={})=>({size,contentType:"application/octet-stream",fileName:"payload.bin",recipientId:"friend-1",idempotencyKey:key,...extra});
+const declaration=(size,key="idem-key-0001",extra={})=>({size,contentType:"application/octet-stream",fileName:"payload.bin",caption:"",recipientId:"friend-1",idempotencyKey:key,...extra});
 const chunk=(data,n)=>data.slice((n-1)*MiB,Math.min(n*MiB,data.length));
 
 test("route integration: interruption, resume, duplicate chunks, exact final bytes and completion retry",async t=>{
