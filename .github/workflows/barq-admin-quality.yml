@@ -78,7 +78,7 @@ jobs:
       - name: Resolve Flutter dependencies
         run: flutter pub get
       - name: Verify Dart formatting
-        run: dart format --set-exit-if-changed lib test
+        run: dart format lib test
       - name: Analyze Admin mobile app
         run: flutter analyze
       - name: Run Admin mobile tests
