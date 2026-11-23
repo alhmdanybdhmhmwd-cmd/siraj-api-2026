@@ -9983,8 +9983,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                           }
                                         },
                                         onDoubleTap: () async {
-                                          await Api.reactPrivateMessage(field(m, ['id', 'message_id']), '❤️');
-                                          if (mounted) await loadMessages(silent: true);
+                                          if (m['is_ephemeral'] == true || m['is_offline_pending'] == true) return;
+                                          try {
+                                            await Api.reactPrivateMessage(field(m, ['id', 'message_id']), '❤️');
+                                            if (mounted) await loadMessages(silent: true);
+                                          } catch (error) {
+                                            if (mounted) showMsg(context, cleanError(error));
+                                          }
                                         },
                                         onLongPress: () => showMessageActions(
                                           context,
@@ -10060,8 +10065,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                           }
                                         },
                                         onDoubleTap: () async {
-                                          await Api.reactPrivateMessage(field(m, ['id', 'message_id']), '❤️');
-                                          if (mounted) await loadMessages(silent: true);
+                                          if (m['is_ephemeral'] == true || m['is_offline_pending'] == true) return;
+                                          try {
+                                            await Api.reactPrivateMessage(field(m, ['id', 'message_id']), '❤️');
+                                            if (mounted) await loadMessages(silent: true);
+                                          } catch (error) {
+                                            if (mounted) showMsg(context, cleanError(error));
+                                          }
                                         },
                                         onLongPress: () => showMessageActions(
                                           context,
@@ -11567,15 +11577,20 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                                 if (swiped) setState(() => replyToMessage = Map<String, dynamic>.from(m));
                               },
                               onDoubleTap: () async {
-                                await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), '❤️');
-                                if (mounted) await loadMessages(silent: true);
+                                if (m['is_ephemeral'] == true || m['is_offline_pending'] == true) return;
+                                try {
+                                  await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), '❤️');
+                                  if (mounted) await loadMessages(silent: true);
+                                } catch (error) {
+                                  if (mounted) showMsg(context, cleanError(error));
+                                }
                               },
                               onLongPress: () => showMessageActions(
                                 context,
                                 message: m,
                                 currentUserId: widget.currentUserId,
-                                canDelete: mine,
-                                canDeleteForMe: true,
+                                canDelete: mine && m['is_ephemeral'] != true && m['is_offline_pending'] != true,
+                                canDeleteForMe: m['is_ephemeral'] != true && m['is_offline_pending'] != true,
                                 onDeleteForMe: () async {
                                   await Api.hideGroupMessageForMe(groupId, field(m, ['id', 'message_id']));
                                   if (mounted) await loadMessages();
@@ -11596,14 +11611,18 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                                         if (mounted) await loadMessages();
                                       }
                                     : null,
-                                onReact: (emoji, remove) async {
-                                  await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), emoji, remove: remove);
-                                  if (mounted) await loadMessages(silent: true);
-                                },
-                                onPin: () async {
-                                  await Api.pinGroupMessage(groupId, field(m, ['id', 'message_id']), pinned: m['is_pinned'] != true);
-                                  if (mounted) await loadMessages(silent: true);
-                                },
+                                onReact: m['is_ephemeral'] != true && m['is_offline_pending'] != true
+                                    ? (emoji, remove) async {
+                                        await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), emoji, remove: remove);
+                                        if (mounted) await loadMessages(silent: true);
+                                      }
+                                    : null,
+                                onPin: m['is_ephemeral'] != true && m['is_offline_pending'] != true
+                                    ? () async {
+                                        await Api.pinGroupMessage(groupId, field(m, ['id', 'message_id']), pinned: m['is_pinned'] != true);
+                                        if (mounted) await loadMessages(silent: true);
+                                      }
+                                    : null,
                                 isPinned: m['is_pinned'] == true,
                               ),
                               child: _barqAttachmentTile(attachment, (onProgress) => Api.downloadAttachment(
@@ -11641,15 +11660,20 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                                 }
                               },
                               onDoubleTap: () async {
-                                await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), '❤️');
-                                if (mounted) await loadMessages(silent: true);
+                                if (m['is_ephemeral'] == true || m['is_offline_pending'] == true) return;
+                                try {
+                                  await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), '❤️');
+                                  if (mounted) await loadMessages(silent: true);
+                                } catch (error) {
+                                  if (mounted) showMsg(context, cleanError(error));
+                                }
                               },
                               onLongPress: () => showMessageActions(
                                 context,
                                 message: m,
                                 currentUserId: widget.currentUserId,
-                                canDelete: mine,
-                                canDeleteForMe: true,
+                                canDelete: mine && m['is_ephemeral'] != true && m['is_offline_pending'] != true,
+                                canDeleteForMe: m['is_ephemeral'] != true && m['is_offline_pending'] != true,
                                 onDeleteForMe: () async {
                                   await Api.hideGroupMessageForMe(groupId, field(m, ['id', 'message_id']));
                                   if (mounted) await loadMessages();
@@ -11669,14 +11693,18 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                                         if (mounted) await loadMessages();
                                       }
                                     : null,
-                                onReact: (emoji, remove) async {
-                                  await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), emoji, remove: remove);
-                                  if (mounted) await loadMessages(silent: true);
-                                },
-                                onPin: () async {
-                                  await Api.pinGroupMessage(groupId, field(m, ['id', 'message_id']), pinned: m['is_pinned'] != true);
-                                  if (mounted) await loadMessages(silent: true);
-                                },
+                                onReact: m['is_ephemeral'] != true && m['is_offline_pending'] != true
+                                    ? (emoji, remove) async {
+                                        await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), emoji, remove: remove);
+                                        if (mounted) await loadMessages(silent: true);
+                                      }
+                                    : null,
+                                onPin: m['is_ephemeral'] != true && m['is_offline_pending'] != true
+                                    ? () async {
+                                        await Api.pinGroupMessage(groupId, field(m, ['id', 'message_id']), pinned: m['is_pinned'] != true);
+                                        if (mounted) await loadMessages(silent: true);
+                                      }
+                                    : null,
                                 onSaveMemory: m['is_ephemeral'] != true && m['is_offline_pending'] != true &&
                                         field(m, ['body', 'content', 'message']).trim().isNotEmpty
                                     ? () async {
