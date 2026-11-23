@@ -52,7 +52,11 @@ test("Google ID token rejects wrong audience, issuer, owner, expiry and unverifi
     { sub: "different-owner" },
     { exp: now - 1 },
     { email_verified: false },
-    { iat: now + 120 }
+    { iat: now + 120 },
+    { nbf: now + 120 },
+    { nbf: "not-a-timestamp" },
+    { sub: "" },
+    { aud: [clientId, "another-client"] }
   ]) {
     const item = await fixture(override);
     await assert.rejects(() => verifyGoogleIdToken(item.token, nonce, env, {
@@ -106,6 +110,11 @@ test("Google ID token rejects tampered signatures and unauthorized azp", async (
   await assert.rejects(() => verifyGoogleIdToken(tampered, nonce, env, {
     fetcher: item.fetcher, nowMs: now * 1000
   }), /invalid_google_signature/);
+  const validAzp = await fixture({ aud: [clientId, "another-client"], azp: clientId });
+  const validIdentity = await verifyGoogleIdToken(validAzp.token, nonce, env, {
+    fetcher: validAzp.fetcher, nowMs: now * 1000
+  });
+  assert.equal(validIdentity.subject, ownerSub);
   const wrongAzp = await fixture({ aud: [clientId, "another-client"], azp: "another-client" });
   await assert.rejects(() => verifyGoogleIdToken(wrongAzp.token, nonce, env, {
     fetcher: wrongAzp.fetcher, nowMs: now * 1000
