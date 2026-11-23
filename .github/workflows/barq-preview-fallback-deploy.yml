@@ -6,8 +6,11 @@ on:
   push:
     branches:
       - barq/phase8-cleanup-preview-readiness-2026-11-23
+      - barq/repair-batch-2026-11-23
     paths:
       - "src/**"
+      - "api/**"
+      - "android/**"
       - "test/**"
       - "wrangler.fallback.test.toml"
       - ".github/workflows/barq-preview-fallback-deploy.yml"
@@ -115,7 +118,7 @@ jobs:
       - name: Verify branch-scoped Vercel proxy for phone networks
         shell: bash
         env:
-          BARQ_VERCEL_PREVIEW_BASE: https://siraj-api-2026-git-barq-phase8-cleanup-previe-c5ab0d-siraj-01fc.vercel.app
+          BARQ_VERCEL_PREVIEW_BASE: https://siraj-api-2026-git-barq-repair-batch-2026-11-23-siraj-01fc.vercel.app
         run: |
           set -euo pipefail
           curl --connect-timeout 10 --max-time 30 --silent --show-error --fail "$BARQ_VERCEL_PREVIEW_BASE/health/live" > vercel-live.json
