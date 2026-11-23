@@ -67,3 +67,13 @@ The Flutter sources are formatted with the repository formatter; CI enforces `da
 The independent Flutter client is under `admin/mobile`. It includes an Arabic RTL owner dashboard, task list, approvals view, secure token storage, cached workspace/task/approval snapshots, and a local outbox for tasks created while offline. The outbox synchronizes with the server on the next successful app refresh/resume.
 
 Important offline boundary: a task created while the phone has no connection remains a local draft until it can reach the Admin API. Once a task has been accepted by the server queue, its analysis/drafting work runs server-side and can continue while the phone is offline. The owner sign-in flow uses Google OIDC Authorization Code + PKCE. The mobile device-management dialog and corresponding API routes are implemented; end-to-end Android callback and live session-revocation behavior remain to be tested against configured Preview resources.
+
+## Owner requirement: always-on BARQ monitoring and safe self-repair (future phase)
+
+The owner explicitly requires BARQ Admin to monitor the BARQ service independently of the owner's phone and internet connection. This is a required future capability, not a feature currently deployed or claimed as operational.
+
+The implementation must run from continuously available server-side monitoring and background workers, collect service health and authorized error/diagnostic signals, detect incidents, correlate them with recent changes, and create a durable incident/task record. For eligible code or configuration faults, BARQ Brain may prepare and apply a repair in an isolated branch or preview environment, run focused and regression tests, and retry within bounded limits. It must retain an audit trail and report the incident, attempted repair, test evidence, and outcome when the owner reconnects.
+
+Autonomous repair must not mean unrestricted production access. Production deployment, destructive data changes, secret or permission changes, paid actions, and public communications remain approval-gated. Where a safe repair cannot be verified, the system must stop, preserve evidence, and request owner review rather than guess. The phone is a notification and control surface; monitoring and accepted server-side work must not depend on the phone remaining online. Work created offline on the phone remains a local draft until synchronized.
+
+This requirement belongs to the later durable-operation and end-to-end lifecycle phases. Phase 1 remains limited to completing the secure Admin foundation and validating its dedicated Preview setup; do not start BARQ repository analysis or autonomous repair implementation before the owner authorizes the relevant phase.
