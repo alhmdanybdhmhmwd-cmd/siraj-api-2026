@@ -468,11 +468,24 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
                     Row(children: [
                       Expanded(child: OutlinedButton.icon(
                         onPressed: busy ? null : () async {
-                          final file = await picker.pickImage(source: ImageSource.gallery, imageQuality: 88);
+                          final file = await picker.pickImage(
+                            source: ImageSource.gallery,
+                            imageQuality: 82,
+                            maxWidth: 1920,
+                            maxHeight: 1920,
+                          );
                           if (file == null) return;
                           final bytes = await file.readAsBytes();
                           final ext = file.name.toLowerCase().split('.').last;
-                          final mime = ext == 'png' ? 'image/png' : ext == 'webp' ? 'image/webp' : 'image/jpeg';
+                          final mime = ext == 'png' ? 'image/png' :
+                            ext == 'webp' ? 'image/webp' :
+                            (ext == 'jpg' || ext == 'jpeg') ? 'image/jpeg' : '';
+                          if (mime.isEmpty) {
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              const SnackBar(content: Text('صيغة الصورة غير مدعومة؛ استخدم JPEG أو PNG أو WebP')),
+                            );
+                            return;
+                          }
                           if (bytes.length > 4 * 1024 * 1024) {
                             ScaffoldMessenger.of(this.context).showSnackBar(
                               const SnackBar(content: Text('اختر صورة لا تتجاوز 4 ميغابايت')),
@@ -485,11 +498,24 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
                       const SizedBox(width: 8),
                       Expanded(child: OutlinedButton.icon(
                         onPressed: busy ? null : () async {
-                          final file = await picker.pickImage(source: ImageSource.camera, imageQuality: 88);
+                          final file = await picker.pickImage(
+                            source: ImageSource.camera,
+                            imageQuality: 82,
+                            maxWidth: 1920,
+                            maxHeight: 1920,
+                          );
                           if (file == null) return;
                           final bytes = await file.readAsBytes();
                           final ext = file.name.toLowerCase().split('.').last;
-                          final mime = ext == 'png' ? 'image/png' : ext == 'webp' ? 'image/webp' : 'image/jpeg';
+                          final mime = ext == 'png' ? 'image/png' :
+                            ext == 'webp' ? 'image/webp' :
+                            (ext == 'jpg' || ext == 'jpeg') ? 'image/jpeg' : '';
+                          if (mime.isEmpty) {
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              const SnackBar(content: Text('صيغة الصورة غير مدعومة؛ استخدم JPEG أو PNG أو WebP')),
+                            );
+                            return;
+                          }
                           if (bytes.length > 4 * 1024 * 1024) {
                             ScaffoldMessenger.of(this.context).showSnackBar(
                               const SnackBar(content: Text('اختر صورة لا تتجاوز 4 ميغابايت')),
@@ -501,7 +527,7 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
                         icon: const Icon(Icons.camera_alt_outlined), label: const Text('الكاميرا'))),
                     ]),
                     const SizedBox(height: 12),
-                    TextField(controller: promptController, maxLines: 3,
+                    TextField(controller: promptController, maxLines: 3, maxLength: 2000,
                       decoration: const InputDecoration(labelText: 'ماذا تريد أن تعرف عن الصورة؟')),
                     const SizedBox(height: 14),
                     FilledButton.icon(
