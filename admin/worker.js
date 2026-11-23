@@ -1,3 +1,5 @@
+import { createAdminAccessToken, createRefreshToken, sha256Hex as authSha256Hex, verifyGoogleIdToken } from "./auth.js";
+
 const encoder = new TextEncoder();
 const TASK_STATUSES = new Set(["queued", "running", "paused", "needs_approval", "failed", "completed", "cancelled"]);
 const TRANSITIONS = {
@@ -421,11 +423,22 @@ async function verifyOwnerToken(request, env) {
     const now = Math.floor(Date.now() / 1000);
     if (claims.iss !== "barq-admin-auth" || claims.aud !== "barq-admin" ||
         typeof claims.sub !== "string" || claims.sub !== env.BARQ_ADMIN_OWNER_SUBJECT ||
+        typeof claims.sid !== "string" || typeof claims.did !== "string" ||
         !Number.isSafeInteger(claims.exp) || claims.exp <= now ||
         (claims.nbf !== undefined && (!Number.isSafeInteger(claims.nbf) || claims.nbf > now))) {
       return null;
     }
-    return { subject: claims.sub, deviceId: typeof claims.did === "string" ? claims.did.slice(0, 100) : "" };
+    const active = await env.ADMIN_DB.prepare(`
+      SELECT s.id FROM admin_owner_sessions s
+      JOIN admin_owner_devices d ON d.id = s.device_id
+      WHERE s.id = ? AND s.owner_subject = ? AND s.device_id = ?
+        AND s.revoked_at IS NULL AND d.revoked_at IS NULL
+    `).bind(claims.sid, claims.sub, claims.did).first();
+    if (!active) return null;
+    await env.ADMIN_DB.prepare(
+      "UPDATE admin_owner_devices SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ? AND revoked_at IS NULL"
+    ).bind(claims.did).run();
+    return { subject: claims.sub, deviceId: claims.did, sessionId: claims.sid };
   } catch {
     return null;
   }
@@ -502,15 +515,162 @@ async function handle(request, env) {
     return new Response(null, { status: 204, headers: {
       "Access-Control-Allow-Origin": allowedOrigin,
       "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Idempotency-Key",
-      "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS",
+      "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
       "Vary": "Origin"
     }});
   }
   if (url.pathname === "/health") return response({ ok: true, service: "barq-admin-preview" });
   if (!env.ADMIN_DB) return response({ error: "admin_database_unavailable" }, 503, allowedOrigin);
+
+  if (request.method === "POST" && url.pathname === "/v1/auth/exchange") {
+    const body = await readJson(request);
+    if (!body || typeof body.idToken !== "string" || typeof body.nonce !== "string") {
+      return response({ error: "invalid_identity_request" }, 400, allowedOrigin);
+    }
+    let identity;
+    try {
+      identity = await verifyGoogleIdToken(body.idToken, body.nonce, env);
+    } catch (error) {
+      console.warn("BARQ Admin Google identity rejected:", String(error?.message || error));
+      return response({ error: "identity_verification_failed" }, 401, allowedOrigin);
+    }
+    const nonceHash = await authSha256Hex(body.nonce);
+    await env.ADMIN_DB.prepare("DELETE FROM admin_oidc_nonce_uses WHERE expires_at < CURRENT_TIMESTAMP").run();
+    try {
+      await env.ADMIN_DB.prepare(`
+        INSERT INTO admin_oidc_nonce_uses (nonce_hash, owner_subject, expires_at)
+        VALUES (?, ?, datetime('now', '+10 minutes'))
+      `).bind(nonceHash, identity.subject).run();
+    } catch {
+      return response({ error: "identity_proof_already_used" }, 401, allowedOrigin);
+    }
+    const deviceId = crypto.randomUUID();
+    const sessionId = crypto.randomUUID();
+    const refreshToken = createRefreshToken();
+    const refreshHash = await authSha256Hex(refreshToken);
+    const deviceName = typeof body.deviceName === "string" ? body.deviceName.trim().slice(0, 80) : "";
+    const platform = body.platform === "ios" ? "ios" : "android";
+    await env.ADMIN_DB.batch([
+      env.ADMIN_DB.prepare(`
+        INSERT INTO admin_owner_devices (id, owner_subject, device_name, platform)
+        VALUES (?, ?, ?, ?)
+      `).bind(deviceId, identity.subject, deviceName || (platform === "ios" ? "iPhone" : "Android device"), platform),
+      env.ADMIN_DB.prepare(`
+        INSERT INTO admin_owner_sessions
+          (id, owner_subject, device_id, refresh_token_hash, refresh_expires_at)
+        VALUES (?, ?, ?, ?, datetime('now', '+30 days'))
+      `).bind(sessionId, identity.subject, deviceId, refreshHash)
+    ]);
+    const workspace = await ensureWorkspace(env, { subject: identity.subject });
+    await audit(env, workspace, { subject: identity.subject, deviceId },
+      "auth.owner_session.created", "device", deviceId, { platform });
+    const accessToken = await createAdminAccessToken(
+      env.BARQ_ADMIN_JWT_SECRET, identity.subject, sessionId, deviceId
+    );
+    return response({
+      accessToken, refreshToken, sessionId, deviceId, expiresIn: 600,
+      owner: { subject: identity.subject, email: identity.email }
+    }, 200, allowedOrigin);
+  }
+
+  if (request.method === "POST" && url.pathname === "/v1/auth/refresh") {
+    const body = await readJson(request);
+    if (!body || typeof body.sessionId !== "string" || typeof body.refreshToken !== "string") {
+      return response({ error: "invalid_refresh_request" }, 400, allowedOrigin);
+    }
+    const session = await env.ADMIN_DB.prepare(`
+      SELECT s.id, s.owner_subject, s.device_id, s.refresh_token_hash,
+        s.refresh_expires_at, s.revoked_at, d.revoked_at AS device_revoked_at
+      FROM admin_owner_sessions s JOIN admin_owner_devices d ON d.id = s.device_id
+      WHERE s.id = ?
+    `).bind(body.sessionId).first();
+    if (!session || session.revoked_at || session.device_revoked_at ||
+        session.refresh_expires_at <= new Date().toISOString().slice(0, 19).replace("T", " ")) {
+      return response({ error: "refresh_session_invalid" }, 401, allowedOrigin);
+    }
+    const suppliedHash = await authSha256Hex(body.refreshToken);
+    if (suppliedHash !== session.refresh_token_hash) {
+      await env.ADMIN_DB.prepare(
+        "UPDATE admin_owner_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE id = ? AND revoked_at IS NULL"
+      ).bind(session.id).run();
+      await audit(env, workspaceId(session.owner_subject),
+        { subject: session.owner_subject, deviceId: session.device_id },
+        "auth.refresh_replay_detected", "session", session.id, {});
+      return response({ error: "refresh_reuse_detected_session_revoked" }, 401, allowedOrigin);
+    }
+    const nextRefresh = createRefreshToken();
+    const nextHash = await authSha256Hex(nextRefresh);
+    const rotated = await env.ADMIN_DB.prepare(`
+      UPDATE admin_owner_sessions SET refresh_token_hash = ?,
+        refresh_version = refresh_version + 1, last_used_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND refresh_token_hash = ? AND revoked_at IS NULL
+        AND refresh_expires_at > CURRENT_TIMESTAMP
+    `).bind(nextHash, session.id, suppliedHash).run();
+    if (!rotated?.meta?.changes) {
+      await env.ADMIN_DB.prepare(
+        "UPDATE admin_owner_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE id = ? AND revoked_at IS NULL"
+      ).bind(session.id).run();
+      return response({ error: "refresh_reuse_detected_session_revoked" }, 401, allowedOrigin);
+    }
+    const accessToken = await createAdminAccessToken(
+      env.BARQ_ADMIN_JWT_SECRET, session.owner_subject, session.id, session.device_id
+    );
+    return response({ accessToken, refreshToken: nextRefresh, sessionId: session.id, deviceId: session.device_id, expiresIn: 600 }, 200, allowedOrigin);
+  }
+
+  if (request.method === "POST" && url.pathname === "/v1/auth/logout") {
+    const body = await readJson(request);
+    if (!body || typeof body.sessionId !== "string" || typeof body.refreshToken !== "string") {
+      return response({ error: "invalid_logout_request" }, 400, allowedOrigin);
+    }
+    const hash = await authSha256Hex(body.refreshToken);
+    const ended = await env.ADMIN_DB.prepare(`
+      UPDATE admin_owner_sessions SET revoked_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND refresh_token_hash = ? AND revoked_at IS NULL
+    `).bind(body.sessionId, hash).run();
+    return response({ ok: Boolean(ended?.meta?.changes) }, 200, allowedOrigin);
+  }
+
   const actor = await verifyOwnerToken(request, env);
   if (!actor) return response({ error: "unauthorized" }, 401, allowedOrigin);
   const workspace = await ensureWorkspace(env, actor);
+
+  if (request.method === "GET" && url.pathname === "/v1/devices") {
+    const result = await env.ADMIN_DB.prepare(`
+      SELECT d.id, d.device_name, d.platform, d.created_at, d.last_seen_at,
+        d.revoked_at, COUNT(s.id) AS active_sessions
+      FROM admin_owner_devices d LEFT JOIN admin_owner_sessions s
+        ON s.device_id = d.id AND s.revoked_at IS NULL
+      WHERE d.owner_subject = ?
+      GROUP BY d.id ORDER BY d.last_seen_at DESC LIMIT 100
+    `).bind(actor.subject).all();
+    return response({ devices: result.results || [] }, 200, allowedOrigin);
+  }
+
+  if (request.method === "DELETE" && /^\\/v1\\/devices\\/[0-9a-f-]{36}$/i.test(url.pathname)) {
+    const deviceId = url.pathname.split("/").pop();
+    const revoked = await env.ADMIN_DB.batch([
+      env.ADMIN_DB.prepare(`
+        UPDATE admin_owner_devices SET revoked_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND owner_subject = ? AND revoked_at IS NULL
+      `).bind(deviceId, actor.subject),
+      env.ADMIN_DB.prepare(`
+        UPDATE admin_owner_sessions SET revoked_at = CURRENT_TIMESTAMP
+        WHERE device_id = ? AND owner_subject = ? AND revoked_at IS NULL
+      `).bind(deviceId, actor.subject)
+    ]);
+    await audit(env, workspace, actor, "auth.device.revoked", "device", deviceId, {});
+    return response({ ok: Boolean(revoked?.[0]?.meta?.changes) }, 200, allowedOrigin);
+  }
+
+  if (request.method === "POST" && url.pathname === "/v1/devices/revoke-all") {
+    await env.ADMIN_DB.batch([
+      env.ADMIN_DB.prepare("UPDATE admin_owner_devices SET revoked_at = CURRENT_TIMESTAMP WHERE owner_subject = ? AND revoked_at IS NULL").bind(actor.subject),
+      env.ADMIN_DB.prepare("UPDATE admin_owner_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE owner_subject = ? AND revoked_at IS NULL").bind(actor.subject)
+    ]);
+    await audit(env, workspace, actor, "auth.devices.revoked_all", "owner", actor.subject, {});
+    return response({ ok: true }, 200, allowedOrigin);
+  }
 
   if (request.method === "POST" && url.pathname === "/v1/brain/generate-image") {
     if (!env.ADMIN_AI) return response({ error: "admin_ai_unavailable" }, 503, allowedOrigin);
