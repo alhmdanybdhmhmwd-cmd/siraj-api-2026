@@ -1114,7 +1114,7 @@ export default {
         const password = String(body.password || "");
         const deviceId = String(body.deviceId || "");
         const deviceName = String(body.deviceName || "جهاز غير معروف").slice(0, 80);
-        if (!/^[a-f0-9-]{36}$/i.test(deviceId)) {
+        if (deviceId && !/^[a-f0-9-]{36}$/i.test(deviceId)) {
           return json({ error: "معرّف الجهاز غير صالح. حدّث التطبيق وحاول مجددًا." }, 400);
         }
 
