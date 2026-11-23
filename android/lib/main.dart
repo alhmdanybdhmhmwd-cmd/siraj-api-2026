@@ -10617,7 +10617,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                 const PopupMenuItem(value: 'wallpaper', child: ListTile(
                   dense: true, leading: Icon(Icons.wallpaper_outlined), title: Text('خلفية المحادثة'))),
                 if (['owner', 'admin'].contains(field(widget.group, ['current_role'], 'member')))
-                  PopupMenuItem(value: 'invite', child: const ListTile(
+                  const PopupMenuItem(value: 'invite', child: ListTile(
                     dense: true, leading: Icon(Icons.link_rounded), title: Text('مشاركة رابط الانضمام'))),
               ],
             ),
