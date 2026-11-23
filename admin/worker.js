@@ -446,31 +446,6 @@ async function retrieveKnowledgeForTask(env, workspaceId, query) {
   return rankKnowledgeChunks(rows.results || [], query, 6);
 }
 
-async function sha256Hex") + "%";
-      bindings.push(pattern, pattern, pattern);
-    }
-    statement = env.ADMIN_DB.prepare(`
-      SELECT source_type, source_path, source_revision, title, content, updated_at
-      FROM admin_project_knowledge
-      WHERE workspace_id = ? AND (${clauses.join(" OR ")})
-      ORDER BY updated_at DESC LIMIT 500
-    `).bind(...bindings);
-  } else {
-    statement = env.ADMIN_DB.prepare(`
-      SELECT source_type, source_path, source_revision, title, content, updated_at
-      FROM admin_project_knowledge WHERE workspace_id = ?
-      ORDER BY updated_at DESC LIMIT 100
-    `).bind(workspaceId);
-  }
-  const rows = await statement.all();
-  return rankKnowledgeChunks(rows.results || [], query, 6);
-}
-
-async function sha256Hex(value) {
-  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(value));
-  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
-}
-
 export function validateAdminAccessClaims(claims, now = Math.floor(Date.now() / 1000)) {
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   return Boolean(claims && typeof claims === "object" && !Array.isArray(claims) &&
