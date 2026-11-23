@@ -54,12 +54,19 @@ export async function verifyGoogleIdToken(idToken, expectedNonce, env, options =
   if (parts.length !== 3) throw new Error("invalid_google_token");
   const header = JSON.parse(new TextDecoder().decode(decodeBase64url(parts[0])));
   const claims = JSON.parse(new TextDecoder().decode(decodeBase64url(parts[1])));
-  if (header.alg !== "RS256" || typeof header.kid !== "string" || header.typ !== "JWT") {
+  if (header.alg !== "RS256" || typeof header.kid !== "string" || (header.typ !== undefined && header.typ !== "JWT")) {
     throw new Error("invalid_google_token_header");
   }
   const keys = await googleJwks(options.fetcher || fetch, options.nowMs ?? Date.now());
-  const jwk = keys.find(key => key.kid === header.kid && key.kty === "RSA" && key.use === "sig" &&
+  let jwk = keys.find(key => key.kid === header.kid && key.kty === "RSA" && key.use === "sig" &&
     (!key.alg || key.alg === "RS256"));
+  if (!jwk && options.fetcher === undefined && cachedJwks) {
+    cachedJwks = null;
+    cachedJwksAt = 0;
+    const refreshedKeys = await googleJwks(fetch, options.nowMs ?? Date.now());
+    jwk = refreshedKeys.find(key => key.kid === header.kid && key.kty === "RSA" && key.use === "sig" &&
+      (!key.alg || key.alg === "RS256"));
+  }
   if (!jwk) throw new Error("google_signing_key_not_found");
   const key = await crypto.subtle.importKey(
     "jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]
@@ -72,7 +79,7 @@ export async function verifyGoogleIdToken(idToken, expectedNonce, env, options =
   const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
   if (!["https://accounts.google.com", "accounts.google.com"].includes(claims.iss) ||
       !audiences.includes(env.BARQ_GOOGLE_OIDC_CLIENT_ID) ||
-      (audiences.length > 1 && claims.azp !== env.BARQ_GOOGLE_OIDC_CLIENT_ID) ||
+      (claims.azp !== undefined && claims.azp !== env.BARQ_GOOGLE_OIDC_CLIENT_ID) ||
       !Number.isSafeInteger(claims.exp) || claims.exp <= now ||
       !Number.isSafeInteger(claims.iat) || claims.iat > now + 60 ||
       typeof claims.sub !== "string" || claims.email_verified !== true ||
