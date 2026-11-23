@@ -1,0 +1,27 @@
+name: BARQ Admin Gradle wrapper completion
+
+on:
+  push:
+    branches:
+      - "barq-admin-foundation-2026-11-23"
+    paths:
+      - ".github/workflows/barq-admin-gradle-wrapper-once.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  add-wrapper:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: barq-admin-foundation-2026-11-23
+      - name: Track Gradle wrapper files ignored by repository defaults
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f admin/mobile/android/gradlew admin/mobile/android/gradlew.bat admin/mobile/android/gradle/wrapper/gradle-wrapper.jar
+          git commit -m "Track BARQ Admin Android Gradle wrapper"
+          git pull --rebase origin barq-admin-foundation-2026-11-23
+          git push origin HEAD:barq-admin-foundation-2026-11-23
