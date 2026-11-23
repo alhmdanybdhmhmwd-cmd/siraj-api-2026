@@ -394,9 +394,11 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
     if (response.statusCode != 200) {
       final message = data is Map && data['error'] == 'admin_ai_unavailable'
           ? 'خدمة الذكاء الاصطناعي غير مهيأة على الخادم بعد'
-          : data is Map && data['error'] == 'image_too_large'
-              ? 'الصورة أكبر من الحد المسموح'
-              : 'تعذر تحليل الصورة (' + response.statusCode.toString() + ')';
+          : data is Map && data['error'] == 'vision_model_license_required'
+              ? 'يلزم تفعيل اتفاقية ترخيص نموذج الرؤية في حساب Cloudflare قبل استخدام تحليل الصور'
+              : data is Map && data['error'] == 'image_too_large'
+                  ? 'الصورة أكبر من الحد المسموح'
+                  : 'تعذر تحليل الصورة (' + response.statusCode.toString() + ')';
       throw Exception(message);
     }
     final answer = data is Map ? (data['answer'] ?? '').toString().trim() : '';
