@@ -210,3 +210,23 @@ test("preview proxy ignores a production upstream override", async () => {
     assert.equal(calledUrl, "https://barq-api-phase2-test.alhmdanybdhmhmwd.workers.dev/health/live");
   } finally { globalThis.fetch = originalFetch; }
 });
+
+
+test("preview proxy may use only the named isolated fallback Worker", async () => {
+  const originalFetch = globalThis.fetch;
+  const previous = process.env.BARQ_API_UPSTREAM;
+  let calledUrl;
+  try {
+    process.env.BARQ_API_UPSTREAM = "https://barq-api-phase2-fallback-test.example.workers.dev";
+    globalThis.fetch = async (url) => {
+      calledUrl = String(url);
+      return new Response("ok");
+    };
+    await handler(makeRequest({ url: "/health/live" }), makeResponse());
+    assert.equal(calledUrl, "https://barq-api-phase2-fallback-test.example.workers.dev/health/live");
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previous === undefined) delete process.env.BARQ_API_UPSTREAM;
+    else process.env.BARQ_API_UPSTREAM = previous;
+  }
+});
