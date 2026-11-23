@@ -112,15 +112,15 @@ test("vision requests accept bounded JPEG PNG and WebP data URLs only", () => {
     prompt: "describe", image: "data:image/svg+xml;base64,AAAA"
   }).ok, false);
   assert.equal(validateVisionInput({
-    prompt: "describe", image: "data:image/png;base64,AAAAAA"
-  }, 3).error, "image_too_large");
+    prompt: "describe", image: "data:image/png;base64,iVBORw0KGgo="
+  }, 4).error, "image_too_large");
 });
 
 test("vision assistant preserves owner phase and approval agreements", () => {
-  const messages = buildVisionMessages("Describe this screenshot", "data:image/png;base64,AAAA");
+  const messages = buildVisionMessages("Describe this screenshot", "data:image/png;base64,iVBORw0KGgo=");
   assert.deepEqual(messages[1].content, [
     { type: "text", text: "Describe this screenshot" },
-    { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } }
+    { type: "image_url", image_url: { url: "data:image/png;base64,iVBORw0KGgo=" } }
   ]);
   assert.match(messages[0].content, /Phase 1 only/);
   assert.match(messages[0].content, /explicitly authorizes Phase 2/);
