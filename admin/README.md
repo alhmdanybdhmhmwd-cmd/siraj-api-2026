@@ -10,7 +10,8 @@ This directory is a separate Admin service boundary. It is not part of the BARQ 
 - Append-only audit events enforced by SQLite triggers.
 - Explicit approval records in the schema.
 - Owner-only JWT validation. The owner subject is configured server-side; a client cannot grant itself a role.
-- Versioned project knowledge ingestion API and an initial guarded GitHub repository indexing script.\n- Unit tests and isolated SQLite schema checks.
+- Versioned project knowledge ingestion API and an initial guarded GitHub repository indexing script.
+- Unit tests and isolated SQLite schema checks.
 
 ## Required runtime bindings
 
