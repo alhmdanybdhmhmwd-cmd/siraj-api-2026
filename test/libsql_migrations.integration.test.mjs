@@ -17,7 +17,7 @@ test("real libSQL applies every isolated Preview migration and supports BARQ dat
       .filter(name => name.endsWith(".sql"))
       .sort();
 
-    assert.equal(migrations.length, 16, "all 16 Preview migrations must be exercised");
+    assert.equal(migrations.length, 17, "all 17 Preview migrations must be exercised");
 
     for (const migration of migrations) {
       const sql = readFileSync(join(migrationsDirectory, migration), "utf8");
