@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl } from "./ingest_github_repo.mjs";
+import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl, summarizeIndexCoverage } from "./ingest_github_repo.mjs";
 
 test("repository ingestion allowlists project files and excludes secrets/build output", () => {
   assert.equal(shouldIndexPath("docs/BARQ_PRODUCT.md"), true);
@@ -39,10 +39,19 @@ test("knowledge ingestion only accepts HTTPS Admin API endpoints", () => {
 });
 
 
-test("repository index reports incomplete coverage rather than silently claiming a full index", async () => {
-  const source = await import("./ingest_github_repo.mjs");
-  assert.equal(typeof source.ingestRepository, "function");
-  assert.match(source.ingestRepository.toString(), /remainingFiles/);
-  assert.match(source.ingestRepository.toString(), /complete:/);
-  assert.match(source.ingestRepository.toString(), /repository \+ "\/"/);
+
+test("index coverage reports remaining files and rejects impossible counts", () => {
+  assert.deepEqual(summarizeIndexCoverage(420, 300), {
+    eligibleFiles: 420,
+    processedFiles: 300,
+    remainingFiles: 120,
+    complete: false
+  });
+  assert.deepEqual(summarizeIndexCoverage(12, 12), {
+    eligibleFiles: 12,
+    processedFiles: 12,
+    remainingFiles: 0,
+    complete: true
+  });
+  assert.throws(() => summarizeIndexCoverage(10, 11), /invalid_index_coverage/);
 });
