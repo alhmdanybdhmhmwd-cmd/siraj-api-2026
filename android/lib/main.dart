@@ -1170,6 +1170,7 @@ class Api {
   static final http.Client _client = http.Client();
   static String? token;
   static String? lastRecoveryCode;
+  static bool lastLoginWasNewDevice = false;
 
   static Map<String, String> get headers => {
         'Content-Type': 'application/json',
@@ -1244,12 +1245,14 @@ class Api {
   }
 
   static Future<Map<String, dynamic>> login(String username, String password) async {
+    lastLoginWasNewDevice = false;
     final data = await request('POST', '/api/login', body: {
       'username': username,
       'password': password,
       'deviceId': await _installationId(),
       'deviceName': _installationName,
     });
+    lastLoginWasNewDevice = data['isNewDevice'] == true;
     token = data['token']?.toString();
     if (token == null || token!.isEmpty) throw Exception('لم يستلم التطبيق رمز الدخول من الخادم.');
     await storage.write(key: 'siraj_token', value: token);
@@ -4021,6 +4024,16 @@ class _LoginPageState extends State<LoginPage> {
         } else if (mounted) {
           showMsg(context, 'تم إنشاء الحساب، لكن لم يصدر الخادم رمز الاسترداد.');
         }
+      }
+      if (!registering && Api.lastLoginWasNewDevice && mounted) {
+        await showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('تسجيل دخول من جهاز جديد'),
+            content: const Text('رصد برق هذا الجهاز كتثبيت جديد لحسابك. إذا لم تكن أنت، غيّر كلمة المرور وأنهِ جلسات الأجهزة من إعدادات الأمان.'),
+            actions: [FilledButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('حسنًا'))],
+          ),
+        );
       }
       await SirajPush.register();
       if (!mounted) return;
@@ -14993,6 +15006,16 @@ class _LoginPageState extends State<LoginPage> {
         } else if (mounted) {
           showMsg(context, 'تم إنشاء الحساب، لكن لم يصدر الخادم رمز الاسترداد.');
         }
+      }
+      if (!registering && Api.lastLoginWasNewDevice && mounted) {
+        await showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('تسجيل دخول من جهاز جديد'),
+            content: const Text('رصد برق هذا الجهاز كتثبيت جديد لحسابك. إذا لم تكن أنت، غيّر كلمة المرور وأنهِ جلسات الأجهزة من إعدادات الأمان.'),
+            actions: [FilledButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('حسنًا'))],
+          ),
+        );
       }
       await SirajPush.register();
       if (!mounted) return;
