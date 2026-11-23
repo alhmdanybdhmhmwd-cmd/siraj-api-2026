@@ -108,14 +108,14 @@ const chunk=(data,n)=>data.slice((n-1)*MiB,Math.min(n*MiB,data.length));
 test("route integration: interruption, resume, duplicate chunks, exact final bytes and completion retry",async t=>{
   const f=fixture();t.after(f.restore);
   const source=Uint8Array.from({length:5*MiB+17},(_,i)=>(i*31+7)%256);
-  const created=await f.call("/api/media/uploads","POST",declaration(source.length));assert.equal(created.status,201);
+  const created=await f.call("/api/media/uploads","POST",declaration(source.length,"idem-key-0001",{caption:"وصف الوسائط"}));assert.equal(created.status,201);
   const sessionId=(await created.json()).session.id;
   for(let n=1;n<=3;n++)assert.equal((await f.call("/api/media/uploads/"+sessionId+"/chunks/"+n,"PUT",chunk(source,n))).status,200);
   const conflicting=chunk(source,2).slice();conflicting[0]^=0xff;
   assert.equal((await f.call("/api/media/uploads/"+sessionId+"/chunks/2","PUT",conflicting)).status,409);
   assert.equal((await f.call("/api/media/uploads/"+sessionId+"/chunks/2","PUT",chunk(source,2))).status,200);
   assert.equal((await f.call("/api/media/uploads/"+sessionId+"/complete","POST",{})).status,409);
-  const resumed=await f.call("/api/media/uploads","POST",declaration(source.length));assert.equal(resumed.status,200);
+  const resumed=await f.call("/api/media/uploads","POST",declaration(source.length,"idem-key-0001",{caption:"وصف الوسائط"}));assert.equal(resumed.status,200);
   const rb=await resumed.json();assert.equal(rb.resumed,true);assert.equal(rb.session.id,sessionId);
   assert.equal((await f.call("/api/media/uploads/"+sessionId+"/chunks/1","PUT",chunk(source,1))).status,200);
   for(let n=4;n<=5;n++)assert.equal((await f.call("/api/media/uploads/"+sessionId+"/chunks/"+n,"PUT",chunk(source,n))).status,200);
@@ -132,6 +132,7 @@ test("route integration: interruption, resume, duplicate chunks, exact final byt
   assert.equal(f.DB.parts.has(sessionId+":2"),true,"last 17-byte part must be committed");
   const done=await f.call("/api/media/uploads/"+sessionId+"/complete","POST",{});assert.equal(done.status,201,await done.clone().text());
   const attachment=(await done.json()).attachment,stored=f.objects.get(attachment.attachmentId);
+  assert.equal(attachment.caption,"وصف الوسائط","caption must remain attached to the same uploaded message");
   assert.ok(stored);assert.equal(stored.length,source.length);
   assert.equal(createHash("sha256").update(stored).digest("hex"),createHash("sha256").update(source).digest("hex"));
   assert.equal(f.DB.sessions.get(sessionId).state,"completed");
