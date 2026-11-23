@@ -9611,7 +9611,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       if (!mounted) return;
       final confirmed = await showBarqAttachmentPreview(context,
         fileName: file.name, contentType: contentType, bytes: bytes);
-      if (!mounted || !confirmed) return;
+      if (!mounted || !confirmed) {
+        return;
+      }
       final local = _newPendingAttachment(bytes, file.name, contentType);
       setState(() => messages = mergeMessages(messages, [local]));
       unawaited(_uploadPendingAttachment(local));
@@ -10999,7 +11001,9 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
       if (!mounted) return;
       final confirmed = await showBarqAttachmentPreview(context,
         fileName: file.name, contentType: contentType, bytes: bytes);
-      if (!mounted || !confirmed) return;
+      if (!mounted || !confirmed) {
+        return;
+      }
       final local = _newPendingAttachment(bytes, file.name, contentType);
       setState(() => messages = mergeMessages(messages, [local]));
       unawaited(_uploadPendingAttachment(local));
