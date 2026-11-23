@@ -30,7 +30,7 @@ function getUpstreamCandidates(env = process.env) {
     (isPreview ? PREVIEW_UPSTREAM : DEFAULT_PRODUCTION_UPSTREAM);
   const candidates = [primary];
   const fallback = safeHttpsOrigin(env.BARQ_API_FALLBACK_UPSTREAM);
-  if (fallback && fallback !== primary) candidates.push(fallback);
+  if (!isPreview && fallback && fallback !== primary) candidates.push(fallback);
   return candidates;
 }
 
