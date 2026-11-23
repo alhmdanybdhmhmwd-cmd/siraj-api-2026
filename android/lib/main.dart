@@ -320,6 +320,7 @@ Future<void> _openBarqPickedMediaPreview(
   }
 }
 
+// ignore: unused_element
 Future<bool?> _showBarqMediaPreview(
   BuildContext context,
   List<PlatformFile> files,
