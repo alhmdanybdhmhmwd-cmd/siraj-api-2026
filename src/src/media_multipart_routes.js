@@ -129,10 +129,12 @@ export async function cleanupExpiredUploadSessions(env, now = Date.now()) {
 }
 
 export async function handleResumableMediaUpload(request, env, currentUser, url, path, method, sendPush = null) {
+  let failureStage = "schema";
   const prefix = "/api/media/uploads";
   if (path !== prefix && !path.startsWith(prefix + "/")) return null;
   try {
     await ensureSessionSchema(env);
+    failureStage = "storage-client";
     const storage = storageClient(env);
     const suffix = path.slice(prefix.length).replace(/^\/+/, "");
     if (!suffix && method === "POST") {
@@ -166,6 +168,7 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
         return json({ session: existing, uploadedParts: parts.results || [], resumed: true });
       }
       const objectKey = currentUser.sub + "/chat-media/" + crypto.randomUUID();
+      failureStage = "multipart-initiate";
       const initiated = await storage.request(objectKey, {
         method: "POST",
         headers: { "Content-Type": declaration.contentType,
@@ -179,6 +182,7 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
       catch (error) { return json({ error: error.message }, 502); }
       const id = crypto.randomUUID();
       const expiresAt = new Date(Date.now() + MEDIA_UPLOAD_SESSION_TTL_MS).toISOString();
+      failureStage = "session-persist";
       try {
         await env.DB.prepare(
           `INSERT INTO media_upload_sessions
@@ -529,7 +533,8 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
     }
     return json({ error: "Method not allowed" }, 405);
   } catch (error) {
-    console.error("Resumable media upload request failed:", error?.name || "Error");
+    const safeMessage = String(error?.message || "").replace(/https?:\/\/\S+/g, "[url]").slice(0, 180);
+    console.error("Resumable media upload request failed:", failureStage, error?.name || "Error", safeMessage);
     return json({ error: "Resumable media upload is temporarily unavailable" }, 500);
   }
 }
