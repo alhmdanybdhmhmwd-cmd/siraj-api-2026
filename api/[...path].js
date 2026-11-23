@@ -1,23 +1,32 @@
-// Keep Preview pinned to its isolated Worker. Production fallback is opt-in
-// and remains inert until a separately provisioned HTTPS upstream is configured.
+// Preview can be pinned to its isolated fallback Worker through BARQ_API_UPSTREAM.
+// Production remains on its existing upstream unless explicitly configured.
 const PREVIEW_UPSTREAM = "https://barq-api-phase2-test.alhmdanybdhmhmwd.workers.dev";
 const DEFAULT_PRODUCTION_UPSTREAM = "https://siraj-api.alhmdanybdhmhmwd.workers.dev";
-const IS_PREVIEW_DEPLOYMENT = process.env.VERCEL_ENV === "preview";
+
+function safeHttpsOrigin(value) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    const parsed = new URL(value.trim());
+    if (parsed.protocol !== "https:" || parsed.origin !== value.trim().replace(/\/$/, "") ||
+        parsed.username || parsed.password || (parsed.pathname !== "/" && parsed.pathname !== "")) {
+      return null;
+    }
+    return parsed.origin;
+  } catch (_) {
+    return null;
+  }
+}
 
 function getUpstreamCandidates(env = process.env) {
-  if (IS_PREVIEW_DEPLOYMENT || env.VERCEL_ENV === "preview") return [PREVIEW_UPSTREAM];
-  const primary = env.BARQ_API_UPSTREAM || DEFAULT_PRODUCTION_UPSTREAM;
+  const isPreview = env.VERCEL_ENV === "preview";
+  const configuredPrimary = isPreview
+    ? (env.BARQ_API_UPSTREAM || PREVIEW_UPSTREAM)
+    : (env.BARQ_API_UPSTREAM || DEFAULT_PRODUCTION_UPSTREAM);
+  const primary = safeHttpsOrigin(configuredPrimary) ||
+    (isPreview ? PREVIEW_UPSTREAM : DEFAULT_PRODUCTION_UPSTREAM);
   const candidates = [primary];
-  const fallback = env.BARQ_API_FALLBACK_UPSTREAM;
-  if (fallback && fallback !== primary) {
-    try {
-      const parsed = new URL(fallback);
-      const normalized = fallback.endsWith("/") ? fallback.slice(0, -1) : fallback;
-      if (parsed.protocol === "https:" && parsed.origin === normalized) candidates.push(normalized);
-    } catch (_) {
-      // Ignore malformed fallback configuration; never route to an unsafe URL.
-    }
-  }
+  const fallback = safeHttpsOrigin(env.BARQ_API_FALLBACK_UPSTREAM);
+  if (fallback && fallback !== primary) candidates.push(fallback);
   return candidates;
 }
 
