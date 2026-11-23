@@ -10461,7 +10461,7 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
                         textCapitalization: TextCapitalization.sentences,
                         textInputAction: TextInputAction.send,
                         decoration: InputDecoration(
-                          hintText: 'رد على الحالة...',
+                          hintText: 'اكتب ردك على SPARK...',
                           counterText: '',
                           hintStyle: TextStyle(color: Colors.white.withValues(alpha: .58), fontSize: 13),
                           border: InputBorder.none,
