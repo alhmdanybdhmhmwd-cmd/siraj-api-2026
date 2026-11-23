@@ -185,7 +185,8 @@ test("speech transcription requires authentication, validates audio, rate-limits
 });
 
 test("excluded referral and invitation mechanics are absent from BARQ registration and API", () => {
-  assert.ok(!flutterApp.includes("inviteCode"));
+  assert.ok(flutterApp.includes("createGroupInvite"));
+  assert.ok(worker.includes("groupInviteCreateMatch"));
   assert.ok(!flutterApp.includes("BarqInviteLinks"));
   assert.ok(!flutterApp.includes("inviteFriendsDialog"));
   assert.ok(!worker.includes('path === "/api/referrals"'));
