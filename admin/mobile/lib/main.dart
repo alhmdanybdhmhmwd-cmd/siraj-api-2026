@@ -29,37 +29,38 @@ class BarqAdminApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    debugShowCheckedModeBanner: false,
-    title: 'BARQ Admin',
-    theme: ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.dark,
-      scaffoldBackgroundColor: _background,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: _blue,
-        brightness: Brightness.dark,
-        surface: _surface,
-      ),
-      cardTheme: CardThemeData(
-        color: _surface,
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: const Color(0xFF202B42),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide.none,
+        debugShowCheckedModeBanner: false,
+        title: 'BARQ Admin',
+        theme: ThemeData(
+          useMaterial3: true,
+          brightness: Brightness.dark,
+          scaffoldBackgroundColor: _background,
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: _blue,
+            brightness: Brightness.dark,
+            surface: _surface,
+          ),
+          cardTheme: CardThemeData(
+            color: _surface,
+            elevation: 0,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          ),
+          inputDecorationTheme: InputDecorationTheme(
+            filled: true,
+            fillColor: const Color(0xFF202B42),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide.none,
+            ),
+          ),
         ),
-      ),
-    ),
-    builder: (context, child) => Directionality(
-      textDirection: TextDirection.rtl,
-      child: child ?? const SizedBox.shrink(),
-    ),
-    home: const AdminHomePage(),
-  );
+        builder: (context, child) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: child ?? const SizedBox.shrink(),
+        ),
+        home: const AdminHomePage(),
+      );
 }
 
 class AdminHomePage extends StatefulWidget {
@@ -114,9 +115,9 @@ class _AdminHomePageState extends State<AdminHomePage>
 
   String get _base => _apiBase.replaceFirst(RegExp(r'/+$'), '');
   Map<String, String> get _headers => {
-    'Authorization': 'Bearer $_token',
-    'Content-Type': 'application/json',
-  };
+        'Authorization': 'Bearer $_token',
+        'Content-Type': 'application/json',
+      };
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -371,8 +372,8 @@ class _AdminHomePageState extends State<AdminHomePage>
           data['error'] == 'identity_verification_failed'
               ? 'رفض الخادم إثبات Google؛ تحقق من حساب المالك وإعدادات Preview'
               : 'تعذر إنشاء جلسة الإدارة (' +
-                    response.statusCode.toString() +
-                    ')',
+                  response.statusCode.toString() +
+                  ')',
         );
       }
       _token = (data['accessToken'] ?? '').toString();
@@ -441,8 +442,7 @@ class _AdminHomePageState extends State<AdminHomePage>
     final cleanTitle = title.trim();
     if (cleanTitle.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
-    final idempotencyKey =
-        DateTime.now().microsecondsSinceEpoch.toString() +
+    final idempotencyKey = DateTime.now().microsecondsSinceEpoch.toString() +
         '-' +
         Random.secure().nextInt(1 << 32).toString();
     final payload = {
@@ -477,9 +477,9 @@ class _AdminHomePageState extends State<AdminHomePage>
     final pending = raw == null
         ? <Map<String, dynamic>>[]
         : (jsonDecode(raw) as List)
-              .whereType<Map>()
-              .map((item) => Map<String, dynamic>.from(item))
-              .toList();
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
     pending.add(payload);
     await prefs.setString(_outboxKey, jsonEncode(pending));
     if (mounted) {
@@ -685,16 +685,19 @@ class _AdminHomePageState extends State<AdminHomePage>
       final message = data is Map && data['error'] == 'admin_ai_unavailable'
           ? 'خدمة الذكاء الاصطناعي غير مهيأة على الخادم بعد'
           : data is Map && data['error'] == 'vision_model_license_required'
-          ? 'يلزم تفعيل اتفاقية ترخيص نموذج الرؤية في حساب Cloudflare قبل استخدام تحليل الصور'
-          : data is Map && data['error'] == 'image_too_large'
-          ? 'الصورة أكبر من الحد المسموح'
-          : data is Map && data['error'] == 'invalid_image_or_prompt'
-          ? 'صيغة الصورة غير مدعومة أو لا يطابق محتواها نوعها؛ استخدم JPEG أو PNG أو WebP'
-          : data is Map && data['error'] == 'vision_rate_limited'
-          ? 'وصلت إلى الحد المؤقت: ثلاث صور في الدقيقة. انتظر قليلًا ثم حاول مجددًا'
-          : data is Map && data['error'] == 'vision_analysis_failed'
-          ? 'تعذر على نموذج الرؤية تحليل الصورة؛ جرّب صورة أوضح أو أعد المحاولة'
-          : 'تعذر تحليل الصورة (' + response.statusCode.toString() + ')';
+              ? 'يلزم تفعيل اتفاقية ترخيص نموذج الرؤية في حساب Cloudflare قبل استخدام تحليل الصور'
+              : data is Map && data['error'] == 'image_too_large'
+                  ? 'الصورة أكبر من الحد المسموح'
+                  : data is Map && data['error'] == 'invalid_image_or_prompt'
+                      ? 'صيغة الصورة غير مدعومة أو لا يطابق محتواها نوعها؛ استخدم JPEG أو PNG أو WebP'
+                      : data is Map && data['error'] == 'vision_rate_limited'
+                          ? 'وصلت إلى الحد المؤقت: ثلاث صور في الدقيقة. انتظر قليلًا ثم حاول مجددًا'
+                          : data is Map &&
+                                  data['error'] == 'vision_analysis_failed'
+                              ? 'تعذر على نموذج الرؤية تحليل الصورة؛ جرّب صورة أوضح أو أعد المحاولة'
+                              : 'تعذر تحليل الصورة (' +
+                                  response.statusCode.toString() +
+                                  ')';
       throw Exception(message);
     }
     final answer = data is Map ? (data['answer'] ?? '').toString().trim() : '';
@@ -725,15 +728,19 @@ class _AdminHomePageState extends State<AdminHomePage>
       final message = data is Map && data['error'] == 'admin_ai_unavailable'
           ? 'خدمة الذكاء الاصطناعي غير مهيأة على الخادم بعد'
           : data is Map && data['error'] == 'invalid_image_prompt'
-          ? 'اكتب وصفًا للصورة لا يتجاوز 1600 حرف'
-          : data is Map && data['error'] == 'image_generation_rate_limited'
-          ? 'وصلت إلى الحد المؤقت: صورتان في الدقيقة. انتظر قليلًا ثم حاول مجددًا'
-          : data is Map &&
-                data['error'] == 'image_generation_model_terms_required'
-          ? 'يلزم قبول شروط نموذج إنشاء الصور في حساب Cloudflare قبل استخدامه'
-          : data is Map && data['error'] == 'image_generation_failed'
-          ? 'تعذر إنشاء الصورة؛ تحقق من تفعيل Workers AI ثم أعد المحاولة'
-          : 'تعذر إنشاء الصورة (' + response.statusCode.toString() + ')';
+              ? 'اكتب وصفًا للصورة لا يتجاوز 1600 حرف'
+              : data is Map && data['error'] == 'image_generation_rate_limited'
+                  ? 'وصلت إلى الحد المؤقت: صورتان في الدقيقة. انتظر قليلًا ثم حاول مجددًا'
+                  : data is Map &&
+                          data['error'] ==
+                              'image_generation_model_terms_required'
+                      ? 'يلزم قبول شروط نموذج إنشاء الصور في حساب Cloudflare قبل استخدامه'
+                      : data is Map &&
+                              data['error'] == 'image_generation_failed'
+                          ? 'تعذر إنشاء الصورة؛ تحقق من تفعيل Workers AI ثم أعد المحاولة'
+                          : 'تعذر إنشاء الصورة (' +
+                              response.statusCode.toString() +
+                              ')';
       throw Exception(message);
     }
     final imageUri = data is Map ? (data['image'] ?? '').toString() : '';
@@ -802,7 +809,8 @@ class _AdminHomePageState extends State<AdminHomePage>
                       maxLength: 1600,
                       decoration: const InputDecoration(
                         labelText: 'صف الصورة التي تريد إنشاءها',
-                        hintText: 'مثال: مشهد سينمائي لمدينة مستقبلية يضيئها البرق الأزرق...',
+                        hintText:
+                            'مثال: مشهد سينمائي لمدينة مستقبلية يضيئها البرق الأزرق...',
                       ),
                     ),
                     if (generatedBytes != null) ...[
@@ -875,15 +883,15 @@ class _AdminHomePageState extends State<AdminHomePage>
                                 if (mounted)
                                   ScaffoldMessenger.of(this.context)
                                       .showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            error.toString().replaceFirst(
+                                    SnackBar(
+                                      content: Text(
+                                        error.toString().replaceFirst(
                                               'Exception: ',
                                               '',
                                             ),
-                                          ),
-                                        ),
-                                      );
+                                      ),
+                                    ),
+                                  );
                               }
                             },
                       icon: busy
@@ -897,15 +905,14 @@ class _AdminHomePageState extends State<AdminHomePage>
                         busy
                             ? 'جارٍ إنشاء الصورة...'
                             : generatedBytes == null
-                            ? 'أنشئ الصورة'
-                            : 'أنشئ صورة أخرى',
+                                ? 'أنشئ الصورة'
+                                : 'أنشئ صورة أخرى',
                       ),
                     ),
                     const SizedBox(height: 8),
                     TextButton(
-                      onPressed: busy
-                          ? null
-                          : () => Navigator.pop(sheetContext),
+                      onPressed:
+                          busy ? null : () => Navigator.pop(sheetContext),
                       child: const Text('إغلاق'),
                     ),
                   ],
@@ -1029,26 +1036,24 @@ class _AdminHomePageState extends State<AdminHomePage>
                                     );
                                     if (file == null) return;
                                     final bytes = await file.readAsBytes();
-                                    final ext = file.name
-                                        .toLowerCase()
-                                        .split('.')
-                                        .last;
+                                    final ext =
+                                        file.name.toLowerCase().split('.').last;
                                     final mime = ext == 'png'
                                         ? 'image/png'
                                         : ext == 'webp'
-                                        ? 'image/webp'
-                                        : (ext == 'jpg' || ext == 'jpeg')
-                                        ? 'image/jpeg'
-                                        : '';
+                                            ? 'image/webp'
+                                            : (ext == 'jpg' || ext == 'jpeg')
+                                                ? 'image/jpeg'
+                                                : '';
                                     if (mime.isEmpty) {
                                       ScaffoldMessenger.of(this.context)
                                           .showSnackBar(
-                                            const SnackBar(
-                                              content: Text(
-                                                'صيغة الصورة غير مدعومة؛ استخدم JPEG أو PNG أو WebP',
-                                              ),
-                                            ),
-                                          );
+                                        const SnackBar(
+                                          content: Text(
+                                            'صيغة الصورة غير مدعومة؛ استخدم JPEG أو PNG أو WebP',
+                                          ),
+                                        ),
+                                      );
                                       return;
                                     }
                                     if (bytes.length > 4 * 1024 * 1024) {
@@ -1087,26 +1092,24 @@ class _AdminHomePageState extends State<AdminHomePage>
                                     );
                                     if (file == null) return;
                                     final bytes = await file.readAsBytes();
-                                    final ext = file.name
-                                        .toLowerCase()
-                                        .split('.')
-                                        .last;
+                                    final ext =
+                                        file.name.toLowerCase().split('.').last;
                                     final mime = ext == 'png'
                                         ? 'image/png'
                                         : ext == 'webp'
-                                        ? 'image/webp'
-                                        : (ext == 'jpg' || ext == 'jpeg')
-                                        ? 'image/jpeg'
-                                        : '';
+                                            ? 'image/webp'
+                                            : (ext == 'jpg' || ext == 'jpeg')
+                                                ? 'image/jpeg'
+                                                : '';
                                     if (mime.isEmpty) {
                                       ScaffoldMessenger.of(this.context)
                                           .showSnackBar(
-                                            const SnackBar(
-                                              content: Text(
-                                                'صيغة الصورة غير مدعومة؛ استخدم JPEG أو PNG أو WebP',
-                                              ),
-                                            ),
-                                          );
+                                        const SnackBar(
+                                          content: Text(
+                                            'صيغة الصورة غير مدعومة؛ استخدم JPEG أو PNG أو WebP',
+                                          ),
+                                        ),
+                                      );
                                       return;
                                     }
                                     if (bytes.length > 4 * 1024 * 1024) {
@@ -1179,15 +1182,15 @@ class _AdminHomePageState extends State<AdminHomePage>
                                 if (mounted)
                                   ScaffoldMessenger.of(this.context)
                                       .showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            error.toString().replaceFirst(
+                                    SnackBar(
+                                      content: Text(
+                                        error.toString().replaceFirst(
                                               'Exception: ',
                                               '',
                                             ),
-                                          ),
-                                        ),
-                                      );
+                                      ),
+                                    ),
+                                  );
                               }
                             },
                       icon: busy
@@ -1333,12 +1336,12 @@ class _AdminHomePageState extends State<AdminHomePage>
               label: const Text('مهمة جديدة'),
             )
           : _tab == 0
-          ? FloatingActionButton.extended(
-              onPressed: () => _showCreateTask(assistant: true),
-              icon: const Icon(Icons.bolt),
-              label: const Text('اسأل BARQ Brain'),
-            )
-          : null,
+              ? FloatingActionButton.extended(
+                  onPressed: () => _showCreateTask(assistant: true),
+                  icon: const Icon(Icons.bolt),
+                  label: const Text('اسأل BARQ Brain'),
+                )
+              : null,
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (value) => setState(() => _tab = value),
@@ -1495,38 +1498,38 @@ class _AdminHomePageState extends State<AdminHomePage>
   }
 
   Widget _signInCard() => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Icon(Icons.verified_user_outlined, color: _gold, size: 34),
-          const SizedBox(height: 10),
-          const Text(
-            'تسجيل دخول مالك BARQ Admin',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Icon(Icons.verified_user_outlined, color: _gold, size: 34),
+              const SizedBox(height: 10),
+              const Text(
+                'تسجيل دخول مالك BARQ Admin',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 7),
+              const Text(
+                'استخدم حساب Google المعتمد للمالك. سيُفتح تسجيل الدخول الآمن عبر المتصفح مع PKCE.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white70, height: 1.4),
+              ),
+              const SizedBox(height: 14),
+              FilledButton.icon(
+                onPressed: _apiBase.isEmpty ? _showSettings : _loginWithGoogle,
+                icon: const Icon(Icons.login),
+                label: Text(
+                  _apiBase.isEmpty
+                      ? 'إعداد عنوان الخادم'
+                      : 'المتابعة باستخدام Google',
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 7),
-          const Text(
-            'استخدم حساب Google المعتمد للمالك. سيُفتح تسجيل الدخول الآمن عبر المتصفح مع PKCE.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white70, height: 1.4),
-          ),
-          const SizedBox(height: 14),
-          FilledButton.icon(
-            onPressed: _apiBase.isEmpty ? _showSettings : _loginWithGoogle,
-            icon: const Icon(Icons.login),
-            label: Text(
-              _apiBase.isEmpty
-                  ? 'إعداد عنوان الخادم'
-                  : 'المتابعة باستخدام Google',
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
+        ),
+      );
 
   Future<void> _showDevices() async {
     try {
@@ -1570,8 +1573,8 @@ class _AdminHomePageState extends State<AdminHomePage>
                                       color: Colors.redAccent,
                                     ),
                                     onPressed: () async {
-                                      final id = (device['id'] ?? '')
-                                          .toString();
+                                      final id =
+                                          (device['id'] ?? '').toString();
                                       final response = await http
                                           .delete(
                                             Uri.parse(
@@ -1627,8 +1630,8 @@ class _AdminHomePageState extends State<AdminHomePage>
 
   Widget _workspaceCard() {
     final project = (_workspace['current_project'] ?? 'BARQ').toString();
-    final phase = (_workspace['current_phase'] ?? 'لم تُحدد المرحلة')
-        .toString();
+    final phase =
+        (_workspace['current_phase'] ?? 'لم تُحدد المرحلة').toString();
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -1711,27 +1714,27 @@ class _AdminHomePageState extends State<AdminHomePage>
       );
 
   Widget _tasksView() => ListView(
-    padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-    children: [
-      const Text(
-        'سجل المهام ونقاط التقدم',
-        style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
-      ),
-      const SizedBox(height: 6),
-      const Text(
-        'المهام التي وصلت إلى الخادم يمكن استعادتها من أي جهاز بعد تسجيل الدخول.',
-        style: TextStyle(color: Colors.white60),
-      ),
-      const SizedBox(height: 14),
-      if (_tasks.isEmpty)
-        _emptyState(
-          'قائمة المهام فارغة',
-          'أضف مهمة جديدة أو أرسل طلبًا إلى BARQ Brain',
-        )
-      else
-        ..._tasks.map(_taskTile),
-    ],
-  );
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+        children: [
+          const Text(
+            'سجل المهام ونقاط التقدم',
+            style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'المهام التي وصلت إلى الخادم يمكن استعادتها من أي جهاز بعد تسجيل الدخول.',
+            style: TextStyle(color: Colors.white60),
+          ),
+          const SizedBox(height: 14),
+          if (_tasks.isEmpty)
+            _emptyState(
+              'قائمة المهام فارغة',
+              'أضف مهمة جديدة أو أرسل طلبًا إلى BARQ Brain',
+            )
+          else
+            ..._tasks.map(_taskTile),
+        ],
+      );
 
   Widget _taskTile(AdminTask task) {
     final local = task.status == 'draft_offline';
@@ -1805,182 +1808,187 @@ class _AdminHomePageState extends State<AdminHomePage>
   }
 
   Widget _approvalsView() => ListView(
-    padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-    children: [
-      const Text(
-        'موافقات المالك',
-        style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
-      ),
-      const SizedBox(height: 6),
-      const Text(
-        'لا ينشر المساعد ولا ينفق ولا يغيّر الإنتاج دون قرار واضح منك.',
-        style: TextStyle(color: Colors.white60),
-      ),
-      const SizedBox(height: 14),
-      if (_approvals.isEmpty)
-        _emptyState(
-          'لا توجد طلبات موافقة',
-          'ستظهر هنا الإجراءات الحساسة قبل تنفيذها',
-        )
-      else
-        ..._approvals.map(
-          (approval) => Card(
-            margin: const EdgeInsets.only(bottom: 12),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+        children: [
+          const Text(
+            'موافقات المالك',
+            style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'لا ينشر المساعد ولا ينفق ولا يغيّر الإنتاج دون قرار واضح منك.',
+            style: TextStyle(color: Colors.white60),
+          ),
+          const SizedBox(height: 14),
+          if (_approvals.isEmpty)
+            _emptyState(
+              'لا توجد طلبات موافقة',
+              'ستظهر هنا الإجراءات الحساسة قبل تنفيذها',
+            )
+          else
+            ..._approvals.map(
+              (approval) => Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Text(
-                          approval.actionType,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              approval.actionType,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          Text(
+                            approval.status,
+                            style: TextStyle(
+                              color: approval.status == 'pending'
+                                  ? _gold
+                                  : Colors.white60,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text((approval.preview['summary'] ?? '').toString()),
+                      const SizedBox(height: 5),
+                      Text(
+                        'الهدف: ' +
+                            (approval.preview['target'] ?? '').toString(),
+                        style: const TextStyle(
+                            color: Colors.white60, fontSize: 12),
                       ),
                       Text(
-                        approval.status,
-                        style: TextStyle(
-                          color: approval.status == 'pending'
-                              ? _gold
-                              : Colors.white60,
-                        ),
+                        'البيئة: ' +
+                            (approval.preview['environment'] ?? '').toString(),
+                        style: const TextStyle(
+                            color: Colors.white60, fontSize: 12),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Text((approval.preview['summary'] ?? '').toString()),
-                  const SizedBox(height: 5),
-                  Text(
-                    'الهدف: ' + (approval.preview['target'] ?? '').toString(),
-                    style: const TextStyle(color: Colors.white60, fontSize: 12),
-                  ),
-                  Text(
-                    'البيئة: ' +
-                        (approval.preview['environment'] ?? '').toString(),
-                    style: const TextStyle(color: Colors.white60, fontSize: 12),
-                  ),
-                  if (approval.status == 'pending') ...[
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () =>
-                                _decideApproval(approval.id, 'rejected'),
-                            child: const Text('رفض'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: FilledButton(
-                            onPressed: () =>
-                                _decideApproval(approval.id, 'approved'),
-                            child: const Text('موافقة'),
-                          ),
+                      if (approval.status == 'pending') ...[
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () =>
+                                    _decideApproval(approval.id, 'rejected'),
+                                child: const Text('رفض'),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: FilledButton(
+                                onPressed: () =>
+                                    _decideApproval(approval.id, 'approved'),
+                                child: const Text('موافقة'),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
-                    ),
-                  ],
-                ],
+                    ],
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-    ],
-  );
+        ],
+      );
 
   Widget _auditView() => ListView(
-    padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-    children: [
-      const Text(
-        'سجل النشاط والتدقيق',
-        style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
-      ),
-      const SizedBox(height: 6),
-      const Text(
-        'سجل للقراءة فقط للأحداث المسجلة على مساحة إدارة BARQ.',
-        style: TextStyle(color: Colors.white60),
-      ),
-      const SizedBox(height: 14),
-      if (_auditEvents.isEmpty)
-        _emptyState(
-          'لا توجد أحداث مسجلة',
-          'ستظهر هنا تغييرات مساحة العمل والمهام والموافقات',
-        )
-      else
-        ..._auditEvents.map((event) {
-          final created = (event['created_at'] ?? '').toString();
-          final details = event['details'] is Map
-              ? Map<String, dynamic>.from(event['details'] as Map)
-              : <String, dynamic>{};
-          return Card(
-            margin: const EdgeInsets.only(bottom: 9),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    (event['event_type'] ?? 'event').toString(),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: _gold,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    'الهدف: ${event['target_type'] ?? '-'} / ${event['target_id'] ?? '-'}',
-                    style: const TextStyle(fontSize: 12, color: Colors.white70),
-                  ),
-                  if (details.isNotEmpty)
-                    Text(
-                      details.entries
-                          .map((entry) => '${entry.key}: ${entry.value}')
-                          .join(' • '),
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: Colors.white54,
-                      ),
-                    ),
-                  if (created.isNotEmpty)
-                    Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: Text(
-                        created,
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+        children: [
+          const Text(
+            'سجل النشاط والتدقيق',
+            style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'سجل للقراءة فقط للأحداث المسجلة على مساحة إدارة BARQ.',
+            style: TextStyle(color: Colors.white60),
+          ),
+          const SizedBox(height: 14),
+          if (_auditEvents.isEmpty)
+            _emptyState(
+              'لا توجد أحداث مسجلة',
+              'ستظهر هنا تغييرات مساحة العمل والمهام والموافقات',
+            )
+          else
+            ..._auditEvents.map((event) {
+              final created = (event['created_at'] ?? '').toString();
+              final details = event['details'] is Map
+                  ? Map<String, dynamic>.from(event['details'] as Map)
+                  : <String, dynamic>{};
+              return Card(
+                margin: const EdgeInsets.only(bottom: 9),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        (event['event_type'] ?? 'event').toString(),
                         style: const TextStyle(
-                          fontSize: 10,
-                          color: Colors.white38,
+                          fontWeight: FontWeight.bold,
+                          color: _gold,
                         ),
                       ),
-                    ),
-                ],
-              ),
-            ),
-          );
-        }),
-    ],
-  );
+                      const SizedBox(height: 5),
+                      Text(
+                        'الهدف: ${event['target_type'] ?? '-'} / ${event['target_id'] ?? '-'}',
+                        style: const TextStyle(
+                            fontSize: 12, color: Colors.white70),
+                      ),
+                      if (details.isNotEmpty)
+                        Text(
+                          details.entries
+                              .map((entry) => '${entry.key}: ${entry.value}')
+                              .join(' • '),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.white54,
+                          ),
+                        ),
+                      if (created.isNotEmpty)
+                        Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: Text(
+                            created,
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Colors.white38,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+        ],
+      );
 
   Widget _emptyState(String title, String subtitle) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          const Icon(Icons.inbox_outlined, color: Colors.white38, size: 36),
-          const SizedBox(height: 10),
-          Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 5),
-          Text(
-            subtitle,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white60, fontSize: 12),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              const Icon(Icons.inbox_outlined, color: Colors.white38, size: 36),
+              const SizedBox(height: 10),
+              Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 5),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white60, fontSize: 12),
+              ),
+            ],
           ),
-        ],
-      ),
-    ),
-  );
+        ),
+      );
 }

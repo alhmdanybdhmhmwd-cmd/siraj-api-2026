@@ -18,25 +18,27 @@ class AdminTask {
   final int checkpointVersion;
 
   factory AdminTask.fromJson(Map<String, dynamic> json) => AdminTask(
-    id: (json['id'] ?? '').toString(),
-    title: (json['title'] ?? '').toString(),
-    status: (json['status'] ?? 'queued').toString(),
-    description: (json['description'] ?? '').toString(),
-    nextAction: (json['next_action'] ?? json['nextAction'] ?? '').toString(),
-    priority: (json['priority'] ?? 'normal').toString(),
-    checkpointVersion:
-        (json['checkpoint_version'] ?? json['checkpointVersion'] ?? 0) as int,
-  );
+        id: (json['id'] ?? '').toString(),
+        title: (json['title'] ?? '').toString(),
+        status: (json['status'] ?? 'queued').toString(),
+        description: (json['description'] ?? '').toString(),
+        nextAction:
+            (json['next_action'] ?? json['nextAction'] ?? '').toString(),
+        priority: (json['priority'] ?? 'normal').toString(),
+        checkpointVersion: (json['checkpoint_version'] ??
+            json['checkpointVersion'] ??
+            0) as int,
+      );
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'title': title,
-    'status': status,
-    'description': description,
-    'next_action': nextAction,
-    'priority': priority,
-    'checkpoint_version': checkpointVersion,
-  };
+        'id': id,
+        'title': title,
+        'status': status,
+        'description': description,
+        'next_action': nextAction,
+        'priority': priority,
+        'checkpoint_version': checkpointVersion,
+      };
 }
 
 class AdminApproval {
@@ -53,11 +55,12 @@ class AdminApproval {
   final Map<String, dynamic> preview;
 
   factory AdminApproval.fromJson(Map<String, dynamic> json) => AdminApproval(
-    id: (json['id'] ?? '').toString(),
-    actionType: (json['action_type'] ?? json['actionType'] ?? '').toString(),
-    status: (json['status'] ?? 'pending').toString(),
-    preview: Map<String, dynamic>.from(
-      json['preview'] is Map ? json['preview'] as Map : const {},
-    ),
-  );
+        id: (json['id'] ?? '').toString(),
+        actionType:
+            (json['action_type'] ?? json['actionType'] ?? '').toString(),
+        status: (json['status'] ?? 'pending').toString(),
+        preview: Map<String, dynamic>.from(
+          json['preview'] is Map ? json['preview'] as Map : const {},
+        ),
+      );
 }
