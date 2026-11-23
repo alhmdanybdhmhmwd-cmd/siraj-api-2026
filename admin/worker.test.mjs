@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canTransitionTask, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, validateKnowledgeInput, rankKnowledgeChunks } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, validateKnowledgeInput, rankKnowledgeChunks } from "./worker.js";
 
 test("task input is normalized and bounded", () => {
   assert.deepEqual(validateTaskInput({ title: "  Prepare global launch  ", priority: "high" }), {
@@ -10,6 +10,15 @@ test("task input is normalized and bounded", () => {
   assert.equal(validateTaskInput({ title: " " }).ok, false);
   assert.equal(validateTaskInput({ title: "x".repeat(181) }).ok, false);
   assert.equal(validateTaskInput({ title: "valid", priority: "root" }).error, "invalid_priority");
+});
+
+test("only the server worker can mark tasks running or completed", () => {
+  assert.equal(canManuallySetTaskStatus("queued"), true);
+  assert.equal(canManuallySetTaskStatus("paused"), true);
+  assert.equal(canManuallySetTaskStatus("cancelled"), true);
+  assert.equal(canManuallySetTaskStatus("running"), false);
+  assert.equal(canManuallySetTaskStatus("completed"), false);
+  assert.equal(canManuallySetTaskStatus("unknown"), false);
 });
 
 test("task state machine allows recovery but prevents terminal state resurrection", () => {
