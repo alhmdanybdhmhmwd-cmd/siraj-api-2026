@@ -466,6 +466,9 @@ test("SPARK media publishing stores private image/video objects with a 24-hour l
   assert.ok(uploadRoute.includes("image\\/") && uploadRoute.includes("video\\/"));
   assert.ok(uploadRoute.includes("60 * 1024 * 1024"));
   assert.ok(worker.includes("const SPARK_STATUS_TTL_MS = 24 * 60 * 60 * 1000"));
+  assert.ok(worker.includes("const SPARK_MAX_ACTIVE_STATUSES = 5"));
+  assert.ok(worker.includes("activeStatuses?.count || 0) >= SPARK_MAX_ACTIVE_STATUSES"));
+  assert.ok(worker.includes('code: "SPARK_ACTIVE_LIMIT"'));
   assert.ok(uploadRoute.includes("Date.now() + SPARK_STATUS_TTL_MS"));
   assert.ok(uploadRoute.includes("CREATE TABLE IF NOT EXISTS status_media"));
   assert.ok(uploadRoute.includes("INSERT INTO media_access"));
