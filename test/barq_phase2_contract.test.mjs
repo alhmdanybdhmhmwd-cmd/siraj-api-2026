@@ -269,6 +269,17 @@ test("chat wallpaper is selectable and persists per conversation", () => {
   assert.ok(flutterApp.includes("barq_chat_wallpaper_"));
 });
 
+test("private and group chat composers use the unified Barq pill layout and reply previews", () => {
+  assert.ok(flutterApp.includes("class BarqReplyPreview extends StatelessWidget"));
+  assert.ok(flutterApp.includes("surfaceContainerHighest.withValues(alpha: .72)"));
+  assert.ok(flutterApp.includes("borderRadius: BorderRadius.circular(24)"));
+  assert.ok(flutterApp.includes("Icons.send_rounded"));
+  assert.ok(flutterApp.includes("textCapitalization: TextCapitalization.sentences"));
+  assert.ok(flutterApp.includes("if (replyToMessage != null)\n              BarqReplyPreview"));
+  assert.ok(flutterApp.includes("_replySwipeDistance.abs() > 48"));
+  assert.ok(flutterApp.includes("(details.primaryVelocity ?? 0).abs() > 260"));
+});
+
 test("visible private and group reaction chips toggle the current user's reaction", () => {
   const start = flutterApp.indexOf("Widget messageReactionBar(");
   const end = flutterApp.indexOf("Future<void> showMessageActions(", start);
