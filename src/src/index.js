@@ -1420,7 +1420,7 @@ export default {
       if (method === "GET" && path === "/api/security/devices") {
         await ensureDeviceSessions(env);
         const result = await env.DB.prepare(
-          "SELECT device_name AS deviceName, first_seen_at AS firstSeenAt, last_seen_at AS lastSeenAt, device_id = ? AS isCurrent FROM device_sessions WHERE user_id = ? AND revoked_at IS NULL ORDER BY last_seen_at DESC LIMIT 20"
+          "SELECT device_id AS deviceId, device_name AS deviceName, first_seen_at AS firstSeenAt, last_seen_at AS lastSeenAt, device_id = ? AS isCurrent FROM device_sessions WHERE user_id = ? AND revoked_at IS NULL ORDER BY last_seen_at DESC LIMIT 20"
         ).bind(String(currentUser.did || ""), currentUser.sub).all();
         return json({ devices: result?.results || [] });
       }
