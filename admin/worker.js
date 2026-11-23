@@ -542,6 +542,10 @@ async function handle(request, env) {
       }, 200, allowedOrigin);
     } catch (error) {
       console.error("BARQ Brain image generation failed:", error);
+      const message = String(error?.message || error || "");
+      if (/license|terms|agreement|5016/i.test(message)) {
+        return response({ error: "image_generation_model_terms_required" }, 503, allowedOrigin);
+      }
       return response({ error: "image_generation_failed" }, 502, allowedOrigin);
     }
   }
