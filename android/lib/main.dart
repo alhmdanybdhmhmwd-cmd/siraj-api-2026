@@ -11743,8 +11743,8 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                     ),
                     IconButton(
                       visualDensity: VisualDensity.compact,
-                      tooltip: 'إرفاق صورة أو فيديو',
-                      onPressed: sending ? null : pickAndSendFile,
+                      tooltip: 'اختيار صورة أو فيديو',
+                      onPressed: sending ? null : pickAndSendMedia,
                       icon: const Icon(Icons.photo_camera_outlined, color: Colors.white70),
                     ),
                     ValueListenableBuilder<TextEditingValue>(
