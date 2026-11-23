@@ -105,7 +105,7 @@ export async function ingestRepository({ repository, ref = "HEAD", githubToken, 
       !githubToken || !adminApiUrl || !ownerToken) {
     throw new Error("missing_ingestion_configuration");
   }
-  const apiBase = adminApiUrl.replace(/\/+$/, "");
+  const apiBase = normalizeAdminApiUrl(adminApiUrl);
   const commit = await githubJson(
     "https://api.github.com/repos/" + repository + "/commits/" + encodeURIComponent(ref),
     githubToken
