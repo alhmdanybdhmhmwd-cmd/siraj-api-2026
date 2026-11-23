@@ -5354,198 +5354,170 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Widget _statusesPage() {
     final palette = Theme.of(context).colorScheme;
-    final grouped = <String, List<Map<String, dynamic>>>{};
-    for (final status in statuses) {
-      final ownerId = field(status, ['userId', 'user_id']);
-      if (ownerId.isEmpty) continue;
-      grouped.putIfAbsent(ownerId, () => <Map<String, dynamic>>[]).add(status);
+    final ownStatuses = statuses.where((item) =>
+      field(item, ['userId', 'user_id']) == myId).toList()
+      ..sort((a, b) => field(b, ['createdAt', 'created_at']).compareTo(
+        field(a, ['createdAt', 'created_at'])));
+    final latestByUser = <String, Map<String, dynamic>>{};
+    for (final status in statuses.where((item) =>
+        field(item, ['userId', 'user_id']) != myId)) {
+      final userId = field(status, ['userId', 'user_id']);
+      final previous = latestByUser[userId];
+      if (previous == null || field(status, ['createdAt', 'created_at']).compareTo(
+          field(previous, ['createdAt', 'created_at'])) > 0) {
+        latestByUser[userId] = status;
+      }
     }
-    final own = grouped.remove(myId) ?? <Map<String, dynamic>>[];
-    final recent = grouped.entries.toList();
+    final recentStatuses = latestByUser.values.toList()
+      ..sort((a, b) => field(b, ['createdAt', 'created_at']).compareTo(
+        field(a, ['createdAt', 'created_at'])));
 
-    Widget avatarFor(Map<String, dynamic>? status, {bool isOwn = false, bool viewed = false}) {
-      final source = isOwn ? me : (status ?? const <String, dynamic>{});
-      final photo = field(source, ['photoUrl', 'photo_url']);
+    Widget avatar(Map<String, dynamic> status, {bool own = false}) {
+      final photo = field(status, ['photoUrl', 'photo_url']);
       return Container(
         padding: const EdgeInsets.all(3),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          border: Border.all(
-            color: viewed ? palette.outlineVariant : palette.primary,
-            width: 2.2,
+          gradient: LinearGradient(
+            colors: own
+                ? [palette.outlineVariant, palette.outlineVariant]
+                : [palette.primary, gold, palette.secondary],
+            begin: Alignment.topRight,
+            end: Alignment.bottomLeft,
           ),
         ),
-        child: CircleAvatar(
-          radius: 25,
-          backgroundColor: palette.surfaceContainerHighest,
-          backgroundImage: photo.isEmpty ? null : NetworkImage(
-            '$apiBase$photo?v=${Uri.encodeComponent(field(source, ['photoUpdatedAt', 'photo_updated_at']))}',
-            headers: {if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'},
+        child: Container(
+          padding: const EdgeInsets.all(2),
+          decoration: BoxDecoration(color: palette.surface, shape: BoxShape.circle),
+          child: CircleAvatar(
+            radius: 27,
+            backgroundColor: palette.surfaceContainerHighest,
+            backgroundImage: photo.isEmpty ? null : NetworkImage(
+              '$apiBase$photo?v=${Uri.encodeComponent(field(status, ['photoUpdatedAt', 'photo_updated_at']))}',
+              headers: {'Authorization': 'Bearer ${Api.token}'},
+            ),
+            child: photo.isEmpty
+                ? Icon(Icons.person_rounded, color: palette.onSurfaceVariant, size: 27)
+                : null,
           ),
-          child: photo.isEmpty
-              ? Icon(Icons.person_rounded, color: palette.onSurfaceVariant, size: 25)
-              : null,
         ),
       );
     }
 
-    Widget statusRow({
-      required String name,
-      required String subtitle,
-      required Map<String, dynamic>? status,
-      required bool isOwn,
-      required bool viewed,
-    }) {
-      final statusId = field(status ?? const <String, dynamic>{}, ['id']);
-      final count = int.tryParse(field(status ?? const <String, dynamic>{}, ['viewCount', 'view_count'], '0')) ?? 0;
+    Widget statusRow(Map<String, dynamic> status) {
+      final name = field(status, ['displayName', 'display_name', 'username'], 'مستخدم برق');
       return ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 1),
-        leading: Stack(clipBehavior: Clip.none, children: [
-          avatarFor(status, isOwn: isOwn, viewed: viewed),
-          if (isOwn)
-            Positioned(
-              bottom: -1, right: -1,
-              child: Container(
-                width: 21, height: 21,
-                decoration: BoxDecoration(
-                  color: palette.primary, shape: BoxShape.circle,
-                  border: Border.all(color: palette.surface, width: 2),
-                ),
-                child: const Icon(Icons.add_rounded, color: Colors.white, size: 14),
-              ),
-            ),
-        ]),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        leading: avatar(status),
         title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-        subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis,
-          style: TextStyle(color: palette.onSurfaceVariant, fontSize: 12)),
-        trailing: isOwn && status != null
-            ? InkWell(
-                borderRadius: BorderRadius.circular(18),
-                onTap: statusId.isEmpty ? null : () => _showSparkViewers(statusId),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 8),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.visibility_outlined, size: 17, color: palette.onSurfaceVariant),
-                    const SizedBox(width: 5),
-                    Text('$count', style: TextStyle(color: palette.onSurfaceVariant, fontSize: 12)),
-                  ]),
-                ),
-              )
-            : null,
-        onTap: isOwn
-            ? (status == null ? publishStatusDialog : () => _openSparkStatus(status))
-            : status == null ? null : () => _openSparkStatus(status),
+        subtitle: Text(field(status, ['createdAt', 'created_at'], 'تحديث جديد'),
+          maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: palette.onSurfaceVariant, fontSize: 11)),
+        onTap: () => _openSparkStatus(status),
       );
     }
-
-    final latestOwn = own.isEmpty ? null : own.first;
-    final latestFriends = recent.map((entry) => entry.value.first).toList();
-    final unviewed = latestFriends.where((item) => item['isViewed'] != true && item['is_viewed'] != true).toList();
-    final viewed = latestFriends.where((item) => item['isViewed'] == true || item['is_viewed'] == true).toList();
 
     return RefreshIndicator(
       color: palette.primary,
       onRefresh: refreshAll,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 4, 4, 12),
-            child: Row(children: [
-              Icon(Icons.bolt_rounded, color: palette.primary, size: 25),
-              const SizedBox(width: 8),
-              Text('SPARK', style: TextStyle(
-                color: palette.primary, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 1.1)),
-              const Spacer(),
-              IconButton(
-                tooltip: 'نشر حالة نصية',
-                onPressed: publishStatusDialog,
-                icon: Icon(Icons.edit_note_rounded, color: palette.onSurfaceVariant),
-              ),
-              IconButton(
-                tooltip: 'نشر صورة أو فيديو',
-                onPressed: publishSparkMediaDialog,
-                icon: Icon(Icons.camera_alt_outlined, color: palette.primary),
+          Row(children: [
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('SPARK', style: TextStyle(
+                  color: palette.primary, fontSize: 22, fontWeight: FontWeight.w900,
+                  letterSpacing: 1.2,
+                )),
+                Text('الحالة والتحديثات', style: TextStyle(
+                  color: palette.onSurfaceVariant, fontSize: 11,
+                )),
+              ],
+            )),
+            PopupMenuButton<String>(
+              tooltip: 'نشر حالة',
+              icon: Icon(Icons.camera_alt_outlined, color: palette.primary, size: 24),
+              onSelected: (value) {
+                if (value == 'text') publishStatusDialog();
+                if (value == 'media') publishSparkMediaDialog();
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'text', child: Text('حالة نصية')),
+                PopupMenuItem(value: 'media', child: Text('صورة أو فيديو')),
+              ],
+            ),
+          ]),
+          const SizedBox(height: 12),
+          ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            leading: Stack(clipBehavior: Clip.none, children: [
+              if (ownStatuses.isEmpty)
+                CircleAvatar(
+                  radius: 31,
+                  backgroundColor: palette.surfaceContainerHighest,
+                  child: Icon(Icons.person_rounded, color: palette.onSurfaceVariant, size: 30),
+                )
+              else
+                avatar(ownStatuses.first, own: true),
+              Positioned(
+                bottom: -1, right: -2,
+                child: Container(
+                  width: 23, height: 23,
+                  decoration: BoxDecoration(
+                    color: palette.primary, shape: BoxShape.circle,
+                    border: Border.all(color: palette.surface, width: 2),
+                  ),
+                  child: const Icon(Icons.add_rounded, size: 16, color: Colors.white),
+                ),
               ),
             ]),
-          ),
-          Text('حالتي', style: TextStyle(
-            color: palette.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 3),
-          statusRow(
-            name: 'حالتي',
-            subtitle: latestOwn == null ? 'اضغط لإضافة تحديث جديد' : 'اضغط لعرض تحديثاتك',
-            status: latestOwn, isOwn: true, viewed: false,
-          ),
-          if (unviewed.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text('التحديثات الأخيرة', style: TextStyle(
-              color: palette.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 3),
-            for (final status in unviewed)
-              statusRow(
-                name: field(status, ['displayName', 'display_name', 'username'], 'مستخدم برق'),
-                subtitle: field(status, ['createdAt', 'created_at']).isEmpty
-                    ? 'تحديث جديد'
-                    : _messageTime(field(status, ['createdAt', 'created_at'])),
-                status: status, isOwn: false, viewed: false,
-              ),
-          ],
-          if (viewed.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            Text('التحديثات التي تمت مشاهدتها', style: TextStyle(
-              color: palette.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 3),
-            for (final status in viewed)
-              statusRow(
-                name: field(status, ['displayName', 'display_name', 'username'], 'مستخدم برق'),
-                subtitle: field(status, ['createdAt', 'created_at']).isEmpty
-                    ? 'تمت المشاهدة'
-                    : _messageTime(field(status, ['createdAt', 'created_at'])),
-                status: status, isOwn: false, viewed: true,
-              ),
-          ],
-          if (statuses.isEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 38),
-              child: Column(children: [
-                Icon(Icons.bolt_rounded, color: palette.primary.withValues(alpha: .65), size: 42),
-                const SizedBox(height: 9),
-                Text('لا توجد تحديثات بعد', style: TextStyle(
-                  color: palette.onSurface, fontWeight: FontWeight.w800, fontSize: 14)),
-                const SizedBox(height: 4),
-                Text('انشر أول لحظة وشاركها مع أصدقائك.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: palette.onSurfaceVariant, fontSize: 12)),
-              ]),
+            title: const Text('حالتي', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+            subtitle: Text(
+              ownStatuses.isEmpty ? 'اضغط لإضافة تحديث' : 'اضغط لعرض تحديثاتك',
+              style: TextStyle(color: palette.onSurfaceVariant, fontSize: 11),
             ),
+            trailing: ownStatuses.isEmpty
+                ? Icon(Icons.add_circle_outline_rounded, color: palette.primary)
+                : Row(mainAxisSize: MainAxisSize.min, children: [
+                    IconButton(
+                      tooltip: 'من شاهد حالتي',
+                      onPressed: () => _showSparkViewers(field(ownStatuses.first, ['id'])),
+                      icon: Icon(Icons.visibility_outlined, color: palette.primary),
+                    ),
+                    Text('${ownStatuses.fold<int>(0, (sum, item) =>
+                      sum + (int.tryParse((item['viewCount'] ?? 0).toString()) ?? 0))}',
+                      style: TextStyle(color: palette.onSurfaceVariant, fontSize: 11)),
+                  ]),
+            onTap: ownStatuses.isEmpty
+                ? publishSparkMediaDialog
+                : () => _openSparkStatus(ownStatuses.first),
+          ),
+          Divider(height: 1, color: palette.outlineVariant.withValues(alpha: .45)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 18, 4, 8),
+            child: Text('التحديثات الأخيرة',
+              style: TextStyle(color: palette.primary, fontWeight: FontWeight.w800, fontSize: 13)),
+          ),
+          if (recentStatuses.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 36),
+              child: Column(children: [
+                Icon(Icons.auto_awesome_outlined, size: 40, color: palette.onSurfaceVariant),
+                const SizedBox(height: 10),
+                Text('لا توجد تحديثات جديدة',
+                  style: TextStyle(color: palette.onSurface, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 5),
+                Text('ستظهر هنا حالات جهات اتصالك مثل واتساب.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: palette.onSurfaceVariant, fontSize: 11)),
+              ]),
+            )
+          else
+            for (final status in recentStatuses) statusRow(status),
         ],
-      ),
-    );
-  }
-
-  Widget _sparkComposeAction({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    final palette = Theme.of(context).colorScheme;
-    return Material(
-      color: palette.primary.withValues(alpha: .09),
-      borderRadius: BorderRadius.circular(15),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(15),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 10),
-          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Icon(icon, color: palette.primary, size: 20),
-            const SizedBox(width: 8),
-            Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: palette.primary, fontSize: 12, fontWeight: FontWeight.w800))),
-          ]),
-        ),
       ),
     );
   }
