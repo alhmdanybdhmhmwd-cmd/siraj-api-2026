@@ -64,3 +64,17 @@ class AdminApproval {
         ),
       );
 }
+
+List<AdminTask> mergeOutboxDrafts(List<AdminTask> serverTasks, List<Map<String, dynamic>> pending) {
+  final existingIds = serverTasks.map((task) => task.id).toSet();
+  final drafts = <AdminTask>[];
+  for (final item in pending) {
+    final key = (item['idempotencyKey'] ?? '').toString();
+    final title = (item['title'] ?? '').toString().trim();
+    if (key.isEmpty || title.isEmpty) continue;
+    final id = 'local-' + key;
+    if (!existingIds.add(id)) continue;
+    drafts.add(AdminTask(id: id, title: title, description: (item['description'] ?? '').toString(), priority: (item['priority'] ?? 'normal').toString(), status: 'draft_offline', nextAction: 'سيتم الإرسال عند عودة الاتصال'));
+  }
+  return [...drafts, ...serverTasks];
+}
