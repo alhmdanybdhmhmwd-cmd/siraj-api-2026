@@ -104,7 +104,7 @@ export function validateGeneratedImage(value, maxImageBytes = 8 * 1024 * 1024) {
   }
 }
 
-export function buildVisionMessages(prompt, image) {
+export function buildVisionMessages(prompt) {
   return [
     {
       role: "system",
@@ -116,13 +116,7 @@ export function buildVisionMessages(prompt, image) {
         "Do not claim to execute actions, edit files, deploy, merge, publish, or modify production. Consequential actions require specific owner approval. Give a clear Arabic answer unless the owner asks for another language."
       ].join("\n")
     },
-    {
-      role: "user",
-      content: [
-        { type: "text", text: prompt },
-        { type: "image_url", image_url: { url: image } }
-      ]
-    }
+    { role: "user", content: prompt }
   ];
 }
 
@@ -870,7 +864,8 @@ async function handle(request, env) {
     const model = "@cf/meta/llama-3.2-11b-vision-instruct";
     try {
       const generated = await env.ADMIN_AI.run(model, {
-        messages: buildVisionMessages(prompt, image),
+        messages: buildVisionMessages(prompt),
+        image,
         max_tokens: 1200
       });
       const answer = typeof generated?.response === "string"

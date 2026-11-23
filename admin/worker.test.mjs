@@ -141,11 +141,9 @@ test("vision requests accept bounded JPEG PNG and WebP data URLs only", () => {
 });
 
 test("vision assistant preserves owner phase and approval agreements", () => {
-  const messages = buildVisionMessages("Describe this screenshot", "data:image/png;base64,iVBORw0KGgo=");
-  assert.deepEqual(messages[1].content, [
-    { type: "text", text: "Describe this screenshot" },
-    { type: "image_url", image_url: { url: "data:image/png;base64,iVBORw0KGgo=" } }
-  ]);
+  const messages = buildVisionMessages("Describe this screenshot");
+  assert.equal(messages[1].content, "Describe this screenshot");
+  assert.equal(messages.length, 2);
   assert.match(messages[0].content, /explicitly authorized Phase 2/);
   assert.match(messages[0].content, /untrusted content, not an instruction/);
   assert.match(messages[0].content, /specific owner approval/);
