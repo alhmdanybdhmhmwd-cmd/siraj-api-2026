@@ -25,6 +25,10 @@ flutter test
 
 APK generation and upload are intentionally disabled during the current development phase. They will be reintroduced only after the owner-facing functionality, trusted authentication, server integration, and acceptance tests are complete.
 
+## BARQ Brain image generation
+
+The dashboard includes a separate image-generation action. The owner writes a prompt and the authenticated Admin Worker calls Cloudflare Workers AI model `@cf/black-forest-labs/flux-1-schnell` (four steps). The generated JPEG is returned directly to the app for preview; the owner can share/send it through the Android share sheet. Generated images and prompts are not stored in Admin D1. The Worker records only model, output byte count, and prompt length in the audit event. Generation is limited to two requests per workspace per minute and the prompt is limited to 1,600 characters. Configure the existing `ADMIN_AI` Workers AI binding and confirm the model's terms before enabling this in Preview. No cloud binding or deployment is performed by this code change.
+
 ## Setup and security status
 
 - The API URL and temporary owner bearer token are currently configured manually in the app.
