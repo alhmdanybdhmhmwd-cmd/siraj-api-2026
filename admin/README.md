@@ -37,7 +37,11 @@ Accepted bearer tokens must be issued by a trusted server-side identity componen
 - `PATCH /v1/workspace` (optimistic project/phase position sync)
 - `GET /v1/approvals`, `POST /v1/approvals`, `PATCH /v1/approvals/:id` (owner-reviewed action previews)
 - `GET /v1/knowledge`, `POST /v1/knowledge`, `GET /v1/knowledge/:id` (versioned project source index)
+- `POST /v1/brain/vision` (owner-provided JPEG/PNG/WebP image analysis; bounded input and per-workspace rate limit)
+- `POST /v1/brain/generate-image` (prompt-to-JPEG generation through Workers AI; two requests per minute per workspace)
 - `GET /v1/audit` (latest append-only audit events)
+
+Image handling is deliberately transient: image-analysis and image-generation payloads are not stored in Admin D1. The image-generation endpoint validates the model response as canonical JPEG base64, enforces an 8 MiB output ceiling, and records only audit metadata (model, byte count, and prompt length). The mobile app previews generated output and opens the platform share sheet; it does not deliver images automatically or retain a permanent image gallery. Real generation requires the dedicated Preview `ADMIN_AI` binding and any model terms acceptance required by Cloudflare.
 
 The checkpoint API stores step input/output references, completed step, next action, and monotonically increasing version. Clients must reload after a version conflict rather than overwrite a newer checkpoint. BARQ Brain retrieves relevant indexed sources by task terms and cites their source paths/revisions. An initial GitHub indexing script now reads an explicit repository ref, skips sensitive paths and likely secret content, limits file sizes and per-run file count, and posts versioned chunks to the Admin API. It has not yet been run against a configured Admin Preview environment.
 
