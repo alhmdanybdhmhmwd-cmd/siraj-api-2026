@@ -2838,7 +2838,8 @@ Future<void> showMessageActions(
                   ),
                 ),
               Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.5)),
-              item(value: 'reply', icon: Icons.reply_rounded, label: 'الرد على الرسالة'),
+              if (onReply != null)
+                item(value: 'reply', icon: Icons.reply_rounded, label: 'الرد على الرسالة'),
               item(value: 'copy', icon: Icons.copy_all_outlined, label: 'نسخ الرسالة'),
               if (onForward != null)
                 item(value: 'forward', icon: Icons.forward_rounded, label: 'تحويل الرسالة'),
