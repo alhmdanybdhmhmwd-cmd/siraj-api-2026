@@ -45,18 +45,25 @@ export function validateVisionInput(value, maxImageBytes = 4 * 1024 * 1024) {
   }
   const image = typeof value.image === "string" ? value.image : "";
   const prompt = typeof value.prompt === "string" ? value.prompt.trim() : "";
-  const match = image.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/);
+  const match = image.match(/^data:(image\\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/);
   if (!match || !prompt || prompt.length > 2000) {
     return { ok: false, error: "invalid_image_or_prompt" };
   }
-  const imageBytes = Math.floor(match[2].length * 3 / 4);
+  let imageBytes;
+  try {
+    const decoded = atob(match[2]);
+    if (btoa(decoded) !== match[2]) return { ok: false, error: "invalid_image_or_prompt" };
+    imageBytes = decoded.length;
+  } catch {
+    return { ok: false, error: "invalid_image_or_prompt" };
+  }
   if (imageBytes < 1 || imageBytes > maxImageBytes) {
     return { ok: false, error: "image_too_large" };
   }
   return { ok: true, value: { image, prompt, mimeType: match[1], imageBytes } };
 }
 
-export function buildVisionMessages(prompt) {
+export function buildVisionMessages(prompt, image) {
   return [
     {
       role: "system",
@@ -68,7 +75,13 @@ export function buildVisionMessages(prompt) {
         "Do not claim to execute actions, edit files, deploy, merge, publish, or modify production. Consequential actions require specific owner approval. Give a clear Arabic answer unless the owner asks for another language."
       ].join("\n")
     },
-    { role: "user", content: prompt }
+    {
+      role: "user",
+      content: [
+        { type: "text", text: prompt },
+        { type: "image_url", image_url: { url: image } }
+      ]
+    }
   ];
 }
 
@@ -498,8 +511,7 @@ async function handle(request, env) {
     const model = "@cf/meta/llama-3.2-11b-vision-instruct";
     try {
       const generated = await env.ADMIN_AI.run(model, {
-        messages: buildVisionMessages(prompt),
-        image,
+        messages: buildVisionMessages(prompt, image),
         max_tokens: 1200
       });
       const answer = typeof generated?.response === "string"
