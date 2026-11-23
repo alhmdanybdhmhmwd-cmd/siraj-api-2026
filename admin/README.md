@@ -53,7 +53,7 @@ The mobile app performs Google Authorization Code + PKCE using AppAuth and sends
 - `PATCH /v1/tasks/:id/status` (validated state transitions)
 - `PATCH /v1/workspace` (optimistic project/phase position sync)
 - `GET /v1/approvals`, `POST /v1/approvals`, `PATCH /v1/approvals/:id` (owner-reviewed action previews)
-- `GET /v1/knowledge`, `POST /v1/knowledge`, `GET /v1/knowledge/:id` (versioned project source index)
+- `GET /v1/knowledge`, `POST /v1/knowledge`, `GET /v1/knowledge/:id` (versioned project source index)\n- `GET /v1/brain/conversations`, `POST /v1/brain/chat`, `GET /v1/brain/conversations/:id/messages` (owner-scoped persistent assistant conversations with source references)
 - `POST /v1/brain/vision` (owner-provided JPEG/PNG/WebP image analysis; no application-imposed request-count quota)
 - `POST /v1/brain/generate-image` (prompt-to-JPEG generation through Workers AI; no application-imposed request-count quota)
 - `GET /v1/audit` (latest append-only audit events)
@@ -67,7 +67,7 @@ The checkpoint API stores step input/output references, completed step, next act
 - The Google OIDC exchange, Admin session issuance, refresh rotation, logout, device listing, and revocation routes are implemented in the isolated Worker code and covered by unit/schema checks. They have **not** yet been exercised against a configured Google OAuth client and dedicated Admin Preview resources or on a physical Android device.
 - The mobile client includes Google OIDC login, secure token storage, refresh handling, logout, and a device-management dialog. Android callback behavior still needs a real signed build/device acceptance test.
 - Dedicated Admin Preview D1, Queue, and AI bindings are not configured or verified. The Queue consumer now processes one task per delivery and a dedicated dead-letter consumer marks exhausted tasks failed and records an audit event. Lease renewal during long AI calls now runs every four minutes with ownership fencing before completion. Explicit recovery/requeue after abrupt worker termination remains incomplete; queue-depth/age alerting and a dead-letter monitoring dashboard are also not implemented.
-- BARQ Brain currently drafts and checkpoints a result; it does not autonomously modify repositories or deploy services. Push notifications, signing-key rotation procedures, concurrency-focused refresh tests, and the growth workspace remain follow-on work.
+- BARQ Brain supports persistent owner-scoped chat history and source-referenced replies in addition to durable task drafts/checkpoints. It does not autonomously modify repositories or deploy services. Chat requires the dedicated Preview `ADMIN_AI` binding and the new `0007_brain_conversations.sql` migration. Push notifications, signing-key rotation procedures, concurrency-focused refresh tests, and the growth workspace remain follow-on work.
 
 No production data or services are changed by this foundation. The current CI pass validates syntax, unit tests, schema invariants, Flutter analysis/tests, and Android manifest/Gradle AppAuth wiring; it does not prove live Google sign-in or deployed background execution.
 
