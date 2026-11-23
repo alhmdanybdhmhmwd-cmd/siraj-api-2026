@@ -9291,7 +9291,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   dense: true, leading: Icon(Icons.cleaning_services_outlined), title: Text('مسح سجل المحادثة'))),
                 PopupMenuItem(value: 'search', child: ListTile(
                   dense: true, leading: Icon(Icons.search), title: Text('البحث في المحادثة'))),
-                const PopupMenuItem(value: 'summary', child: ListTile(
+                PopupMenuItem(value: 'summary', child: ListTile(
                   dense: true, leading: Icon(Icons.auto_awesome_outlined), title: Text('ملخص المحادثة'))),
               ],
             ),
@@ -10672,7 +10672,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
               itemBuilder: (_) => [
                 const PopupMenuItem(value: 'members', child: ListTile(
                   dense: true, leading: Icon(Icons.people_alt_outlined), title: Text('معلومات المجموعة والأعضاء'))),
-                PopupMenuItem(value: 'summary', child: ListTile(
+                const                 PopupMenuItem(value: 'summary', child: ListTile(
                   dense: true, leading: Icon(Icons.auto_awesome_outlined), title: Text('ملخص المحادثة'))),
                 const PopupMenuItem(value: 'pinned', child: ListTile(
                   dense: true, leading: Icon(Icons.push_pin_outlined), title: Text('الرسائل المثبتة'))),
