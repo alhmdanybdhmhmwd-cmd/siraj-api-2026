@@ -6844,10 +6844,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                       final deviceId = device['deviceId']?.toString() ?? '';
                                       if (deviceId.isEmpty) return;
                                       try {
+                                        final isCurrent = device['isCurrent'] == true || device['isCurrent'] == 1;
                                         await Api.revokeDeviceSession(deviceId);
                                         if (!devicesContext.mounted) return;
                                         Navigator.pop(devicesContext);
-                                        showMsg(dialogContext, 'تم إنهاء جلسة الجهاز. حدّث قائمة الأجهزة للتأكد.');
+                                        if (isCurrent) {
+                                          await Api.logout();
+                                          if (!mounted) return;
+                                          Navigator.of(this.context).pushAndRemoveUntil(
+                                            MaterialPageRoute(builder: (_) => const LoginPage()),
+                                            (_) => false,
+                                          );
+                                        } else {
+                                          showMsg(dialogContext, 'تم إنهاء جلسة الجهاز بنجاح.');
+                                        }
                                       } catch (error) {
                                         if (devicesContext.mounted) showMsg(devicesContext, cleanError(error));
                                       }
