@@ -84,6 +84,11 @@ jobs:
           SUBDOMAIN="$(echo "$RESPONSE" | jq -r '.result.subdomain')"
           echo "Verified workers.dev account subdomain: $SUBDOMAIN"
           echo "BARQ_WORKERS_DEV_SUBDOMAIN=$SUBDOMAIN" >> "$GITHUB_ENV"
+      - name: Apply migrations to isolated Preview D1 only
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 d1 migrations apply barq-phase2-test-2026-11-20 --remote --config wrangler.fallback.test.toml
       - name: Deploy isolated fallback Worker
         id: deploy
         shell: bash
