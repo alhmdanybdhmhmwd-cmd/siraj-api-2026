@@ -232,6 +232,16 @@ export function buildAssistantMessages(task, workspace, knowledge = []) {
   ];
 }
 
+export async function renewAdminTaskLease(env, taskId, workspaceId, leaseId) {
+  if (!env.ADMIN_DB) return false;
+  const result = await env.ADMIN_DB.prepare(`
+    UPDATE admin_tasks
+    SET lease_expires_at = datetime('now', '+10 minutes'), updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND workspace_id = ? AND lease_owner = ? AND status = 'running'
+  `).bind(taskId, workspaceId, leaseId).run();
+  return Boolean(result?.meta?.changes);
+}
+
 async function processAdminTaskMessage(message, env) {
   const payload = message.body;
   if (!payload || typeof payload.taskId !== "string" || typeof payload.workspaceId !== "string") {
@@ -279,8 +289,15 @@ async function processAdminTaskMessage(message, env) {
     SELECT current_project, current_phase FROM admin_workspaces WHERE id = ?
   `).bind(payload.workspaceId).first();
 
+  let heartbeatTimer;
+  let leaseLost = false;
   try {
     if (!task || !workspace) throw new Error("task_context_missing");
+    heartbeatTimer = setInterval(() => {
+      renewAdminTaskLease(env, payload.taskId, payload.workspaceId, leaseId)
+        .then(renewed => { if (!renewed) leaseLost = true; })
+        .catch(error => { console.error("BARQ Admin lease renewal failed:", error); leaseLost = true; });
+    }, 4 * 60 * 1000);
     const model = env.BARQ_ADMIN_AI_MODEL || "@cf/meta/llama-3.1-8b-instruct";
     const generated = await env.ADMIN_AI.run(model, {
       messages: buildAssistantMessages(task, workspace,
@@ -295,6 +312,7 @@ async function processAdminTaskMessage(message, env) {
         )),
       max_tokens: 1800
     });
+    if (leaseLost) throw new Error("task_lease_lost");
     const answer = typeof generated?.response === "string"
       ? generated.response.trim()
       : typeof generated === "string" ? generated.trim() : "";
@@ -313,7 +331,7 @@ async function processAdminTaskMessage(message, env) {
         UPDATE admin_tasks SET status = 'completed', checkpoint_version = ?,
           last_checkpoint_id = ?, next_action = 'Review the assistant result',
           lease_owner = NULL, lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ? AND workspace_id = ? AND lease_owner = ? AND status = 'running' AND checkpoint_version = ?
+        WHERE id = ? AND workspace_id = ? AND lease_owner = ? AND status = 'running' AND checkpoint_version = ? AND lease_expires_at > CURRENT_TIMESTAMP
       `).bind(nextVersion, checkpointId, task.id, payload.workspaceId, leaseId, task.checkpoint_version),
       env.ADMIN_DB.prepare(`
         INSERT INTO admin_task_checkpoints
@@ -353,6 +371,8 @@ async function processAdminTaskMessage(message, env) {
     } else {
       message.retry({ delaySeconds: Math.min(300, 15 * Number(task?.attempt_count || 1)) });
     }
+  } finally {
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
   }
 }
 
