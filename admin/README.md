@@ -79,6 +79,26 @@ The independent Flutter client is under `admin/mobile`. It includes an Arabic RT
 
 Important offline boundary: a task created while the phone has no connection remains a local draft until it can reach the Admin API. Once a task has been accepted by the server queue, its analysis/drafting work runs server-side and can continue while the phone is offline. The owner sign-in flow uses Google OIDC Authorization Code + PKCE. The mobile device-management dialog and corresponding API routes are implemented; end-to-end Android callback and live session-revocation behavior remain to be tested against configured Preview resources.
 
+## Owner requirement: complete BARQ project understanding for BARQ Brain (Phase 2)
+
+The owner requires BARQ Brain to become a broad, project-aware engineering assistant for the separate BARQ Admin app. It must understand the BARQ product and its development history well enough for the owner to continue building BARQ together with the assistant, rather than behaving as a generic chatbot.
+
+This is an explicit Phase 2 acceptance requirement, not a claim that complete project understanding is already implemented in Phase 1. Phase 1 may prepare secure foundations and documentation only. Do not begin BARQ repository indexing, project analysis, or Phase 2 implementation until the owner explicitly authorizes that phase.
+
+When Phase 2 is authorized, the knowledge system must progressively cover and keep current:
+
+- Product identity, purpose, global audience, product vision, user journeys, and the distinction between BARQ (the messaging app), SPARK (its stories/status feature), BARQ Admin (the management app), and BARQ Brain (the Admin assistant).
+- The agreed roadmap, phase boundaries, completed and pending work, owner-approved decisions, changed or rejected ideas, and constraints that must not be reintroduced.
+- Every major BARQ feature and its behavior, UI flows, interactions, permissions, dependencies, and relationships to other features.
+- All authorized project repositories and relevant branches, source files, commits, pull requests, issues, release notes, and configuration. Repository scope must be explicit and owner-approved.
+- System architecture, Android/mobile structure, backend services, Workers, databases and migrations, APIs/contracts, authentication, notifications, storage, deployment environments, and third-party integrations.
+- Known and historical defects, error evidence, root-cause hypotheses, attempted fixes, test outcomes, regressions, operational incidents, and unresolved risks.
+- CI workflows, unit/integration/device tests, build results, deployment/health evidence, and the exact revision each result applies to.
+
+Knowledge must be source-backed and revision-aware: retain source path or record ID, repository/ref/commit or other revision, observed time, and ingestion status. Distinguish verified facts from assumptions and outdated material; surface conflicts instead of silently choosing one. Preserve an owner decision/history ledger so a later conversation does not erase or contradict earlier approved requirements. Refresh changed sources incrementally, detect removals/renames, and show what has not yet been indexed. Retrieve relevant material across sources for each task and cite the source and revision in answers.
+
+Phase 2 acceptance must include a coverage report, freshness/staleness indicators, source citations, tests for retrieval and conflicting decisions, and a demonstration that BARQ Brain can explain the product architecture, roadmap, feature behavior, known problems, and next authorized work without inventing missing facts. Do not claim it knows "everything" until the configured sources have actually been indexed and coverage has been measured. Keep secrets, personal user data, and production credentials out of the knowledge index.
+
 ## Owner requirement: always-on BARQ monitoring and safe self-repair (future phase)
 
 The owner explicitly requires BARQ Admin to monitor the BARQ service independently of the owner's phone and internet connection. This is a required future capability, not a feature currently deployed or claimed as operational.
