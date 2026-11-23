@@ -656,6 +656,7 @@ class SirajPush {
   static bool _tokenRefreshListening = false;
   static bool _tapListening = false;
   static String? _lastTapFingerprint;
+  static DateTime? _lastRegistrationAttempt;
 
   static void queueNotificationTap(RemoteMessage message) {
     final route = barqNotificationRouteFromData(message.data);
@@ -699,6 +700,7 @@ class SirajPush {
 
   static Future<void> clearPreferences() async {
     _preferences = {'messages': true, 'groups': true, 'statuses': true};
+    _lastRegistrationAttempt = null;
     try { await storage.delete(key: 'barq_notification_prefs'); } catch (_) {}
   }
 
@@ -810,7 +812,13 @@ class SirajPush {
     unawaited(_showForegroundNotification(message, label));
   }
 
-  static Future<void> register() async {
+  static Future<void> register({bool force = false}) async {
+    final now = DateTime.now();
+    if (!force && _lastRegistrationAttempt != null &&
+        now.difference(_lastRegistrationAttempt!) < const Duration(minutes: 5)) {
+      return;
+    }
+    _lastRegistrationAttempt = now;
     try {
       final messaging = FirebaseMessaging.instance;
       // Foreground in-app alerts are independent from OS notification permission.
@@ -4310,6 +4318,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _startOfflineSyncTimer();
+      unawaited(SirajPush.register());
       _syncRealtimeConnection();
       BarqOfflineQueue.syncOutbox();
       if (phoneContactsPermissionGranted) matchPhoneContacts(silent: true);
