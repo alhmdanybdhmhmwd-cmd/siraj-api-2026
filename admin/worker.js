@@ -84,6 +84,24 @@ export function validateImageGenerationInput(value) {
   return { ok: true, value: { prompt } };
 }
 
+export function validateGeneratedImage(value, maxImageBytes = 8 * 1024 * 1024) {
+  const image = typeof value === "string" ? value : "";
+  if (!image || !/^[A-Za-z0-9+/]+={0,2}$/.test(image)) {
+    return { ok: false, error: "image_generation_empty_result" };
+  }
+  try {
+    const binary = atob(image);
+    if (binary.length < 4 || binary.length > maxImageBytes ||
+        binary.charCodeAt(0) !== 0xff || binary.charCodeAt(1) !== 0xd8 ||
+        binary.charCodeAt(2) !== 0xff || btoa(binary) !== image) {
+      return { ok: false, error: "image_generation_invalid_result" };
+    }
+    return { ok: true, value: { image, mimeType: "image/jpeg", imageBytes: binary.length } };
+  } catch {
+    return { ok: false, error: "image_generation_invalid_result" };
+  }
+}
+
 export function buildVisionMessages(prompt, image) {
   return [
     {
@@ -519,23 +537,18 @@ async function handle(request, env) {
     const model = "@cf/black-forest-labs/flux-1-schnell";
     try {
       const generated = await env.ADMIN_AI.run(model, { prompt, steps: 4 });
-      const image = typeof generated?.image === "string" ? generated.image : "";
-      if (!/^[A-Za-z0-9+/]+={0,2}$/.test(image)) throw new Error("image_generation_empty_result");
-      const binary = atob(image);
-      if (binary.length < 4 || binary.length > 8 * 1024 * 1024 ||
-          binary.charCodeAt(0) !== 0xff || binary.charCodeAt(1) !== 0xd8 ||
-          binary.charCodeAt(2) !== 0xff || btoa(binary) !== image) {
-        throw new Error("image_generation_invalid_result");
-      }
+      const checkedImage = validateGeneratedImage(generated?.image);
+      if (!checkedImage.ok) throw new Error(checkedImage.error);
+      const { image, imageBytes } = checkedImage.value;
       await audit(env, workspace, actor, "brain.image_generated", "image", crypto.randomUUID(), {
-        imageBytes: binary.length,
+        imageBytes,
         promptLength: prompt.length,
         model
       });
       return response({
         image: "data:image/jpeg;base64," + image,
         mimeType: "image/jpeg",
-        imageBytes: binary.length,
+        imageBytes,
         model,
         generatedAt: new Date().toISOString(),
         imageStored: false
