@@ -106,8 +106,8 @@ export function buildAssistantMessages(task, workspace, knowledge = []) {
     const reference = String(item.source_path || "unknown") +
       (item.source_revision ? " @ " + item.source_revision : "");
     return "[" + (index + 1) + "] " + String(item.title || "") +
-      " (" + reference + ")\\n" + String(item.content || "").slice(0, 3000);
-  }).join("\\n\\n");
+      " (" + reference + ")\n" + String(item.content || "").slice(0, 3000);
+  }).join("\n\n");
   return [
     {
       role: "system",
@@ -123,7 +123,7 @@ export function buildAssistantMessages(task, workspace, knowledge = []) {
         "Relevant indexed project knowledge:",
         context || "No matching project knowledge has been indexed yet.",
         "Return a practical result, cite relevant source paths, note assumptions and risks, and identify any owner approval needed."
-      ].join("\\n")
+      ].join("\n")
     }
   ];
 }
@@ -273,7 +273,7 @@ export function validateKnowledgeInput(value) {
 }
 
 export function rankKnowledgeChunks(chunks, query, limit = 6) {
-  const tokens = [...new Set((String(query || "").toLowerCase().match(/[\\p{L}\\p{N}]{3,}/gu) || []))];
+  const tokens = [...new Set((String(query || "").toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []))];
   return (chunks || []).map(chunk => {
     const title = String(chunk.title || "").toLowerCase();
     const path = String(chunk.source_path || "").toLowerCase();
@@ -516,7 +516,7 @@ async function handle(request, env) {
     return response({ source, duplicate: source.id !== candidateId }, 201, allowedOrigin);
   }
 
-  const knowledgeMatch = url.pathname.match(/^\\/v1\\/knowledge\\/([0-9a-f-]{36})$/i);
+  const knowledgeMatch = url.pathname.match(/^\/v1\/knowledge\/([0-9a-f-]{36})$/i);
   if (request.method === "GET" && knowledgeMatch) {
     const source = await env.ADMIN_DB.prepare(`
       SELECT id, source_type, source_path, source_revision, title, content, updated_at
