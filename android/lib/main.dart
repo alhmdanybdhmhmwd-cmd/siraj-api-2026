@@ -5242,7 +5242,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                             contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                             leading: CircleAvatar(
                               backgroundColor: palette.primary.withValues(alpha: .13),
-                              child: Text(name.trim().isEmpty ? 'ب' : name.trim().characters.first,
+                              child: Text(name.trim().isEmpty ? 'ب' : name.trim().substring(0, 1),
                                 style: TextStyle(color: palette.primary, fontWeight: FontWeight.w800)),
                             ),
                             title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
