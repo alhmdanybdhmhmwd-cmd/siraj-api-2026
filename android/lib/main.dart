@@ -9596,12 +9596,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     }
   }
 
-  Map<String, dynamic> _newPendingAttachment(Uint8List bytes, String fileName, String contentType, {Duration? duration}) => {
+  Map<String, dynamic> _newPendingAttachment(Uint8List bytes, String fileName, String contentType, {Duration? duration, String? localPath}) => {
     'id': newBarqMessageId(), 'sender_id': widget.currentUserId, 'receiver_id': friendId,
     'body': '', 'created_at': DateTime.now().toUtc().toIso8601String(), 'is_sending': true,
     'local_attachment': {'type':'attachment','fileName':fileName,'contentType':contentType,
       'size':bytes.length,'localBytes':bytes,'localUploadProgress':0.0,
-      if (duration != null) 'duration': duration.inMilliseconds},
+      if (duration != null) 'duration': duration.inMilliseconds,
+      if (localPath != null && localPath.isNotEmpty) 'localPath': localPath},
   };
 
   Future<void> _uploadPendingAttachment(Map<String, dynamic> message) async {
@@ -9686,7 +9687,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         captionController.dispose();
         return;
       }
-      final local = _newPendingAttachment(bytes, file.name, contentType);
+      final local = _newPendingAttachment(bytes, file.name, contentType, localPath: file.path);
       (local['local_attachment'] as Map<String, dynamic>)['caption'] = captionController.text.trim();
       captionController.dispose();
       setState(() => messages = mergeMessages(messages, [local]));
@@ -11045,12 +11046,13 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
     } finally { if (mounted) setState(() => sending = false); }
   }
 
-  Map<String, dynamic> _newPendingAttachment(Uint8List bytes, String fileName, String contentType, {Duration? duration}) => {
+  Map<String, dynamic> _newPendingAttachment(Uint8List bytes, String fileName, String contentType, {Duration? duration, String? localPath}) => {
     'id': newBarqMessageId(), 'sender_id': widget.currentUserId, 'group_id': groupId,
     'body': '', 'created_at': DateTime.now().toUtc().toIso8601String(), 'is_sending': true,
     'local_attachment': {'type':'attachment','fileName':fileName,'contentType':contentType,
       'size':bytes.length,'localBytes':bytes,'localUploadProgress':0.0,
-      if (duration != null) 'duration': duration.inMilliseconds},
+      if (duration != null) 'duration': duration.inMilliseconds,
+      if (localPath != null && localPath.isNotEmpty) 'localPath': localPath},
   };
 
   Future<void> _uploadPendingAttachment(Map<String, dynamic> message) async {
@@ -11105,7 +11107,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
         captionController.dispose();
         return;
       }
-      final local = _newPendingAttachment(bytes, file.name, contentType);
+      final local = _newPendingAttachment(bytes, file.name, contentType, localPath: file.path);
       (local['local_attachment'] as Map<String, dynamic>)['caption'] = captionController.text.trim();
       captionController.dispose();
       setState(() => messages = mergeMessages(messages, [local]));
@@ -11132,7 +11134,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
         captionController.dispose();
         return;
       }
-      final local = _newPendingAttachment(bytes, file.name, contentType);
+      final local = _newPendingAttachment(bytes, file.name, contentType, localPath: file.path);
       (local['local_attachment'] as Map<String, dynamic>)['caption'] = captionController.text.trim();
       captionController.dispose();
       setState(() => messages = mergeMessages(messages, [local]));
