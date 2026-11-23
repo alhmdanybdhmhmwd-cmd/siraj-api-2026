@@ -3371,6 +3371,34 @@ Future<void> showConversationSearch(
   controller.dispose();
 }
 
+Future<List<Map<String, dynamic>>> loadBarqCachedMessages(String key) async {
+  try {
+    final raw = await storage.read(key: key);
+    if (raw == null || raw.isEmpty) return [];
+    final decoded = jsonDecode(raw);
+    if (decoded is! List) return [];
+    return decoded.whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  } catch (_) {
+    return [];
+  }
+}
+
+Future<void> saveBarqCachedMessages(
+  String key,
+  List<Map<String, dynamic>> messages,
+) async {
+  try {
+    final snapshot = messages.length > 150
+        ? messages.sublist(messages.length - 150)
+        : messages;
+    await storage.write(key: key, value: jsonEncode(snapshot));
+  } catch (_) {
+    // A cache write must never block message delivery or rendering.
+  }
+}
+
 List<Map<String, dynamic>> mergeMessages(
   Iterable<Map<String, dynamic>> first,
   Iterable<Map<String, dynamic>> second,
@@ -8686,6 +8714,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           : widget.friend;
 
   String get friendId => field(person, ['id', 'user_id', 'friend_id']);
+  String get _messageCacheKey => 'barq_private_messages_${widget.currentUserId}_$friendId';
 
   @override
   void initState() {
@@ -8775,6 +8804,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     try {
       await Api.clearPrivateConversation(friendId);
       await BarqOfflineQueue.clearConversation(friendId, widget.currentUserId);
+      await storage.delete(key: _messageCacheKey);
       if (!mounted) return;
       setState(() {
         messages = [];
@@ -8936,6 +8966,16 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     if (refreshing) return;
     refreshing = true;
     try {
+      if (!silent && messages.isEmpty) {
+        final cached = await loadBarqCachedMessages(_messageCacheKey);
+        if (cached.isNotEmpty && mounted) {
+          setState(() {
+            messages = filterExpiredEphemeralMessages(cached);
+            loading = false;
+          });
+          _scheduleEphemeralExpiry();
+        }
+      }
       await BarqOfflineQueue.syncOutbox();
       final page = await Api.messagesPage(friendId);
       final data = Api._list(page['messages']);
@@ -8963,6 +9003,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         loading = false;
       });
         _scheduleEphemeralExpiry();
+        unawaited(saveBarqCachedMessages(_messageCacheKey, messages));
         if (BarqFeatures.autoTranslate) _translateMessages(data);
       }
     } catch (e) {
@@ -10120,6 +10161,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
   double _replySwipeDistance = 0;
   Timer? refreshTimer;
   String get groupId => field(widget.group, ['id']);
+  String get _messageCacheKey => 'barq_group_messages_${widget.currentUserId}_$groupId';
 
   @override
   void initState() {
@@ -10239,6 +10281,15 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
     if (refreshing) return;
     refreshing = true;
     try {
+      if (!silent && messages.isEmpty) {
+        final cached = await loadBarqCachedMessages(_messageCacheKey);
+        if (cached.isNotEmpty && mounted) {
+          setState(() {
+            messages = cached;
+            loading = false;
+          });
+        }
+      }
       final page = await Api.groupMessagesPage(groupId);
       final data = Api._list(page['messages']);
       if (mounted) {
@@ -10251,6 +10302,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
         hasOlderMessages = page['hasMore'] == true || (silent && hasOlderMessages);
         loading = false;
       });
+        unawaited(saveBarqCachedMessages(_messageCacheKey, messages));
         if (BarqFeatures.autoTranslate) _translateMessages(data);
       }
     } catch (e) {
