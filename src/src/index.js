@@ -2452,7 +2452,11 @@ export default {
                   CASE WHEN pp.user_id IS NOT NULL
                     THEN '/api/profile/photo/' || u.id ELSE NULL END AS photoUrl,
                   pp.updated_at AS photoUpdatedAt,
-                  CASE WHEN s.user_id = ? THEN (SELECT COUNT(*) FROM status_views sv WHERE sv.status_id = s.id) ELSE 0 END AS viewCount
+                  CASE WHEN s.user_id = ? THEN (SELECT COUNT(*) FROM status_views sv WHERE sv.status_id = s.id) ELSE 0 END AS viewCount,
+                  CASE WHEN s.user_id != ? AND EXISTS (
+                    SELECT 1 FROM status_views mine
+                    WHERE mine.status_id = s.id AND mine.viewer_id = ?
+                  ) THEN 1 ELSE 0 END AS isViewed
            FROM status_posts s
            JOIN users u ON u.id = s.user_id
            LEFT JOIN profile_photos pp ON pp.user_id = u.id
@@ -2475,7 +2479,7 @@ export default {
              )
            ORDER BY s.created_at DESC
            LIMIT 100`
-        ).bind(currentUser.sub, currentUser.sub, currentUser.sub, currentUser.sub, currentUser.sub, currentUser.sub).all();
+        ).bind(currentUser.sub, currentUser.sub, currentUser.sub, currentUser.sub, currentUser.sub, currentUser.sub, currentUser.sub, currentUser.sub).all();
 
         const statuses = result.results || [];
         if (statuses.length) {
