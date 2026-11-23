@@ -10423,7 +10423,21 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
               CircleAvatar(
                 radius: 19,
                 backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: .16),
-                child: Icon(Icons.groups_rounded, color: Theme.of(context).colorScheme.primary, size: 21),
+                child: Stack(clipBehavior: Clip.none, children: [
+                  Icon(Icons.groups_rounded, color: Theme.of(context).colorScheme.primary, size: 21),
+                  Positioned(
+                    bottom: -5, left: -5,
+                    child: Container(
+                      width: 13, height: 13,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Theme.of(context).colorScheme.primary, width: 1),
+                      ),
+                      child: Icon(Icons.bolt_rounded, size: 9, color: Theme.of(context).colorScheme.primary),
+                    ),
+                  ),
+                ]),
               ),
               const SizedBox(width: 9),
               Flexible(child: Column(
