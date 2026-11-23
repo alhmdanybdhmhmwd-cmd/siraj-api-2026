@@ -192,8 +192,8 @@ const retry = await json(`/api/media/uploads/${sessionId}/complete`, {
 });
 assert.equal(retry.alreadyCompleted, true, "completion retry must be idempotent");
 const afterRetry = await json("/api/messages?with=" + encodeURIComponent(b.user.id), { token: a.token });
-assert.equal((afterRetry.messages || []).filter(message => message.id === sessionId).length, 1,
-  "completion retry must not duplicate the attachment chat message");
+assert.equal((afterRetry.messages || []).filter(message => message.id === sessionId).length, 0,
+  "completion retry must not recreate the attachment chat message after delete-for-everyone");
 
 // Exercise the same resumable-media pipeline for a real Preview group conversation.
 const group = await json("/api/groups", {
