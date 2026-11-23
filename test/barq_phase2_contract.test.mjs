@@ -202,7 +202,7 @@ test("Android API, media, and realtime origins are selectable for isolated previ
   assert.ok(flutterApp.includes("defaultValue: '',"));
   assert.ok(flutterApp.includes("const String mediaWorkerBase = String.fromEnvironment"));
   assert.equal((flutterApp.match(/defaultValue: 'https:\/\/siraj-api-2026\.vercel\.app'/g) || []).length, 1);
-  assert.ok(flutterApp.includes("defaultValue: 'https://siraj-api.alhmdanybdhmhmwd.workers.dev'"));
+  assert.ok(flutterApp.includes("defaultValue: apiBase"));
   assert.ok(flutterApp.includes("BARQ_MEDIA_BASE"));
   assert.ok(flutterApp.includes("BARQ_REALTIME_URL"));
   assert.ok(!flutterApp.includes(".t3.storage.dev"));
