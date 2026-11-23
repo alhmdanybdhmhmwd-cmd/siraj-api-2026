@@ -5418,7 +5418,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         leading: avatar(status),
         title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-        subtitle: Text(field(status, ['createdAt', 'created_at'], 'تحديث جديد'),
+        subtitle: Text(_messageTime(field(status, ['createdAt', 'created_at'])),
           maxLines: 1, overflow: TextOverflow.ellipsis,
           style: TextStyle(color: palette.onSurfaceVariant, fontSize: 11)),
         onTap: () => _openSparkStatus(status),
@@ -5494,8 +5494,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       onPressed: () => _showSparkViewers(field(ownStatuses.first, ['id'])),
                       icon: Icon(Icons.visibility_outlined, color: palette.primary),
                     ),
-                    Text('${ownStatuses.fold<int>(0, (sum, item) =>
-                      sum + (int.tryParse((item['viewCount'] ?? 0).toString()) ?? 0))}',
+                    Text(field(ownStatuses.first, ['viewCount'], '0'),
                       style: TextStyle(color: palette.onSurfaceVariant, fontSize: 11)),
                   ]),
             onTap: ownStatuses.isEmpty
