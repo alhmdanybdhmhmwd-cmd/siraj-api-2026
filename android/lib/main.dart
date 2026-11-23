@@ -1308,6 +1308,13 @@ class Api {
     return code;
   }
 
+  static Future<List<Map<String, dynamic>>> deviceSessions() async =>
+      _list((await request('GET', '/api/security/devices'))['devices']);
+
+  static Future<void> revokeDeviceSession(String deviceId) async {
+    await request('DELETE', '/api/security/devices/${Uri.encodeComponent(deviceId)}');
+  }
+
   static Future<void> logoutAllSessions(String currentPassword) async {
     await request('POST', '/api/security/logout-all', body: {
       'password': currentPassword,
@@ -6803,6 +6810,51 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               },
               icon: const Icon(Icons.key_rounded),
               label: const Text('إنشاء رمز استرداد'),
+            ),
+            OutlinedButton.icon(
+              onPressed: busy ? null : () async {
+                setDialog(() => busy = true);
+                try {
+                  final devices = await Api.deviceSessions();
+                  if (!dialogContext.mounted) return;
+                  setDialog(() => busy = false);
+                  await showDialog<void>(
+                    context: dialogContext,
+                    builder: (devicesContext) => AlertDialog(
+                      title: const Text('الأجهزة المتصلة'),
+                      content: SizedBox(
+                        width: double.maxFinite,
+                        child: devices.isEmpty
+                          ? const Text('لا توجد جلسات أجهزة مسجلة بعد.')
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: devices.length,
+                              separatorBuilder: (_, __) => const Divider(),
+                              itemBuilder: (context, index) {
+                                final device = devices[index];
+                                return ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: const Icon(Icons.phone_android_rounded),
+                                  title: Text(device['deviceName']?.toString() ?? 'جهاز برق'),
+                                  subtitle: Text('آخر نشاط: ${device['lastSeenAt'] ?? 'غير معروف'}'),
+                                );
+                              },
+                            ),
+                      ),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(devicesContext), child: const Text('إغلاق')),
+                      ],
+                    ),
+                  );
+                } catch (error) {
+                  if (dialogContext.mounted) {
+                    setDialog(() => busy = false);
+                    showMsg(dialogContext, cleanError(error));
+                  }
+                }
+              },
+              icon: const Icon(Icons.devices_other_rounded),
+              label: const Text('عرض الأجهزة المتصلة'),
             ),
             FilledButton.icon(
               onPressed: busy ? null : () async {
