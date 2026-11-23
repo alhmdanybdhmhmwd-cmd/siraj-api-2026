@@ -175,7 +175,6 @@ jobs:
       - name: Build optimized Preview-connected arm64 APK
         if: success()
         working-directory: android
-        env:
         run: |
           set -euo pipefail
           BARQ_API_BASE="$BARQ_FALLBACK_PREVIEW_URL"
