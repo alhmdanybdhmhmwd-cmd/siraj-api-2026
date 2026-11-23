@@ -3510,23 +3510,27 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
              (id, group_id, sender_id, body, reply_to_id, reply_to_body, reply_to_sender_id)
              VALUES (?, ?, ?, ?, ?, ?, ?)`
           ).bind(id, groupId, currentUser.sub, message, reply.id, reply.body, reply.sender_id).run();
-          try {
-            const [group, recipients, sender] = await Promise.all([
-              env.DB.prepare("SELECT name FROM chat_groups WHERE id = ?").bind(groupId).first(),
-              env.DB.prepare("SELECT user_id FROM group_members WHERE group_id = ? AND user_id != ?")
-                .bind(groupId, currentUser.sub).all(),
-              env.DB.prepare("SELECT display_name FROM users WHERE id = ?").bind(currentUser.sub).first()
-            ]);
-            await Promise.all((recipients.results || []).map(item =>
-              sendSirajPush(
-                env, item.user_id, currentUser.sub,
-                sender?.display_name || "مستخدم برق", message,
-                { category: "groups", groupId, groupName: group?.name || "مجموعة برق" }
-              )
-            ));
-          } catch (notificationError) {
-            console.error("Group message notification dispatch failed:", notificationError);
-          }
+          const pushTask = (async () => {
+            try {
+              const [group, recipients, sender] = await Promise.all([
+                env.DB.prepare("SELECT name FROM chat_groups WHERE id = ?").bind(groupId).first(),
+                env.DB.prepare("SELECT user_id FROM group_members WHERE group_id = ? AND user_id != ?")
+                  .bind(groupId, currentUser.sub).all(),
+                env.DB.prepare("SELECT display_name FROM users WHERE id = ?").bind(currentUser.sub).first()
+              ]);
+              await Promise.all((recipients.results || []).map(item =>
+                sendSirajPush(
+                  env, item.user_id, currentUser.sub,
+                  sender?.display_name || "مستخدم برق", message,
+                  { category: "groups", groupId, groupName: group?.name || "مجموعة برق" }
+                )
+              ));
+            } catch (notificationError) {
+              console.error("Group message notification dispatch failed:", notificationError);
+            }
+          })();
+          if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(pushTask);
+          else await pushTask;
           return json({ message: "Message sent", id }, 201);
         }
       }
@@ -3630,19 +3634,23 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
           `).bind(receiverId, currentUser.sub)
         ]);
 
-        // Message persistence is authoritative; sender lookup or push delivery
-        // must not turn a successfully stored message into an apparent failure.
-        try {
-          const sender = await env.DB.prepare(
-            "SELECT display_name FROM users WHERE id = ?"
-          ).bind(currentUser.sub).first();
-          await sendSirajPush(
-            env, receiverId, currentUser.sub,
-            sender?.display_name || currentUser.username, message
-          );
-        } catch (notificationError) {
-          console.error("Private message notification dispatch failed:", notificationError);
-        }
+        // Persisted messages are acknowledged immediately. Push delivery runs
+        // after the response so FCM latency never delays the sender's chat UI.
+        const pushTask = (async () => {
+          try {
+            const sender = await env.DB.prepare(
+              "SELECT display_name FROM users WHERE id = ?"
+            ).bind(currentUser.sub).first();
+            await sendSirajPush(
+              env, receiverId, currentUser.sub,
+              sender?.display_name || currentUser.username, message
+            );
+          } catch (notificationError) {
+            console.error("Private message notification dispatch failed:", notificationError);
+          }
+        })();
+        if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(pushTask);
+        else await pushTask;
 
         return json({
           message: "Message sent",
