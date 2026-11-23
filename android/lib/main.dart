@@ -770,7 +770,7 @@ class SirajPush {
       final body = message.notification?.body ?? label;
       final channelId = _channelFor(message);
       final channelName = channelId == 'barq_groups' ? 'رسائل مجموعات برق'
-          : channelId == 'barq_statuses' ? 'حالات برق' : 'رسائل برق الخاصة';
+          : channelId == 'barq_statuses' ? 'SPARK برق' : 'رسائل برق الخاصة';
       try {
         await barqLocalNotifications.show(
           message.messageId?.hashCode.abs() ?? DateTime.now().millisecondsSinceEpoch.remainder(0x7fffffff),
@@ -5091,7 +5091,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   Navigator.pop(dialogContext);
                   await refreshAll();
                   if (!context.mounted) return;
-                  showMsg(context, 'نُشرت حالتك لمدة 24 ساعة.');
+                  showMsg(context, 'تم نشر SPARK لمدة 24 ساعة.');
                 } catch (e) {
                   if (context.mounted) showMsg(context, cleanError(e));
                 }
@@ -5263,7 +5263,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     children: [
                       Text('مشاهدو SPARK',
                         style: Theme.of(sheetContext).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-                      Text('قائمة خاصة لا يراها إلا صاحب الحالة',
+                      Text('قائمة خاصة لا يراها إلا صاحب SPARK',
                         style: Theme.of(sheetContext).textTheme.bodySmall?.copyWith(
                           color: palette.onSurface.withValues(alpha: .62),
                         )),
@@ -5439,20 +5439,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   color: palette.primary, fontSize: 22, fontWeight: FontWeight.w900,
                   letterSpacing: 1.2,
                 )),
-                Text('الحالة والتحديثات', style: TextStyle(
+                Text('مساحة اللحظات والتحديثات', style: TextStyle(
                   color: palette.onSurfaceVariant, fontSize: 11,
                 )),
               ],
             )),
             PopupMenuButton<String>(
-              tooltip: 'نشر حالة',
+              tooltip: 'نشر في SPARK',
               icon: Icon(Icons.camera_alt_outlined, color: palette.primary, size: 24),
               onSelected: (value) {
                 if (value == 'text') publishStatusDialog();
                 if (value == 'media') publishSparkMediaDialog();
               },
               itemBuilder: (_) => const [
-                PopupMenuItem(value: 'text', child: Text('حالة نصية')),
+                PopupMenuItem(value: 'text', child: Text('نص في SPARK')),
                 PopupMenuItem(value: 'media', child: Text('صورة أو فيديو')),
               ],
             ),
@@ -5481,7 +5481,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 ),
               ),
             ]),
-            title: const Text('حالتي', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+            title: const Text('SPARK الخاص بي', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
             subtitle: Text(
               ownStatuses.isEmpty ? 'اضغط لإضافة تحديث' : 'اضغط لعرض تحديثاتك',
               style: TextStyle(color: palette.onSurfaceVariant, fontSize: 11),
@@ -5490,7 +5490,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 ? Icon(Icons.add_circle_outline_rounded, color: palette.primary)
                 : Row(mainAxisSize: MainAxisSize.min, children: [
                     IconButton(
-                      tooltip: 'من شاهد حالتي',
+                      tooltip: 'مشاهدو SPARK',
                       onPressed: () => _showSparkViewers(field(ownStatuses.first, ['id'])),
                       icon: Icon(Icons.visibility_outlined, color: palette.primary),
                     ),
@@ -5516,7 +5516,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 Text('لا توجد تحديثات جديدة',
                   style: TextStyle(color: palette.onSurface, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 5),
-                Text('ستظهر هنا حالات جهات اتصالك مثل واتساب.',
+                Text('ستظهر هنا تحديثات SPARK من جهات اتصالك.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: palette.onSurfaceVariant, fontSize: 11)),
               ]),
@@ -10488,7 +10488,7 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
             child: Row(children: [
               IconButton(
-                tooltip: 'إغلاق الحالة',
+                tooltip: 'إغلاق SPARK',
                 onPressed: () => Navigator.pop(context),
                 icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
               ),
@@ -10690,7 +10690,7 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
                     const Icon(Icons.visibility_rounded, color: gold, size: 17),
                     const SizedBox(width: 7),
                     Text(
-                      'اضغط على عدد المشاهدات لمعرفة من شاهد حالتك',
+                      'اضغط على عدد المشاهدات لمعرفة من شاهد SPARK',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.white.withValues(alpha: .78), fontSize: 11),
                     ),
