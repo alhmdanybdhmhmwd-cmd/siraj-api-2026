@@ -1643,11 +1643,11 @@ export default {
           try {
             await env.DB.prepare(`
               INSERT INTO profile_photos (user_id, object_key, content_type, updated_at)
-              VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+              VALUES (?, ?, ?, strftime('%Y-%m-%d %H:%M:%f', 'now'))
               ON CONFLICT(user_id) DO UPDATE SET
                 object_key = excluded.object_key,
                 content_type = excluded.content_type,
-                updated_at = CURRENT_TIMESTAMP
+                updated_at = strftime('%Y-%m-%d %H:%M:%f', 'now')
             `).bind(currentUser.sub, objectKey, contentType).run();
           } catch (error) {
             try { await storage.fetch(storageUrl, { method: "DELETE" }); } catch (_) {}
