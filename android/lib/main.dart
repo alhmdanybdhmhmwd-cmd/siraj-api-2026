@@ -40,7 +40,7 @@ const String apiBase = String.fromEnvironment(
 // origin is opt-in only for isolated diagnostics via BARQ_MEDIA_BASE.
 const String mediaWorkerBase = String.fromEnvironment(
   'BARQ_MEDIA_BASE',
-  defaultValue: 'https://siraj-api.alhmdanybdhmhmwd.workers.dev',
+  defaultValue: apiBase,
 );
 const String barqPlayStoreUrl = 'https://play.google.com/store/apps/details?id=com.barq.app';
 
@@ -8250,7 +8250,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         loadMessages(silent: true);
       }
     });
-    // مزامنة الرسائل عبر REST/Vercel كل 5 ثوانٍ أثناء ظهور التطبيق فقط.
+    // مزامنة الرسائل عبر REST/Vercel كل 3 ثوانٍ أثناء ظهور التطبيق فقط.
     _startRefreshTimer();
   }
 
@@ -8368,7 +8368,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   void _startRefreshTimer() {
     refreshTimer?.cancel();
-    refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+    refreshTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       if (mounted && !sending && !refreshing) loadMessages(silent: true);
     });
   }
@@ -9629,7 +9629,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
 
   void _startRefreshTimer() {
     refreshTimer?.cancel();
-    refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+    refreshTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       if (mounted && !sending && !refreshing) loadMessages(silent: true);
     });
   }
