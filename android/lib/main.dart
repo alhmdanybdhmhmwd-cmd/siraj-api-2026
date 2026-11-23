@@ -2173,6 +2173,8 @@ class Api {
   static Future<void> deleteAccount(String confirmUsername) async {
     await request('DELETE', '/api/account', body: {'confirmUsername': confirmUsername});
     await logout();
+    // Remove cached conversations and account-scoped local data from this device.
+    await storage.deleteAll();
   }
 
   static Future<void> logout() async {
