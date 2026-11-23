@@ -59,4 +59,4 @@ The dedicated Admin Preview D1, Queue, and AI bindings must be configured and ve
 
 ## Owner operating agreement
 
-BARQ is the main product, SPARK is its stories feature, BARQ Admin is the separate management app, and BARQ Brain is its assistant. The current authorized scope is Phase 1 only. Phase 2 repository/code understanding and indexing is blocked until the owner explicitly authorizes it. Production publishing, deployment, merging, pull-request base changes, spending, and other consequential external actions require specific owner approval.
+BARQ is the main product, SPARK is its stories feature, BARQ Admin is the separate management app, and BARQ Brain is its assistant. The owner explicitly authorized Phase 2 on 2026-11-24. BARQ Brain project understanding and repository/code indexing are in progress; do not claim complete coverage until real Preview indexing and coverage/freshness checks pass. Production publishing, deployment, merging, pull-request base changes, spending, and other consequential external actions require specific owner approval.
