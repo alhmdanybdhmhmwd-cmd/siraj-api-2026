@@ -8159,12 +8159,14 @@ class PublicProfilePage extends StatelessWidget {
   final Map<String, dynamic> person;
   final String currentUserId;
   final bool canMessage;
+  final List<BarqConversationTool> conversationTools;
 
   const PublicProfilePage({
     super.key,
     required this.person,
     required this.currentUserId,
     this.canMessage = false,
+    this.conversationTools = const [],
   });
 
   Map<String, dynamic> get profile => person['user'] is Map
@@ -8283,6 +8285,31 @@ class PublicProfilePage extends StatelessWidget {
                 ],
               ),
             ),
+            if (conversationTools.isNotEmpty) ...[
+              const SizedBox(height: 18),
+              Card(
+                color: Theme.of(context).colorScheme.surface,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const ListTile(
+                      leading: Icon(Icons.tune_rounded),
+                      title: Text('إعدادات المحادثة'),
+                      subtitle: Text('الأدوات والخيارات الخاصة بهذه المحادثة'),
+                    ),
+                    const Divider(height: 1, indent: 16, endIndent: 16),
+                    for (final tool in conversationTools)
+                      ListTile(
+                        leading: Icon(tool.icon),
+                        title: Text(tool.title),
+                        subtitle: Text(tool.subtitle,
+                          style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                        onTap: tool.onTap,
+                      ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 20),
             if (phone.isNotEmpty)
               OutlinedButton.icon(
@@ -8848,7 +8875,18 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           title: InkWell(
             borderRadius: BorderRadius.circular(18),
             onTap: () => Navigator.push(context, MaterialPageRoute(
-              builder: (_) => PublicProfilePage(person: widget.friend, currentUserId: widget.currentUserId, canMessage: true),
+              builder: (_) => PublicProfilePage(
+                person: widget.friend,
+                currentUserId: widget.currentUserId,
+                canMessage: true,
+                conversationTools: [
+                  BarqConversationTool(icon: Icons.wallpaper_outlined, title: 'خلفية المحادثة', subtitle: 'تخصيص مظهر هذه المحادثة', onTap: _chooseChatWallpaper),
+                  BarqConversationTool(icon: Icons.delete_outline_rounded, title: 'حذف المحادثة', subtitle: 'حذفها من حسابك فقط مع إبقاء جهة الاتصال', onTap: _deleteConversation),
+                  BarqConversationTool(icon: blockedByMe ? Icons.lock_open_rounded : Icons.block_rounded, title: blockedByMe ? 'إلغاء حظر المستخدم' : 'حظر المستخدم', subtitle: blockedByMe ? 'السماح بالتواصل الخاص مجدداً' : 'منع الرسائل الخاصة بينكما', onTap: _toggleBlockState),
+                  BarqConversationTool(icon: Icons.push_pin_outlined, title: 'الرسائل المثبتة (${messages.where((message) => message['is_pinned'] == true).length})', subtitle: 'عرض المثبتة ضمن الرسائل المحمّلة', onTap: () => showBarqMessageCollectionDialog(context, title: 'الرسائل المثبتة', messages: messages, attachmentsOnly: false)),
+                  BarqConversationTool(icon: Icons.perm_media_outlined, title: 'الوسائط والملفات (${messages.where((message) => _attachmentData(message) != null).length})', subtitle: 'عرض المرفقات ضمن الرسائل المحمّلة', onTap: () => showBarqMessageCollectionDialog(context, title: 'الوسائط والملفات', messages: messages, attachmentsOnly: true)),
+                ],
+              ),
             )),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               personAvatar(widget.friend, radius: 17),
@@ -8863,60 +8901,32 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               onPressed: _chooseChatWallpaper,
               icon: const Icon(Icons.wallpaper_outlined),
             ),
-            IconButton(
-              onPressed: () => showBarqConversationTools(context, [
-                BarqConversationTool(
-                  icon: Icons.search,
-                  title: 'البحث في المحادثة',
-                  subtitle: 'ابحث داخل الرسائل المحمّلة',
-                  onTap: () => showConversationSearch(context, (query, before) => Api.searchPrivateMessages(friendId, query, before: before)),
-                ),
-                BarqConversationTool(
-                  icon: Icons.cleaning_services_outlined,
-                  title: 'مسح سجل المحادثة',
-                  subtitle: 'مسح رسائلك مع إبقاء جهة الاتصال والمحادثة',
-                  onTap: _clearConversationHistory,
-                ),
-                BarqConversationTool(
-                  icon: Icons.delete_outline_rounded,
-                  title: 'حذف المحادثة',
-                  subtitle: 'حذفها من حسابك فقط مع إبقاء جهة الاتصال',
-                  onTap: _deleteConversation,
-                ),
-                BarqConversationTool(
-                  icon: blockedByMe ? Icons.lock_open_rounded : Icons.block_rounded,
-                  title: blockedByMe ? 'إلغاء حظر المستخدم' : 'حظر المستخدم',
-                  subtitle: blockedByMe ? 'السماح بالتواصل الخاص مجدداً' : 'منع الرسائل الخاصة بينكما',
-                  onTap: _toggleBlockState,
-                ),
-                BarqConversationTool(
-                  icon: Icons.auto_awesome_outlined,
-                  title: 'ملخص المحادثة',
-                  subtitle: 'إنشاء ملخص ذكي بعد موافقتك',
-                  onTap: () => showDialog<void>(
+            PopupMenuButton<String>(
+              tooltip: 'خيارات المحادثة',
+              icon: const Icon(Icons.more_vert_rounded),
+              onSelected: (value) {
+                if (value == 'search') {
+                  showConversationSearch(context, (query, before) =>
+                    Api.searchPrivateMessages(friendId, query, before: before));
+                } else if (value == 'clear') {
+                  _clearConversationHistory();
+                } else if (value == 'summary') {
+                  showDialog<void>(
                     context: context,
                     builder: (_) => BarqConversationSummaryDialog(
                       loadSummary: () => Api.summarizePrivateConversation(friendId),
                     ),
-                  ),
-                ),
-                BarqConversationTool(
-                  icon: Icons.push_pin_outlined,
-                  title: 'الرسائل المثبتة (${messages.where((message) => message['is_pinned'] == true).length})',
-                  subtitle: 'عرض المثبتة ضمن الرسائل المحمّلة',
-                  onTap: () => showBarqMessageCollectionDialog(context,
-                    title: 'الرسائل المثبتة', messages: messages, attachmentsOnly: false),
-                ),
-                BarqConversationTool(
-                  icon: Icons.perm_media_outlined,
-                  title: 'الوسائط والملفات (${messages.where((message) => _attachmentData(message) != null).length})',
-                  subtitle: 'عرض المرفقات ضمن الرسائل المحمّلة',
-                  onTap: () => showBarqMessageCollectionDialog(context,
-                    title: 'الوسائط والملفات', messages: messages, attachmentsOnly: true),
-                ),
-              ]),
-              icon: const Icon(Icons.build_circle_outlined),
-              tooltip: 'أدوات المحادثة',
+                  );
+                }
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'search', child: ListTile(
+                  dense: true, leading: Icon(Icons.search), title: Text('البحث في المحادثة'))),
+                PopupMenuItem(value: 'summary', child: ListTile(
+                  dense: true, leading: Icon(Icons.auto_awesome_outlined), title: Text('ملخص المحادثة'))),
+                PopupMenuItem(value: 'clear', child: ListTile(
+                  dense: true, leading: Icon(Icons.cleaning_services_outlined), title: Text('مسح سجل المحادثة'))),
+              ],
             ),
           ],
         ),
@@ -10148,42 +10158,38 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
               onPressed: _chooseGroupWallpaper,
               icon: const Icon(Icons.wallpaper_outlined),
             ),
-            IconButton(
-              onPressed: () => showBarqConversationTools(context, [
-                BarqConversationTool(
-                  icon: Icons.search,
-                  title: 'البحث في المحادثة',
-                  subtitle: 'ابحث داخل رسائل المجموعة المحمّلة',
-                  onTap: () => showConversationSearch(context, (query, before) => Api.searchGroupMessages(groupId, query, before: before)),
-                ),
-                BarqConversationTool(
-                  icon: Icons.auto_awesome_outlined,
-                  title: 'ملخص المحادثة',
-                  subtitle: 'إنشاء ملخص ذكي بعد موافقتك',
-                  onTap: () => showDialog<void>(
+            PopupMenuButton<String>(
+              tooltip: 'خيارات المجموعة',
+              icon: const Icon(Icons.more_vert_rounded),
+              onSelected: (value) {
+                if (value == 'search') {
+                  showConversationSearch(context, (query, before) =>
+                    Api.searchGroupMessages(groupId, query, before: before));
+                } else if (value == 'summary') {
+                  showDialog<void>(
                     context: context,
                     builder: (_) => BarqConversationSummaryDialog(
                       loadSummary: () => Api.summarizeGroupConversation(groupId),
                     ),
-                  ),
-                ),
-                BarqConversationTool(
-                  icon: Icons.push_pin_outlined,
-                  title: 'الرسائل المثبتة (${messages.where((message) => message['is_pinned'] == true).length})',
-                  subtitle: 'عرض المثبتة ضمن الرسائل المحمّلة',
-                  onTap: () => showBarqMessageCollectionDialog(context,
-                    title: 'الرسائل المثبتة', messages: messages, attachmentsOnly: false),
-                ),
-                BarqConversationTool(
-                  icon: Icons.perm_media_outlined,
-                  title: 'الوسائط والملفات (${messages.where((message) => _attachmentData(message) != null).length})',
-                  subtitle: 'عرض المرفقات ضمن الرسائل المحمّلة',
-                  onTap: () => showBarqMessageCollectionDialog(context,
-                    title: 'الوسائط والملفات', messages: messages, attachmentsOnly: true),
-                ),
-              ]),
-              icon: const Icon(Icons.build_circle_outlined),
-              tooltip: 'أدوات المحادثة',
+                  );
+                } else if (value == 'pinned') {
+                  showBarqMessageCollectionDialog(context,
+                    title: 'الرسائل المثبتة', messages: messages, attachmentsOnly: false);
+                } else if (value == 'media') {
+                  showBarqMessageCollectionDialog(context,
+                    title: 'الوسائط والملفات', messages: messages, attachmentsOnly: true);
+                }
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'search', child: ListTile(
+                  dense: true, leading: Icon(Icons.search), title: Text('البحث في المحادثة'))),
+                PopupMenuItem(value: 'summary', child: ListTile(
+                  dense: true, leading: Icon(Icons.auto_awesome_outlined), title: Text('ملخص المحادثة'))),
+                PopupMenuItem(value: 'pinned', child: ListTile(
+                  dense: true, leading: Icon(Icons.push_pin_outlined), title: Text('الرسائل المثبتة'))),
+                PopupMenuItem(value: 'media', child: ListTile(
+                  dense: true, leading: Icon(Icons.perm_media_outlined), title: Text('الوسائط والملفات'))),
+              ],
             ),
             IconButton(onPressed: showGroupMembers, icon: const Icon(Icons.people_alt_outlined), tooltip: 'أعضاء المجموعة'),
             if (['owner', 'admin'].contains(field(widget.group, ['current_role'], 'member')))
