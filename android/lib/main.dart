@@ -7433,6 +7433,7 @@ class _BarqVoiceRecordButtonState extends State<BarqVoiceRecordButton> {
   Timer? _ticker;
   String? _recordingPath;
   Duration _elapsed = Duration.zero;
+  double _wavePhase = 0;
   bool _recording = false;
   bool _busy = false;
 
@@ -7471,9 +7472,9 @@ class _BarqVoiceRecordButtonState extends State<BarqVoiceRecordButton> {
       _stopwatch = Stopwatch()..start();
       _elapsed = Duration.zero;
       _ticker?.cancel();
-      _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      _ticker = Timer.periodic(const Duration(milliseconds: 120), (_) {
         if (mounted && _stopwatch != null) {
-          setState(() => _elapsed = _stopwatch!.elapsed);
+          setState(() { _elapsed = _stopwatch!.elapsed; _wavePhase += .42; });
         }
       });
       if (mounted) setState(() => _recording = true);
@@ -7591,12 +7592,7 @@ class _BarqVoiceRecordButtonState extends State<BarqVoiceRecordButton> {
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.fiber_manual_record_rounded, color: Colors.redAccent, size: 9),
               const SizedBox(width: 5),
-              for (final height in const [7.0, 12.0, 17.0, 10.0, 20.0, 13.0, 8.0, 16.0, 11.0, 19.0, 9.0])
-                Container(
-                  width: 2.5, height: height,
-                  margin: const EdgeInsets.symmetric(horizontal: 1),
-                  decoration: BoxDecoration(color: Colors.redAccent.withValues(alpha: .78), borderRadius: BorderRadius.circular(4)),
-                ),
+              _BarqWaveform(phase: _wavePhase, color: Colors.redAccent, count: 18),
               const SizedBox(width: 6),
               Text(formatBarqMediaDuration(_elapsed),
                 style: const TextStyle(color: Colors.redAccent, fontSize: 11, fontFeatures: [FontFeature.tabularFigures()])),
@@ -7745,6 +7741,117 @@ Map<String, dynamic>? _attachmentData(Map<String, dynamic> message) {
     }
   } catch (_) {}
   return null;
+}
+
+Future<bool> showBarqAttachmentPreview(
+  BuildContext context, {
+  required String fileName,
+  required String contentType,
+  required Uint8List bytes,
+}) async {
+  final type = contentType.toLowerCase();
+  final isImage = type.startsWith('image/');
+  final isVideo = type.startsWith('video/');
+  final isAudio = type.startsWith('audio/');
+  final accepted = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) {
+      final scheme = Theme.of(dialogContext).colorScheme;
+      return Directionality(
+        textDirection: TextDirection.rtl,
+        child: Dialog(
+          backgroundColor: scheme.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(children: [
+                  Icon(Icons.bolt_rounded, color: scheme.primary),
+                  const SizedBox(width: 8),
+                  const Expanded(child: Text('معاينة قبل الإرسال',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16))),
+                  IconButton(tooltip: 'إغلاق', onPressed: () => Navigator.pop(dialogContext, false),
+                    icon: const Icon(Icons.close_rounded)),
+                ]),
+                const SizedBox(height: 10),
+                if (isImage)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: Image.memory(bytes, height: 220, fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const SizedBox(height: 120,
+                        child: Center(child: Icon(Icons.broken_image_outlined, size: 42)))),
+                  )
+                else
+                  Container(
+                    height: 132,
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerHighest.withValues(alpha: .65),
+                      borderRadius: BorderRadius.circular(14)),
+                    child: Center(child: Icon(
+                      isVideo ? Icons.play_circle_outline_rounded
+                        : isAudio ? Icons.graphic_eq_rounded
+                        : Icons.insert_drive_file_outlined,
+                      size: 54, color: scheme.primary)),
+                  ),
+                const SizedBox(height: 12),
+                Text(fileName, maxLines: 2, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                Text('${(bytes.length / (1024 * 1024)).toStringAsFixed(2)} MB',
+                  style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                const SizedBox(height: 16),
+                Row(children: [
+                  Expanded(child: OutlinedButton(
+                    onPressed: () => Navigator.pop(dialogContext, false),
+                    child: const Text('إلغاء'))),
+                  const SizedBox(width: 10),
+                  Expanded(child: FilledButton.icon(
+                    onPressed: () => Navigator.pop(dialogContext, true),
+                    icon: const Icon(Icons.send_rounded, size: 18),
+                    label: const Text('إرسال'))),
+                ]),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+  return accepted == true;
+}
+
+class _BarqWaveform extends StatelessWidget {
+  final double phase;
+  final Color color;
+  final int count;
+  const _BarqWaveform({required this.phase, required this.color, this.count = 23});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: List.generate(count, (index) {
+        final envelope = .28 + .72 * math.sin((index + 1) * .47).abs();
+        final pulse = .35 + .65 * math.sin(phase + index * .58).abs();
+        final height = 5 + 22 * envelope * pulse;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 110),
+          curve: Curves.easeOut,
+          width: 2.6,
+          height: height,
+          margin: const EdgeInsets.symmetric(horizontal: 1),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: .48 + .5 * pulse),
+            borderRadius: BorderRadius.circular(5),
+          ),
+        );
+      }),
+    );
+  }
 }
 
 Widget _attachmentTile(
@@ -8110,6 +8217,14 @@ class _AttachmentTileState extends State<_AttachmentTile> {
               label: const Text('إعادة تنزيل الملف'),
             ),
           if (_isAudio) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: _BarqWaveform(
+                phase: _audioPosition.inMilliseconds / 135,
+                color: Theme.of(context).colorScheme.primary,
+                count: 30,
+              ),
+            ),
             Row(children: [
               Text(formatBarqMediaDuration(_audioPosition),
                 style: const TextStyle(color: Colors.white70, fontSize: 10)),
@@ -9377,11 +9492,17 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       if (result == null || result.files.isEmpty) return;
       final file = result.files.single;
       final bytes = await readBarqPickedFileBytes(file);
+      final contentType = file.extension == null
+          ? 'application/octet-stream' : _mimeForExtension(file.extension!);
+      if (!await showBarqAttachmentPreview(
+        context, fileName: file.name, contentType: contentType, bytes: bytes,
+      )) return;
+      if (!mounted) return;
       setState(() { sending = true; mediaUploadProgress = 0; });
       await Api.uploadAttachment(
         bytes: bytes,
         fileName: file.name,
-        contentType: file.extension == null ? 'application/octet-stream' : _mimeForExtension(file.extension!),
+        contentType: contentType,
         recipientId: friendId,
         onProgress: (progress) {
           if (mounted) setState(() => mediaUploadProgress = progress);
@@ -10707,6 +10828,12 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
       if (result == null || result.files.isEmpty) return;
       final file = result.files.single;
       final bytes = await readBarqPickedFileBytes(file);
+      final contentType = file.extension == null
+          ? 'application/octet-stream' : _mimeForExtension(file.extension!);
+      if (!await showBarqAttachmentPreview(
+        context, fileName: file.name, contentType: contentType, bytes: bytes,
+      )) return;
+      if (!mounted) return;
       setState(() { sending = true; mediaUploadProgress = 0; });
       await Api.uploadAttachment(
         bytes: bytes,
