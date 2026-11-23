@@ -183,6 +183,7 @@ class _AdminHomePageState extends State<AdminHomePage>
           .whereType<Map>()
           .map((item) => AdminTask.fromJson(Map<String, dynamic>.from(item)))
           .toList();
+      _mergeOutboxDrafts(prefs);
       _approvals = (approvalData['approvals'] as List? ?? [])
           .whereType<Map>()
           .map(
@@ -242,6 +243,37 @@ class _AdminHomePageState extends State<AdminHomePage>
       }
     } catch (_) {
       // The server remains authoritative if a local cache is damaged.
+    }
+  }
+
+  void _mergeOutboxDrafts(SharedPreferences prefs) {
+    try {
+      final raw = prefs.getString(_outboxKey);
+      if (raw == null) return;
+      final pending = (jsonDecode(raw) as List)
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+      final existingIds = _tasks.map((task) => task.id).toSet();
+      final drafts = <AdminTask>[];
+      for (final item in pending) {
+        final key = (item['idempotencyKey'] ?? '').toString();
+        final title = (item['title'] ?? '').toString().trim();
+        if (key.isEmpty || title.isEmpty) continue;
+        final id = 'local-' + key;
+        if (!existingIds.add(id)) continue;
+        drafts.add(AdminTask(
+          id: id,
+          title: title,
+          description: (item['description'] ?? '').toString(),
+          priority: (item['priority'] ?? 'normal').toString(),
+          status: 'draft_offline',
+          nextAction: 'سيتم الإرسال عند عودة الاتصال',
+        ));
+      }
+      _tasks = [...drafts, ..._tasks];
+    } catch (_) {
+      // Ignore malformed local drafts; keep the server/cache snapshot usable.
     }
   }
 
