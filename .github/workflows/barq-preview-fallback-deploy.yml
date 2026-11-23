@@ -169,8 +169,8 @@ jobs:
         if: success()
         working-directory: android
         env:
-          BARQ_API_BASE: https://siraj-api-2026-git-barq-phase8-cleanup-previe-c5ab0d-siraj-01fc.vercel.app
-          BARQ_MEDIA_BASE: https://siraj-api-2026-git-barq-phase8-cleanup-previe-c5ab0d-siraj-01fc.vercel.app
+          BARQ_API_BASE: https://siraj-api-2026-git-barq-repair-batch-2026-11-23-siraj-01fc.vercel.app
+          BARQ_MEDIA_BASE: https://siraj-api-2026-git-barq-repair-batch-2026-11-23-siraj-01fc.vercel.app
         run: |
           set -euo pipefail
           case "$BARQ_API_BASE" in https://*.vercel.app) ;; *) echo "::error::API endpoint is not the isolated Vercel Preview proxy."; exit 1;; esac
