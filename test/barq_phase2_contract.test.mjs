@@ -271,6 +271,7 @@ test("chat wallpaper is selectable and persists per conversation", () => {
 
 test("private and group chat composers use the unified Barq pill layout and reply previews", () => {
   assert.ok(flutterApp.includes("class BarqReplyPreview extends StatelessWidget"));
+  assert.ok(flutterApp.includes("tooltip: 'إلغاء الرد'"));
   assert.ok(flutterApp.includes("surfaceContainerHighest.withValues(alpha: .72)"));
   assert.ok(flutterApp.includes("borderRadius: BorderRadius.circular(24)"));
   assert.ok(flutterApp.includes("Icons.send_rounded"));
