@@ -8623,6 +8623,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   Color? chatWallpaperColor;
   Map<String, dynamic>? olderMessageCursor;
   Map<String, dynamic>? replyToMessage;
+  double _replySwipeDistance = 0;
   Timer? refreshTimer;
   Timer? _ephemeralExpiryTimer;
   StreamSubscription<Map<String, dynamic>>? realtimeSubscription;
@@ -9321,8 +9322,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                       ),
                                     if (_attachmentData(m) case final attachment?) ...[
                                       GestureDetector(
+                                        onHorizontalDragStart: (_) => _replySwipeDistance = 0,
+                                        onHorizontalDragUpdate: (details) => _replySwipeDistance += details.delta.dx,
                                         onHorizontalDragEnd: (details) {
-                                          if ((details.primaryVelocity ?? 0).abs() > 180 && m['is_ephemeral'] != true) {
+                                          final swiped = _replySwipeDistance.abs() > 42 ||
+                                              (details.primaryVelocity ?? 0).abs() > 180;
+                                          _replySwipeDistance = 0;
+                                          if (swiped && m['is_ephemeral'] != true) {
                                             setState(() => replyToMessage = Map<String, dynamic>.from(m));
                                           }
                                         },
@@ -10656,10 +10662,13 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                             ),
                           if (_attachmentData(m) case final attachment?) ...[
                             GestureDetector(
+                              onHorizontalDragStart: (_) => _replySwipeDistance = 0,
+                              onHorizontalDragUpdate: (details) => _replySwipeDistance += details.delta.dx,
                               onHorizontalDragEnd: (details) {
-                                if ((details.primaryVelocity ?? 0).abs() > 180) {
-                                  setState(() => replyToMessage = Map<String, dynamic>.from(m));
-                                }
+                                final swiped = _replySwipeDistance.abs() > 42 ||
+                                    (details.primaryVelocity ?? 0).abs() > 180;
+                                _replySwipeDistance = 0;
+                                if (swiped) setState(() => replyToMessage = Map<String, dynamic>.from(m));
                               },
                               onDoubleTap: () async {
                                 await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), '❤️');
