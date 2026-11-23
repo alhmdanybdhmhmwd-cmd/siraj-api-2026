@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, rankKnowledgeChunks, validateAdminAccessClaims, processAdminDeadLetterMessage } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, rankKnowledgeChunks, validateAdminAccessClaims, processAdminDeadLetterMessage, renewAdminTaskLease } from "./worker.js";
 
 test("task input is normalized and bounded", () => {
   assert.deepEqual(validateTaskInput({ title: "  Prepare global launch  ", priority: "high" }), {
@@ -261,4 +261,25 @@ test("dead-letter delivery is retried when durable storage is unavailable", asyn
     retry(options) { actions.push(options); }
   }, {});
   assert.deepEqual(actions, [{ delaySeconds: 60 }]);
+});
+
+
+test("task lease renewal extends only the lease owned by the active worker", async () => {
+  let sql = "";
+  let args = [];
+  const env = { ADMIN_DB: {
+    prepare(value) { sql = value; return { bind(...values) { args = values; return { async run() { return { meta: { changes: 1 } }; } }; } }; }
+  } };
+  assert.equal(await renewAdminTaskLease(env, "task-9", "workspace-2", "lease-3"), true);
+  assert.match(sql, /lease_expires_at = datetime\('now', '\+10 minutes'\)/);
+  assert.match(sql, /lease_owner = \? AND status = 'running'/);
+  assert.deepEqual(args, ["task-9", "workspace-2", "lease-3"]);
+  assert.equal(await renewAdminTaskLease({}, "task-9", "workspace-2", "lease-3"), false);
+});
+
+test("lease renewal reports ownership loss without modifying another worker's task", async () => {
+  const env = { ADMIN_DB: {
+    prepare() { return { bind() { return { async run() { return { meta: { changes: 0 } }; } }; } }; }
+  } };
+  assert.equal(await renewAdminTaskLease(env, "task-9", "workspace-2", "stale-lease"), false);
 });
