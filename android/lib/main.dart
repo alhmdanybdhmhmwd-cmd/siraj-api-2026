@@ -8777,6 +8777,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   final ScrollController messagesScrollController = ScrollController();
   bool _autoOlderArmed = false;
   Color? chatWallpaperColor;
+  bool chatToolsExpanded = false;
   Map<String, dynamic>? olderMessageCursor;
   Map<String, dynamic>? replyToMessage;
   double _replySwipeDistance = 0;
@@ -9341,38 +9342,48 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           ),
           actions: [
             IconButton(
-              tooltip: 'تغيير خلفية المحادثة',
-              onPressed: _chooseChatWallpaper,
-              icon: const Icon(Icons.wallpaper_outlined),
-            ),
-            PopupMenuButton<String>(
-              tooltip: 'خيارات المحادثة',
-              icon: const Icon(Icons.more_vert_rounded),
-              onSelected: (value) {
-                if (value == 'search') {
-                  showConversationSearch(context, (query, before) =>
-                    Api.searchPrivateMessages(friendId, query, before: before));
-                } else if (value == 'clear') {
-                  _clearConversationHistory();
-                } else if (value == 'summary') {
-                  showDialog<void>(
-                    context: context,
-                    builder: (_) => BarqConversationSummaryDialog(
-                      loadSummary: () => Api.summarizePrivateConversation(friendId),
-                    ),
-                  );
-                }
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'clear', child: ListTile(
-                  dense: true, leading: Icon(Icons.cleaning_services_outlined), title: Text('مسح سجل المحادثة'))),
-                PopupMenuItem(value: 'search', child: ListTile(
-                  dense: true, leading: Icon(Icons.search), title: Text('البحث في المحادثة'))),
-                PopupMenuItem(value: 'summary', child: ListTile(
-                  dense: true, leading: Icon(Icons.auto_awesome_outlined), title: Text('ملخص المحادثة'))),
-              ],
+              tooltip: chatToolsExpanded ? 'إخفاء أدوات المحادثة' : 'إظهار أدوات المحادثة',
+              onPressed: () => setState(() => chatToolsExpanded = !chatToolsExpanded),
+              icon: Icon(chatToolsExpanded ? Icons.keyboard_arrow_up_rounded : Icons.tune_rounded),
             ),
           ],
+          bottom: chatToolsExpanded
+              ? PreferredSize(
+                  preferredSize: const Size.fromHeight(52),
+                  child: SizedBox(
+                    height: 52,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      child: Row(children: [
+                        ActionChip(
+                          avatar: const Icon(Icons.search_rounded, size: 17),
+                          label: const Text('بحث'),
+                          onPressed: () => showConversationSearch(context, (query, before) =>
+                            Api.searchPrivateMessages(friendId, query, before: before)),
+                        ),
+                        const SizedBox(width: 7),
+                        ActionChip(
+                          avatar: const Icon(Icons.auto_awesome_rounded, size: 17),
+                          label: const Text('ملخص'),
+                          onPressed: () => showDialog<void>(
+                            context: context,
+                            builder: (_) => BarqConversationSummaryDialog(
+                              loadSummary: () => Api.summarizePrivateConversation(friendId),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 7),
+                        ActionChip(
+                          avatar: const Icon(Icons.cleaning_services_outlined, size: 17),
+                          label: const Text('مسح السجل'),
+                          onPressed: _clearConversationHistory,
+                        ),
+                      ]),
+                    ),
+                  ),
+                )
+              : null,
         ),
         body: Container(
           decoration: barqChatWallpaperDecoration(context, chatWallpaperColor),
@@ -10230,6 +10241,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
   double? mediaUploadProgress;
   bool refreshing = false;
   Color? chatWallpaperColor;
+  bool chatToolsExpanded = false;
   bool hasOlderMessages = false;
   bool loadingOlderMessages = false;
   final ScrollController messagesScrollController = ScrollController();
@@ -10713,58 +10725,76 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
           ),
           actions: [
             IconButton(
-              tooltip: 'البحث في المجموعة',
-              onPressed: () => showConversationSearch(context, (query, before) =>
-                Api.searchGroupMessages(groupId, query, before: before)),
-              icon: const Icon(Icons.search_rounded),
+              tooltip: chatToolsExpanded ? 'إخفاء أدوات المجموعة' : 'إظهار أدوات المجموعة',
+              onPressed: () => setState(() => chatToolsExpanded = !chatToolsExpanded),
+              icon: Icon(chatToolsExpanded ? Icons.keyboard_arrow_up_rounded : Icons.tune_rounded),
             ),
-            PopupMenuButton<String>(
-              tooltip: 'خيارات المجموعة',
-              icon: const Icon(Icons.more_vert_rounded),
-              onSelected: (value) {
-                if (value == 'search') {
-                  showConversationSearch(context, (query, before) =>
-                    Api.searchGroupMessages(groupId, query, before: before));
-                } else if (value == 'summary') {
-                  showDialog<void>(
-                    context: context,
-                    builder: (_) => BarqConversationSummaryDialog(
-                      loadSummary: () => Api.summarizeGroupConversation(groupId),
-                    ),
-                  );
-                } else if (value == 'pinned') {
-                  showBarqMessageCollectionDialog(context,
-                    title: 'الرسائل المثبتة', messages: messages, attachmentsOnly: false);
-                } else if (value == 'media') {
-                  showBarqMessageCollectionDialog(context,
-                    title: 'الوسائط والملفات', messages: messages, attachmentsOnly: true);
-                } else if (value == 'members') {
-                  showGroupMembers();
-                } else if (value == 'wallpaper') {
-                  _chooseGroupWallpaper();
-                } else if (value == 'invite') {
-                  widget.onShareInvite();
-                }
-              },
-              itemBuilder: (_) => [
-                const PopupMenuItem(value: 'members', child: ListTile(
-                  dense: true, leading: Icon(Icons.people_alt_outlined), title: Text('معلومات المجموعة والأعضاء'))),
-                const                 PopupMenuItem(value: 'summary', child: ListTile(
-                  dense: true, leading: Icon(Icons.auto_awesome_outlined), title: Text('ملخص المحادثة'))),
-                const PopupMenuItem(value: 'pinned', child: ListTile(
-                  dense: true, leading: Icon(Icons.push_pin_outlined), title: Text('الرسائل المثبتة'))),
-                const PopupMenuItem(value: 'media', child: ListTile(
-                  dense: true, leading: Icon(Icons.perm_media_outlined), title: Text('الوسائط والملفات'))),
-                const PopupMenuItem(value: 'wallpaper', child: ListTile(
-                  dense: true, leading: Icon(Icons.wallpaper_outlined), title: Text('خلفية المحادثة'))),
-                if (['owner', 'admin'].contains(field(widget.group, ['current_role'], 'member')))
-                  const PopupMenuItem(value: 'invite', child: ListTile(
-                    dense: true, leading: Icon(Icons.link_rounded), title: Text('مشاركة رابط الانضمام'))),
-              ],
-            ),
-            if (['owner', 'admin'].contains(field(widget.group, ['current_role'], 'member')))
-              IconButton(onPressed: widget.onAddMember, icon: const Icon(Icons.person_add_alt_1_rounded), tooltip: 'إضافة أعضاء'),
           ],
+          bottom: chatToolsExpanded
+              ? PreferredSize(
+                  preferredSize: const Size.fromHeight(52),
+                  child: SizedBox(
+                    height: 52,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      child: Row(children: [
+                        ActionChip(
+                          avatar: const Icon(Icons.search_rounded, size: 17),
+                          label: const Text('بحث'),
+                          onPressed: () => showConversationSearch(context, (query, before) =>
+                            Api.searchGroupMessages(groupId, query, before: before)),
+                        ),
+                        const SizedBox(width: 7),
+                        ActionChip(
+                          avatar: const Icon(Icons.auto_awesome_rounded, size: 17),
+                          label: const Text('ملخص'),
+                          onPressed: () => showDialog<void>(
+                            context: context,
+                            builder: (_) => BarqConversationSummaryDialog(
+                              loadSummary: () => Api.summarizeGroupConversation(groupId),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 7),
+                        ActionChip(
+                          avatar: const Icon(Icons.push_pin_outlined, size: 17),
+                          label: const Text('المثبتة'),
+                          onPressed: () => showBarqMessageCollectionDialog(context,
+                            title: 'الرسائل المثبتة', messages: messages, attachmentsOnly: false),
+                        ),
+                        const SizedBox(width: 7),
+                        ActionChip(
+                          avatar: const Icon(Icons.perm_media_outlined, size: 17),
+                          label: const Text('الوسائط'),
+                          onPressed: () => showBarqMessageCollectionDialog(context,
+                            title: 'الوسائط والملفات', messages: messages, attachmentsOnly: true),
+                        ),
+                        const SizedBox(width: 7),
+                        ActionChip(
+                          avatar: const Icon(Icons.wallpaper_outlined, size: 17),
+                          label: const Text('الخلفية'),
+                          onPressed: _chooseGroupWallpaper,
+                        ),
+                        if (['owner', 'admin'].contains(field(widget.group, ['current_role'], 'member'))) ...[
+                          const SizedBox(width: 7),
+                          ActionChip(
+                            avatar: const Icon(Icons.link_rounded, size: 17),
+                            label: const Text('رابط الدعوة'),
+                            onPressed: widget.onShareInvite,
+                          ),
+                          const SizedBox(width: 7),
+                          ActionChip(
+                            avatar: const Icon(Icons.person_add_alt_1_rounded, size: 17),
+                            label: const Text('إضافة أعضاء'),
+                            onPressed: widget.onAddMember,
+                          ),
+                        ],
+                      ]),
+                    ),
+                  ),
+                )
+              : null,
         ),
         body: Container(
           decoration: barqChatWallpaperDecoration(context, chatWallpaperColor),
