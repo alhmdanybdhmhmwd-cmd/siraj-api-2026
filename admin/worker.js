@@ -1002,7 +1002,7 @@ async function handle(request, env) {
     const historyRows = await env.ADMIN_DB.prepare(`
       SELECT role, content FROM admin_brain_messages
       WHERE conversation_id = ? AND workspace_id = ?
-      ORDER BY created_at DESC, id DESC LIMIT 12
+      ORDER BY rowid DESC LIMIT 12
     `).bind(conversationId, workspace).all();
     const history = (historyRows.results || []).reverse();
     const userMessageId = crypto.randomUUID();
@@ -1073,7 +1073,7 @@ async function handle(request, env) {
     const rows = await env.ADMIN_DB.prepare(`
       SELECT id, role, content, source_refs_json, model, created_at
       FROM admin_brain_messages WHERE conversation_id = ? AND workspace_id = ?
-      ORDER BY created_at ASC, id ASC LIMIT 100
+      ORDER BY rowid ASC LIMIT 100
     `).bind(conversationId, workspace).all();
     const messages = (rows.results || []).map(item => {
       let sources = [];
