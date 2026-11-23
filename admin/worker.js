@@ -649,9 +649,18 @@ async function handle(request, env) {
     if (!canTransitionTask(task.status, nextStatus)) {
       return response({ error: "invalid_status_transition", from: task.status, to: nextStatus }, 409, allowedOrigin);
     }
-    await env.ADMIN_DB.prepare(
+    const changed = await env.ADMIN_DB.prepare(
       "UPDATE admin_tasks SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND workspace_id = ? AND status = ?"
     ).bind(nextStatus, taskId, workspace, task.status).run();
+    if (!changed?.meta?.changes) {
+      const current = await env.ADMIN_DB.prepare(
+        "SELECT status FROM admin_tasks WHERE id = ? AND workspace_id = ?"
+      ).bind(taskId, workspace).first();
+      return response({
+        error: "task_status_conflict",
+        currentStatus: current?.status ?? null
+      }, 409, allowedOrigin);
+    }
     await audit(env, workspace, actor, "task.status.changed", "task", taskId,
       { from: task.status, to: nextStatus });
     return response({ task: { id: taskId, status: nextStatus } }, 200, allowedOrigin);
