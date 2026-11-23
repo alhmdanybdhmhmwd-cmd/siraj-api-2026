@@ -757,7 +757,7 @@ class SirajPush {
           : channelId == 'barq_statuses' ? 'حالات برق' : 'رسائل برق الخاصة';
       try {
         await barqLocalNotifications.show(
-          message.messageId?.hashCode ?? DateTime.now().millisecondsSinceEpoch.remainder(0x7fffffff),
+          message.messageId?.hashCode.abs() ?? DateTime.now().millisecondsSinceEpoch.remainder(0x7fffffff),
           title,
           body,
           NotificationDetails(
