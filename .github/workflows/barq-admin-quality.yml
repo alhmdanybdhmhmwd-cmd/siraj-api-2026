@@ -209,7 +209,7 @@ jobs:
           exit 1
       - uses: gradle/actions/setup-gradle@v4
       - name: Validate Android AppAuth platform wiring without building an APK
-        timeout-minutes: 15
+        timeout-minutes: 10
         run: |
           test -f android/gradlew
           grep -Fq 'applicationId = "com.barq.admin"' android/app/build.gradle.kts
@@ -219,4 +219,4 @@ jobs:
           sdk_path="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
           printf "flutter.sdk=%s\nsdk.dir=%s\n" "$FLUTTER_ROOT" "$sdk_path" > android/local.properties
           cd android
-          bash gradlew :app:processDebugManifest --stacktrace
+          bash gradlew :app:processDebugManifest --no-daemon --console=plain --stacktrace --info
