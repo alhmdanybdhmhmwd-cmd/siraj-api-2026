@@ -84,7 +84,7 @@ Important offline boundary: a task created while the phone has no connection rem
 
 The owner requires BARQ Brain to become a broad, project-aware engineering assistant for the separate BARQ Admin app. It must understand the BARQ product and its development history well enough for the owner to continue building BARQ together with the assistant, rather than behaving as a generic chatbot.
 
-This is an explicit Phase 2 acceptance requirement, not a claim that complete project understanding is already implemented in Phase 1. Phase 1 may prepare secure foundations and documentation only. Do not begin BARQ repository indexing, project analysis, or Phase 2 implementation until the owner explicitly authorizes that phase.
+This is an explicit Phase 2 acceptance requirement. The owner explicitly authorized Phase 2 on 2026-11-24; repository indexing, project analysis, and BARQ Brain implementation are now in progress. The earlier Phase 1-only restriction is superseded. Do not claim complete project understanding until configured sources have actually been indexed and coverage/freshness checks pass.
 
 When Phase 2 is authorized, the knowledge system must progressively cover and keep current:
 
@@ -108,4 +108,4 @@ The implementation must run from continuously available server-side monitoring a
 
 Autonomous repair must not mean unrestricted production access. Production deployment, destructive data changes, secret or permission changes, paid actions, and public communications remain approval-gated. Where a safe repair cannot be verified, the system must stop, preserve evidence, and request owner review rather than guess. The phone is a notification and control surface; monitoring and accepted server-side work must not depend on the phone remaining online. Work created offline on the phone remains a local draft until synchronized.
 
-This requirement belongs to the later durable-operation and end-to-end lifecycle phases. Phase 1 remains limited to completing the secure Admin foundation and validating its dedicated Preview setup; do not start BARQ repository analysis or autonomous repair implementation before the owner authorizes the relevant phase.
+This requirement belongs to the later durable-operation and end-to-end lifecycle phases. The owner has authorized Phase 2 project understanding and knowledge indexing. Phase 1 secure-foundation closeout continues in parallel. Autonomous repository repair, editing, merging, production deployment, and durable independent operation remain outside Phase 2 and require later phase authorization.
