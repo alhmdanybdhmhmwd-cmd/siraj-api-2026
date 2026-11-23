@@ -17,6 +17,8 @@ This directory is a separate Admin service boundary. It is not part of the BARQ 
 The future dedicated Admin Preview Worker requires:
 
 - `ADMIN_DB`: a dedicated Admin Preview D1 database (never the BARQ production D1).
+- `ADMIN_TASK_QUEUE`: a dedicated Cloudflare Queue for durable background tasks.
+- `ADMIN_AI`: a server-side Workers AI binding used by BARQ Brain for analysis and draft generation.
 - `BARQ_ADMIN_JWT_SECRET`: a server-side HS256 secret of at least 32 characters.
 - `BARQ_ADMIN_OWNER_SUBJECT`: the exact owner subject allowed to administer this workspace.
 - `BARQ_ADMIN_ALLOWED_ORIGIN`: the exact Admin client origin; no wildcard origin is supported.
