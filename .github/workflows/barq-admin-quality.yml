@@ -225,4 +225,8 @@ jobs:
           sdk_path="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
           printf "flutter.sdk=%s\nsdk.dir=%s\n" "$FLUTTER_ROOT" "$sdk_path" > android/local.properties
           cd android
+          export BARQ_GOOGLE_OIDC_CLIENT_ID="1234567890-test.apps.googleusercontent.com"
           bash gradlew :app:processDebugManifest --no-daemon --console=plain --stacktrace --info
+          manifest="$(find app/build/intermediates -path '*merged_manifest*' -name AndroidManifest.xml -print -quit)"
+          test -n "$manifest"
+          grep -Fq 'com.googleusercontent.apps.1234567890' "$manifest"
