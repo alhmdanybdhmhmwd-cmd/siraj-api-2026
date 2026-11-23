@@ -40,6 +40,7 @@ jobs:
           db.executescript(Path("admin/migrations/0002_project_knowledge.sql").read_text())
           db.executescript(Path("admin/migrations/0003_vision_usage_limits.sql").read_text())
           db.executescript(Path("admin/migrations/0004_image_generation_limits.sql").read_text())
+          db.executescript(Path("admin/migrations/0005_owner_identity_sessions.sql").read_text())
           names = {row[0] for row in db.execute(
               "SELECT name FROM sqlite_master WHERE type IN ('table','trigger')"
           )}
@@ -47,7 +48,8 @@ jobs:
               "admin_workspaces", "admin_tasks", "admin_task_checkpoints",
               "admin_approvals", "admin_audit_events", "admin_project_knowledge",
               "admin_ai_usage_limits", "admin_image_generation_limits",
-              "admin_audit_no_update", "admin_audit_no_delete"
+              "admin_audit_no_update", "admin_audit_no_delete", "admin_owner_devices",
+              "admin_owner_sessions", "admin_oidc_nonce_uses"
           }
           missing = required - names
           assert not missing, f"Missing schema objects: {sorted(missing)}"
@@ -119,8 +121,8 @@ jobs:
           cache: true
       - name: Resolve Flutter dependencies
         run: flutter pub get
-      - name: Report Dart formatting (non-blocking)
-        run: dart format --output=none lib test
+      - name: Enforce Dart formatting
+        run: dart format --output=none --set-exit-if-changed lib test
       - name: Analyze Admin mobile app
         run: flutter analyze
       - name: Run Admin mobile tests
