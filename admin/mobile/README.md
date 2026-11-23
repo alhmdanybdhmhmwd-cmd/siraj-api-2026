@@ -37,3 +37,7 @@ The CI workflow uploads `app-debug.apk` as the `barq-admin-debug-apk` artifact f
 - Do not connect this app to the BARQ consumer database or reuse consumer-user sessions.
 
 This build is suitable for internal UI and integration testing only. It is not production-ready.
+
+## Owner operating agreement
+
+BARQ Brain receives the owner's current operating agreement in its server-side system prompt and the app displays a short version in the Brain panel. The current authorized scope is Phase 1 (BARQ Admin foundation) only. Phase 2 repository/code understanding and indexing is blocked until the owner explicitly authorizes it. BARQ is the main product, SPARK is its stories feature, BARQ Admin is the separate management app, and BARQ Brain is its assistant. Production publishing, deployment, merging, pull-request base changes, spending, and other consequential external actions require specific owner approval. The two-hour target is a testable-build goal, not a production-readiness guarantee.
