@@ -10297,15 +10297,37 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
       textDirection: TextDirection.rtl,
       child: Scaffold(
         appBar: AppBar(
-          title: Row(mainAxisSize: MainAxisSize.min, children: [
-            Flexible(child: Text(field(widget.group, ['name'], 'مجموعة'), overflow: TextOverflow.ellipsis)),
-
-          ]),
+          titleSpacing: 4,
+          title: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: showGroupMembers,
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              CircleAvatar(
+                radius: 19,
+                backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: .16),
+                child: Icon(Icons.groups_rounded, color: Theme.of(context).colorScheme.primary, size: 21),
+              ),
+              const SizedBox(width: 9),
+              Flexible(child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(field(widget.group, ['name'], 'مجموعة'),
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                  Text('${field(widget.group, ['member_count', 'memberCount'], 'مجموعة')} أعضاء',
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .62))),
+                ],
+              )),
+            ]),
+          ),
           actions: [
             IconButton(
-              tooltip: 'تغيير خلفية المجموعة',
-              onPressed: _chooseGroupWallpaper,
-              icon: const Icon(Icons.wallpaper_outlined),
+              tooltip: 'البحث في المجموعة',
+              onPressed: () => showConversationSearch(context, (query, before) =>
+                Api.searchGroupMessages(groupId, query, before: before)),
+              icon: const Icon(Icons.search_rounded),
             ),
             PopupMenuButton<String>(
               tooltip: 'خيارات المجموعة',
@@ -10327,22 +10349,27 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                 } else if (value == 'media') {
                   showBarqMessageCollectionDialog(context,
                     title: 'الوسائط والملفات', messages: messages, attachmentsOnly: true);
+                } else if (value == 'members') {
+                  showGroupMembers();
+                } else if (value == 'wallpaper') {
+                  _chooseGroupWallpaper();
                 }
               },
               itemBuilder: (_) => const [
-                PopupMenuItem(value: 'search', child: ListTile(
-                  dense: true, leading: Icon(Icons.search), title: Text('البحث في المحادثة'))),
+                PopupMenuItem(value: 'members', child: ListTile(
+                  dense: true, leading: Icon(Icons.people_alt_outlined), title: Text('معلومات المجموعة والأعضاء'))),
                 PopupMenuItem(value: 'summary', child: ListTile(
                   dense: true, leading: Icon(Icons.auto_awesome_outlined), title: Text('ملخص المحادثة'))),
                 PopupMenuItem(value: 'pinned', child: ListTile(
                   dense: true, leading: Icon(Icons.push_pin_outlined), title: Text('الرسائل المثبتة'))),
                 PopupMenuItem(value: 'media', child: ListTile(
                   dense: true, leading: Icon(Icons.perm_media_outlined), title: Text('الوسائط والملفات'))),
+                PopupMenuItem(value: 'wallpaper', child: ListTile(
+                  dense: true, leading: Icon(Icons.wallpaper_outlined), title: Text('خلفية المحادثة'))),
               ],
             ),
-            IconButton(onPressed: showGroupMembers, icon: const Icon(Icons.people_alt_outlined), tooltip: 'أعضاء المجموعة'),
             if (['owner', 'admin'].contains(field(widget.group, ['current_role'], 'member')))
-              IconButton(onPressed: widget.onAddMember, icon: const Icon(Icons.person_add_alt_1), tooltip: 'إضافة عضو'),
+              IconButton(onPressed: widget.onAddMember, icon: const Icon(Icons.person_add_alt_1_rounded), tooltip: 'إضافة أعضاء'),
           ],
         ),
         body: Container(
