@@ -17,7 +17,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: barq-admin-quality-${{ github.ref }}
+  group: barq-admin-quality-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
