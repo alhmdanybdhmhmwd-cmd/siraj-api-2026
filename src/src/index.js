@@ -1120,6 +1120,105 @@ export default {
       const resumableMediaResponse = await handleResumableMediaUpload(request, env, currentUser, url, path, method, sendSirajPush);
       if (resumableMediaResponse) return resumableMediaResponse;
 
+      // Permanently delete the authenticated account after an explicit username confirmation.
+      // Remove owned objects first; if storage cleanup fails, retain the account and retry safely.
+      if (method === "DELETE" && path === "/api/account") {
+        const body = await readJsonRequestLimited(request);
+        const account = await env.DB.prepare("SELECT id, username FROM users WHERE id = ?")
+          .bind(currentUser.sub).first();
+        if (!account) return json({ error: "Account not found" }, 404);
+        if (String(body.confirmUsername || "").trim().toLowerCase() !== String(account.username || "").toLowerCase()) {
+          return json({ error: "Username confirmation does not match" }, 400);
+        }
+
+        const tableExists = async name => Boolean(await env.DB.prepare(
+          "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?"
+        ).bind(name).first());
+        const readRows = async (sql, ...args) => {
+          const result = await env.DB.prepare(sql).bind(...args).all();
+          return result.results || [];
+        };
+        const objectKeys = new Set();
+        const collect = async (sql, ...args) => {
+          try {
+            for (const row of await readRows(sql, ...args)) {
+              const key = String(row.object_key || "").trim();
+              if (key) objectKeys.add(key);
+            }
+          } catch (_) {}
+        };
+
+        if (await tableExists("media_access")) {
+          await collect("SELECT object_key FROM media_access WHERE owner_id = ?", currentUser.sub);
+        }
+        if (await tableExists("profile_photos")) {
+          await collect("SELECT object_key FROM profile_photos WHERE user_id = ?", currentUser.sub);
+        }
+        if (await tableExists("status_media") && await tableExists("status_posts")) {
+          await collect("SELECT sm.object_key FROM status_media sm JOIN status_posts sp ON sp.id = sm.status_id WHERE sp.user_id = ?", currentUser.sub);
+        }
+        if (await tableExists("status_audio_replies")) {
+          await collect("SELECT object_key FROM status_audio_replies WHERE user_id = ?", currentUser.sub);
+        }
+        if (await tableExists("private_memory_media")) {
+          await collect("SELECT object_key FROM private_memory_media WHERE owner_id = ?", currentUser.sub);
+        }
+
+        const storageConfigured = Boolean(env.TIGRIS_ACCESS_KEY_ID && env.TIGRIS_SECRET_ACCESS_KEY);
+        if (objectKeys.size && !storageConfigured) {
+          return json({ error: "Media storage is unavailable; account deletion was not completed" }, 503);
+        }
+        if (objectKeys.size) {
+          const storage = createS3ObjectStorageProvider(env, AwsClient);
+          for (const key of objectKeys) {
+            const response = await storage.fetch(createObjectStorageUrl(env, key), { method: "DELETE" });
+            if (!response.ok && response.status !== 404) {
+              return json({ error: "Could not securely remove all account media; retry deletion" }, 503);
+            }
+          }
+        }
+
+        const statements = [];
+        const addDelete = async (table, where, ...args) => {
+          if (await tableExists(table)) statements.push(env.DB.prepare(`DELETE FROM ${table} WHERE ${where}`).bind(...args));
+        };
+        await addDelete("messages", "sender_id = ? OR receiver_id = ?", currentUser.sub, currentUser.sub);
+        await addDelete("ephemeral_messages", "sender_id = ? OR receiver_id = ?", currentUser.sub, currentUser.sub);
+        await addDelete("friendships", "user_id = ? OR friend_id = ?", currentUser.sub, currentUser.sub);
+        await addDelete("blocked_users", "blocker_id = ? OR blocked_id = ?", currentUser.sub, currentUser.sub);
+        await addDelete("private_conversation_state", "user_id = ? OR peer_id = ?", currentUser.sub, currentUser.sub);
+        await addDelete("media_access", "owner_id = ? OR recipient_id = ?", currentUser.sub, currentUser.sub);
+        await addDelete("media_expirations", "object_key IN (SELECT object_key FROM media_access WHERE owner_id = ?)", currentUser.sub);
+        await addDelete("status_posts", "user_id = ?", currentUser.sub);
+        await addDelete("status_views", "viewer_id = ?", currentUser.sub);
+        await addDelete("status_reactions", "user_id = ?", currentUser.sub);
+        await addDelete("status_replies", "user_id = ?", currentUser.sub);
+        await addDelete("status_audio_replies", "user_id = ?", currentUser.sub);
+        await addDelete("private_memories", "owner_id = ?", currentUser.sub);
+        await addDelete("private_memory_media", "owner_id = ?", currentUser.sub);
+        await addDelete("message_reactions", "user_id = ?", currentUser.sub);
+        await addDelete("pinned_messages", "pinned_by = ?", currentUser.sub);
+        await addDelete("hidden_private_messages", "user_id = ?", currentUser.sub);
+        await addDelete("group_hidden_messages", "user_id = ?", currentUser.sub);
+        await addDelete("group_message_reads", "user_id = ?", currentUser.sub);
+        await addDelete("group_invites", "created_by = ?", currentUser.sub);
+        await addDelete("group_member_roles", "user_id = ?", currentUser.sub);
+        await addDelete("group_messages", "sender_id = ?", currentUser.sub);
+        await addDelete("group_members", "user_id = ?", currentUser.sub);
+        await addDelete("chat_groups", "owner_id = ?", currentUser.sub);
+        await addDelete("device_tokens", "user_id = ?", currentUser.sub);
+        await addDelete("notification_preferences", "user_id = ?", currentUser.sub);
+        await addDelete("user_privacy", "user_id = ?", currentUser.sub);
+        await addDelete("account_security", "user_id = ?", currentUser.sub);
+        await addDelete("recovery_codes", "user_id = ?", currentUser.sub);
+        await addDelete("revoked_sessions", "user_id = ?", currentUser.sub);
+        await addDelete("media_upload_sessions", "owner_id = ?", currentUser.sub);
+        await addDelete("profile_photos", "user_id = ?", currentUser.sub);
+        statements.push(env.DB.prepare("DELETE FROM users WHERE id = ?").bind(currentUser.sub));
+        if (statements.length) await env.DB.batch(statements);
+        return json({ message: "Account and associated data deleted" });
+      }
+
       // Revoke only this bearer token; other device sessions remain valid.
       if (method === "POST" && path === "/api/logout") {
         const authHeader = request.headers.get("Authorization") || "";
