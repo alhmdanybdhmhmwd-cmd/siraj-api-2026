@@ -809,6 +809,7 @@ class SirajPush {
 
   static void _handleForegroundMessage(RemoteMessage message) {
     if (Api.token == null) return;
+    SirajRealtime.instance.acceptPush(message.data);
     final label = barqForegroundPushLabel(message.data, _preferences);
     if (label == null) return;
     unawaited(_showForegroundNotification(message, label));
@@ -1027,6 +1028,18 @@ class SirajRealtime {
 
   Stream<Map<String, dynamic>> get events => _events.stream;
   bool get isConnected => _socket?.readyState == WebSocket.open;
+
+  /// Forward foreground FCM events to open chats immediately; REST remains the source of truth.
+  void acceptPush(Map<String, dynamic> data) {
+    final type = data['type']?.toString();
+    if (type == 'direct_message') {
+      _events.add({'type': 'message', 'senderId': data['senderId']?.toString() ?? ''});
+    } else if (type == 'group_message') {
+      _events.add({'type': 'group_message', 'groupId': data['groupId']?.toString() ?? ''});
+    } else if (type == 'status_update') {
+      _events.add({'type': 'status_update', 'statusId': data['statusId']?.toString() ?? ''});
+    }
+  }
 
   Future<void> start(String token) async {
     if (token.isEmpty) return;
@@ -4362,6 +4375,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   DateTime? _lastResumeRefreshAt;
   StreamSubscription<Uri>? _groupInviteLinkSubscription;
   final Set<String> _handledGroupInviteCodes = <String>{};
+  StreamSubscription<Map<String, dynamic>>? _pushRefreshSubscription;
+  bool _refreshAgain = false;
 
   String get myId => field(me, ['id', 'user_id']);
 
@@ -4370,6 +4385,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     barqPendingNotificationTap.addListener(_handlePendingNotificationTap);
+    _pushRefreshSubscription = SirajRealtime.instance.events.listen((event) {
+      if (event['type'] == 'message' || event['type'] == 'group_message' || event['type'] == 'status_update') {
+        unawaited(refreshAll());
+      }
+    });
     _initializeGroupInviteLinks();
     _syncRealtimeConnection();
     _loadCachedFriends().whenComplete(() { if (mounted) refreshAll(); });
@@ -4380,6 +4400,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     barqPendingNotificationTap.removeListener(_handlePendingNotificationTap);
+    _pushRefreshSubscription?.cancel();
     _groupInviteLinkSubscription?.cancel();
     offlineSyncTimer?.cancel();
     super.dispose();
@@ -4608,49 +4629,62 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> refreshAll() async {
-    if (_refreshingAll) return;
+    if (_refreshingAll) {
+      _refreshAgain = true;
+      return;
+    }
     _refreshingAll = true;
-    // Keep the current tabs visible during background refreshes. The initial
-    // loading state is already true until the first refresh completes.
+    _refreshAgain = false;
     try {
-      final results = await Future.wait([
-        Api.friends(),
-        Api.me(),
+      // Independent home resources load concurrently; a slow endpoint no longer
+      // serializes friends, groups, statuses and the rest of the home screen.
+      await Future.wait<void>([
+        () async {
+          try {
+            final value = await Api.friends();
+            friends = value;
+            unawaited(storage.write(key: 'barq_cached_friends', value: jsonEncode(value)));
+          } catch (_) {}
+        }(),
+        () async {
+          try {
+            final value = await Api.me();
+            me = value;
+            unawaited(storage.write(key: 'barq_cached_user', value: jsonEncode(value)));
+          } catch (_) {}
+        }(),
+        () async {
+          try {
+            final value = await Api.statuses();
+            statuses = value;
+            unawaited(storage.write(key: 'barq_cached_statuses', value: jsonEncode(value)));
+          } catch (_) {}
+        }(),
+        () async {
+          try { privacySettings = await Api.privacy(); } catch (_) {}
+        }(),
+        () async {
+          try {
+            notificationPrefs = await Api.notificationSettings();
+            SirajPush.updatePreferences(notificationPrefs);
+          } catch (_) {}
+        }(),
+        () async {
+          try {
+            final value = await Api.groups();
+            groups = value;
+            unawaited(storage.write(key: 'barq_cached_groups', value: jsonEncode(value)));
+          } catch (_) {}
+        }(),
+        () async {
+          try {
+            memories = await Api.privateMemories();
+            memoriesLoadFailed = false;
+          } catch (_) {
+            memoriesLoadFailed = true;
+          }
+        }(),
       ]);
-      friends = results[0] as List<Map<String, dynamic>>;
-      me = results[1] as Map<String, dynamic>;
-      await storage.write(key: 'barq_cached_friends', value: jsonEncode(friends));
-      await storage.write(key: 'barq_cached_user', value: jsonEncode(me));
-      try {
-        statuses = await Api.statuses();
-        await storage.write(key: 'barq_cached_statuses', value: jsonEncode(statuses));
-      } catch (_) {
-        // Keep the last local snapshot visible while the network is unavailable.
-      }
-      try {
-        privacySettings = await Api.privacy();
-      } catch (_) {
-        // لا نعطل بقية التطبيق إذا لم يكن تحديث الخصوصية منشوراً على الخادم بعد.
-      }
-      try {
-        notificationPrefs = await Api.notificationSettings();
-        SirajPush.updatePreferences(notificationPrefs);
-      } catch (_) {
-        // يبقى التطبيق متاحاً إذا لم يُنشر مسار إعدادات الإشعارات بعد.
-      }
-      try {
-        groups = await Api.groups();
-        await storage.write(key: 'barq_cached_groups', value: jsonEncode(groups));
-      } catch (_) {
-        // Keep cached groups visible until the next successful online refresh.
-      }
-      try {
-        memories = await Api.privateMemories();
-        memoriesLoadFailed = false;
-      } catch (_) {
-        // Preserve previously loaded memories; a network error must not look like an empty vault.
-        memoriesLoadFailed = true;
-      }
     } catch (e) {
       if (mounted) showMsg(context, cleanError(e));
     } finally {
@@ -4664,6 +4698,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         });
       }
       _refreshingAll = false;
+      if (_refreshAgain && mounted) unawaited(refreshAll());
     }
   }
 
@@ -9167,7 +9202,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   void _startRefreshTimer() {
     refreshTimer?.cancel();
-    refreshTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+    refreshTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       if (mounted && !sending && !refreshing) loadMessages(silent: true);
     });
   }
@@ -10573,6 +10608,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
   Map<String, dynamic>? replyToMessage;
   double _replySwipeDistance = 0;
   Timer? refreshTimer;
+  StreamSubscription<Map<String, dynamic>>? realtimeSubscription;
   String get groupId => field(widget.group, ['id']);
   String get _messageCacheKey => 'barq_group_messages_${widget.currentUserId}_$groupId';
 
@@ -10583,6 +10619,11 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
     messagesScrollController.addListener(_maybeLoadOlderMessages);
     loadMessages();
     _loadGroupWallpaper();
+    realtimeSubscription = SirajRealtime.instance.events.listen((event) {
+      if (event['type'] == 'group_message' && event['groupId']?.toString() == groupId) {
+        loadMessages(silent: true);
+      }
+    });
     _startRefreshTimer();
   }
 
@@ -10608,7 +10649,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
 
   void _startRefreshTimer() {
     refreshTimer?.cancel();
-    refreshTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+    refreshTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       if (mounted && !sending && !refreshing) loadMessages(silent: true);
     });
   }
@@ -10632,6 +10673,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     refreshTimer?.cancel();
+    realtimeSubscription?.cancel();
     messagesScrollController.dispose();
     controller.dispose();
     super.dispose();
