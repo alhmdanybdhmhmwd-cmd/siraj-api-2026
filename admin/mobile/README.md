@@ -10,7 +10,7 @@ Arabic RTL Flutter client for the independent BARQ Admin owner workspace.
 - Secure local storage for the temporary owner bearer token.
 - Cached workspace snapshots and a local offline task outbox.
 - Refresh/resume synchronization with the Admin API.
-- GitHub Actions quality checks and an installable Android **debug APK** artifact.
+- GitHub Actions backend and Flutter quality checks. Android APK generation is deliberately deferred until the programming and integration work is complete.
 
 ## Build and test
 
@@ -21,11 +21,9 @@ flutter pub get
 dart format lib test
 flutter analyze
 flutter test
-flutter create --platforms=android --org com.barq .
-flutter build apk --debug
 ```
 
-The CI workflow uploads `app-debug.apk` as the `barq-admin-debug-apk` artifact for seven days after a successful build. This is a debug/testing artifact, not a signed production release.
+APK generation and upload are intentionally disabled during the current development phase. They will be reintroduced only after the owner-facing functionality, trusted authentication, server integration, and acceptance tests are complete.
 
 ## Setup and security status
 
@@ -36,7 +34,7 @@ The CI workflow uploads `app-debug.apk` as the `barq-admin-debug-apk` artifact f
 - Do not put signing secrets, provider secrets, or GitHub tokens in the APK.
 - Do not connect this app to the BARQ consumer database or reuse consumer-user sessions.
 
-This build is suitable for internal UI and integration testing only. It is not production-ready.
+The current Flutter client is still a development prototype. No installable APK is being generated at this stage, and the app is not production-ready.
 
 ## Owner operating agreement
 
