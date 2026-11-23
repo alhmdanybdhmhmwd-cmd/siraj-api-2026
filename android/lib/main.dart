@@ -8467,6 +8467,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   bool blockedByMe = false;
   bool hasOlderMessages = false;
   bool loadingOlderMessages = false;
+  final ScrollController messagesScrollController = ScrollController();
+  bool _autoOlderArmed = false;
   Color? chatWallpaperColor;
   Map<String, dynamic>? olderMessageCursor;
   Map<String, dynamic>? replyToMessage;
@@ -8486,6 +8488,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    messagesScrollController.addListener(_maybeLoadOlderMessages);
     loadMessages();
     _loadBlockState();
     _loadChatWallpaper();
@@ -8644,6 +8647,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     _ephemeralExpiryTimer?.cancel();
     realtimeSubscription?.cancel();
     nearbySubscription?.cancel();
+    messagesScrollController.dispose();
     controller.dispose();
     super.dispose();
   }
@@ -8771,6 +8775,21 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       }
     } finally {
       refreshing = false;
+    }
+  }
+
+  void _maybeLoadOlderMessages() {
+    if (!messagesScrollController.hasClients) return;
+    final position = messagesScrollController.position;
+    if (position.pixels > 120) {
+      _autoOlderArmed = true;
+      return;
+    }
+    if (_autoOlderArmed &&
+        position.userScrollDirection == ScrollDirection.forward &&
+        hasOlderMessages && !loadingOlderMessages) {
+      _autoOlderArmed = false;
+      unawaited(loadOlderMessages());
     }
   }
 
@@ -9040,6 +9059,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   : messages.isEmpty
                       ? const Center(child: Text('لا توجد رسائل بعد. ابدأ المحادثة.', style: TextStyle(color: Colors.white60)))
                       : ListView.builder(
+                           controller: messagesScrollController,
                           padding: const EdgeInsets.all(12),
                           itemCount: messages.length + (hasOlderMessages ? 1 : 0),
                           itemBuilder: (context, index) {
@@ -9853,6 +9873,8 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
   Color? chatWallpaperColor;
   bool hasOlderMessages = false;
   bool loadingOlderMessages = false;
+  final ScrollController messagesScrollController = ScrollController();
+  bool _autoOlderArmed = false;
   Map<String, dynamic>? olderMessageCursor;
   Map<String, dynamic>? replyToMessage;
   Timer? refreshTimer;
@@ -9862,6 +9884,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    messagesScrollController.addListener(_maybeLoadOlderMessages);
     loadMessages();
     _loadGroupWallpaper();
     _startRefreshTimer();
@@ -9913,6 +9936,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     refreshTimer?.cancel();
+    messagesScrollController.dispose();
     controller.dispose();
     super.dispose();
   }
@@ -9994,6 +10018,21 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
         if (!silent) showMsg(context, cleanError(e));
       }
     } finally { refreshing = false; }
+  }
+
+  void _maybeLoadOlderMessages() {
+    if (!messagesScrollController.hasClients) return;
+    final position = messagesScrollController.position;
+    if (position.pixels > 120) {
+      _autoOlderArmed = true;
+      return;
+    }
+    if (_autoOlderArmed &&
+        position.userScrollDirection == ScrollDirection.forward &&
+        hasOlderMessages && !loadingOlderMessages) {
+      _autoOlderArmed = false;
+      unawaited(loadOlderMessages());
+    }
   }
 
   Future<void> loadOlderMessages() async {
@@ -10118,6 +10157,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
             child: members.isEmpty
                 ? const Center(child: Text('لا يوجد أعضاء لعرضهم.'))
                 : ListView.builder(
+                   controller: messagesScrollController,
                     itemCount: members.length,
                     itemBuilder: (context, index) {
                       final member = members[index];
