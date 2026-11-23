@@ -35,9 +35,10 @@ Accepted bearer tokens must be issued by a trusted server-side identity componen
 - `PATCH /v1/tasks/:id/status` (validated state transitions)
 - `PATCH /v1/workspace` (optimistic project/phase position sync)
 - `GET /v1/approvals`, `POST /v1/approvals`, `PATCH /v1/approvals/:id` (owner-reviewed action previews)
+- `GET /v1/knowledge`, `POST /v1/knowledge`, `GET /v1/knowledge/:id` (versioned project source index)
 - `GET /v1/audit` (latest append-only audit events)
 
-The checkpoint API stores step input/output references, completed step, next action, and monotonically increasing version. Clients must reload after a version conflict rather than overwrite a newer checkpoint.
+The checkpoint API stores step input/output references, completed step, next action, and monotonically increasing version. Clients must reload after a version conflict rather than overwrite a newer checkpoint. BARQ Brain retrieves relevant indexed sources by task terms and cites their source paths/revisions; source ingestion is currently owner/API-driven, with automatic GitHub repository indexing planned as a later connector.
 
 ## Not implemented yet
 
