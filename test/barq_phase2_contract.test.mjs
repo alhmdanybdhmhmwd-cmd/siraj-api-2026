@@ -726,6 +726,8 @@ test("SPARK view tracking is unique per viewer and only the owner can inspect vi
   assert.ok(start >= 0 && end > start);
   assert.ok(route.includes("INSERT OR IGNORE INTO status_views"));
   assert.ok(route.includes("SELECT COUNT(*) AS count FROM status_views"));
+  assert.ok(route.includes("CASE WHEN status.user_id === currentUser.sub"));
+  assert.ok(worker.includes("CASE WHEN s.user_id = ? THEN (SELECT COUNT(*) FROM status_views sv WHERE sv.status_id = s.id) ELSE 0 END AS viewCount"));
   assert.ok(route.includes("status.user_id !== currentUser.sub"));
   assert.ok(route.includes("Only the status owner can view this list"));
   assert.ok(route.includes("FROM status_views sv JOIN users u"));
