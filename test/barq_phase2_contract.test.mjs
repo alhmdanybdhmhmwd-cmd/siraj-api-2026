@@ -299,6 +299,17 @@ test("voice messages show animated Barq waveforms during recording and playback"
   assert.ok(flutterApp.includes("Icons.bolt_rounded"));
 });
 
+test("account deletion is authenticated, username-confirmed, and revokes owned media", () => {
+  assert.ok(worker.includes('method === "DELETE" && path === "/api/account"'));
+  assert.ok(worker.includes("confirmation.toLowerCase() !== String(account.username || \"\").toLowerCase()"));
+  assert.ok(worker.includes("DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?"));
+  assert.ok(worker.includes("DELETE FROM group_messages WHERE sender_id = ?"));
+  assert.ok(worker.includes("INSERT INTO media_expirations (object_key, expires_at)"));
+  assert.ok(worker.includes("DELETE FROM media_access WHERE owner_id = ?"));
+  assert.ok(worker.includes('return json({ message: "Account deleted"'));
+  assert.ok(flutterApp.includes("static Future<void> deleteAccount(String confirmUsername)"));
+});
+
 test("private and group attachments require a pre-send preview and confirmation", () => {
   assert.ok(flutterApp.includes("Future<bool> showBarqAttachmentPreview("));
   assert.ok(flutterApp.includes("معاينة قبل الإرسال"));
