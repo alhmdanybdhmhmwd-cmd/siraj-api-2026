@@ -5,7 +5,8 @@ Arabic RTL Flutter client for the independent BARQ Admin owner workspace.
 ## Current prototype capabilities
 
 - Dark electric-blue and gold visual system.
-- Dashboard, task list, and owner approvals.
+- Dashboard, task list, owner approvals, and a read-only audit timeline.
+- Explicit local logout that clears the saved owner token, cached workspace data, and pending local outbox.
 - Secure local storage for the temporary owner bearer token.
 - Cached workspace snapshots and a local offline task outbox.
 - Refresh/resume synchronization with the Admin API.
