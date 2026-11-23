@@ -31,6 +31,7 @@ const SPARK_STATUS_TEXT_COLORS = new Set(["white", "black", "gold"]);
 const SPARK_STATUS_FONTS = new Set(["modern", "classic", "mono"]);
 const SPARK_STATUS_TTL_MS = 24 * 60 * 60 * 1000;
 const SPARK_POSTS_PER_RATE_WINDOW = 10;
+const SPARK_MAX_ACTIVE_STATUSES = 5;
 const SPARK_MEDIA_PER_STATUS = 10;
 
 async function rollbackSparkMediaUpload(env, storage, storageUrl, objectKey) {
@@ -1956,6 +1957,19 @@ export default {
 
         const requestedStatusId = (request.headers.get("X-Status-Id") || "").trim();
         if (requestedStatusId.length > 128) return json({ error: "Invalid SPARK status identifier" }, 400);
+        if (!requestedStatusId) {
+          const activeStatuses = await env.DB.prepare(
+            "SELECT COUNT(*) AS count FROM status_posts WHERE user_id = ? AND expires_at > CURRENT_TIMESTAMP"
+          ).bind(currentUser.sub).first();
+          if (Number(activeStatuses?.count || 0) >= SPARK_MAX_ACTIVE_STATUSES) {
+            return json({
+              error: "You can have up to 5 active SPARKs. They expire after 24 hours.",
+              code: "SPARK_ACTIVE_LIMIT",
+              maxActive: SPARK_MAX_ACTIVE_STATUSES,
+              durationHours: 24
+            }, 429);
+          }
+        }
         const id = requestedStatusId || crypto.randomUUID();
         let existingStatusExpiry = null;
         if (requestedStatusId) {
@@ -2093,6 +2107,18 @@ export default {
           )
         `).run();
         await ensureSparkStatusStyleColumns(env);
+
+        const activeStatuses = await env.DB.prepare(
+          "SELECT COUNT(*) AS count FROM status_posts WHERE user_id = ? AND expires_at > CURRENT_TIMESTAMP"
+        ).bind(currentUser.sub).first();
+        if (Number(activeStatuses?.count || 0) >= SPARK_MAX_ACTIVE_STATUSES) {
+          return json({
+            error: "You can have up to 5 active SPARKs. They expire after 24 hours.",
+            code: "SPARK_ACTIVE_LIMIT",
+            maxActive: SPARK_MAX_ACTIVE_STATUSES,
+            durationHours: 24
+          }, 429);
+        }
 
         const id = crypto.randomUUID();
         const expiresAt = new Date(Date.now() + SPARK_STATUS_TTL_MS)
