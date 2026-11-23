@@ -79,6 +79,32 @@ test("login throttles each identifier while avoiding a shared missing-IP bucket 
   assert.ok(route.includes('"Retry-After": "900"'));
 });
 
+test("account recovery requires the one-time recovery proof and avoids a shared unknown-IP throttle bucket", () => {
+  const start = worker.indexOf('path === "/api/password/recover"');
+  const end = worker.indexOf("// Login", start);
+  const route = worker.slice(start, end);
+  assert.ok(start >= 0 && end > start, "recovery route must exist");
+  assert.ok(route.includes("recoveryCode"));
+  assert.ok(route.includes("consumeRecoveryAttempt(env, \"identifier\", identifier, 5)"));
+  assert.ok(route.includes('consumeRecoveryAttempt(env, "account", user.id)'));
+  assert.ok(route.includes('clientIp && clientIp.trim()'));
+  assert.ok(!route.includes('|| "unknown"'), "missing edge IP must not create a global recovery bucket");
+  assert.ok(route.includes("constantTimeHexEqual"));
+  assert.ok(route.includes("consumed_at IS NULL"));
+  assert.ok(route.includes("session_version = session_version + 1"));
+});
+
+test("all-device logout is password-confirmed, rate-limited, and invalidates the account session version", () => {
+  const start = worker.indexOf('path === "/api/security/logout-all"');
+  const end = worker.indexOf("// Private memories are isolated", start);
+  const route = worker.slice(start, end);
+  assert.ok(start >= 0 && end > start, "logout-all route must exist");
+  assert.ok(route.includes('SELECT password_hash, password_salt FROM users WHERE id = ?'));
+  assert.ok(route.includes('consumeLoginAttempt(env, "security-logout-all", currentUser.sub, 5)'));
+  assert.ok(route.includes("hashPassword(password, credentials.password_salt)"));
+  assert.ok(route.includes("session_version = session_version + 1"));
+});
+
 test("message deletion is authenticated and limited to the author in private and group chats", () => {
   const privateStart = worker.indexOf("privateMessageActionMatch");
   const privateEnd = worker.indexOf("// Get conversation messages", privateStart);
