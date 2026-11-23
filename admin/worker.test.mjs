@@ -90,6 +90,8 @@ test("BARQ Brain prompts include current workspace context and no execution auth
   assert.match(messages[0].content, /BARQ Admin/);
   assert.match(messages[0].content, /Never publish to production/);
   assert.match(messages[0].content, /two-hour target/);
+  assert.match(messages[0].content, /has not yet selected the identity provider/);
+  assert.match(messages[0].content, /Google OIDC was only proposed, not approved/);
 });
 
 test("knowledge sources are versioned, typed, and bounded", () => {
