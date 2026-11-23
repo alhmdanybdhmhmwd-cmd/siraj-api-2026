@@ -448,7 +448,6 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
     for (final key in [_cacheWorkspace, _cacheTasks, _cacheApprovals, _cacheAudit, _outboxKey]) {
       await prefs.remove(key);
     }
-    await prefs.remove('barq_admin_api_base');
     if (!mounted) return;
     setState(() {
       _apiBase = '';
