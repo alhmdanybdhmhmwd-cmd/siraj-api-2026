@@ -243,6 +243,10 @@ class FakeDB {
           db.readReceiptUpdate = { sql, params: this.params };
         }
         if (sql.includes("INSERT OR IGNORE INTO account_security")) db.sessionVersion ??= 0;
+        if (sql.includes("UPDATE account_security SET session_version = session_version + 1")) {
+          db.sessionVersion = Number(db.sessionVersion || 0) + 1;
+          return { meta: { changes: 1 } };
+        }
         if (sql.includes("INSERT OR IGNORE INTO revoked_sessions")) {
           db.revokedSessions ??= new Set();
           db.revokedSessions.add(this.params[0]);
@@ -2832,6 +2836,34 @@ test("logout revokes only the current bearer token and leaves another device ses
   assert.equal(db.revokedSessions.size, 1);
 });
 
+
+test("logout-all requires the current password and invalidates every device session", async () => {
+  const db = new FakeDB();
+  db.user.password_salt = "AAECAwQFBgcICQoLDA0ODw";
+  db.user.password_hash = await worker.hashPassword("correct-password", db.user.password_salt);
+  const firstToken = await worker.signToken(user, secret, 0);
+  const secondToken = await worker.signToken({ ...user, username: "tester-device-2" }, secret, 0);
+  const env = { DB: db, JWT_SECRET: secret };
+  const request = (password, token = firstToken) => new Request("https://api.example.test/api/security/logout-all", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+    body: JSON.stringify({ password })
+  });
+
+  const denied = await worker.default.fetch(request("wrong-password"), env);
+  assert.equal(denied.status, 401);
+  assert.equal(db.sessionVersion, 0);
+
+  const accepted = await worker.default.fetch(request("correct-password"), env);
+  assert.equal(accepted.status, 200);
+  assert.equal(db.sessionVersion, 1);
+  assert.equal(await worker.authenticate(new Request("https://api.example.test/private", {
+    headers: { Authorization: "Bearer " + firstToken }
+  }), env), null);
+  assert.equal(await worker.authenticate(new Request("https://api.example.test/private", {
+    headers: { Authorization: "Bearer " + secondToken }
+  }), env), null);
+});
 
 test("bounded request reader rejects oversized streaming bodies without Content-Length", async () => {
   const maxBytes = 2 * 1024 * 1024;
