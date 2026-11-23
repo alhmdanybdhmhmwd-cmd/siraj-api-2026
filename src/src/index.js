@@ -964,10 +964,15 @@ export default {
         if (newPassword.length < 8 || newPassword.length > 128) {
           return json({ error: "كلمة المرور يجب أن تكون بين 8 و128 حرفًا" }, 400);
         }
-        const clientIp = request.headers.get("CF-Connecting-IP") || "unknown";
+        // Recovery codes are the additional proof for high-risk account recovery.
+        // Keep per-identifier throttling even without edge metadata, but never place
+        // every user into one shared "unknown" network bucket.
+        const clientIp = request.headers.get("CF-Connecting-IP");
         const [identifierAllowed, clientAllowed] = await Promise.all([
           consumeRecoveryAttempt(env, "identifier", identifier, 5),
-          consumeRecoveryAttempt(env, "client", clientIp, 20)
+          clientIp && clientIp.trim()
+            ? consumeRecoveryAttempt(env, "client", clientIp, 20)
+            : Promise.resolve(true)
         ]);
         if (!identifierAllowed || !clientAllowed) {
           return json({ error: "محاولات كثيرة. انتظر 15 دقيقة ثم حاول مجددًا." }, 429);
@@ -1299,6 +1304,46 @@ export default {
           "INSERT OR IGNORE INTO revoked_sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)"
         ).bind(await sha256Hex(bearerToken), currentUser.sub, currentUser.exp).run();
         return json({ message: "تم تسجيل الخروج من هذا الجهاز." });
+      }
+
+      // Revoke every active session after password re-authentication.
+      // This protects an account if a device is lost or the user suspects takeover.
+      if (method === "POST" && path === "/api/security/logout-all") {
+        const body = await readJsonRequestLimited(request);
+        const password = String(body.password || "");
+        if (password.length < 8 || password.length > 128) {
+          return json({ error: "أدخل كلمة المرور الحالية لتأكيد تسجيل الخروج من جميع الأجهزة." }, 400);
+        }
+        const clientIp = request.headers.get("CF-Connecting-IP");
+        const [accountAllowed, networkAllowed] = await Promise.all([
+          consumeLoginAttempt(env, "security-logout-all", currentUser.sub, 5),
+          clientIp && clientIp.trim()
+            ? consumeLoginAttempt(env, "security-logout-all-network", clientIp, 20)
+            : Promise.resolve(true)
+        ]);
+        if (!accountAllowed || !networkAllowed) {
+          return new Response(JSON.stringify({
+            error: "محاولات كثيرة. انتظر 15 دقيقة ثم حاول مجددًا."
+          }), {
+            status: 429,
+            headers: { ...corsHeaders, "Retry-After": "900" }
+          });
+        }
+        const credentials = await env.DB.prepare(
+          "SELECT password_hash, password_salt FROM users WHERE id = ?"
+        ).bind(currentUser.sub).first();
+        if (!credentials ||
+            await hashPassword(password, credentials.password_salt) !== credentials.password_hash) {
+          return json({ error: "كلمة المرور غير صحيحة." }, 401);
+        }
+        await ensureAccountSecurity(env);
+        const result = await env.DB.prepare(
+          "UPDATE account_security SET session_version = session_version + 1, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?"
+        ).bind(currentUser.sub).run();
+        if (Number(result?.meta?.changes || 0) !== 1) {
+          return json({ error: "تعذر إنهاء الجلسات بأمان. حاول مجددًا." }, 503);
+        }
+        return json({ message: "تم تسجيل الخروج من جميع الأجهزة. سجّل الدخول مجددًا على هذا الجهاز." });
       }
 
       // Private memories are isolated by owner_id; saved message text is copied
