@@ -1080,7 +1080,17 @@ async function handle(request, env) {
       FROM admin_brain_messages WHERE conversation_id = ? AND workspace_id = ?
       ORDER BY created_at ASC, id ASC LIMIT 100
     `).bind(conversationId, workspace).all();
-    return response({ conversationId, messages: rows.results || [] }, 200, allowedOrigin);
+    const messages = (rows.results || []).map(item => {
+      let sources = [];
+      try {
+        const parsed = JSON.parse(item.source_refs_json || "[]");
+        if (Array.isArray(parsed)) sources = parsed;
+      } catch {
+        sources = [];
+      }
+      return { ...item, sources };
+    });
+    return response({ conversationId, messages }, 200, allowedOrigin);
   }
 
   if (request.method === "GET" && url.pathname === "/v1/knowledge") {
