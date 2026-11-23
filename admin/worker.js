@@ -642,6 +642,9 @@ async function handle(request, env) {
     const taskId = statusMatch[1];
     const body = await readJson(request);
     const nextStatus = body?.status;
+    if (nextStatus === "running" || nextStatus === "completed") {
+      return response({ error: "status_requires_server_worker" }, 409, allowedOrigin);
+    }
     const task = await env.ADMIN_DB.prepare(
       "SELECT status FROM admin_tasks WHERE id = ? AND workspace_id = ?"
     ).bind(taskId, workspace).first();
@@ -665,7 +668,13 @@ async function handle(request, env) {
     }
     await audit(env, workspace, actor, "task.status.changed", "task", taskId,
       { from: task.status, to: nextStatus });
-    return response({ task: { id: taskId, status: nextStatus } }, 200, allowedOrigin);
+    let dispatched = false;
+    if (nextStatus === "queued" && env.ADMIN_TASK_QUEUE && env.ADMIN_AI) {
+      await env.ADMIN_TASK_QUEUE.send({ taskId, workspaceId: workspace });
+      dispatched = true;
+    }
+    return response({ task: { id: taskId, status: nextStatus },
+      execution: dispatched ? "queued_for_server_worker" : undefined }, 200, allowedOrigin);
   }
 
   return response({ error: "not_found" }, 404, allowedOrigin);
