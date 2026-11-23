@@ -9649,18 +9649,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       final bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
       final contentType = file.extension == null ? 'application/octet-stream' : _mimeForExtension(file.extension!);
       if (!mounted) return;
-      final captionController = TextEditingController();
-      final confirmed = await showBarqAttachmentPreview(
-        context, fileName: file.name, contentType: contentType, bytes: bytes,
-        captionController: captionController,
-      );
-      if (!mounted || !confirmed) {
-        captionController.dispose();
-        return;
-      }
+      // WhatsApp-style: use the composer text as the optional media caption,
+      // insert the local media bubble immediately, then upload in the background.
+      final caption = controller.text.trim();
       final local = _newPendingAttachment(bytes, file.name, contentType, localPath: file.path);
-      (local['local_attachment'] as Map<String, dynamic>)['caption'] = captionController.text.trim();
-      captionController.dispose();
+      (local['local_attachment'] as Map<String, dynamic>)['caption'] = caption;
+      controller.clear();
       setState(() => messages = mergeMessages(messages, [local]));
       unawaited(_uploadPendingAttachment(local));
     } catch (error) {
@@ -9678,17 +9672,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       final bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
       final contentType = file.extension == null ? 'application/octet-stream' : _mimeForExtension(file.extension!);
       if (!mounted) return;
-      final captionController = TextEditingController();
-      final confirmed = await showBarqAttachmentPreview(context,
-        fileName: file.name, contentType: contentType, bytes: bytes,
-        captionController: captionController);
-      if (!mounted || !confirmed) {
-        captionController.dispose();
-        return;
-      }
+      // File captions are taken from the composer; no blocking preview dialog.
+      final caption = controller.text.trim();
       final local = _newPendingAttachment(bytes, file.name, contentType, localPath: file.path);
-      (local['local_attachment'] as Map<String, dynamic>)['caption'] = captionController.text.trim();
-      captionController.dispose();
+      (local['local_attachment'] as Map<String, dynamic>)['caption'] = caption;
+      controller.clear();
       setState(() => messages = mergeMessages(messages, [local]));
       unawaited(_uploadPendingAttachment(local));
     } catch (error) { if (mounted) showMsg(context, cleanError(error)); }
@@ -11099,18 +11087,12 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
       final bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
       final contentType = file.extension == null ? 'application/octet-stream' : _mimeForExtension(file.extension!);
       if (!mounted) return;
-      final captionController = TextEditingController();
-      final confirmed = await showBarqAttachmentPreview(
-        context, fileName: file.name, contentType: contentType, bytes: bytes,
-        captionController: captionController,
-      );
-      if (!mounted || !confirmed) {
-        captionController.dispose();
-        return;
-      }
+      // WhatsApp-style: use the composer text as the optional media caption,
+      // insert the local media bubble immediately, then upload in the background.
+      final caption = controller.text.trim();
       final local = _newPendingAttachment(bytes, file.name, contentType, localPath: file.path);
-      (local['local_attachment'] as Map<String, dynamic>)['caption'] = captionController.text.trim();
-      captionController.dispose();
+      (local['local_attachment'] as Map<String, dynamic>)['caption'] = caption;
+      controller.clear();
       setState(() => messages = mergeMessages(messages, [local]));
       unawaited(_uploadPendingAttachment(local));
     } catch (error) {
@@ -11127,17 +11109,11 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
       final bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
       final contentType = file.extension == null ? 'application/octet-stream' : _mimeForExtension(file.extension!);
       if (!mounted) return;
-      final captionController = TextEditingController();
-      final confirmed = await showBarqAttachmentPreview(context,
-        fileName: file.name, contentType: contentType, bytes: bytes,
-        captionController: captionController);
-      if (!mounted || !confirmed) {
-        captionController.dispose();
-        return;
-      }
+      // File captions are taken from the composer; no blocking preview dialog.
+      final caption = controller.text.trim();
       final local = _newPendingAttachment(bytes, file.name, contentType, localPath: file.path);
-      (local['local_attachment'] as Map<String, dynamic>)['caption'] = captionController.text.trim();
-      captionController.dispose();
+      (local['local_attachment'] as Map<String, dynamic>)['caption'] = caption;
+      controller.clear();
       setState(() => messages = mergeMessages(messages, [local]));
       unawaited(_uploadPendingAttachment(local));
     } catch (error) { if (mounted) showMsg(context, cleanError(error)); }
