@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateKnowledgeInput, rankKnowledgeChunks } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, rankKnowledgeChunks } from "./worker.js";
 
 test("task input is normalized and bounded", () => {
   assert.deepEqual(validateTaskInput({ title: "  Prepare global launch  ", priority: "high" }), {
@@ -103,6 +103,18 @@ test("image generation prompt is required and bounded", () => {
   assert.equal(validateImageGenerationInput({ prompt: "x".repeat(1601) }).error, "invalid_image_prompt");
   assert.equal(validateImageGenerationInput({ prompt: 42 }).ok, false);
   assert.equal(validateImageGenerationInput(null).ok, false);
+});
+
+test("generated images must be canonical bounded JPEG base64", () => {
+  assert.deepEqual(validateGeneratedImage("/9j/2Q=="), {
+    ok: true,
+    value: { image: "/9j/2Q==", mimeType: "image/jpeg", imageBytes: 4 }
+  });
+  assert.equal(validateGeneratedImage("").error, "image_generation_empty_result");
+  assert.equal(validateGeneratedImage("not-base64").error, "image_generation_empty_result");
+  assert.equal(validateGeneratedImage("iVBORw0KGgo=").error, "image_generation_invalid_result");
+  assert.equal(validateGeneratedImage("/9j/2Q==", 3).error, "image_generation_invalid_result");
+  assert.equal(validateGeneratedImage("/9j/2Q").error, "image_generation_invalid_result");
 });
 
 test("vision requests accept bounded JPEG PNG and WebP data URLs only", () => {
