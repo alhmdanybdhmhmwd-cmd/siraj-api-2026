@@ -390,7 +390,12 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
         'image': 'data:' + mimeType + ';base64,' + base64Encode(bytes),
       }),
     ).timeout(const Duration(seconds: 90));
-    final data = jsonDecode(response.body);
+    dynamic data;
+    try {
+      data = jsonDecode(response.body);
+    } on FormatException {
+      throw Exception('استجابة الخادم غير مفهومة؛ تحقق من اتصال Preview ثم أعد المحاولة');
+    }
     if (response.statusCode != 200) {
       final message = data is Map && data['error'] == 'admin_ai_unavailable'
           ? 'خدمة الذكاء الاصطناعي غير مهيأة على الخادم بعد'
@@ -398,9 +403,13 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
               ? 'يلزم تفعيل اتفاقية ترخيص نموذج الرؤية في حساب Cloudflare قبل استخدام تحليل الصور'
               : data is Map && data['error'] == 'image_too_large'
                   ? 'الصورة أكبر من الحد المسموح'
-                  : data is Map && data['error'] == 'vision_rate_limited'
-                      ? 'وصلت إلى الحد المؤقت: ثلاث صور في الدقيقة. انتظر قليلًا ثم حاول مجددًا'
-                      : 'تعذر تحليل الصورة (' + response.statusCode.toString() + ')';
+                  : data is Map && data['error'] == 'invalid_image_or_prompt'
+                      ? 'صيغة الصورة غير مدعومة أو لا يطابق محتواها نوعها؛ استخدم JPEG أو PNG أو WebP'
+                      : data is Map && data['error'] == 'vision_rate_limited'
+                          ? 'وصلت إلى الحد المؤقت: ثلاث صور في الدقيقة. انتظر قليلًا ثم حاول مجددًا'
+                          : data is Map && data['error'] == 'vision_analysis_failed'
+                              ? 'تعذر على نموذج الرؤية تحليل الصورة؛ جرّب صورة أوضح أو أعد المحاولة'
+                              : 'تعذر تحليل الصورة (' + response.statusCode.toString() + ')';
       throw Exception(message);
     }
     final answer = data is Map ? (data['answer'] ?? '').toString().trim() : '';
