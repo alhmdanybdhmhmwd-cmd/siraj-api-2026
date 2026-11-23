@@ -10344,6 +10344,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
             : messages.isEmpty
               ? const Center(child: Text('لا توجد رسائل بعد. ابدأ الحديث مع مجموعتك.', style: TextStyle(color: Colors.white60)))
               : ListView.builder(
+                  controller: messagesScrollController,
                   padding: const EdgeInsets.all(12), itemCount: messages.length + (hasOlderMessages ? 1 : 0),
                   itemBuilder: (context, index) {
                     if (hasOlderMessages && index == 0) {
