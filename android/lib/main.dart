@@ -2225,17 +2225,29 @@ Map<String, String>? parseBarqSparkPrivateReply(String body) {
 }
 
 BoxDecoration barqChatWallpaperDecoration(BuildContext context, Color? wallpaper) {
-  final base = wallpaper ?? Theme.of(context).scaffoldBackgroundColor;
+  final base = wallpaper ?? const Color(0xFF061A36);
   return BoxDecoration(
     gradient: LinearGradient(
       begin: Alignment.topRight,
       end: Alignment.bottomLeft,
+      stops: const [0, .48, 1],
       colors: [
-        Color.lerp(base, Colors.white, .035)!,
+        Color.lerp(base, const Color(0xFF0755A8), .24)!,
         base,
-        Color.lerp(base, Colors.black, .24)!,
+        Color.lerp(base, const Color(0xFF020A1C), .48)!,
       ],
     ),
+  );
+}
+
+void insertBarqChatEmoji(TextEditingController controller) {
+  final selection = controller.selection;
+  final start = selection.isValid ? selection.start : controller.text.length;
+  final end = selection.isValid ? selection.end : controller.text.length;
+  final updated = controller.text.replaceRange(start, end, ' 😊');
+  controller.value = TextEditingValue(
+    text: updated,
+    selection: TextSelection.collapsed(offset: start + 3),
   );
 }
 
@@ -9702,7 +9714,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                             return Align(
                               alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
                               child: Container(
-                                constraints: const BoxConstraints(maxWidth: 300),
+                                constraints: const BoxConstraints(maxWidth: 330),
                                 margin: const EdgeInsets.symmetric(vertical: 4),
                                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                                 decoration: BoxDecoration(
@@ -9711,12 +9723,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                     end: Alignment.bottomLeft,
                                     colors: mine
                                         ? [
-                                            Theme.of(context).colorScheme.primary.withValues(alpha: .24),
-                                            Theme.of(context).colorScheme.secondary.withValues(alpha: .09),
+                                            const Color(0xFF0757B8).withValues(alpha: .96),
+                                            const Color(0xFF063B82).withValues(alpha: .96),
                                           ]
                                         : [
-                                            Theme.of(context).colorScheme.surfaceContainerHighest,
-                                            Theme.of(context).colorScheme.surface,
+                                            const Color(0xFF18253D).withValues(alpha: .97),
+                                            const Color(0xFF111D32).withValues(alpha: .97),
                                           ],
                                   ),
                                   borderRadius: BorderRadius.only(
@@ -10042,38 +10054,36 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
               top: false,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(9, 5, 9, 9),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      onPressed: sending ? null : () => setState(() {
-                        ephemeralMode = !ephemeralMode;
-                        replyToMessage = null;
-                      }),
-                      icon: Icon(Icons.timer_outlined,
-                        color: ephemeralMode ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurfaceVariant),
-                      tooltip: ephemeralMode ? 'إيقاف الرسائل المؤقتة' : 'إرسال رسالة تختفي بعد قراءتها',
-                    ),
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      onPressed: sending ? null : pickAndSendFile,
-                      icon: const Icon(Icons.add_circle_outline_rounded),
-                      tooltip: 'إرسال ملف أو صورة أو فيديو',
-                    ),
-                    if (!ephemeralMode)
-                      BarqVoiceRecordButton(disabled: sending, onSend: _sendVoiceRecording),
-                    const SizedBox(width: 5),
-                    Expanded(
-                      child: Container(
-                        constraints: const BoxConstraints(minHeight: 46),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .72),
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(
-                            color: Theme.of(context).colorScheme.outline.withValues(alpha: .16),
-                          ),
-                        ),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF071326).withValues(alpha: .96),
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: .38)),
+                    boxShadow: [
+                      BoxShadow(color: Theme.of(context).colorScheme.primary.withValues(alpha: .10), blurRadius: 18),
+                    ],
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        onPressed: sending ? null : () => setState(() {
+                          ephemeralMode = !ephemeralMode;
+                          replyToMessage = null;
+                        }),
+                        icon: Icon(Icons.timer_outlined,
+                          color: ephemeralMode ? Theme.of(context).colorScheme.primary : Colors.white70),
+                        tooltip: ephemeralMode ? 'إيقاف الرسائل المؤقتة' : 'إرسال رسالة تختفي بعد قراءتها',
+                      ),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        tooltip: 'إضافة رمز تعبيري',
+                        onPressed: sending ? null : () => insertBarqChatEmoji(controller),
+                        icon: const Icon(Icons.emoji_emotions_outlined, color: Colors.white70),
+                      ),
+                      Expanded(
                         child: TextField(
                           controller: controller,
                           minLines: 1,
@@ -10086,29 +10096,48 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                             focusedBorder: InputBorder.none,
                             filled: false,
                             isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 13),
                           ),
                           onSubmitted: (_) => send(),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 7),
-                    SizedBox(
-                      width: 44,
-                      height: 44,
-                      child: IconButton.filled(
-                        style: IconButton.styleFrom(
-                          backgroundColor: Theme.of(context).colorScheme.primary,
-                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                        ),
-                        onPressed: sending ? null : send,
-                        icon: sending
-                            ? const SizedBox(width: 18, height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.send_rounded),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        tooltip: 'إرفاق صورة أو ملف',
+                        onPressed: sending ? null : pickAndSendFile,
+                        icon: const Icon(Icons.attach_file_rounded, color: Colors.white70),
                       ),
-                    ),
-                  ],
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        tooltip: 'إرفاق صورة أو فيديو',
+                        onPressed: sending ? null : pickAndSendFile,
+                        icon: const Icon(Icons.photo_camera_outlined, color: Colors.white70),
+                      ),
+                      ValueListenableBuilder<TextEditingValue>(
+                        valueListenable: controller,
+                        builder: (context, value, _) {
+                          if (value.text.trim().isEmpty && !sending && !ephemeralMode) {
+                            return BarqVoiceRecordButton(disabled: sending, onSend: _sendVoiceRecording);
+                          }
+                          return SizedBox(
+                            width: 42,
+                            height: 42,
+                            child: IconButton.filled(
+                              style: IconButton.styleFrom(
+                                backgroundColor: Theme.of(context).colorScheme.primary,
+                                foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                              ),
+                              onPressed: sending ? null : send,
+                              icon: sending
+                                  ? const SizedBox(width: 18, height: 18,
+                                      child: CircularProgressIndicator(strokeWidth: 2))
+                                  : const Icon(Icons.send_rounded),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -11212,12 +11241,12 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                             end: Alignment.bottomLeft,
                             colors: mine
                                 ? [
-                                    Theme.of(context).colorScheme.primary.withValues(alpha: .23),
-                                    Theme.of(context).colorScheme.secondary.withValues(alpha: .09),
+                                    const Color(0xFF0757B8).withValues(alpha: .96),
+                                    const Color(0xFF063B82).withValues(alpha: .96),
                                   ]
                                 : [
-                                    Theme.of(context).colorScheme.surfaceContainerHighest,
-                                    Theme.of(context).colorScheme.surface,
+                                    const Color(0xFF18253D).withValues(alpha: .97),
+                                    const Color(0xFF111D32).withValues(alpha: .97),
                                   ],
                           ),
                           borderRadius: BorderRadius.only(
@@ -11491,64 +11520,85 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
               preview: messageReplyPreview(replyToMessage!),
               onClose: sending ? null : () => setState(() => replyToMessage = null),
             ),
-          SafeArea(top: false, child: Padding(
-            padding: const EdgeInsets.fromLTRB(9, 5, 9, 9),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  onPressed: sending ? null : pickAndSendFile,
-                  icon: const Icon(Icons.add_circle_outline_rounded),
-                  tooltip: 'إرسال ملف أو صورة أو فيديو',
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(9, 5, 9, 9),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF071326).withValues(alpha: .96),
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: .38)),
+                  boxShadow: [
+                    BoxShadow(color: Theme.of(context).colorScheme.primary.withValues(alpha: .10), blurRadius: 18),
+                  ],
                 ),
-                BarqVoiceRecordButton(disabled: sending, onSend: _sendVoiceRecording),
-                const SizedBox(width: 5),
-                Expanded(
-                  child: Container(
-                    constraints: const BoxConstraints(minHeight: 46),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .72),
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(
-                        color: Theme.of(context).colorScheme.outline.withValues(alpha: .16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'إضافة رمز تعبيري',
+                      onPressed: sending ? null : () => insertBarqChatEmoji(controller),
+                      icon: const Icon(Icons.emoji_emotions_outlined, color: Colors.white70),
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: controller,
+                        minLines: 1,
+                        maxLines: 4,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: const InputDecoration(
+                          hintText: 'اكتب رسالة للمجموعة...',
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          filled: false,
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 13),
+                        ),
+                        onSubmitted: (_) => send(),
                       ),
                     ),
-                    child: TextField(
-                      controller: controller,
-                      minLines: 1,
-                      maxLines: 4,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(
-                        hintText: 'اكتب رسالة للمجموعة...',
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        filled: false,
-                        isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-                      ),
-                      onSubmitted: (_) => send(),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'إرفاق صورة أو ملف',
+                      onPressed: sending ? null : pickAndSendFile,
+                      icon: const Icon(Icons.attach_file_rounded, color: Colors.white70),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 7),
-                SizedBox(
-                  width: 44,
-                  height: 44,
-                  child: IconButton.filled(
-                    style: IconButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'إرفاق صورة أو فيديو',
+                      onPressed: sending ? null : pickAndSendFile,
+                      icon: const Icon(Icons.photo_camera_outlined, color: Colors.white70),
                     ),
-                    onPressed: sending ? null : send,
-                    icon: sending
-                        ? const SizedBox(width: 18, height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.send_rounded),
-                  ),
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: controller,
+                      builder: (context, value, _) {
+                        if (value.text.trim().isEmpty && !sending) {
+                          return BarqVoiceRecordButton(disabled: sending, onSend: _sendVoiceRecording);
+                        }
+                        return SizedBox(
+                          width: 42,
+                          height: 42,
+                          child: IconButton.filled(
+                            style: IconButton.styleFrom(
+                              backgroundColor: Theme.of(context).colorScheme.primary,
+                              foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                            ),
+                            onPressed: sending ? null : send,
+                            icon: sending
+                                ? const SizedBox(width: 18, height: 18,
+                                    child: CircularProgressIndicator(strokeWidth: 2))
+                                : const Icon(Icons.send_rounded),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           )),
         ])),
