@@ -7841,6 +7841,16 @@ Widget _barqAttachmentTile(Map<String, dynamic> attachment,
               style: const TextStyle(color: Colors.white), maxLines: 2,
               overflow: TextOverflow.ellipsis)),
           ]),
+        if (isAudio) ...[
+          const SizedBox(height: 4),
+          const _BarqWaveform(phase: 0, color: Colors.white70, count: 25),
+        ],
+        if (field(attachment, ['caption']).isNotEmpty) ...[
+          const SizedBox(height: 5),
+          Align(alignment: AlignmentDirectional.centerStart,
+            child: Text(field(attachment, ['caption']),
+              style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.3))),
+        ],
         const SizedBox(height: 5),
         Row(children: [
           Expanded(child: Text(failed ? 'تعذر الإرسال — أعد المحاولة'
