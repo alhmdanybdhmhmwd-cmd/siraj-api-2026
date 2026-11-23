@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { generateKeyPair, sign } from "node:crypto";
+import { generateKeyPairSync, sign } from "node:crypto";
 import { verifyGoogleIdToken, createAdminAccessToken, createRefreshToken, sha256Hex } from "./auth.js";
 
 const clientId = "barq-admin-android-client.apps.googleusercontent.com";
@@ -13,7 +13,7 @@ function b64url(value) {
 }
 
 async function fixture(overrides = {}) {
-  const { publicKey, privateKey } = await generateKeyPair("rsa", {
+  const { publicKey, privateKey } = generateKeyPairSync("rsa", {
     modulusLength: 2048,
   });
   const jwk = { ...publicKey.export({ format: "jwk" }), kid: "test-key", use: "sig", alg: "RS256" };
