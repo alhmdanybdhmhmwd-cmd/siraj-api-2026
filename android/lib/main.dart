@@ -709,7 +709,7 @@ class SirajPush {
       const settings = InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       );
-      await barqLocalNotifications.initialize(
+      final initialized = await barqLocalNotifications.initialize(
         settings,
         onDidReceiveNotificationResponse: (response) {
           final raw = response.payload;
@@ -724,7 +724,20 @@ class SirajPush {
           } catch (_) {}
         },
       );
-      _localNotificationsReady = true;
+      _localNotificationsReady = initialized != false;
+      final launchDetails = await barqLocalNotifications.getNotificationAppLaunchDetails();
+      final launchPayload = launchDetails?.notificationResponse?.payload;
+      if (launchDetails?.didNotificationLaunchApp == true &&
+          launchPayload != null && launchPayload.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(launchPayload);
+          if (decoded is Map) {
+            queueNotificationTap(RemoteMessage(
+              data: Map<String, dynamic>.from(decoded),
+            ));
+          }
+        } catch (_) {}
+      }
     } catch (_) {
       _localNotificationsReady = false;
     }
