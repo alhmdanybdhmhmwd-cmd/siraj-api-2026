@@ -10,13 +10,18 @@
 
 ## الوضع الحالي المؤكد
 
-- يتحقق Admin Worker من JWT موقّع بـ HS256، ويثبت `iss=barq-admin-auth` و`aud=barq-admin` و`sub` مقابل `BARQ_ADMIN_OWNER_SUBJECT`.
-- لا يوجد في المشروع حاليًا token issuer أو تدفق تسجيل دخول مالك.
-- تطبيق Flutter يطلب عنوان API ورمز Bearer يدويًا ويحفظ الرمز في secure storage.
-- لا يوجد سجل أجهزة/جلسات على الخادم، ولا refresh-token rotation أو device revocation.
-- لا توجد بيئة Admin Preview موثقة ومختبرة لتشغيل تدفق الهوية كاملًا.
+- نُفذ Google OIDC ID-token verification في `admin/auth.js`: RS256/JWKS، issuer، audience/authorized party، expiry/issued-at، verified email، nonce، وقائمة سماح المالك عبر البريد أو `sub`.
+- نُفذت مسارات `exchange`, `refresh`, `logout` في `admin/worker.js`، مع access JWT قصير العمر مرتبط بجلسة وجهاز نشطين.
+- تُخزن بصمة refresh token فقط، ويُدوّر الرمز عند الاستخدام، ويُحتفظ بسجل البصمات المستخدمة لاكتشاف إعادة الاستخدام.
+- نُفذت مسارات عرض الأجهزة وإبطال جهاز أو جميع الأجهزة، مع التحقق من نشاط الجلسة عند كل طلب API.
+- تطبيق Flutter يحتوي تدفق Google AppAuth + PKCE، تخزينًا آمنًا للرموز، تجديدًا تلقائيًا، خروجًا، ونافذة لإدارة الأجهزة.
+- نجحت اختبارات CI الحالية بما فيها فحوص Worker وFlutter وAndroid manifest/Gradle wiring. لم يتم بعد اختبار Google OAuth الفعلي أو موارد Preview أو callback على هاتف حقيقي.
 
-## القرار المعتمد\n\nاعتمد المالك Google OpenID Connect باستخدام Authorization Code + PKCE عبر AppAuth. يُسمح لحساب Google واحد فقط من خلال `BARQ_ADMIN_OWNER_EMAIL` مع التحقق من `email_verified=true`، ويمكن تثبيت قيمة `sub` عبر `BARQ_ADMIN_OWNER_SUBJECT` بعد أول تهيئة. لا تُطلب صلاحيات Gmail أو Drive.\n\n## البنية المستهدفة
+## القرار المعتمد
+
+اعتمد المالك Google OpenID Connect باستخدام Authorization Code + PKCE عبر AppAuth. يُسمح لحساب Google واحد فقط من خلال `BARQ_ADMIN_OWNER_EMAIL` مع التحقق من `email_verified=true`، ويمكن تثبيت قيمة `sub` عبر `BARQ_ADMIN_OWNER_SUBJECT` بعد أول تهيئة. لا تُطلب صلاحيات Gmail أو Drive.
+
+## البنية المستهدفة
 
 1. **Google OIDC**: يستخدم تطبيق الهاتف Authorization Code + PKCE عبر AppAuth، مع `openid`, `email`, `profile` فقط. لا تُخزن كلمة مرور المالك في BARQ Admin.
 2. **Admin identity exchange**: يتحقق خادم BARQ Admin من توقيع ورمز هوية المزود، ثم يطابق issuer وaudience وsubject مع إعدادات المالك المسموح به. لا يقبل التطبيق اختيار subject أو role.
@@ -25,7 +30,7 @@
 5. **إدارة الأجهزة**: قائمة جلسات المالك، إبطال جهاز محدد، وإبطال جميع الجلسات. يجب أن يُرفض access token فور إبطال جلسته، حتى لو لم تنته مدة JWT.
 6. **فصل المنتجات**: لا تُقبل جلسات BARQ Admin في API المستخدمين، ولا تُقبل جلسات مستخدمي BARQ في Admin API. لا اتصال مباشر من تطبيق الإدارة إلى قاعدة بيانات BARQ.
 
-## عقود API المقترحة
+## مسارات API المنفذة برمجيًا (تحتاج تحقق Preview)
 
 - `POST /v1/auth/exchange`: تبادل إثبات الهوية الموثوق عن طريق الخادم وإنشاء جلسة جهاز.
 - `POST /v1/auth/refresh`: تدوير refresh token وإصدار access token جديد.
@@ -34,7 +39,7 @@
 - `DELETE /v1/devices/:id`: إبطال جلسة جهاز محدد.
 - `POST /v1/devices/revoke-all`: إبطال جميع الجلسات، مع استثناء الجلسة الحالية فقط إذا كان ذلك مطلوبًا ومؤكدًا في UX.
 
-هذه عقود تصميم وليست مسارات عاملة حاليًا. يجب حماية كل مسار ومراجعته قبل إتاحته.
+المسارات موجودة في كود Worker، لكن لا تُعد جاهزة للاستخدام الفعلي حتى تُضبط موارد Preview وGoogle OAuth وتنجح اختبارات التكامل على خادم وهاتف.
 
 ## مخطط البيانات المطلوب
 
@@ -69,9 +74,9 @@
 9. اختبارات التزامن: طلبا refresh متزامنان لا ينتجان جلستين صالحَتين من الرمز نفسه.
 10. اختبار Flutter على Android: login، refresh بعد انتهاء access، logout، عرض الأجهزة وإبطال جهاز.
 
-## قرار مطلوب قبل التنفيذ
+## ما تبقى قبل التفعيل
 
-يجب اختيار مزود هوية يدعم OIDC وPKCE وتحديد حساب المالك المسموح به، ثم إعداد بياناته السرية في بيئة خادم Preview فقط. لا أختار مزودًا ولا أطلب أو أخزن كلمة مرور أو سرًا داخل المحادثة. بعد اعتماد المزود، ينفذ التكامل على فرع الإدارة ويُختبر في موارد Preview معزولة.
+اختيار Google OIDC + PKCE معتمد من المالك ونُفذ أساسه البرمجي. المتبقي هو إنشاء Google OAuth Android client الصحيح باسم الحزمة وبصمة شهادة التوقيع، وضبط `BARQ_GOOGLE_OIDC_CLIENT_ID` و`BARQ_ADMIN_OWNER_EMAIL` و`BARQ_ADMIN_JWT_SECRET` كإعدادات خادم سرية/آمنة، وتثبيت `BARQ_ADMIN_OWNER_SUBJECT` بعد التحقق الأول إذا تقرر ذلك. يجب تنفيذ ذلك في موارد Admin Preview منفصلة فقط، ثم اختبار الدخول والتجديد والإبطال على جهاز Android. لا يوضع أي signing secret أو client secret داخل التطبيق.
 
 ## معيار إغلاق المرحلة 1
 
