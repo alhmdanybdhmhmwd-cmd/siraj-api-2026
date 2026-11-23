@@ -7,7 +7,7 @@ export const MEDIA_MULTIPART_MAX_PARTS = Math.ceil(
 );
 export const MEDIA_UPLOAD_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 
-export function validateMultipartDeclaration({ size, contentType, fileName }) {
+export function validateMultipartDeclaration({ size, contentType, fileName, caption = '' }) {
   const normalizedSize = Number(size);
   if (!Number.isSafeInteger(normalizedSize) || normalizedSize < 1 ||
       normalizedSize > MEDIA_MULTIPART_MAX_SIZE) {
@@ -17,7 +17,9 @@ export function validateMultipartDeclaration({ size, contentType, fileName }) {
   const allowedTypes = /^(image\/(jpeg|png|webp|gif)|video\/(mp4|webm|quicktime)|audio\/(mpeg|mp4|aac|wav|ogg|webm)|application\/(octet-stream|pdf|zip|msword|vnd\.ms-excel|vnd\.ms-powerpoint|vnd\.openxmlformats-officedocument\.[a-z0-9.]+)|text\/plain)$/;
   if (!allowedTypes.test(type)) throw new TypeError("Unsupported media type");
   const name = String(fileName || "attachment").replace(/[\\/\x00-\x1f\x7f]/g, "_").trim().slice(0, 180) || "attachment";
-  return { size: normalizedSize, contentType: type, fileName: name };
+  const normalizedCaption = String(caption || '').trim();
+  if (normalizedCaption.length > 2000) throw new RangeError('Media caption must not exceed 2000 characters');
+  return { size: normalizedSize, contentType: type, fileName: name, caption: normalizedCaption };
 }
 
 export function getMultipartPartBounds(totalSize, partNumber) {
@@ -108,5 +110,6 @@ export function matchesUploadDeclaration(existing, declaration, recipientId, gro
     existing?.recipientId === recipientId &&
     existing?.groupId === groupId &&
     existing?.contentType === declaration.contentType &&
-    existing?.fileName === declaration.fileName;
+    existing?.fileName === declaration.fileName &&
+    String(existing?.caption || '') === declaration.caption;
 }
