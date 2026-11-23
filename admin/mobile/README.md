@@ -24,7 +24,7 @@ Arabic RTL Flutter client for the independent BARQ Admin owner workspace.
    - `BARQ_ADMIN_JWT_SECRET`: a random server-only secret of at least 32 characters.
    - `BARQ_ADMIN_ALLOWED_ORIGIN`: the exact app/web origin where applicable.
    - Optional `BARQ_ADMIN_OWNER_SUBJECT`: pin the verified Google `sub` after first controlled enrollment.
-5. Apply `admin/migrations/0005_owner_identity_sessions.sql` to the dedicated Admin Preview D1 database. Never apply it to BARQ consumer production data.
+5. Provision the dedicated Admin Preview D1 database and both queues (`barq-admin-preview-tasks` and `barq-admin-preview-dlq`) using the instructions in `admin/README.md` and `admin/wrangler.toml.example`. From the `admin/` directory, apply all pending Admin migrations in order with `npx wrangler d1 migrations apply barq-admin-preview --remote`; do not manually apply only migration 0005, and never target BARQ consumer production data.
 
 The Worker validates Google RS256 signatures using Google's published signing keys and checks issuer, audience, expiry, verified email, owner allowlist, and one-time OIDC nonce. The Worker then issues its own session tokens. Google access tokens are not used as Admin API bearer tokens. The opaque refresh token is stored server-side only as a SHA-256 hash and rotated on every refresh; reuse revokes that session. Each API request checks that its session and device are still active. No signing secret belongs in the APK.
 
