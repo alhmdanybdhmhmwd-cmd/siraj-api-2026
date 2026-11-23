@@ -10222,7 +10222,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                           maxLines: 4,
                           textCapitalization: TextCapitalization.sentences,
                           decoration: InputDecoration(
-                            hintText: ephemeralMode ? 'رسالة مؤقتة...' : 'اكتب رسالتك...',
+                            hintText: ephemeralMode ? 'رسالة مؤقتة...' : 'اكتب رسالة أو تعليق الوسائط...',
                             border: InputBorder.none,
                             enabledBorder: InputBorder.none,
                             focusedBorder: InputBorder.none,
@@ -11726,7 +11726,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                         maxLines: 4,
                         textCapitalization: TextCapitalization.sentences,
                         decoration: const InputDecoration(
-                          hintText: 'اكتب رسالة للمجموعة...',
+                          hintText: 'اكتب رسالة أو تعليق الوسائط...',
                           border: InputBorder.none,
                           enabledBorder: InputBorder.none,
                           focusedBorder: InputBorder.none,
