@@ -9441,8 +9441,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                         ),
                                     ] else ...[
                                       GestureDetector(
+                                        onHorizontalDragStart: (_) => _replySwipeDistance = 0,
+                                        onHorizontalDragUpdate: (details) => _replySwipeDistance += details.delta.dx,
                                         onHorizontalDragEnd: (details) {
-                                          if ((details.primaryVelocity ?? 0) > 260 && m['is_ephemeral'] != true) {
+                                          final shouldReply = _replySwipeDistance > 48 ||
+                                              (details.primaryVelocity ?? 0) > 260;
+                                          _replySwipeDistance = 0;
+                                          if (shouldReply && m['is_ephemeral'] != true) {
                                             setState(() => replyToMessage = Map<String, dynamic>.from(m));
                                           }
                                         },
@@ -10783,8 +10788,13 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                               ),
                           ] else ...[
                             GestureDetector(
+                              onHorizontalDragStart: (_) => _replySwipeDistance = 0,
+                              onHorizontalDragUpdate: (details) => _replySwipeDistance += details.delta.dx,
                               onHorizontalDragEnd: (details) {
-                                if ((details.primaryVelocity ?? 0) > 260) {
+                                final shouldReply = _replySwipeDistance > 48 ||
+                                    (details.primaryVelocity ?? 0) > 260;
+                                _replySwipeDistance = 0;
+                                if (shouldReply) {
                                   setState(() => replyToMessage = Map<String, dynamic>.from(m));
                                 }
                               },
