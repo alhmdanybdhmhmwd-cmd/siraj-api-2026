@@ -803,8 +803,7 @@ class _AdminHomePageState extends State<AdminHomePage>
         }
       } catch (_) {
         conversationId = null;
-        await prefs.remove(
-                                    'barq_admin_brain_conversation_id');
+        await prefs.remove('barq_admin_brain_conversation_id');
       }
     }
 
@@ -903,7 +902,7 @@ class _AdminHomePageState extends State<AdminHomePage>
                           child: Text(
                             'محادثة BARQ Brain',
                             style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 17),
+                                fontWeight: FontWeight.bold, fontSize: 17),
                           ),
                         ),
                         TextButton(
@@ -912,7 +911,8 @@ class _AdminHomePageState extends State<AdminHomePage>
                               : () async {
                                   conversationId = null;
                                   messages.clear();
-                                  await prefs.remove('barq_admin_brain_conversation_id');
+                                  await prefs.remove(
+                                      'barq_admin_brain_conversation_id');
                                   setDialogState(() {});
                                 },
                           child: const Text('محادثة جديدة'),
@@ -947,9 +947,9 @@ class _AdminHomePageState extends State<AdminHomePage>
                                       : Alignment.centerRight,
                                   child: Container(
                                     constraints:
-                                      const BoxConstraints(maxWidth: 520),
+                                        const BoxConstraints(maxWidth: 520),
                                     margin:
-                                      const EdgeInsets.symmetric(vertical: 5),
+                                        const EdgeInsets.symmetric(vertical: 5),
                                     padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
                                       color: isError
