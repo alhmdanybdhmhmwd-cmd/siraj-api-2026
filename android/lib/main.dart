@@ -9327,17 +9327,17 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
           _scheduleEphemeralExpiry();
         }
       }
-      await BarqOfflineQueue.syncOutbox();
-      final page = await Api.messagesPage(friendId);
+      // Flush pending sends without holding up the first visible server page.
+      unawaited(BarqOfflineQueue.syncOutbox());
+      final pageFuture = Api.messagesPage(friendId);
+      final temporaryFuture = Api.ephemeralMessages(friendId)
+          .catchError((_) => <Map<String, dynamic>>[]);
+      final page = await pageFuture;
       final data = Api._list(page['messages']);
       await BarqOfflineQueue.reconcile(data);
       final localPending = await BarqOfflineQueue.conversation(friendId, widget.currentUserId);
-      List<Map<String, dynamic>> temporary = [];
-      try {
-        temporary = await Api.ephemeralMessages(friendId);
-      } catch (_) {
-        // النسخ القديمة من الخادم لا تملك مسار الرسائل المؤقتة بعد.
-      }
+      // Fetch ephemeral and regular messages concurrently to reduce chat-open latency.
+      final temporary = await temporaryFuture;
       if (mounted) {
         setState(() {
         final existingRegular = messages.where((item) => item['is_ephemeral'] != true).toList();
