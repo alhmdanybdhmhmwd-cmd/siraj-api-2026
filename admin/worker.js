@@ -373,6 +373,19 @@ const KNOWLEDGE_TYPES = new Set([
   "api_contract", "test_report", "runbook", "launch_material"
 ]);
 
+export function validateBrainChatInput(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ok: false, error: "invalid_body" };
+  }
+  const message = typeof value.message === "string" ? value.message.trim() : "";
+  const conversationId = value.conversationId == null ? "" : String(value.conversationId);
+  if (!message || message.length > 8000 ||
+      (conversationId && !/^[0-9a-f-]{36}$/i.test(conversationId))) {
+    return { ok: false, error: "invalid_brain_chat_input" };
+  }
+  return { ok: true, value: { message, conversationId: conversationId || null } };
+}
+
 export function validateKnowledgeInput(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return { ok: false, error: "invalid_body" };
   const sourceType = value.sourceType;
@@ -960,6 +973,111 @@ async function handle(request, env) {
       dispatched = true;
     }
     return response({ task, execution: dispatched ? "queued_for_server_worker" : "persisted_waiting_for_queue" }, 201, allowedOrigin);
+  }
+
+  if (request.method === "GET" && url.pathname === "/v1/brain/conversations") {
+    const rows = await env.ADMIN_DB.prepare(\`
+      SELECT id, title, created_at, updated_at
+      FROM admin_brain_conversations WHERE workspace_id = ?
+      ORDER BY updated_at DESC LIMIT 50
+    \`).bind(workspace).all();
+    return response({ conversations: rows.results || [] }, 200, allowedOrigin);
+  }
+
+  if (request.method === "POST" && url.pathname === "/v1/brain/chat") {
+    const parsed = validateBrainChatInput(await readJson(request));
+    if (!parsed.ok) return response({ error: parsed.error }, 400, allowedOrigin);
+    if (!env.ADMIN_AI) return response({ error: "assistant_unavailable" }, 503, allowedOrigin);
+
+    let conversationId = parsed.value.conversationId;
+    if (conversationId) {
+      const existing = await env.ADMIN_DB.prepare(
+        "SELECT id FROM admin_brain_conversations WHERE id = ? AND workspace_id = ?"
+      ).bind(conversationId, workspace).first();
+      if (!existing) return response({ error: "conversation_not_found" }, 404, allowedOrigin);
+    } else {
+      conversationId = crypto.randomUUID();
+      const title = parsed.value.message.replace(/\s+/g, " ").slice(0, 120);
+      await env.ADMIN_DB.prepare(\`
+        INSERT INTO admin_brain_conversations (id, workspace_id, title, created_by)
+        VALUES (?, ?, ?, ?)
+      \`).bind(conversationId, workspace, title, actor.subject).run();
+    }
+
+    const historyRows = await env.ADMIN_DB.prepare(\`
+      SELECT role, content FROM admin_brain_messages
+      WHERE conversation_id = ? AND workspace_id = ?
+      ORDER BY created_at DESC LIMIT 20
+    \`).bind(conversationId, workspace).all();
+    const history = (historyRows.results || []).reverse();
+    const userMessageId = crypto.randomUUID();
+    await env.ADMIN_DB.prepare(\`
+      INSERT INTO admin_brain_messages
+        (id, conversation_id, workspace_id, role, content)
+      VALUES (?, ?, ?, 'user', ?)
+    \`).bind(userMessageId, conversationId, workspace, parsed.value.message).run();
+
+    try {
+      const knowledge = await retrieveKnowledgeForTask(env, workspace, parsed.value.message);
+      const workspaceInfo = await env.ADMIN_DB.prepare(
+        "SELECT current_project, current_phase FROM admin_workspaces WHERE id = ?"
+      ).bind(workspace).first();
+      const base = buildAssistantMessages(
+        { title: "BARQ Brain conversation", description: parsed.value.message },
+        workspaceInfo,
+        knowledge
+      );
+      const messages = [
+        base[0],
+        ...history.map(item => ({ role: item.role, content: item.content })),
+        { role: "user", content: parsed.value.message }
+      ];
+      const model = env.BARQ_ADMIN_AI_MODEL || "@cf/meta/llama-3.1-8b-instruct";
+      const generated = await env.ADMIN_AI.run(model, { messages, max_tokens: 2400 });
+      const answer = typeof generated?.response === "string"
+        ? generated.response.trim()
+        : typeof generated === "string" ? generated.trim() : "";
+      if (!answer) throw new Error("assistant_empty_result");
+      const boundedAnswer = answer.slice(0, 12000);
+      const sourceRefs = knowledge.map((item, index) => ({
+        reference: index + 1,
+        sourcePath: item.source_path,
+        sourceRevision: item.source_revision,
+        title: item.title
+      }));
+      await env.ADMIN_DB.batch([
+        env.ADMIN_DB.prepare(\`
+          INSERT INTO admin_brain_messages
+            (id, conversation_id, workspace_id, role, content, source_refs_json, model)
+          VALUES (?, ?, ?, 'assistant', ?, ?, ?)
+        \`).bind(crypto.randomUUID(), conversationId, workspace, boundedAnswer,
+          JSON.stringify(sourceRefs), model),
+        env.ADMIN_DB.prepare(
+          "UPDATE admin_brain_conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ? AND workspace_id = ?"
+        ).bind(conversationId, workspace)
+      ]);
+      await audit(env, workspace, actor, "brain.chat.responded", "conversation",
+        conversationId, { model, sourceCount: sourceRefs.length });
+      return response({ conversationId, answer: boundedAnswer, sources: sourceRefs }, 200, allowedOrigin);
+    } catch (error) {
+      console.error("BARQ Brain chat request failed:", error);
+      return response({ error: "assistant_request_failed", conversationId, userMessageId }, 502, allowedOrigin);
+    }
+  }
+
+  const brainMessagesMatch = url.pathname.match(/^\/v1\/brain\/conversations\/([0-9a-f-]{36})\/messages$/i);
+  if (request.method === "GET" && brainMessagesMatch) {
+    const conversationId = brainMessagesMatch[1];
+    const conversation = await env.ADMIN_DB.prepare(
+      "SELECT id FROM admin_brain_conversations WHERE id = ? AND workspace_id = ?"
+    ).bind(conversationId, workspace).first();
+    if (!conversation) return response({ error: "conversation_not_found" }, 404, allowedOrigin);
+    const rows = await env.ADMIN_DB.prepare(\`
+      SELECT id, role, content, source_refs_json, model, created_at
+      FROM admin_brain_messages WHERE conversation_id = ? AND workspace_id = ?
+      ORDER BY created_at ASC LIMIT 100
+    \`).bind(conversationId, workspace).all();
+    return response({ conversationId, messages: rows.results || [] }, 200, allowedOrigin);
   }
 
   if (request.method === "GET" && url.pathname === "/v1/knowledge") {
