@@ -7777,8 +7777,10 @@ Map<String, dynamic>? _attachmentData(Map<String, dynamic> message) {
 Widget _barqAttachmentTile(Map<String, dynamic> attachment,
     Future<void> Function(void Function(double progress) onProgress) onDownload,
     {Future<void> Function()? onRetry}) {
-  if (attachment['localBytes'] is Uint8List) {
-    final bytes = attachment['localBytes'] as Uint8List;
+  if (attachment['localBytes'] is Uint8List || attachment['localPreparing'] == true) {
+    final bytes = attachment['localBytes'] is Uint8List
+        ? attachment['localBytes'] as Uint8List : null;
+    final preparing = attachment['localPreparing'] == true;
     final type = field(attachment, ['contentType']).toLowerCase();
     final failed = attachment['localUploadFailed'] == true;
     final raw = attachment['localUploadProgress'];
@@ -7796,14 +7798,21 @@ Widget _barqAttachmentTile(Map<String, dynamic> attachment,
             ClipRRect(
               borderRadius: BorderRadius.circular(11),
               child: isImage
-                  ? Image.memory(bytes, width: 244, height: 176, fit: BoxFit.cover)
+                  ? (bytes != null
+                      ? Image.memory(bytes, width: 244, height: 176, fit: BoxFit.cover)
+                      : attachment['localPath'] is String && (attachment['localPath'] as String).isNotEmpty
+                          ? Image.file(File(attachment['localPath'] as String), width: 244, height: 176, fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(width: 244, height: 176, color: Colors.black45,
+                                child: const Icon(Icons.image_outlined, color: Colors.white70, size: 42)))
+                          : Container(width: 244, height: 176, color: Colors.black45,
+                              child: const Icon(Icons.image_outlined, color: Colors.white70, size: 42)))
                   : attachment['localPath'] is String && (attachment['localPath'] as String).isNotEmpty
                       ? SizedBox(
                           width: 244, height: 150,
                           child: _BarqPickedVideoThumbnail(file: PlatformFile(
                             name: field(attachment, ['fileName'], 'barq-video'),
                             path: attachment['localPath'] as String,
-                            size: bytes.length,
+                            size: bytes?.length ?? (attachment['size'] is int ? attachment['size'] as int : 0),
                           )),
                         )
                       : Container(width: 244, height: 150, color: Colors.black45,
@@ -7849,6 +7858,7 @@ Widget _barqAttachmentTile(Map<String, dynamic> attachment,
         const SizedBox(height: 5),
         Row(children: [
           Expanded(child: Text(failed ? 'تعذر الإرسال — أعد المحاولة'
+              : preparing ? 'جارٍ تجهيز الوسائط...'
               : progress > 0 ? 'جارٍ الإرسال ${(progress * 100).round()}%'
               : 'جارٍ الإرسال...', style: const TextStyle(color: Colors.white70, fontSize: 11))),
           if (failed && onRetry != null)
@@ -9646,16 +9656,28 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       );
       if (result == null || result.files.isEmpty) return;
       final file = result.files.single;
-      final bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
       final contentType = file.extension == null ? 'application/octet-stream' : _mimeForExtension(file.extension!);
       if (!mounted) return;
-      // WhatsApp-style: use the composer text as the optional media caption,
-      // insert the local media bubble immediately, then upload in the background.
       final caption = controller.text.trim();
-      final local = _newPendingAttachment(bytes, file.name, contentType, localPath: file.path);
-      (local['local_attachment'] as Map<String, dynamic>)['caption'] = caption;
+      final local = <String, dynamic>{
+        'id': newBarqMessageId(), 'sender_id': widget.currentUserId, 'receiver_id': friendId,
+        'body': '', 'created_at': DateTime.now().toUtc().toIso8601String(), 'is_sending': true,
+        'local_attachment': <String, dynamic>{
+          'type': 'attachment', 'fileName': file.name, 'contentType': contentType,
+          'size': file.size, 'localPath': file.path, 'localUploadProgress': 0.0,
+          'localPreparing': true, 'caption': caption,
+        },
+      };
       controller.clear();
       setState(() => messages = mergeMessages(messages, [local]));
+      final bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
+      if (!mounted) return;
+      final attachment = local['local_attachment'] as Map<String, dynamic>;
+      setState(() {
+        attachment['localBytes'] = bytes;
+        attachment['size'] = bytes.length;
+        attachment['localPreparing'] = false;
+      });
       unawaited(_uploadPendingAttachment(local));
     } catch (error) {
       if (mounted) showMsg(context, cleanError(error));
@@ -9669,15 +9691,28 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         title: 'إرسال وسائط أو ملف', withData: false);
       if (result == null || result.files.isEmpty) return;
       final file = result.files.single;
-      final bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
       final contentType = file.extension == null ? 'application/octet-stream' : _mimeForExtension(file.extension!);
       if (!mounted) return;
-      // File captions are taken from the composer; no blocking preview dialog.
       final caption = controller.text.trim();
-      final local = _newPendingAttachment(bytes, file.name, contentType, localPath: file.path);
-      (local['local_attachment'] as Map<String, dynamic>)['caption'] = caption;
+      final local = <String, dynamic>{
+        'id': newBarqMessageId(), 'sender_id': widget.currentUserId, 'receiver_id': friendId,
+        'body': '', 'created_at': DateTime.now().toUtc().toIso8601String(), 'is_sending': true,
+        'local_attachment': <String, dynamic>{
+          'type': 'attachment', 'fileName': file.name, 'contentType': contentType,
+          'size': file.size, 'localPath': file.path, 'localUploadProgress': 0.0,
+          'localPreparing': true, 'caption': caption,
+        },
+      };
       controller.clear();
       setState(() => messages = mergeMessages(messages, [local]));
+      final bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
+      if (!mounted) return;
+      final attachment = local['local_attachment'] as Map<String, dynamic>;
+      setState(() {
+        attachment['localBytes'] = bytes;
+        attachment['size'] = bytes.length;
+        attachment['localPreparing'] = false;
+      });
       unawaited(_uploadPendingAttachment(local));
     } catch (error) { if (mounted) showMsg(context, cleanError(error)); }
   }
@@ -11084,16 +11119,28 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
       );
       if (result == null || result.files.isEmpty) return;
       final file = result.files.single;
-      final bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
       final contentType = file.extension == null ? 'application/octet-stream' : _mimeForExtension(file.extension!);
       if (!mounted) return;
-      // WhatsApp-style: use the composer text as the optional media caption,
-      // insert the local media bubble immediately, then upload in the background.
       final caption = controller.text.trim();
-      final local = _newPendingAttachment(bytes, file.name, contentType, localPath: file.path);
-      (local['local_attachment'] as Map<String, dynamic>)['caption'] = caption;
+      final local = <String, dynamic>{
+        'id': newBarqMessageId(), 'sender_id': widget.currentUserId, 'group_id': groupId,
+        'body': '', 'created_at': DateTime.now().toUtc().toIso8601String(), 'is_sending': true,
+        'local_attachment': <String, dynamic>{
+          'type': 'attachment', 'fileName': file.name, 'contentType': contentType,
+          'size': file.size, 'localPath': file.path, 'localUploadProgress': 0.0,
+          'localPreparing': true, 'caption': caption,
+        },
+      };
       controller.clear();
       setState(() => messages = mergeMessages(messages, [local]));
+      final bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
+      if (!mounted) return;
+      final attachment = local['local_attachment'] as Map<String, dynamic>;
+      setState(() {
+        attachment['localBytes'] = bytes;
+        attachment['size'] = bytes.length;
+        attachment['localPreparing'] = false;
+      });
       unawaited(_uploadPendingAttachment(local));
     } catch (error) {
       if (mounted) showMsg(context, cleanError(error));
@@ -11106,15 +11153,28 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
         title: 'إرسال وسائط أو ملف للمجموعة', withData: false);
       if (result == null || result.files.isEmpty) return;
       final file = result.files.single;
-      final bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
       final contentType = file.extension == null ? 'application/octet-stream' : _mimeForExtension(file.extension!);
       if (!mounted) return;
-      // File captions are taken from the composer; no blocking preview dialog.
       final caption = controller.text.trim();
-      final local = _newPendingAttachment(bytes, file.name, contentType, localPath: file.path);
-      (local['local_attachment'] as Map<String, dynamic>)['caption'] = caption;
+      final local = <String, dynamic>{
+        'id': newBarqMessageId(), 'sender_id': widget.currentUserId, 'group_id': groupId,
+        'body': '', 'created_at': DateTime.now().toUtc().toIso8601String(), 'is_sending': true,
+        'local_attachment': <String, dynamic>{
+          'type': 'attachment', 'fileName': file.name, 'contentType': contentType,
+          'size': file.size, 'localPath': file.path, 'localUploadProgress': 0.0,
+          'localPreparing': true, 'caption': caption,
+        },
+      };
       controller.clear();
       setState(() => messages = mergeMessages(messages, [local]));
+      final bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
+      if (!mounted) return;
+      final attachment = local['local_attachment'] as Map<String, dynamic>;
+      setState(() {
+        attachment['localBytes'] = bytes;
+        attachment['size'] = bytes.length;
+        attachment['localPreparing'] = false;
+      });
       unawaited(_uploadPendingAttachment(local));
     } catch (error) { if (mounted) showMsg(context, cleanError(error)); }
   }
