@@ -9,7 +9,7 @@ This directory is a separate Admin service boundary. It is not part of the BARQ 
 - Durable task states, server Queue consumer, lease-based task claiming, bounded retries, server-side BARQ Brain draft generation, and optimistic checkpoint versions.
 - Append-only audit events enforced by SQLite triggers.
 - Explicit approval records in the schema.
-- Google OpenID Connect identity exchange using Authorization Code + PKCE in the native client; the Worker verifies Google RS256 signatures, issuer, audience, verified email, exact owner subject, expiry, and one-time nonce use.\n- Short-lived Admin access JWTs bound to a server-side device session; opaque refresh tokens are stored only as SHA-256 hashes and rotated on every use.\n- Owner device inventory, per-device revocation, global session revocation, refresh replay detection, and append-only security audit events.
+- Google OpenID Connect identity exchange using Authorization Code + PKCE in the native client; the Worker verifies Google RS256 signatures, issuer, audience, verified email, exact owner subject, expiry, and one-time nonce use.\n- Short-lived Admin access JWTs bound to a server-side device session; opaque refresh tokens are stored only as SHA-256 hashes and rotated on every use; a hash history distinguishes a genuine replay from an arbitrary invalid token, so random bad tokens cannot revoke an owner session.\n- Owner device inventory, per-device revocation, global session revocation, refresh replay detection, and append-only security audit events.
 - Versioned project knowledge ingestion API and an initial guarded GitHub repository indexing script.
 - Unit tests and isolated SQLite schema checks.
 
