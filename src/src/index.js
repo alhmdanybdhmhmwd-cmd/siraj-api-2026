@@ -2095,7 +2095,8 @@ export default {
         await ensureSparkStatusStyleColumns(env);
 
         const id = crypto.randomUUID();
-        const expiresAt = new Date(Date.now() + SPARK_STATUS_TTL_MS).toISOString();
+        const expiresAt = new Date(Date.now() + SPARK_STATUS_TTL_MS)
+          .toISOString().slice(0, 19).replace("T", " ");
         await env.DB.prepare(
           `INSERT INTO status_posts
              (id, user_id, content, expires_at, background_key, text_color_key, font_key)
