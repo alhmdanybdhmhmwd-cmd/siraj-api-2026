@@ -67,6 +67,40 @@ export function validateCheckpointInput(value) {
   }
 }
 
+const APPROVAL_ACTIONS = new Set([
+  "production_deploy", "data_mutation", "public_publish", "paid_campaign",
+  "store_listing_change", "creator_outreach", "secret_rotation", "bulk_moderation"
+]);
+
+export function validateApprovalInput(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { ok: false, error: "invalid_body" };
+  const actionType = value.actionType;
+  const preview = value.preview;
+  if (!APPROVAL_ACTIONS.has(actionType) || !preview || typeof preview !== "object" || Array.isArray(preview)) {
+    return { ok: false, error: "invalid_approval_action" };
+  }
+  const summary = typeof preview.summary === "string" ? preview.summary.trim() : "";
+  const target = typeof preview.target === "string" ? preview.target.trim() : "";
+  const impact = typeof preview.impact === "string" ? preview.impact.trim() : "";
+  const environment = preview.environment;
+  if (!summary || summary.length > 240 || !target || target.length > 160 ||
+      !impact || impact.length > 500 || !["preview", "staging", "production", "external"].includes(environment)) {
+    return { ok: false, error: "invalid_approval_preview" };
+  }
+  const taskId = typeof value.taskId === "string" && /^[0-9a-f-]{36}$/i.test(value.taskId) ? value.taskId : null;
+  if (value.taskId !== undefined && value.taskId !== null && !taskId) return { ok: false, error: "invalid_task_id" };
+  return { ok: true, value: { actionType, taskId, preview: { summary, target, impact, environment } } };
+}
+
+export function validateApprovalDecision(value) {
+  if (!value || typeof value !== "object" || !["approved", "rejected"].includes(value.status)) {
+    return { ok: false, error: "invalid_approval_decision" };
+  }
+  const note = typeof value.note === "string" ? value.note.trim() : "";
+  if (note.length > 500) return { ok: false, error: "approval_note_too_long" };
+  return { ok: true, value: { status: value.status, note } };
+}
+
 async function verifyOwnerToken(request, env) {
   const authorization = request.headers.get("Authorization") || "";
   if (!authorization.startsWith("Bearer ")) return null;
@@ -188,6 +222,30 @@ async function handle(request, env) {
     return response({ workspace: row, tasks: await listTasks(env, workspace) }, 200, allowedOrigin);
   }
 
+  if (request.method === "PATCH" && url.pathname === "/v1/workspace") {
+    const body = await readJson(request);
+    if (!body || !Number.isSafeInteger(body.expectedVersion) || body.expectedVersion < 1) {
+      return response({ error: "invalid_expected_version" }, 400, allowedOrigin);
+    }
+    const currentProject = typeof body.currentProject === "string" ? body.currentProject.trim() : "";
+    const currentPhase = typeof body.currentPhase === "string" ? body.currentPhase.trim() : "";
+    if (!currentProject || currentProject.length > 100 || !currentPhase || currentPhase.length > 100) {
+      return response({ error: "invalid_workspace_position" }, 400, allowedOrigin);
+    }
+    const updated = await env.ADMIN_DB.prepare(`
+      UPDATE admin_workspaces SET current_project = ?, current_phase = ?,
+        version = version + 1, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND version = ?
+    `).bind(currentProject, currentPhase, workspace, body.expectedVersion).run();
+    if (!updated?.meta?.changes) {
+      const current = await env.ADMIN_DB.prepare("SELECT version FROM admin_workspaces WHERE id = ?").bind(workspace).first();
+      return response({ error: "workspace_version_conflict", currentVersion: current?.version ?? null }, 409, allowedOrigin);
+    }
+    await audit(env, workspace, actor, "workspace.position.changed", "workspace", workspace,
+      { currentProject, currentPhase, version: body.expectedVersion + 1 });
+    return response({ workspace: { currentProject, currentPhase, version: body.expectedVersion + 1 } }, 200, allowedOrigin);
+  }
+
   if (request.method === "GET" && url.pathname === "/v1/tasks") {
     return response({ tasks: await listTasks(env, workspace) }, 200, allowedOrigin);
   }
@@ -219,6 +277,67 @@ async function handle(request, env) {
       "SELECT id, title, description, status, priority, checkpoint_version, next_action, created_at FROM admin_tasks WHERE id = ?"
     ).bind(id).first();
     return response({ task }, 201, allowedOrigin);
+  }
+
+  if (request.method === "GET" && url.pathname === "/v1/approvals") {
+    const rows = await env.ADMIN_DB.prepare(`
+      SELECT id, task_id, requested_by, action_type, action_preview_json, status,
+        decided_by, decision_note, created_at, decided_at
+      FROM admin_approvals WHERE workspace_id = ?
+      ORDER BY CASE status WHEN 'pending' THEN 0 ELSE 1 END, created_at DESC LIMIT 100
+    `).bind(workspace).all();
+    return response({ approvals: (rows.results || []).map(row => ({
+      ...row, preview: JSON.parse(row.action_preview_json), action_preview_json: undefined
+    })) }, 200, allowedOrigin);
+  }
+
+  if (request.method === "POST" && url.pathname === "/v1/approvals") {
+    const parsed = validateApprovalInput(await readJson(request));
+    if (!parsed.ok) return response({ error: parsed.error }, 400, allowedOrigin);
+    if (parsed.value.taskId) {
+      const task = await env.ADMIN_DB.prepare("SELECT id FROM admin_tasks WHERE id = ? AND workspace_id = ?")
+        .bind(parsed.value.taskId, workspace).first();
+      if (!task) return response({ error: "task_not_found" }, 404, allowedOrigin);
+    }
+    const id = crypto.randomUUID();
+    await env.ADMIN_DB.prepare(`
+      INSERT INTO admin_approvals
+        (id, workspace_id, task_id, requested_by, action_type, action_preview_json)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(id, workspace, parsed.value.taskId, actor.subject, parsed.value.actionType,
+      JSON.stringify(parsed.value.preview)).run();
+    await audit(env, workspace, actor, "approval.requested", "approval", id,
+      { actionType: parsed.value.actionType, environment: parsed.value.preview.environment });
+    return response({ approval: { id, status: "pending", ...parsed.value } }, 201, allowedOrigin);
+  }
+
+  const approvalMatch = url.pathname.match(/^\\/v1\\/approvals\\/([0-9a-f-]{36})$/i);
+  if (request.method === "PATCH" && approvalMatch) {
+    const parsed = validateApprovalDecision(await readJson(request));
+    if (!parsed.ok) return response({ error: parsed.error }, 400, allowedOrigin);
+    const approvalId = approvalMatch[1];
+    const updated = await env.ADMIN_DB.prepare(`
+      UPDATE admin_approvals SET status = ?, decided_by = ?, decision_note = ?, decided_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND workspace_id = ? AND status = 'pending'
+    `).bind(parsed.value.status, actor.subject, parsed.value.note, approvalId, workspace).run();
+    if (!updated?.meta?.changes) {
+      const existing = await env.ADMIN_DB.prepare("SELECT status FROM admin_approvals WHERE id = ? AND workspace_id = ?")
+        .bind(approvalId, workspace).first();
+      return response({ error: existing ? "approval_already_decided" : "approval_not_found" }, 409, allowedOrigin);
+    }
+    await audit(env, workspace, actor, "approval.decided", "approval", approvalId, { status: parsed.value.status });
+    return response({ approval: { id: approvalId, status: parsed.value.status } }, 200, allowedOrigin);
+  }
+
+  if (request.method === "GET" && url.pathname === "/v1/audit") {
+    const rows = await env.ADMIN_DB.prepare(`
+      SELECT id, actor_subject, actor_device_id, event_type, target_type, target_id, details_json, created_at
+      FROM admin_audit_events WHERE workspace_id = ?
+      ORDER BY created_at DESC, id DESC LIMIT 100
+    `).bind(workspace).all();
+    return response({ events: (rows.results || []).map(row => ({
+      ...row, details: JSON.parse(row.details_json), details_json: undefined
+    })) }, 200, allowedOrigin);
   }
 
   const checkpointMatch = url.pathname.match(/^\/v1\/tasks\/([0-9a-f-]{36})\/checkpoints$/i);
