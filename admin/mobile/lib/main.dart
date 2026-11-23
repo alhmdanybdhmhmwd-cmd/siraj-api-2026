@@ -690,10 +690,8 @@ class _AdminHomePageState extends State<AdminHomePage>
                   ? 'الصورة أكبر من الحد المسموح'
                   : data is Map && data['error'] == 'invalid_image_or_prompt'
                       ? 'صيغة الصورة غير مدعومة أو لا يطابق محتواها نوعها؛ استخدم JPEG أو PNG أو WebP'
-                      : data is Map && data['error'] == 'vision_rate_limited'
-                          ? 'وصلت إلى الحد المؤقت: ثلاث صور في الدقيقة. انتظر قليلًا ثم حاول مجددًا'
-                          : data is Map &&
-                                  data['error'] == 'vision_analysis_failed'
+                      : data is Map &&
+                              data['error'] == 'vision_analysis_failed'
                               ? 'تعذر على نموذج الرؤية تحليل الصورة؛ جرّب صورة أوضح أو أعد المحاولة'
                               : 'تعذر تحليل الصورة (' +
                                   response.statusCode.toString() +
@@ -729,11 +727,8 @@ class _AdminHomePageState extends State<AdminHomePage>
           ? 'خدمة الذكاء الاصطناعي غير مهيأة على الخادم بعد'
           : data is Map && data['error'] == 'invalid_image_prompt'
               ? 'اكتب وصفًا للصورة لا يتجاوز 1600 حرف'
-              : data is Map && data['error'] == 'image_generation_rate_limited'
-                  ? 'وصلت إلى الحد المؤقت: صورتان في الدقيقة. انتظر قليلًا ثم حاول مجددًا'
-                  : data is Map &&
-                          data['error'] ==
-                              'image_generation_model_terms_required'
+              : data is Map &&
+                      data['error'] == 'image_generation_model_terms_required'
                       ? 'يلزم قبول شروط نموذج إنشاء الصور في حساب Cloudflare قبل استخدامه'
                       : data is Map &&
                               data['error'] == 'image_generation_failed'
