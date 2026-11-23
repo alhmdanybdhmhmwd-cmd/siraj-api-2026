@@ -58,6 +58,27 @@ test("registration throttles repeated attempts per phone and per trusted network
   assert.ok(route.includes('"Retry-After": "900"'));
 });
 
+test("international phone registration canonicalizes common formatting and Arabic/Persian digits", () => {
+  assert.match(worker, /function normalizeInternationalPhone\(value\)/);
+  assert.match(worker, /normalizeInternationalPhone\(body\.phone\)/);
+  assert.match(worker, /raw\.startsWith\("00"\)/);
+  assert.match(worker, /replace\(\/\[\\s\(\)\.\-\]\/g, ""\)/);
+  assert.match(worker, /phoneAlreadyInUse\(env, phone\)/);
+  assert.match(worker, /phoneConflictCondition\("phone", phone\)/);
+});
+
+test("login throttles each identifier while avoiding a shared missing-IP bucket and allowing carrier NAT headroom", () => {
+  const start = worker.indexOf('if (method === "POST" && path === "/api/login")');
+  const end = worker.indexOf("// Authentication required below this point", start);
+  const route = worker.slice(start, end);
+  assert.ok(start >= 0 && end > start, "login route must exist");
+  assert.ok(route.includes('consumeLoginAttempt(env, "identifier", rateLimitIdentifier, 10)'));
+  assert.ok(route.includes('consumeLoginAttempt(env, "client", clientIp, 40)'));
+  assert.ok(route.includes('clientIp && clientIp.trim()'));
+  assert.ok(!route.includes('|| "unknown"'), "missing edge IP must not create one global login bucket");
+  assert.ok(route.includes('"Retry-After": "900"'));
+});
+
 test("message deletion is authenticated and limited to the author in private and group chats", () => {
   const privateStart = worker.indexOf("privateMessageActionMatch");
   const privateEnd = worker.indexOf("// Get conversation messages", privateStart);
