@@ -9670,7 +9670,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       };
       controller.clear();
       setState(() => messages = mergeMessages(messages, [local]));
-      final bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
+      Uint8List bytes;
+      try {
+        bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
+      } catch (_) {
+        if (mounted) setState(() => messages.removeWhere((item) => field(item, ['id']) == field(local, ['id'])));
+        rethrow;
+      }
       if (!mounted) return;
       final attachment = local['local_attachment'] as Map<String, dynamic>;
       setState(() {
@@ -9705,7 +9711,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       };
       controller.clear();
       setState(() => messages = mergeMessages(messages, [local]));
-      final bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
+      Uint8List bytes;
+      try {
+        bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
+      } catch (_) {
+        if (mounted) setState(() => messages.removeWhere((item) => field(item, ['id']) == field(local, ['id'])));
+        rethrow;
+      }
       if (!mounted) return;
       final attachment = local['local_attachment'] as Map<String, dynamic>;
       setState(() {
@@ -11133,7 +11145,13 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
       };
       controller.clear();
       setState(() => messages = mergeMessages(messages, [local]));
-      final bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
+      Uint8List bytes;
+      try {
+        bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
+      } catch (_) {
+        if (mounted) setState(() => messages.removeWhere((item) => field(item, ['id']) == field(local, ['id'])));
+        rethrow;
+      }
       if (!mounted) return;
       final attachment = local['local_attachment'] as Map<String, dynamic>;
       setState(() {
@@ -11167,7 +11185,13 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
       };
       controller.clear();
       setState(() => messages = mergeMessages(messages, [local]));
-      final bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
+      Uint8List bytes;
+      try {
+        bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
+      } catch (_) {
+        if (mounted) setState(() => messages.removeWhere((item) => field(item, ['id']) == field(local, ['id'])));
+        rethrow;
+      }
       if (!mounted) return;
       final attachment = local['local_attachment'] as Map<String, dynamic>;
       setState(() {
