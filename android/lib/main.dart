@@ -9166,7 +9166,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                   dense: true, leading: Icon(Icons.cleaning_services_outlined), title: Text('مسح سجل المحادثة'))),
                 PopupMenuItem(value: 'search', child: ListTile(
                   dense: true, leading: Icon(Icons.search), title: Text('البحث في المحادثة'))),
-                PopupMenuItem(value: 'summary', child: ListTile(
+                const PopupMenuItem(value: 'summary', child: ListTile(
                   dense: true, leading: Icon(Icons.auto_awesome_outlined), title: Text('ملخص المحادثة'))),
               ],
             ),
@@ -10475,16 +10475,16 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                   widget.onShareInvite();
                 }
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'members', child: ListTile(
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'members', child: ListTile(
                   dense: true, leading: Icon(Icons.people_alt_outlined), title: Text('معلومات المجموعة والأعضاء'))),
                 PopupMenuItem(value: 'summary', child: ListTile(
                   dense: true, leading: Icon(Icons.auto_awesome_outlined), title: Text('ملخص المحادثة'))),
-                PopupMenuItem(value: 'pinned', child: ListTile(
+                const PopupMenuItem(value: 'pinned', child: ListTile(
                   dense: true, leading: Icon(Icons.push_pin_outlined), title: Text('الرسائل المثبتة'))),
-                PopupMenuItem(value: 'media', child: ListTile(
+                const PopupMenuItem(value: 'media', child: ListTile(
                   dense: true, leading: Icon(Icons.perm_media_outlined), title: Text('الوسائط والملفات'))),
-                PopupMenuItem(value: 'wallpaper', child: ListTile(
+                const PopupMenuItem(value: 'wallpaper', child: ListTile(
                   dense: true, leading: Icon(Icons.wallpaper_outlined), title: Text('خلفية المحادثة'))),
                 if (['owner', 'admin'].contains(field(widget.group, ['current_role'], 'member')))
                   PopupMenuItem(value: 'invite', child: ListTile(
