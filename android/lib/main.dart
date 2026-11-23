@@ -8923,12 +8923,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                 }
               },
               itemBuilder: (_) => const [
+                PopupMenuItem(value: 'clear', child: ListTile(
+                  dense: true, leading: Icon(Icons.cleaning_services_outlined), title: Text('مسح سجل المحادثة'))),
                 PopupMenuItem(value: 'search', child: ListTile(
                   dense: true, leading: Icon(Icons.search), title: Text('البحث في المحادثة'))),
                 PopupMenuItem(value: 'summary', child: ListTile(
                   dense: true, leading: Icon(Icons.auto_awesome_outlined), title: Text('ملخص المحادثة'))),
-                PopupMenuItem(value: 'clear', child: ListTile(
-                  dense: true, leading: Icon(Icons.cleaning_services_outlined), title: Text('مسح سجل المحادثة'))),
               ],
             ),
           ],
