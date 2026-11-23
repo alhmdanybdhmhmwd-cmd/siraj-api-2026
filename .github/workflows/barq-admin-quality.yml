@@ -129,6 +129,31 @@ jobs:
           assert blocked_auth is None, "Auth rate limit allowed a sixth request"
           print("Admin schema, immutable audit, owner sessions, OIDC nonce, refresh history and auth throttling checks passed.")
           PY
+      - name: Validate isolated Cloudflare Preview template
+        run: |
+          python3 - <<'PY'
+          import tomllib
+          from pathlib import Path
+          config = tomllib.loads(Path("admin/wrangler.toml.example").read_text())
+          assert config["name"] == "barq-admin-preview"
+          assert config["main"] == "worker.js"
+          assert config["d1_databases"][0]["binding"] == "ADMIN_DB"
+          assert config["d1_databases"][0]["database_id"].startswith("REPLACE_")
+          assert config["d1_databases"][0]["migrations_dir"] == "migrations"
+          assert config["queues"]["producers"][0]["binding"] == "ADMIN_TASK_QUEUE"
+          consumer = config["queues"]["consumers"][0]
+          assert consumer["queue"] == "barq-admin-preview-tasks"
+          assert consumer["dead_letter_queue"] == "barq-admin-preview-dlq"
+          assert config["ai"]["binding"] == "ADMIN_AI"
+          assert config["observability"]["enabled"] is True
+          assert "REPLACE_WITH" in config["vars"]["BARQ_ADMIN_ALLOWED_ORIGIN"]
+          assert "REPLACE_WITH" in config["vars"]["BARQ_GOOGLE_OIDC_CLIENT_ID"]
+          assert "REPLACE_WITH" in config["vars"]["BARQ_ADMIN_OWNER_EMAIL"]
+          serialized = str(config).lower()
+          assert "barq-production" not in serialized
+          assert "siraj-production" not in serialized
+          print("Admin Preview Wrangler template is valid TOML and isolated from production identifiers.")
+          PY
 
   admin-mobile-quality:
     runs-on: ubuntu-latest
