@@ -10308,6 +10308,7 @@ class SparkMediaViewer extends StatefulWidget {
 class _SparkMediaViewerState extends State<SparkMediaViewer> {
   final TextEditingController _replyController = TextEditingController();
   bool _sendingReply = false;
+  int _currentMediaIndex = 0;
   final AudioRecorder _audioRecorder = AudioRecorder();
   Timer? _audioRecordingTimer;
   Stopwatch? _audioRecordingWatch;
@@ -10451,48 +10452,58 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
     final canReply = widget.authorId.isNotEmpty && widget.authorId != widget.currentUserId;
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: Text(widget.author),
-        foregroundColor: Colors.white,
-        actions: [
-          if (widget.showViewCount &&
-              widget.authorId.isNotEmpty &&
-              widget.authorId == widget.currentUserId &&
-              widget.onShowViewers != null)
-            Padding(
-              padding: const EdgeInsetsDirectional.only(end: 12),
-              child: Center(
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: widget.onShowViewers,
-                    borderRadius: BorderRadius.circular(22),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: gold.withValues(alpha: .14),
-                        borderRadius: BorderRadius.circular(22),
-                        border: Border.all(color: gold.withValues(alpha: .42)),
-                      ),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        const Icon(Icons.visibility_outlined, size: 17, color: gold),
-                        const SizedBox(width: 7),
-                        Text('${widget.viewCount} مشاهدة', style: const TextStyle(
-                          color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800,
-                        )),
-                        const SizedBox(width: 4),
-                        const Icon(Icons.chevron_right_rounded, size: 16, color: gold),
-                      ]),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
       body: SafeArea(
         child: Column(children: [
+          if (widget.media.length > 1)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(9, 8, 9, 5),
+              child: Row(children: List.generate(widget.media.length, (index) =>
+                Expanded(child: Container(
+                  height: 3,
+                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: FractionallySizedBox(
+                    alignment: Alignment.centerLeft,
+                    widthFactor: index < _currentMediaIndex ? 1 : index == _currentMediaIndex ? .45 : 0,
+                    child: DecoratedBox(decoration: BoxDecoration(
+                      color: Colors.white, borderRadius: BorderRadius.circular(4),
+                    )),
+                  ),
+                ))),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            child: Row(children: [
+              IconButton(
+                tooltip: 'إغلاق الحالة',
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+              ),
+              CircleAvatar(
+                radius: 17,
+                backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: .22),
+                child: Text(widget.author.trim().isEmpty ? 'ب' : widget.author.trim().substring(0, 1),
+                  style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w800)),
+              ),
+              const SizedBox(width: 9),
+              Expanded(child: Text(widget.author,
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14))),
+              if (widget.showViewCount &&
+                  widget.authorId.isNotEmpty &&
+                  widget.authorId == widget.currentUserId &&
+                  widget.onShowViewers != null)
+                TextButton.icon(
+                  onPressed: widget.onShowViewers,
+                  icon: const Icon(Icons.visibility_outlined, size: 18, color: Colors.white),
+                  label: Text('${widget.viewCount}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+                ),
+            ]),
+          ),
           Expanded(
             child: widget.media.isEmpty
                 ? Container(
@@ -10526,6 +10537,7 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
                   )
                 : PageView.builder(
                     itemCount: widget.media.length,
+                    onPageChanged: (index) => setState(() => _currentMediaIndex = index),
                     itemBuilder: (context, index) {
                       final item = widget.media[index];
                       final attachmentId = (item['attachmentId'] ?? '').toString();
