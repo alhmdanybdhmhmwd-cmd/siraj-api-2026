@@ -1947,6 +1947,13 @@ export default {
             FOREIGN KEY (status_id) REFERENCES status_posts(id) ON DELETE CASCADE
           )
         `).run();
+        // Upgrade a pre-existing Preview table in place; CREATE IF NOT EXISTS
+        // cannot add columns to tables created by older deployments.
+        const statusMediaColumns = await env.DB.prepare("PRAGMA table_info(status_media)").all();
+        const statusMediaColumnNames = new Set((statusMediaColumns.results || []).map(column => column.name));
+        if (!statusMediaColumnNames.has("caption")) {
+          await env.DB.prepare("ALTER TABLE status_media ADD COLUMN caption TEXT NOT NULL DEFAULT ''").run();
+        }
         await env.DB.prepare("CREATE TABLE IF NOT EXISTS media_expirations (object_key TEXT PRIMARY KEY, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
         await env.DB.prepare(`
           CREATE TABLE IF NOT EXISTS media_access (
