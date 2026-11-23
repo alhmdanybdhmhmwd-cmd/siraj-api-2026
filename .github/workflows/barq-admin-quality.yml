@@ -84,3 +84,29 @@ jobs:
         run: flutter analyze
       - name: Run Admin mobile tests
         run: flutter test
+
+  admin-android-apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.50.1"
+          channel: stable
+          cache: true
+      - name: Generate Android platform project
+        run: flutter create --platforms=android --org com.barq .
+      - name: Resolve Flutter dependencies
+        run: flutter pub get
+      - name: Build installable debug APK
+        run: flutter build apk --debug
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: barq-admin-debug-apk
+          path: admin/mobile/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
