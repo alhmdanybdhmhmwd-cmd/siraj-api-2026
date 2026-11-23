@@ -4,7 +4,7 @@ const MAX_CHUNK_CHARS = 18000;
 const MAX_FILES_PER_RUN = 300;
 const ALLOWED_EXTENSIONS = new Set([
   ".md", ".mdx", ".txt", ".dart", ".js", ".mjs", ".ts", ".tsx",
-  ".jsx", ".sql", ".yaml", ".yml", ".toml"
+  ".jsx", ".sql", ".yaml", ".yml", ".toml", ".xml", ".gradle", ".kts", ".properties", ".py", ".sh"
 ]);
 const SENSITIVE_PATH = /(^|\/)(\.git|\.next|\.dart_tool|build|dist|node_modules|vendor|coverage)(\/|$)|(^|\/)(\.env[^/]*|.*\.(pem|key|p12|pfx|keystore|jks|apk|aab|ipa|sqlite|db))$/i;
 const SECRET_CONTENT = [
