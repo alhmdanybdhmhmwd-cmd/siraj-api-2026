@@ -190,6 +190,7 @@ jobs:
       - name: Run Admin mobile tests
         run: flutter test
       - uses: android-actions/setup-android@v3
+        timeout-minutes: 15
         with:
           packages: "platform-tools platforms;android-36 build-tools;36.0.0"
       - name: Install Flutter-pinned Android NDK with transient-download retries
