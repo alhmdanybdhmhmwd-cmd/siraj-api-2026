@@ -5354,215 +5354,168 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Widget _statusesPage() {
     final palette = Theme.of(context).colorScheme;
-    final ownStatuses = statuses.where((item) =>
-      field(item, ['userId', 'user_id']) == myId).toList();
-    final friendStatuses = statuses.where((item) =>
-      field(item, ['userId', 'user_id']) != myId).toList();
+    final grouped = <String, List<Map<String, dynamic>>>{};
+    for (final status in statuses) {
+      final ownerId = field(status, ['userId', 'user_id']);
+      if (ownerId.isEmpty) continue;
+      grouped.putIfAbsent(ownerId, () => <Map<String, dynamic>>[]).add(status);
+    }
+    final own = grouped.remove(myId) ?? <Map<String, dynamic>>[];
+    final recent = grouped.entries.toList();
 
-    Widget storyAvatar(Map<String, dynamic> status, {bool own = false}) {
-      final photo = field(status, ['photoUrl', 'photo_url']);
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Stack(clipBehavior: Clip.none, children: [
-            Container(
-              padding: const EdgeInsets.all(3),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [palette.primary, palette.secondary, gold],
-                  begin: Alignment.topRight,
-                  end: Alignment.bottomLeft,
-                ),
-                boxShadow: [BoxShadow(
-                  color: palette.primary.withValues(alpha: .20),
-                  blurRadius: 12,
-                  spreadRadius: 1,
-                )],
-              ),
-              child: Container(
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  color: palette.surface,
-                  shape: BoxShape.circle,
-                ),
-                child: CircleAvatar(
-                  radius: 29,
-                  backgroundColor: palette.surfaceContainerHighest,
-                  backgroundImage: photo.isEmpty ? null : NetworkImage(
-                    '$apiBase$photo?v=${Uri.encodeComponent(field(status, ['photoUpdatedAt', 'photo_updated_at']))}',
-                    headers: {'Authorization': 'Bearer ${Api.token}'},
-                  ),
-                  child: photo.isEmpty
-                    ? Icon(Icons.person_rounded, color: palette.onSurfaceVariant, size: 27)
-                    : null,
-                ),
-              ),
-            ),
-            if (own)
-              Positioned(
-                bottom: -1,
-                right: -2,
-                child: Container(
-                  width: 23, height: 23,
-                  decoration: BoxDecoration(
-                    color: palette.primary,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: palette.surface, width: 2),
-                  ),
-                  child: const Icon(Icons.add_rounded, size: 16, color: Colors.white),
-                ),
-              ),
-          ]),
-          const SizedBox(height: 7),
-          SizedBox(
-            width: 72,
-            child: Text(
-              own ? 'حالتي' : field(status, ['displayName', 'display_name', 'username'], 'مستخدم'),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: own ? FontWeight.w800 : FontWeight.w500,
-                color: palette.onSurface,
-              ),
-            ),
+    Widget avatarFor(Map<String, dynamic>? status, {bool isOwn = false, bool viewed = false}) {
+      final source = isOwn ? me : (status ?? const <String, dynamic>{});
+      final photo = field(source, ['photoUrl', 'photo_url']);
+      return Container(
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: viewed ? palette.outlineVariant : palette.primary,
+            width: 2.2,
           ),
-        ],
+        ),
+        child: CircleAvatar(
+          radius: 25,
+          backgroundColor: palette.surfaceContainerHighest,
+          backgroundImage: photo.isEmpty ? null : NetworkImage(
+            '$apiBase$photo?v=${Uri.encodeComponent(field(source, ['photoUpdatedAt', 'photo_updated_at']))}',
+            headers: {if (Api.token != null) 'Authorization': 'Bearer ${Api.token}'},
+          ),
+          child: photo.isEmpty
+              ? Icon(Icons.person_rounded, color: palette.onSurfaceVariant, size: 25)
+              : null,
+        ),
       );
     }
+
+    Widget statusRow({
+      required String name,
+      required String subtitle,
+      required Map<String, dynamic>? status,
+      required bool isOwn,
+      required bool viewed,
+    }) {
+      final statusId = field(status ?? const <String, dynamic>{}, ['id']);
+      final count = int.tryParse(field(status ?? const <String, dynamic>{}, ['viewCount', 'view_count'], '0')) ?? 0;
+      return ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 1),
+        leading: Stack(clipBehavior: Clip.none, children: [
+          avatarFor(status, isOwn: isOwn, viewed: viewed),
+          if (isOwn)
+            Positioned(
+              bottom: -1, right: -1,
+              child: Container(
+                width: 21, height: 21,
+                decoration: BoxDecoration(
+                  color: palette.primary, shape: BoxShape.circle,
+                  border: Border.all(color: palette.surface, width: 2),
+                ),
+                child: const Icon(Icons.add_rounded, color: Colors.white, size: 14),
+              ),
+            ),
+        ]),
+        title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+        subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: palette.onSurfaceVariant, fontSize: 12)),
+        trailing: isOwn && status != null
+            ? InkWell(
+                borderRadius: BorderRadius.circular(18),
+                onTap: statusId.isEmpty ? null : () => _showSparkViewers(statusId),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 8),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.visibility_outlined, size: 17, color: palette.onSurfaceVariant),
+                    const SizedBox(width: 5),
+                    Text('$count', style: TextStyle(color: palette.onSurfaceVariant, fontSize: 12)),
+                  ]),
+                ),
+              )
+            : null,
+        onTap: isOwn
+            ? (status == null ? publishStatusDialog : () => _openSparkStatus(status))
+            : status == null ? null : () => _openSparkStatus(status),
+      );
+    }
+
+    final latestOwn = own.isEmpty ? null : own.first;
+    final latestFriends = recent.map((entry) => entry.value.first).toList();
+    final unviewed = latestFriends.where((item) => item['isViewed'] != true && item['is_viewed'] != true).toList();
+    final viewed = latestFriends.where((item) => item['isViewed'] == true || item['is_viewed'] == true).toList();
 
     return RefreshIndicator(
       color: palette.primary,
       onRefresh: refreshAll,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
         children: [
-          Row(children: [
-            Container(
-              width: 42, height: 42,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                color: palette.primary.withValues(alpha: .13),
-                border: Border.all(color: palette.primary.withValues(alpha: .28)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 4, 4, 12),
+            child: Row(children: [
+              Icon(Icons.bolt_rounded, color: palette.primary, size: 25),
+              const SizedBox(width: 8),
+              Text('SPARK', style: TextStyle(
+                color: palette.primary, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 1.1)),
+              const Spacer(),
+              IconButton(
+                tooltip: 'نشر حالة نصية',
+                onPressed: publishStatusDialog,
+                icon: Icon(Icons.edit_note_rounded, color: palette.onSurfaceVariant),
               ),
-              child: Icon(Icons.bolt_rounded, color: palette.primary, size: 25),
-            ),
-            const SizedBox(width: 11),
-            Expanded(child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('SPARK', style: TextStyle(
-                  color: palette.primary,
-                  fontSize: 21,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.4,
-                )),
-                Text('لحظات تنبض بالضوء',
-                  style: TextStyle(color: palette.onSurfaceVariant, fontSize: 11)),
-              ],
-            )),
-            IconButton(
-              tooltip: 'نشر لحظة',
-              onPressed: publishSparkMediaDialog,
-              icon: Icon(Icons.add_circle_outline_rounded, color: palette.primary, size: 27),
-            ),
-          ]),
-          const SizedBox(height: 18),
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 12),
-            decoration: BoxDecoration(
-              color: palette.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: palette.outline.withValues(alpha: .16)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Text('اللحظات', style: TextStyle(
-                    color: palette.onSurface, fontSize: 15, fontWeight: FontWeight.w800)),
-                  const Spacer(),
-                  Text('تختفي بعد 24 ساعة', style: TextStyle(
-                    color: palette.onSurfaceVariant, fontSize: 10)),
-                ]),
-                const SizedBox(height: 14),
-                SizedBox(
-                  height: 99,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    children: [
-                      GestureDetector(
-                        onTap: ownStatuses.isEmpty ? publishStatusDialog : () => _openSparkStatus(ownStatuses.first),
-                        child: SizedBox(
-                          width: 78,
-                          child: ownStatuses.isEmpty
-                            ? Column(mainAxisSize: MainAxisSize.min, children: [
-                                Container(
-                                  padding: const EdgeInsets.all(3),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: palette.outline.withValues(alpha: .35), width: 1.5),
-                                  ),
-                                  child: CircleAvatar(
-                                    radius: 29,
-                                    backgroundColor: palette.surfaceContainerHighest,
-                                    child: Icon(Icons.person_outline_rounded, color: palette.onSurfaceVariant, size: 27),
-                                  ),
-                                ),
-                                const SizedBox(height: 7),
-                                const Text('حالتي', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
-                              ])
-                            : storyAvatar(ownStatuses.first, own: true),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      for (final status in friendStatuses)
-                        Padding(
-                          padding: const EdgeInsetsDirectional.only(end: 9),
-                          child: GestureDetector(
-                            onTap: () => _openSparkStatus(status),
-                            child: storyAvatar(status),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              IconButton(
+                tooltip: 'نشر صورة أو فيديو',
+                onPressed: publishSparkMediaDialog,
+                icon: Icon(Icons.camera_alt_outlined, color: palette.primary),
+              ),
+            ]),
           ),
-          const SizedBox(height: 18),
-          Row(children: [
-            Icon(Icons.auto_awesome_rounded, color: palette.primary, size: 18),
-            const SizedBox(width: 7),
-            Text('شارك لحظتك', style: TextStyle(
-              color: palette.onSurface, fontSize: 14, fontWeight: FontWeight.w800)),
-          ]),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(child: _sparkComposeAction(
-              icon: Icons.text_fields_rounded,
-              label: 'حالة نصية',
-              onTap: publishStatusDialog,
-            )),
-            const SizedBox(width: 9),
-            Expanded(child: _sparkComposeAction(
-              icon: Icons.photo_library_outlined,
-              label: 'صورة أو فيديو',
-              onTap: publishSparkMediaDialog,
-            )),
-          ]),
+          Text('حالتي', style: TextStyle(
+            color: palette.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 3),
+          statusRow(
+            name: 'حالتي',
+            subtitle: latestOwn == null ? 'اضغط لإضافة تحديث جديد' : 'اضغط لعرض تحديثاتك',
+            status: latestOwn, isOwn: true, viewed: false,
+          ),
+          if (unviewed.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text('التحديثات الأخيرة', style: TextStyle(
+              color: palette.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 3),
+            for (final status in unviewed)
+              statusRow(
+                name: field(status, ['displayName', 'display_name', 'username'], 'مستخدم برق'),
+                subtitle: field(status, ['createdAt', 'created_at']).isEmpty
+                    ? 'تحديث جديد'
+                    : _messageTime(field(status, ['createdAt', 'created_at'])),
+                status: status, isOwn: false, viewed: false,
+              ),
+          ],
+          if (viewed.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Text('التحديثات التي تمت مشاهدتها', style: TextStyle(
+              color: palette.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 3),
+            for (final status in viewed)
+              statusRow(
+                name: field(status, ['displayName', 'display_name', 'username'], 'مستخدم برق'),
+                subtitle: field(status, ['createdAt', 'created_at']).isEmpty
+                    ? 'تمت المشاهدة'
+                    : _messageTime(field(status, ['createdAt', 'created_at'])),
+                status: status, isOwn: false, viewed: true,
+              ),
+          ],
           if (statuses.isEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 38),
               child: Column(children: [
-                Icon(Icons.bolt_rounded, color: palette.primary.withValues(alpha: .65), size: 45),
-                const SizedBox(height: 10),
-                Text('مساحتك تبدأ من هنا', style: TextStyle(
-                  color: palette.onSurface, fontWeight: FontWeight.w800, fontSize: 15)),
-                const SizedBox(height: 5),
-                Text('انشر أول لحظة لتشارك أصدقاءك ما يحدث معك.',
+                Icon(Icons.bolt_rounded, color: palette.primary.withValues(alpha: .65), size: 42),
+                const SizedBox(height: 9),
+                Text('لا توجد تحديثات بعد', style: TextStyle(
+                  color: palette.onSurface, fontWeight: FontWeight.w800, fontSize: 14)),
+                const SizedBox(height: 4),
+                Text('انشر أول لحظة وشاركها مع أصدقائك.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: palette.onSurfaceVariant, fontSize: 12)),
               ]),
@@ -9516,7 +9469,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       return;
     }
     final text = controller.text.trim();
-    if (text.isEmpty || sending) return;
+    if (text.isEmpty) return;
     if (!isBarqMessageTextAllowed(text)) {
       showMsg(context, 'الرسالة طويلة جدًا؛ الحد الأقصى 5000 حرف.');
       return;
@@ -9821,9 +9774,9 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                             return Align(
                               alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
                               child: Container(
-                                constraints: const BoxConstraints(maxWidth: 330),
+                                constraints: const BoxConstraints(maxWidth: 292),
                                 margin: const EdgeInsets.symmetric(vertical: 4),
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
                                     begin: Alignment.topRight,
@@ -10243,7 +10196,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                 backgroundColor: Theme.of(context).colorScheme.primary,
                                 foregroundColor: Theme.of(context).colorScheme.onPrimary,
                               ),
-                              onPressed: sending ? null : send,
+                              onPressed: send,
                               icon: const Icon(Icons.send_rounded),
                             ),
                           );
@@ -10967,7 +10920,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
 
   Future<void> send() async {
     final body = controller.text.trim();
-    if (body.isEmpty || sending) return;
+    if (body.isEmpty) return;
     if (!isBarqMessageTextAllowed(body)) {
       showMsg(context, 'الرسالة طويلة جدًا؛ الحد الأقصى 5000 حرف.');
       return;
@@ -11350,9 +11303,9 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                     return Align(
                       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
                       child: Container(
-                        constraints: const BoxConstraints(maxWidth: 310),
+                        constraints: const BoxConstraints(maxWidth: 292),
                         margin: const EdgeInsets.symmetric(vertical: 4),
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             begin: Alignment.topRight,
