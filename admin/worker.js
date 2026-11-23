@@ -1110,6 +1110,39 @@ async function handle(request, env) {
   return response({ error: "not_found" }, 404, allowedOrigin);
 }
 
+async function processAdminDeadLetterMessage(message, env) {
+  const payload = message.body;
+  if (!payload || typeof payload.taskId !== "string" || typeof payload.workspaceId !== "string") {
+    message.ack();
+    return;
+  }
+  if (!env.ADMIN_DB) {
+    message.retry({ delaySeconds: 60 });
+    return;
+  }
+
+  try {
+    const result = await env.ADMIN_DB.prepare(`
+      UPDATE admin_tasks
+      SET status = 'failed', lease_owner = NULL, lease_expires_at = NULL,
+        next_action = 'Review the task failure recorded in the dead-letter queue',
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND workspace_id = ? AND status IN ('queued', 'running')
+    `).bind(payload.taskId, payload.workspaceId).run();
+
+    if (result?.meta?.changes) {
+      await audit(env, payload.workspaceId,
+        { subject: "barq-admin-dead-letter", deviceId: "server-queue" },
+        "task.server_execution.dead_lettered", "task", payload.taskId,
+        { queue: "barq-admin-preview-dlq" });
+    }
+    message.ack();
+  } catch (error) {
+    console.error("BARQ Admin dead-letter handling failed:", error);
+    message.retry({ delaySeconds: 60 });
+  }
+}
+
 export default {
   async fetch(request, env) {
     try {
@@ -1120,8 +1153,13 @@ export default {
     }
   },
   async queue(batch, env) {
+    const isDeadLetter = batch.queue === "barq-admin-preview-dlq";
     for (const message of batch.messages) {
-      await processAdminTaskMessage(message, env);
+      if (isDeadLetter) {
+        await processAdminDeadLetterMessage(message, env);
+      } else {
+        await processAdminTaskMessage(message, env);
+      }
     }
   }
 };
