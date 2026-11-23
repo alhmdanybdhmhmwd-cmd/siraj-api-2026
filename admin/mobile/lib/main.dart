@@ -795,9 +795,21 @@ class _AdminHomePageState extends State<AdminHomePage>
         );
         for (final item in (history['messages'] as List? ?? const [])) {
           if (item is Map) {
+            var content = (item['content'] ?? '').toString();
+            final sources = item['sources'];
+            if (sources is List && sources.isNotEmpty) {
+              final references = sources.whereType<Map>().map((source) {
+                final path = (source['sourcePath'] ?? '').toString();
+                final revision = (source['sourceRevision'] ?? '').toString();
+                return revision.isEmpty
+                    ? '• ' + path
+                    : '• ' + path + ' @ ' + revision;
+              }).join('\\n');
+              content += '\\n\\nالمصادر التي استند إليها:\\n' + references;
+            }
             messages.add({
               'role': (item['role'] ?? 'assistant').toString(),
-              'content': (item['content'] ?? '').toString(),
+              'content': content,
             });
           }
         }
