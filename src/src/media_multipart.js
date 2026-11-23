@@ -111,5 +111,5 @@ export function matchesUploadDeclaration(existing, declaration, recipientId, gro
     existing?.groupId === groupId &&
     existing?.contentType === declaration.contentType &&
     existing?.fileName === declaration.fileName &&
-    String(existing?.caption || '') === declaration.caption;
+    String(existing?.caption || '') === String(declaration?.caption || '');
 }
