@@ -1251,6 +1251,131 @@ export default {
         return json({ message: "Account and associated data deleted" });
       }
 
+      // Permanently delete the authenticated account only after an explicit username confirmation.
+      // Media objects are first queued for the existing storage-cleanup worker; access rows are
+      // removed in the same D1 batch so the deleted account cannot continue reading them.
+      if (method === "DELETE" && path === "/api/account") {
+        const body = await readJsonRequestLimited(request);
+        const account = await env.DB.prepare(
+          "SELECT id, username FROM users WHERE id = ?"
+        ).bind(currentUser.sub).first();
+        if (!account) return json({ error: "Account not found" }, 404);
+        const confirmation = String(body?.confirmUsername || "").trim();
+        if (!confirmation || confirmation.toLowerCase() !== String(account.username || "").toLowerCase()) {
+          return json({ error: "Username confirmation does not match this account" }, 403);
+        }
+
+        const tableRows = await env.DB.prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).all();
+        const tables = new Set((tableRows.results || []).map(row => row.name));
+        const has = name => tables.has(name);
+        const objectKeys = new Set();
+        const collectKeys = async (sql, ...values) => {
+          const rows = await env.DB.prepare(sql).bind(...values).all();
+          for (const row of rows.results || []) {
+            const key = String(row.object_key || "").trim();
+            if (key && key.length <= 512 && !key.startsWith("/") &&
+                !key.split("/").some(part => !part || part === "." || part === "..")) {
+              objectKeys.add(key);
+            }
+          }
+        };
+
+        if (has("media_access")) {
+          await collectKeys("SELECT object_key FROM media_access WHERE owner_id = ?", currentUser.sub);
+        }
+        if (has("profile_photos")) {
+          await collectKeys("SELECT object_key FROM profile_photos WHERE user_id = ?", currentUser.sub);
+        }
+        if (has("private_memory_media")) {
+          await collectKeys("SELECT object_key FROM private_memory_media WHERE owner_id = ?", currentUser.sub);
+        }
+        if (has("status_media") && has("status_posts")) {
+          await collectKeys(
+            "SELECT sm.object_key FROM status_media sm JOIN status_posts sp ON sp.id = sm.status_id WHERE sp.user_id = ?",
+            currentUser.sub
+          );
+        }
+        if (has("status_audio_replies")) {
+          await collectKeys("SELECT object_key FROM status_audio_replies WHERE user_id = ?", currentUser.sub);
+        }
+
+        // Abort any unfinished multipart uploads before deleting their owning session rows.
+        if (has("media_upload_sessions")) {
+          await env.DB.prepare(
+            "UPDATE media_upload_sessions SET expires_at = ? WHERE owner_id = ? AND state IN ('uploading', 'completing', 'failed')"
+          ).bind(new Date(Date.now() - 1000).toISOString(), currentUser.sub).run();
+          try {
+            for (let attempt = 0; attempt < 4; attempt++) {
+              const cleaned = await cleanupExpiredUploadSessions(env);
+              if (!cleaned.checked || cleaned.checked < 50) break;
+            }
+          } catch (error) {
+            console.error("Account deletion could not safely abort pending media uploads:", error?.name || "Error");
+            return json({ error: "Pending media uploads could not be safely closed. Please retry account deletion." }, 503);
+          }
+        }
+
+        if (!has("media_expirations")) {
+          await env.DB.prepare(
+            "CREATE TABLE IF NOT EXISTS media_expirations (object_key TEXT PRIMARY KEY, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+          ).run();
+        }
+        const statements = [];
+        const add = (table, sql, ...values) => {
+          if (has(table)) statements.push(env.DB.prepare(sql).bind(...values));
+        };
+        const cleanupAt = new Date(Date.now() - 1000).toISOString();
+        for (const key of objectKeys) {
+          statements.push(env.DB.prepare(
+            "INSERT INTO media_expirations (object_key, expires_at) VALUES (?, ?) ON CONFLICT(object_key) DO UPDATE SET expires_at = excluded.expires_at"
+          ).bind(key, cleanupAt));
+        }
+
+        // Preserve groups that still have members by transferring ownership before the account is removed.
+        if (has("chat_groups") && has("group_members")) {
+          statements.push(env.DB.prepare(
+            "UPDATE chat_groups SET owner_id = (SELECT gm.user_id FROM group_members gm WHERE gm.group_id = chat_groups.id AND gm.user_id <> ? ORDER BY gm.joined_at ASC LIMIT 1) WHERE owner_id = ? AND EXISTS (SELECT 1 FROM group_members gm WHERE gm.group_id = chat_groups.id AND gm.user_id <> ?)"
+          ).bind(currentUser.sub, currentUser.sub, currentUser.sub));
+        }
+
+        // Remove user-authored and user-received content before deleting the user row.
+        add("group_hidden_messages", "DELETE FROM group_hidden_messages WHERE user_id = ?", currentUser.sub);
+        add("hidden_private_messages", "DELETE FROM hidden_private_messages WHERE user_id = ?", currentUser.sub);
+        add("hidden_ephemeral_messages", "DELETE FROM hidden_ephemeral_messages WHERE user_id = ?", currentUser.sub);
+        add("message_reactions", "DELETE FROM message_reactions WHERE user_id = ?", currentUser.sub);
+        add("pinned_messages", "DELETE FROM pinned_messages WHERE pinned_by = ?", currentUser.sub);
+        add("status_reactions", "DELETE FROM status_reactions WHERE user_id = ?", currentUser.sub);
+        add("status_replies", "DELETE FROM status_replies WHERE user_id = ?", currentUser.sub);
+        add("status_views", "DELETE FROM status_views WHERE viewer_id = ?", currentUser.sub);
+        add("status_audio_replies", "DELETE FROM status_audio_replies WHERE user_id = ?", currentUser.sub);
+        add("messages", "DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?", currentUser.sub, currentUser.sub);
+        add("ephemeral_messages", "DELETE FROM ephemeral_messages WHERE sender_id = ? OR receiver_id = ?", currentUser.sub, currentUser.sub);
+        add("group_messages", "DELETE FROM group_messages WHERE sender_id = ?", currentUser.sub);
+        add("group_message_reads", "DELETE FROM group_message_reads WHERE user_id = ?", currentUser.sub);
+        add("group_invites", "DELETE FROM group_invites WHERE created_by = ?", currentUser.sub);
+        add("group_member_roles", "DELETE FROM group_member_roles WHERE user_id = ?", currentUser.sub);
+        add("group_members", "DELETE FROM group_members WHERE user_id = ?", currentUser.sub);
+        add("friendships", "DELETE FROM friendships WHERE user_id = ? OR friend_id = ?", currentUser.sub, currentUser.sub);
+        add("private_conversation_state", "DELETE FROM private_conversation_state WHERE user_id = ? OR peer_id = ?", currentUser.sub, currentUser.sub);
+        add("blocked_users", "DELETE FROM blocked_users WHERE blocker_id = ? OR blocked_id = ?", currentUser.sub, currentUser.sub);
+        add("status_posts", "DELETE FROM status_posts WHERE user_id = ?", currentUser.sub);
+        add("private_memories", "DELETE FROM private_memories WHERE owner_id = ?", currentUser.sub);
+        add("profile_photos", "DELETE FROM profile_photos WHERE user_id = ?", currentUser.sub);
+        add("media_access", "UPDATE media_access SET recipient_id = NULL WHERE recipient_id = ? AND owner_id <> ?", currentUser.sub, currentUser.sub);
+        add("media_access", "DELETE FROM media_access WHERE owner_id = ?", currentUser.sub);
+        add("users", "DELETE FROM users WHERE id = ?", currentUser.sub);
+
+        try {
+          if (statements.length) await env.DB.batch(statements);
+        } catch (error) {
+          console.error("Account deletion D1 transaction failed:", error?.name || "Error");
+          return json({ error: "Account data could not be deleted safely. No success was reported; please retry." }, 503);
+        }
+        return json({ message: "Account deleted", mediaCleanupQueued: objectKeys.size });
+      }
+
       // Revoke only this bearer token; other device sessions remain valid.
       if (method === "POST" && path === "/api/logout") {
         const authHeader = request.headers.get("Authorization") || "";
