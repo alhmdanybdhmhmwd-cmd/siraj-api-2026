@@ -2,7 +2,7 @@
 
 **Purpose:** This note is the integration and ownership boundary between the independent BARQ Admin project and the original BARQ consumer app. It is written so a separate development conversation can understand what is ready, what is missing, and what must not be mixed.
 
-**Last verified Admin commit:** `a3ad463e237eb6e9598c70dfef52eb7bdf11ed49`  
+**Last reviewed Admin workstream:** `dfcc121a6dc7197ed7cbf30cb024d69385cc6cc9` (auth test hardening)\n**Latest roadmap update:** `6984fadc16285aa88c5aa2e94b7f5c0886396c69`  
 **Admin branch:** `barq-admin-foundation-2026-11-23`  
 **Admin PR:** [#11](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026/pull/11)  
 **Consumer-app branch (separate workstream):** `barq/ux-media-chat-spark-2026-11-23`
@@ -41,10 +41,11 @@ This proves the CI jobs passed for that commit. It does **not** prove that a dep
 ## 4. Critical missing pieces / known risks
 
 ### Identity and device security
-1. There is no production-grade owner sign-in or trusted token issuer in this project yet. The mobile app currently accepts a temporary owner API URL and bearer token through a setup screen.
-2. No server-backed device-session registry, refresh-token rotation, per-device revocation, or revoke-all-sessions flow is complete.
-3. Key rotation, rate limiting, abuse controls, and a full threat review remain outstanding.
-4. Never put the JWT signing secret, provider credentials, GitHub tokens, or other server secrets in the APK.
+1. Google OIDC Authorization Code + PKCE, Worker-side RS256/claims/nonce verification, owner allowlisting, short-lived Admin JWTs, and rotating opaque refresh tokens are implemented in code.
+2. Server-backed device/session records, refresh-token hash history and replay revocation, logout, device listing, per-device revocation, and revoke-all routes are implemented in code.
+3. Auth rate limiting and append-only security audit events are implemented; signing-key rotation procedures, concurrency-focused refresh tests, full threat review, and live integration validation remain outstanding.
+4. The mobile client includes AppAuth, secure token storage, refresh handling, logout, and a device-management dialog. Real Google credentials, dedicated Preview bindings, and physical-device callback/revocation tests have not yet been supplied or verified.
+5. Never put the JWT signing secret, provider credentials, GitHub tokens, or other server secrets in the APK.
 
 ### Worker reliability and long-running execution
 1. Queue/D1/Workers AI bindings are not configured and verified in a dedicated Admin Preview environment.
