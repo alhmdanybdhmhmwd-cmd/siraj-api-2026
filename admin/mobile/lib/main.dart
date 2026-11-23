@@ -126,6 +126,7 @@ class _AdminHomePageState extends State<AdminHomePage>
     _refreshToken = await _secure.read(key: 'barq_admin_refresh_token') ?? '';
     _sessionId = await _secure.read(key: 'barq_admin_session_id') ?? '';
     _readCache(prefs);
+    _mergeOutboxDrafts(prefs);
     if (_apiBase.isEmpty || _token.isEmpty) {
       if (mounted)
         setState(() {
@@ -254,24 +255,7 @@ class _AdminHomePageState extends State<AdminHomePage>
           .whereType<Map>()
           .map((item) => Map<String, dynamic>.from(item))
           .toList();
-      final existingIds = _tasks.map((task) => task.id).toSet();
-      final drafts = <AdminTask>[];
-      for (final item in pending) {
-        final key = (item['idempotencyKey'] ?? '').toString();
-        final title = (item['title'] ?? '').toString().trim();
-        if (key.isEmpty || title.isEmpty) continue;
-        final id = 'local-' + key;
-        if (!existingIds.add(id)) continue;
-        drafts.add(AdminTask(
-          id: id,
-          title: title,
-          description: (item['description'] ?? '').toString(),
-          priority: (item['priority'] ?? 'normal').toString(),
-          status: 'draft_offline',
-          nextAction: 'سيتم الإرسال عند عودة الاتصال',
-        ));
-      }
-      _tasks = [...drafts, ..._tasks];
+      _tasks = mergeOutboxDrafts(_tasks, pending);
     } catch (_) {
       // Ignore malformed local drafts; keep the server/cache snapshot usable.
     }
