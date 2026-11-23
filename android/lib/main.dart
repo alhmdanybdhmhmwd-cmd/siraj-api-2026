@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
@@ -10166,7 +10167,6 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
             child: members.isEmpty
                 ? const Center(child: Text('لا يوجد أعضاء لعرضهم.'))
                 : ListView.builder(
-                   controller: messagesScrollController,
                     itemCount: members.length,
                     itemBuilder: (context, index) {
                       final member = members[index];
