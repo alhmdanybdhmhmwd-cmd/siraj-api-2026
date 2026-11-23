@@ -25,9 +25,12 @@ export async function sendBarqPushNotification(
   const category = ["groups", "statuses"].includes(options.category) ? options.category : "messages";
   const pushType = category === "groups" ? "group_message"
     : category === "statuses" ? "status_update" : "direct_message";
-  if (!env?.FCM_SERVICE_ACCOUNT_JSON) return;
-  const cryptoImpl = dependencies.cryptoImpl || globalThis.crypto;
   const logger = dependencies.logger || console;
+  if (!env?.FCM_SERVICE_ACCOUNT_JSON) {
+    logger.warn?.("BARQ push delivery skipped: FCM_SERVICE_ACCOUNT_JSON is not configured");
+    return;
+  }
+  const cryptoImpl = dependencies.cryptoImpl || globalThis.crypto;
   const nowProvider = dependencies.now || Date.now;
   let pushProvider;
   try {
@@ -93,6 +96,10 @@ export async function sendBarqPushNotification(
     const devices = await env.DB.prepare(
       "SELECT fcm_token FROM device_tokens WHERE user_id = ?"
     ).bind(recipientId).all();
+    if (!(devices.results || []).length) {
+      logger.warn?.("BARQ push delivery skipped: recipient has no registered devices");
+      return;
+    }
 
     const preview = String(messageText || "").slice(0, 120);
     await Promise.all((devices.results || []).map(async device => {
