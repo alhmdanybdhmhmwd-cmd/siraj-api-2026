@@ -5708,7 +5708,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             onChanged: (value) => setState(() => conversationQuery = value),
             textInputAction: TextInputAction.search,
             decoration: InputDecoration(
-              hintText: 'ابحث عن محادثة أو شخص...',
+              hintText: 'ابحث في المحادثات وجهات الاتصال والمجموعات...',
               prefixIcon: Icon(Icons.search_rounded, color: palette.primary),
               suffixIcon: conversationQuery.isEmpty ? null : IconButton(
                 tooltip: 'مسح البحث', icon: const Icon(Icons.close_rounded),
