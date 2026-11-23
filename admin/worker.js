@@ -653,10 +653,20 @@ async function handle(request, env) {
       return response({ error: "invalid_logout_request" }, 400, allowedOrigin);
     }
     const hash = await authSha256Hex(body.refreshToken);
+    const session = await env.ADMIN_DB.prepare(`
+      SELECT owner_subject, device_id FROM admin_owner_sessions
+      WHERE id = ? AND refresh_token_hash = ? AND revoked_at IS NULL
+    `).bind(body.sessionId, hash).first();
+    if (!session) return response({ ok: false }, 200, allowedOrigin);
     const ended = await env.ADMIN_DB.prepare(`
       UPDATE admin_owner_sessions SET revoked_at = CURRENT_TIMESTAMP
       WHERE id = ? AND refresh_token_hash = ? AND revoked_at IS NULL
     `).bind(body.sessionId, hash).run();
+    if (ended?.meta?.changes) {
+      await audit(env, workspaceId(session.owner_subject),
+        { subject: session.owner_subject, deviceId: session.device_id },
+        "auth.owner_session.logged_out", "session", body.sessionId, {});
+    }
     return response({ ok: Boolean(ended?.meta?.changes) }, 200, allowedOrigin);
   }
 
