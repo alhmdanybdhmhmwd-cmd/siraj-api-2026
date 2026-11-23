@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateKnowledgeInput, rankKnowledgeChunks } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateKnowledgeInput, rankKnowledgeChunks } from "./worker.js";
 
 test("task input is normalized and bounded", () => {
   assert.deepEqual(validateTaskInput({ title: "  Prepare global launch  ", priority: "high" }), {
@@ -92,6 +92,17 @@ test("BARQ Brain prompts include current workspace context and no execution auth
   assert.match(messages[0].content, /two-hour target/);
   assert.match(messages[0].content, /has not yet selected the identity provider/);
   assert.match(messages[0].content, /Google OIDC was only proposed, not approved/);
+});
+
+test("image generation prompt is required and bounded", () => {
+  assert.deepEqual(validateImageGenerationInput({ prompt: "  A blue lightning bird above a futuristic city  " }), {
+    ok: true,
+    value: { prompt: "A blue lightning bird above a futuristic city" }
+  });
+  assert.equal(validateImageGenerationInput({ prompt: " " }).error, "invalid_image_prompt");
+  assert.equal(validateImageGenerationInput({ prompt: "x".repeat(1601) }).error, "invalid_image_prompt");
+  assert.equal(validateImageGenerationInput({ prompt: 42 }).ok, false);
+  assert.equal(validateImageGenerationInput(null).ok, false);
 });
 
 test("vision requests accept bounded JPEG PNG and WebP data URLs only", () => {
