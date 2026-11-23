@@ -11,7 +11,7 @@ import {
 const headers = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-File-Name, X-Recipient-Id, X-Group-Id, X-Idempotency-Key",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-File-Name, X-Recipient-Id, X-Group-Id, X-Idempotency-Key, X-Caption",
   "Content-Type": "application/json; charset=utf-8",
   "Cache-Control": "no-store",
   "X-Content-Type-Options": "nosniff",
@@ -67,6 +67,7 @@ async function ensureSessionSchema(env) {
   // accepting retries that cannot be compared with their original payload.
   await env.DB.prepare("SELECT sha256 FROM media_upload_chunks LIMIT 0").all();
   await env.DB.prepare("SELECT sha256 FROM media_upload_parts LIMIT 0").all();
+  await env.DB.prepare("SELECT caption FROM media_upload_sessions LIMIT 0").all();
 }
 function stagedChunkKey(session, chunkNumber) {
   return session.object_key + ".barq-staging/" + session.id + "/" + chunkNumber;
@@ -139,7 +140,7 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
       if (!body || typeof body !== "object") return json({ error: "Invalid upload declaration" }, 400);
       let declaration;
       try {
-        declaration = validateMultipartDeclaration({ size: body.size, contentType: body.contentType, fileName: body.fileName });
+        declaration = validateMultipartDeclaration({ size: body.size, contentType: body.contentType, fileName: body.fileName, caption: body.caption });
       } catch (error) { return json({ error: error.message }, 400); }
       const recipientId = String(body.recipientId || "").trim() || null;
       const groupId = String(body.groupId || "").trim() || null;
@@ -154,7 +155,7 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
       }
       const expectedParts = Math.ceil(declaration.size / MEDIA_MULTIPART_PART_SIZE);
       const existing = await env.DB.prepare(
-        "SELECT id, state, total_size AS size, expected_parts AS expectedParts, expires_at AS expiresAt, recipient_id AS recipientId, group_id AS groupId, content_type AS contentType, file_name AS fileName FROM media_upload_sessions WHERE owner_id = ? AND idempotency_key = ?"
+        "SELECT id, state, total_size AS size, expected_parts AS expectedParts, expires_at AS expiresAt, recipient_id AS recipientId, group_id AS groupId, content_type AS contentType, file_name AS fileName, caption FROM media_upload_sessions WHERE owner_id = ? AND idempotency_key = ?"
       ).bind(currentUser.sub, idempotencyKey).first();
       if (existing && !isUploadSessionExpired(existing.expiresAt) && ["uploading", "completing", "completed"].includes(existing.state)) {
         if (!matchesUploadDeclaration(existing, declaration, recipientId, groupId) ||
@@ -182,11 +183,11 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
         await env.DB.prepare(
           `INSERT INTO media_upload_sessions
            (id, owner_id, recipient_id, group_id, object_key, storage_upload_id,
-            file_name, content_type, total_size, part_size, expected_parts,
+            file_name, content_type, caption, total_size, part_size, expected_parts,
             idempotency_key, state, expires_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'uploading', ?)`
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'uploading', ?)`
         ).bind(id, currentUser.sub, recipientId, groupId, objectKey, uploadId,
-          declaration.fileName, declaration.contentType, declaration.size,
+          declaration.fileName, declaration.contentType, declaration.caption, declaration.size,
           MEDIA_MULTIPART_PART_SIZE, expectedParts, idempotencyKey, expiresAt).run();
       } catch (error) {
         await storage.delete(objectKey, { uploadId }).catch(() => {});
@@ -427,7 +428,8 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
         attachmentId: session.object_key,
         fileName: session.file_name,
         contentType: session.content_type,
-        size: Number(session.total_size)
+        size: Number(session.total_size),
+        caption: session.caption || ''
       });
       const completionStatements = [
         env.DB.prepare(
