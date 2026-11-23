@@ -153,6 +153,29 @@ jobs:
         with:
           channel: stable
           cache: true
+      - name: Preinstall Android NDK with retry
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          NDK_VERSION="28.2.13676358"
+          SDKMANAGER="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          # A transient SDK download previously left a truncated NDK archive.
+          # Remove only this version and retry installation before Gradle starts.
+          rm -rf "${ANDROID_HOME}/ndk/$NDK_VERSION"
+          for attempt in 1 2 3; do
+            if "$SDKMANAGER" --install "ndk;$NDK_VERSION"; then
+              test -d "${ANDROID_HOME}/ndk/$NDK_VERSION"
+              break
+            fi
+            rm -rf "${ANDROID_HOME}/ndk/$NDK_VERSION"
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::Unable to install Android NDK $NDK_VERSION after 3 attempts"
+              exit 1
+            fi
+            sleep $((attempt * 10))
+          done
       - name: Install Android dependencies
         if: success()
         working-directory: android
