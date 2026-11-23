@@ -2170,6 +2170,11 @@ class Api {
     if (saved == null) throw Exception('تم إلغاء حفظ الملف.');
   }
 
+  static Future<void> deleteAccount(String confirmUsername) async {
+    await request('DELETE', '/api/account', body: {'confirmUsername': confirmUsername});
+    await logout();
+  }
+
   static Future<void> logout() async {
     // Revoke this installation's push token before clearing the auth session.
     // A network failure must never trap the user in the account.
@@ -6904,6 +6909,60 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             applicationVersion: 'نسخة اختبار',
             applicationLegalese: 'التواصل بنبض الضوء',
           ),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: palette.error,
+            side: BorderSide(color: palette.error.withValues(alpha: .65)),
+          ),
+          onPressed: () async {
+            final confirmController = TextEditingController();
+            final confirmedUsername = await showDialog<String>(
+              context: context,
+              builder: (dialogContext) => AlertDialog(
+                title: const Text('حذف حساب برق نهائياً؟'),
+                content: Column(mainAxisSize: MainAxisSize.min, children: [
+                  const Text('سيتم حذف حسابك ورسائلك ووسائطك وبياناتك المرتبطة به. لا يمكن التراجع عن هذا الإجراء.'),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: confirmController,
+                    textDirection: TextDirection.ltr,
+                    decoration: InputDecoration(
+                      labelText: 'اكتب اسم المستخدم للتأكيد',
+                      hintText: username,
+                    ),
+                  ),
+                ]),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: const Text('إلغاء'),
+                  ),
+                  FilledButton(
+                    style: FilledButton.styleFrom(backgroundColor: palette.error),
+                    onPressed: () => Navigator.pop(dialogContext, confirmController.text.trim()),
+                    child: const Text('تأكيد الحذف'),
+                  ),
+                ],
+              ),
+            );
+            confirmController.dispose();
+            if (confirmedUsername == null || confirmedUsername.trim().isEmpty || !mounted) return;
+            try {
+              await Api.deleteAccount(confirmedUsername.trim());
+              if (!mounted) return;
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => const LoginPage()),
+                (_) => false,
+              );
+            } catch (error) {
+              if (mounted) showMsg(context, cleanError(error));
+            }
+          },
+          icon: const Icon(Icons.delete_forever_outlined),
+          label: const Text('حذف الحساب نهائياً'),
         ),
         const SizedBox(height: 12),
         OutlinedButton.icon(
