@@ -51,6 +51,8 @@ The Queue consumer and server-side assistant draft path exist in code, but dedic
 
 ## Flutter owner app (initial client shell)
 
+The Flutter sources are formatted with the repository formatter; CI enforces `dart format --output=none --set-exit-if-changed` before analysis and tests.
+
 The independent Flutter client is under `admin/mobile`. It includes an Arabic RTL owner dashboard, task list, approvals view, secure token storage, cached workspace/task/approval snapshots, and a local outbox for tasks created while offline. The outbox synchronizes with the server on the next successful app refresh/resume.
 
 Important offline boundary: a task created while the phone has no connection remains a local draft until it can reach the Admin API. Once a task has been accepted by the server queue, its analysis/drafting work runs server-side and can continue while the phone is offline. The owner sign-in flow uses Google OIDC Authorization Code + PKCE. Device/session controls are exposed by the Admin API; the mobile device-management screen and end-to-end Android callback validation remain to be completed and tested.
