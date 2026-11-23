@@ -310,13 +310,16 @@ test("account deletion is authenticated, username-confirmed, and revokes owned m
   assert.ok(flutterApp.includes("static Future<void> deleteAccount(String confirmUsername)"));
 });
 
-test("private and group attachments require a pre-send preview and confirmation", () => {
+test("private and group attachments appear locally before background upload", () => {
   assert.ok(flutterApp.includes("Future<bool> showBarqAttachmentPreview("));
-  assert.ok(flutterApp.includes("معاينة قبل الإرسال"));
-  assert.ok(flutterApp.includes("final confirmed = await showBarqAttachmentPreview("));
-  assert.ok(flutterApp.includes("if (!mounted || !confirmed) {\n        captionController.dispose();\n        return;\n      }"));
+  assert.ok(flutterApp.includes("'localPreparing': true"));
+  assert.ok(flutterApp.includes("جارٍ تجهيز الوسائط..."));
+  assert.ok(flutterApp.includes("messages = mergeMessages(messages, [local])"));
+  assert.ok(flutterApp.includes("unawaited(_uploadPendingAttachment(local))"));
   assert.ok(flutterApp.includes("contentType: contentType,"));
   assert.ok(flutterApp.includes("رفع المرفق"));
+  // The only remaining preview invocation belongs to SPARK publishing, not chat media.
+  assert.equal((flutterApp.match(/showBarqAttachmentPreview\(/g) || []).length, 2);
 });
 
 test("message reactions and bidirectional swipe-to-reply stay available in both chat types", () => {
@@ -326,6 +329,11 @@ test("message reactions and bidirectional swipe-to-reply stay available in both 
   assert.ok((flutterApp.match(/_replySwipeDistance\.abs\(\) > 48/g) || []).length >= 3);
   assert.ok((flutterApp.match(/\(details\.primaryVelocity \?\? 0\)\.abs\(\) > 260/g) || []).length >= 3);
   assert.ok(flutterApp.includes("onDoubleTap: () async"));
+  assert.ok((flutterApp.match(/onLongPress: \(\) => showMessageActions/g) || []).length >= 4);
+  assert.ok(flutterApp.includes("value: 'pin'"));
+  assert.ok(flutterApp.includes("Api.pinPrivateMessage("));
+  assert.ok(flutterApp.includes("Api.pinGroupMessage("));
+  assert.ok((flutterApp.match(/if \(m\['is_ephemeral'\] == true \|\| m\['is_offline_pending'\] == true\) return;/g) || []).length >= 4);
 });
 
 test("private and group chat composers use the unified Barq pill layout and reply previews", () => {
