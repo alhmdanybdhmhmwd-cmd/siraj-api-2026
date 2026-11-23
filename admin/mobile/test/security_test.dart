@@ -13,7 +13,10 @@ void main() {
     expect(isValidAdminApiBase('admin.example.com'), isFalse);
     expect(isValidAdminApiBase('https:///missing-host'), isFalse);
     expect(isValidAdminApiBase('https://user:pass@admin.example.com'), isFalse);
-    expect(isValidAdminApiBase('https://admin.example.com?token=secret'), isFalse);
+    expect(
+      isValidAdminApiBase('https://admin.example.com?token=secret'),
+      isFalse,
+    );
     expect(isValidAdminApiBase('https://admin.example.com#fragment'), isFalse);
     expect(isValidAdminApiBase(''), isFalse);
   });

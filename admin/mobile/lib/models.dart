@@ -24,7 +24,8 @@ class AdminTask {
     description: (json['description'] ?? '').toString(),
     nextAction: (json['next_action'] ?? json['nextAction'] ?? '').toString(),
     priority: (json['priority'] ?? 'normal').toString(),
-    checkpointVersion: (json['checkpoint_version'] ?? json['checkpointVersion'] ?? 0) as int,
+    checkpointVersion:
+        (json['checkpoint_version'] ?? json['checkpointVersion'] ?? 0) as int,
   );
 
   Map<String, dynamic> toJson() => {
@@ -55,6 +56,8 @@ class AdminApproval {
     id: (json['id'] ?? '').toString(),
     actionType: (json['action_type'] ?? json['actionType'] ?? '').toString(),
     status: (json['status'] ?? 'pending').toString(),
-    preview: Map<String, dynamic>.from(json['preview'] is Map ? json['preview'] as Map : const {}),
+    preview: Map<String, dynamic>.from(
+      json['preview'] is Map ? json['preview'] as Map : const {},
+    ),
   );
 }

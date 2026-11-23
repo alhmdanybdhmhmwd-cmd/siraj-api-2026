@@ -23,7 +23,8 @@ String googleOidcRedirectUri(String clientId) {
     throw ArgumentError('invalid_google_client_id');
   }
   final clientPrefix = clean.substring(0, clean.indexOf('.'));
-  if (clientPrefix.isEmpty || !RegExp(r'^[0-9]+-[A-Za-z0-9_-]+$').hasMatch(clientPrefix)) {
+  if (clientPrefix.isEmpty ||
+      !RegExp(r'^[0-9]+-[A-Za-z0-9_-]+$').hasMatch(clientPrefix)) {
     throw ArgumentError('invalid_google_client_id');
   }
   return 'com.googleusercontent.apps.$clientPrefix:/oauth2redirect';
