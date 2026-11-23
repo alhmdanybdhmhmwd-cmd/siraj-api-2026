@@ -1187,8 +1187,13 @@ export default {
         await addDelete("friendships", "user_id = ? OR friend_id = ?", currentUser.sub, currentUser.sub);
         await addDelete("blocked_users", "blocker_id = ? OR blocked_id = ?", currentUser.sub, currentUser.sub);
         await addDelete("private_conversation_state", "user_id = ? OR peer_id = ?", currentUser.sub, currentUser.sub);
+        if (objectKeys.size && await tableExists("media_expirations")) {
+          const keys = [...objectKeys];
+          statements.push(env.DB.prepare(
+            `DELETE FROM media_expirations WHERE object_key IN (${keys.map(() => "?").join(",")})`
+          ).bind(...keys));
+        }
         await addDelete("media_access", "owner_id = ? OR recipient_id = ?", currentUser.sub, currentUser.sub);
-        await addDelete("media_expirations", "object_key IN (SELECT object_key FROM media_access WHERE owner_id = ?)", currentUser.sub);
         await addDelete("status_posts", "user_id = ?", currentUser.sub);
         await addDelete("status_views", "viewer_id = ?", currentUser.sub);
         await addDelete("status_reactions", "user_id = ?", currentUser.sub);
