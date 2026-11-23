@@ -1139,6 +1139,13 @@ export default {
           return result.results || [];
         };
         const objectKeys = new Set();
+        const pendingUploads = await (async () => {
+          if (!(await tableExists("media_upload_sessions"))) return [];
+          return readRows(
+            "SELECT id, object_key, storage_upload_id FROM media_upload_sessions WHERE owner_id = ? AND state IN ('uploading', 'completing', 'failed')",
+            currentUser.sub,
+          );
+        })();
         const collect = async (sql, ...args) => {
           try {
             for (const row of await readRows(sql, ...args)) {
@@ -1165,15 +1172,34 @@ export default {
         }
 
         const storageConfigured = Boolean(env.TIGRIS_ACCESS_KEY_ID && env.TIGRIS_SECRET_ACCESS_KEY);
-        if (objectKeys.size && !storageConfigured) {
+        if ((objectKeys.size || pendingUploads.length) && !storageConfigured) {
           return json({ error: "Media storage is unavailable; account deletion was not completed" }, 503);
         }
-        if (objectKeys.size) {
+        if (objectKeys.size || pendingUploads.length) {
           const storage = createS3ObjectStorageProvider(env, AwsClient);
           for (const key of objectKeys) {
             const response = await storage.fetch(createObjectStorageUrl(env, key), { method: "DELETE" });
             if (!response.ok && response.status !== 404) {
               return json({ error: "Could not securely remove all account media; retry deletion" }, 503);
+            }
+          }
+          for (const upload of pendingUploads) {
+            const aborted = await storage.delete(upload.object_key, { uploadId: upload.storage_upload_id });
+            if (!aborted.ok && aborted.status !== 404) {
+              return json({ error: "Could not cancel an unfinished media upload; retry deletion" }, 503);
+            }
+            if (await tableExists("media_upload_chunks")) {
+              const chunks = await readRows(
+                "SELECT chunk_number FROM media_upload_chunks WHERE session_id = ?",
+                upload.id,
+              );
+              for (const chunk of chunks) {
+                const stagedKey = upload.object_key + ".barq-staging/" + upload.id + "/" + chunk.chunk_number;
+                const removed = await storage.delete(stagedKey);
+                if (!removed.ok && removed.status !== 404) {
+                  return json({ error: "Could not clean unfinished media chunks; retry deletion" }, 503);
+                }
+              }
             }
           }
         }
