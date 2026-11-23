@@ -43,11 +43,11 @@ The mobile app performs Google Authorization Code + PKCE using AppAuth and sends
 - `PATCH /v1/workspace` (optimistic project/phase position sync)
 - `GET /v1/approvals`, `POST /v1/approvals`, `PATCH /v1/approvals/:id` (owner-reviewed action previews)
 - `GET /v1/knowledge`, `POST /v1/knowledge`, `GET /v1/knowledge/:id` (versioned project source index)
-- `POST /v1/brain/vision` (owner-provided JPEG/PNG/WebP image analysis; max 3 requests per minute per workspace)
-- `POST /v1/brain/generate-image` (prompt-to-JPEG generation through Workers AI; max 2 requests per minute per workspace)
+- `POST /v1/brain/vision` (owner-provided JPEG/PNG/WebP image analysis; no application-imposed request-count quota)
+- `POST /v1/brain/generate-image` (prompt-to-JPEG generation through Workers AI; no application-imposed request-count quota)
 - `GET /v1/audit` (latest append-only audit events)
 
-Image handling is deliberately transient: image-analysis and image-generation payloads are not stored in Admin D1. The image-generation endpoint validates the model response as canonical JPEG base64, enforces an 8 MiB output ceiling, and records only audit metadata (model, byte count, and prompt length). The mobile app previews generated output and opens the platform share sheet; it does not deliver images automatically or retain a permanent image gallery. Real generation requires the dedicated Preview `ADMIN_AI` binding and any model terms acceptance required by Cloudflare.
+Image handling is deliberately transient: image-analysis and image-generation payloads are not stored in Admin D1. There are no daily, per-minute, or lifetime request-count caps imposed by the application for image analysis or image generation. Requests remain subject to the configured AI provider's availability, account-level service limits, and technical payload-size validation; these are not usage-count quotas. The image-generation endpoint validates the model response as canonical JPEG base64, enforces an 8 MiB output ceiling, and records only audit metadata (model, byte count, and prompt length). The mobile app previews generated output and opens the platform share sheet; it does not deliver images automatically or retain a permanent image gallery. Real generation requires the dedicated Preview `ADMIN_AI` binding and any model terms acceptance required by Cloudflare.
 
 The checkpoint API stores step input/output references, completed step, next action, and monotonically increasing version. Clients must reload after a version conflict rather than overwrite a newer checkpoint. BARQ Brain retrieves relevant indexed sources by task terms and cites their source paths/revisions. An initial GitHub indexing script now reads an explicit repository ref, skips sensitive paths and likely secret content, limits file sizes and per-run file count, and posts versioned chunks to the Admin API. It has not yet been run against a configured Admin Preview environment.
 
