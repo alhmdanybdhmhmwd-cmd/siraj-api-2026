@@ -9614,8 +9614,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                         onHorizontalDragStart: (_) => _replySwipeDistance = 0,
                                         onHorizontalDragUpdate: (details) => _replySwipeDistance += details.delta.dx,
                                         onHorizontalDragEnd: (details) {
-                                          final swiped = _replySwipeDistance > 48 ||
-                                              (details.primaryVelocity ?? 0) > 260;
+                                          final swiped = _replySwipeDistance.abs() > 48 ||
+                                              (details.primaryVelocity ?? 0).abs() > 260;
                                           _replySwipeDistance = 0;
                                           if (swiped && m['is_ephemeral'] != true) {
                                             setState(() => replyToMessage = Map<String, dynamic>.from(m));
@@ -9682,8 +9682,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                         onHorizontalDragStart: (_) => _replySwipeDistance = 0,
                                         onHorizontalDragUpdate: (details) => _replySwipeDistance += details.delta.dx,
                                         onHorizontalDragEnd: (details) {
-                                          final shouldReply = _replySwipeDistance > 48 ||
-                                              (details.primaryVelocity ?? 0) > 260;
+                                          final shouldReply = _replySwipeDistance.abs() > 48 ||
+                                              (details.primaryVelocity ?? 0).abs() > 260;
                                           _replySwipeDistance = 0;
                                           if (shouldReply && m['is_ephemeral'] != true) {
                                             setState(() => replyToMessage = Map<String, dynamic>.from(m));
@@ -9862,44 +9862,72 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             SafeArea(
               top: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+                padding: const EdgeInsets.fromLTRB(9, 5, 9, 9),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     IconButton(
-                      onPressed: sending ? null : () => setState(() { ephemeralMode = !ephemeralMode; replyToMessage = null; }),
-                      icon: Icon(Icons.timer_outlined, color: ephemeralMode ? Theme.of(context).colorScheme.primary : Colors.white54),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: sending ? null : () => setState(() {
+                        ephemeralMode = !ephemeralMode;
+                        replyToMessage = null;
+                      }),
+                      icon: Icon(Icons.timer_outlined,
+                        color: ephemeralMode ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurfaceVariant),
                       tooltip: ephemeralMode ? 'إيقاف الرسائل المؤقتة' : 'إرسال رسالة تختفي بعد قراءتها',
                     ),
                     IconButton(
-                        onPressed: sending ? null : pickAndSendFile,
-                        icon: const Icon(Icons.attach_file),
-                        tooltip: 'إرسال ملف أو صورة أو فيديو',
-                      ),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: sending ? null : pickAndSendFile,
+                      icon: const Icon(Icons.add_circle_outline_rounded),
+                      tooltip: 'إرسال ملف أو صورة أو فيديو',
+                    ),
                     if (!ephemeralMode)
                       BarqVoiceRecordButton(disabled: sending, onSend: _sendVoiceRecording),
+                    const SizedBox(width: 5),
                     Expanded(
-                      child: TextField(
-                        controller: controller,
-                        minLines: 1,
-                        maxLines: 4,
-                        decoration: inputDecoration(
-                          ephemeralMode ? 'رسالة مؤقتة — تختفي بعد القراءة' : 'اكتب رسالتك...',
-                          ephemeralMode ? Icons.timer_outlined : Icons.message,
-                        ).copyWith(
+                      child: Container(
+                        constraints: const BoxConstraints(minHeight: 46),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .72),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.outline.withValues(alpha: .16),
+                          ),
                         ),
-                        onSubmitted: (_) => send(),
+                        child: TextField(
+                          controller: controller,
+                          minLines: 1,
+                          maxLines: 4,
+                          textCapitalization: TextCapitalization.sentences,
+                          decoration: InputDecoration(
+                            hintText: ephemeralMode ? 'رسالة مؤقتة...' : 'اكتب رسالتك...',
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            filled: false,
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                          ),
+                          onSubmitted: (_) => send(),
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    if (replyToMessage != null)
-                      IconButton(onPressed: sending ? null : () => setState(() => replyToMessage = null),
-                        icon: const Icon(Icons.close, color: Colors.white70), tooltip: 'إلغاء الرد'),
-                    IconButton.filled(
-                      style: IconButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary),
-                      onPressed: sending ? null : send,
-                      icon: sending
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                          : const Icon(Icons.send),
+                    const SizedBox(width: 7),
+                    SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: IconButton.filled(
+                        style: IconButton.styleFrom(
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                        ),
+                        onPressed: sending ? null : send,
+                        icon: sending
+                            ? const SizedBox(width: 18, height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.send_rounded),
+                      ),
                     ),
                   ],
                 ),
@@ -11093,8 +11121,8 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                               onHorizontalDragStart: (_) => _replySwipeDistance = 0,
                               onHorizontalDragUpdate: (details) => _replySwipeDistance += details.delta.dx,
                               onHorizontalDragEnd: (details) {
-                                final shouldReply = _replySwipeDistance > 48 ||
-                                    (details.primaryVelocity ?? 0) > 260;
+                                final shouldReply = _replySwipeDistance.abs() > 48 ||
+                                    (details.primaryVelocity ?? 0).abs() > 260;
                                 _replySwipeDistance = 0;
                                 if (shouldReply) {
                                   setState(() => replyToMessage = Map<String, dynamic>.from(m));
@@ -11241,25 +11269,64 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
               onClose: sending ? null : () => setState(() => replyToMessage = null),
             ),
           SafeArea(top: false, child: Padding(
-            padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
-            child: Row(children: [
-              IconButton(onPressed: sending ? null : pickAndSendFile,
-                  icon: const Icon(Icons.attach_file), tooltip: 'إرسال ملف أو صورة أو فيديو'),
-              BarqVoiceRecordButton(disabled: sending, onSend: _sendVoiceRecording),
-              Expanded(child: TextField(controller: controller, minLines: 1, maxLines: 4,
-                decoration: inputDecoration('اكتب رسالة للمجموعة...', Icons.message).copyWith(
-                ), onSubmitted: (_) => send())),
-              const SizedBox(width: 8),
-              if (replyToMessage != null)
-                IconButton(onPressed: sending ? null : () => setState(() => replyToMessage = null),
-                  icon: const Icon(Icons.close, color: Colors.white70), tooltip: 'إلغاء الرد'),
-              IconButton.filled(
-                style: IconButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary),
-                onPressed: sending ? null : send,
-                icon: sending ? const SizedBox(width: 18, height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)) : const Icon(Icons.send),
-              ),
-            ]),
+            padding: const EdgeInsets.fromLTRB(9, 5, 9, 9),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  onPressed: sending ? null : pickAndSendFile,
+                  icon: const Icon(Icons.add_circle_outline_rounded),
+                  tooltip: 'إرسال ملف أو صورة أو فيديو',
+                ),
+                BarqVoiceRecordButton(disabled: sending, onSend: _sendVoiceRecording),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Container(
+                    constraints: const BoxConstraints(minHeight: 46),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .72),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.outline.withValues(alpha: .16),
+                      ),
+                    ),
+                    child: TextField(
+                      controller: controller,
+                      minLines: 1,
+                      maxLines: 4,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: const InputDecoration(
+                        hintText: 'اكتب رسالة للمجموعة...',
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        filled: false,
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                      ),
+                      onSubmitted: (_) => send(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 7),
+                SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: IconButton.filled(
+                    style: IconButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                    ),
+                    onPressed: sending ? null : send,
+                    icon: sending
+                        ? const SizedBox(width: 18, height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.send_rounded),
+                  ),
+                ),
+              ],
+            ),
           )),
         ])),
       ),
