@@ -73,6 +73,17 @@ export function validateVisionInput(value, maxImageBytes = 4 * 1024 * 1024) {
   return { ok: true, value: { image, prompt, mimeType: match[1], imageBytes } };
 }
 
+export function validateImageGenerationInput(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ok: false, error: "invalid_body" };
+  }
+  const prompt = typeof value.prompt === "string" ? value.prompt.trim() : "";
+  if (!prompt || prompt.length > 1600) {
+    return { ok: false, error: "invalid_image_prompt" };
+  }
+  return { ok: true, value: { prompt } };
+}
+
 export function buildVisionMessages(prompt, image) {
   return [
     {
@@ -481,6 +492,58 @@ async function handle(request, env) {
   const actor = await verifyOwnerToken(request, env);
   if (!actor) return response({ error: "unauthorized" }, 401, allowedOrigin);
   const workspace = await ensureWorkspace(env, actor);
+
+  if (request.method === "POST" && url.pathname === "/v1/brain/generate-image") {
+    if (!env.ADMIN_AI) return response({ error: "admin_ai_unavailable" }, 503, allowedOrigin);
+    const body = await readJson(request);
+    if (!body) return response({ error: "invalid_body" }, 400, allowedOrigin);
+    const validated = validateImageGenerationInput(body);
+    if (!validated.ok) return response({ error: validated.error }, 400, allowedOrigin);
+    const { prompt } = validated.value;
+    const windowStart = Math.floor(Date.now() / 60000);
+    await env.ADMIN_DB.prepare(
+      "DELETE FROM admin_image_generation_limits WHERE workspace_id = ? AND window_start < ?"
+    ).bind(workspace, windowStart - 60).run();
+    const usage = await env.ADMIN_DB.prepare(`
+      INSERT INTO admin_image_generation_limits (workspace_id, window_start, request_count)
+      VALUES (?, ?, 1)
+      ON CONFLICT(workspace_id, window_start) DO UPDATE SET
+        request_count = request_count + 1, updated_at = CURRENT_TIMESTAMP
+      WHERE request_count < 2
+      RETURNING request_count
+    `).bind(workspace, windowStart).first();
+    if (!usage) {
+      return response({ error: "image_generation_rate_limited", retryAfterSeconds: 60 }, 429, allowedOrigin);
+    }
+    const model = "@cf/black-forest-labs/flux-1-schnell";
+    try {
+      const generated = await env.ADMIN_AI.run(model, { prompt, steps: 4 });
+      const image = typeof generated?.image === "string" ? generated.image : "";
+      if (!/^[A-Za-z0-9+/]+={0,2}$/.test(image)) throw new Error("image_generation_empty_result");
+      const binary = atob(image);
+      if (binary.length < 4 || binary.length > 8 * 1024 * 1024 ||
+          binary.charCodeAt(0) !== 0xff || binary.charCodeAt(1) !== 0xd8 ||
+          binary.charCodeAt(2) !== 0xff || btoa(binary) !== image) {
+        throw new Error("image_generation_invalid_result");
+      }
+      await audit(env, workspace, actor, "brain.image_generated", "image", crypto.randomUUID(), {
+        imageBytes: binary.length,
+        promptLength: prompt.length,
+        model
+      });
+      return response({
+        image: "data:image/jpeg;base64," + image,
+        mimeType: "image/jpeg",
+        imageBytes: binary.length,
+        model,
+        generatedAt: new Date().toISOString(),
+        imageStored: false
+      }, 200, allowedOrigin);
+    } catch (error) {
+      console.error("BARQ Brain image generation failed:", error);
+      return response({ error: "image_generation_failed" }, 502, allowedOrigin);
+    }
+  }
 
   if (request.method === "POST" && url.pathname === "/v1/brain/vision") {
     if (!env.ADMIN_AI) return response({ error: "admin_ai_unavailable" }, 503, allowedOrigin);
