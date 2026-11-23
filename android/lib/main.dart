@@ -2762,6 +2762,56 @@ List<Map<String, dynamic>> normalizeMessageReactions(dynamic raw) {
   return raw.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
 }
 
+class BarqReplyPreview extends StatelessWidget {
+  final String sender;
+  final String preview;
+  final VoidCallback? onClose;
+  const BarqReplyPreview({
+    super.key,
+    required this.sender,
+    required this.preview,
+    this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(10, 5, 10, 3),
+      padding: const EdgeInsets.fromLTRB(11, 7, 5, 7),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: .72),
+        borderRadius: BorderRadius.circular(12),
+        border: Border(
+          right: BorderSide(color: scheme.primary, width: 3),
+        ),
+      ),
+      child: Row(children: [
+        Icon(Icons.reply_rounded, size: 17, color: scheme.primary),
+        const SizedBox(width: 8),
+        Expanded(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(sender, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: scheme.primary, fontSize: 11, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 2),
+            Text(preview, maxLines: 2, overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11)),
+          ],
+        )),
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          constraints: const BoxConstraints.tightFor(width: 34, height: 34),
+          onPressed: onClose,
+          icon: const Icon(Icons.close_rounded, size: 18),
+          tooltip: 'إلغاء الاقتباس',
+        ),
+      ]),
+    );
+  }
+}
+
 Widget messageReactionBar({
   required BuildContext context,
   required Map<String, dynamic> message,
@@ -9560,6 +9610,12 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                     style: const TextStyle(fontSize: 11, color: Colors.white70)),
                 ]),
               ),
+            if (replyToMessage != null)
+              BarqReplyPreview(
+                sender: field(replyToMessage!, ['display_name', 'username', 'sender_name'], 'رسالة مقتبسة'),
+                preview: messageReplyPreview(replyToMessage!),
+                onClose: sending ? null : () => setState(() => replyToMessage = null),
+              ),
             SafeArea(
               top: false,
               child: Padding(
@@ -9587,8 +9643,6 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                           ephemeralMode ? 'رسالة مؤقتة — تختفي بعد القراءة' : 'اكتب رسالتك...',
                           ephemeralMode ? Icons.timer_outlined : Icons.message,
                         ).copyWith(
-                          helperText: replyToMessage == null ? null : 'الرد على: ${messageReplyPreview(replyToMessage!)}',
-                          helperStyle: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 10),
                         ),
                         onSubmitted: (_) => send(),
                       ),
@@ -10868,6 +10922,12 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                     style: const TextStyle(fontSize: 11, color: Colors.white70)),
                 ]),
               ),
+          if (replyToMessage != null)
+            BarqReplyPreview(
+              sender: field(replyToMessage!, ['display_name', 'username', 'sender_name'], 'رسالة مقتبسة'),
+              preview: messageReplyPreview(replyToMessage!),
+              onClose: sending ? null : () => setState(() => replyToMessage = null),
+            ),
           SafeArea(top: false, child: Padding(
             padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
             child: Row(children: [
@@ -10876,8 +10936,6 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
               BarqVoiceRecordButton(disabled: sending, onSend: _sendVoiceRecording),
               Expanded(child: TextField(controller: controller, minLines: 1, maxLines: 4,
                 decoration: inputDecoration('اكتب رسالة للمجموعة...', Icons.message).copyWith(
-                  helperText: replyToMessage == null ? null : 'الرد على: ${messageReplyPreview(replyToMessage!)}',
-                  helperStyle: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 10),
                 ), onSubmitted: (_) => send())),
               const SizedBox(width: 8),
               if (replyToMessage != null)
