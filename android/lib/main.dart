@@ -1298,6 +1298,23 @@ class Api {
     return code;
   }
 
+  static Future<void> logoutAllSessions(String currentPassword) async {
+    await request('POST', '/api/security/logout-all', body: {
+      'password': currentPassword,
+    });
+    // The server has already invalidated every session, including this token.
+    // Clear this installation locally without relying on another authenticated API call.
+    await SirajRealtime.instance.stop();
+    await BarqNearbyService.instance.stop();
+    token = null;
+    await SirajPush.clearPreferences();
+    await storage.delete(key: 'siraj_token');
+    await storage.delete(key: 'barq_cached_user');
+    await storage.delete(key: 'barq_cached_friends');
+    await storage.delete(key: 'barq_offline_outbox_v1');
+    await storage.delete(key: 'barq_offline_inbox_v1');
+  }
+
   static Future<Map<String, dynamic>> me() async {
     final user = _map((await request('GET', '/api/me'))['user']);
     await _cacheUser(user);
@@ -6701,6 +6718,126 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> securitySettingsDialog() async {
+    final passwordController = TextEditingController();
+    String? recoveryCode;
+    bool busy = false;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialog) => AlertDialog(
+          backgroundColor: Theme.of(dialogContext).colorScheme.surface,
+          title: const Row(children: [
+            Icon(Icons.shield_outlined),
+            SizedBox(width: 9),
+            Text('أمان الحساب'),
+          ]),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const Text('استخدم كلمة مرورك الحالية لتأكيد إجراءات الأمان. لا نطلب رسائل SMS أو مكالمات.'),
+              const SizedBox(height: 14),
+              TextField(
+                controller: passwordController,
+                obscureText: true,
+                textDirection: TextDirection.ltr,
+                decoration: const InputDecoration(
+                  labelText: 'كلمة المرور الحالية',
+                  prefixIcon: Icon(Icons.lock_outline),
+                ),
+              ),
+              if (recoveryCode != null) ...[
+                const SizedBox(height: 16),
+                const Text('رمز الاسترداد الجديد — احفظه الآن، فلن يظهر مرة أخرى.',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                SelectableText(recoveryCode!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 18, letterSpacing: 1.5, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: recoveryCode!));
+                    if (dialogContext.mounted) {
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
+                        const SnackBar(content: Text('تم نسخ رمز الاسترداد.')),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.copy_rounded),
+                  label: const Text('نسخ الرمز'),
+                ),
+              ],
+            ]),
+          ),
+          actions: [
+            TextButton(
+              onPressed: busy ? null : () => Navigator.pop(dialogContext),
+              child: const Text('إغلاق'),
+            ),
+            TextButton.icon(
+              onPressed: busy ? null : () async {
+                final password = passwordController.text;
+                if (password.isEmpty) {
+                  showMsg(dialogContext, 'أدخل كلمة المرور الحالية أولاً.');
+                  return;
+                }
+                setDialog(() => busy = true);
+                try {
+                  final code = await Api.rotateRecoveryCode(password);
+                  passwordController.clear();
+                  setDialog(() { recoveryCode = code; busy = false; });
+                } catch (error) {
+                  setDialog(() => busy = false);
+                  if (dialogContext.mounted) showMsg(dialogContext, cleanError(error));
+                }
+              },
+              icon: const Icon(Icons.key_rounded),
+              label: const Text('إنشاء رمز استرداد'),
+            ),
+            FilledButton.icon(
+              onPressed: busy ? null : () async {
+                final password = passwordController.text;
+                if (password.isEmpty) {
+                  showMsg(dialogContext, 'أدخل كلمة المرور الحالية أولاً.');
+                  return;
+                }
+                final confirmed = await showDialog<bool>(
+                  context: dialogContext,
+                  builder: (confirmContext) => AlertDialog(
+                    title: const Text('تسجيل الخروج من جميع الأجهزة؟'),
+                    content: const Text('سيتم إنهاء الجلسات على كل الهواتف والأجهزة، وستحتاج إلى تسجيل الدخول مجدداً على هذا الجهاز أيضاً.'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(confirmContext, false), child: const Text('إلغاء')),
+                      FilledButton(onPressed: () => Navigator.pop(confirmContext, true), child: const Text('تأكيد')),
+                    ],
+                  ),
+                );
+                if (confirmed != true || !dialogContext.mounted) return;
+                setDialog(() => busy = true);
+                try {
+                  await Api.logoutAllSessions(password);
+                  if (!dialogContext.mounted) return;
+                  Navigator.pop(dialogContext);
+                  if (!mounted) return;
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const LoginPage()),
+                    (_) => false,
+                  );
+                } catch (error) {
+                  setDialog(() => busy = false);
+                  if (dialogContext.mounted) showMsg(dialogContext, cleanError(error));
+                }
+              },
+              icon: const Icon(Icons.devices_rounded),
+              label: const Text('تسجيل الخروج من جميع الأجهزة'),
+            ),
+          ],
+        ),
+      ),
+    );
+    passwordController.dispose();
+  }
+
   Future<void> privacySettingsDialog() async {
     bool searchable = privacySettings['searchable'] != false;
     bool readReceipts = privacySettings['readReceipts'] != false;
@@ -6879,6 +7016,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           title: 'الخصوصية والأمان',
           subtitle: 'الظهور في البحث وإشعارات قراءة الرسائل',
           onTap: privacySettingsDialog,
+        ),
+        item(
+          icon: Icons.shield_outlined,
+          title: 'أمان الحساب',
+          subtitle: 'رمز الاسترداد وتسجيل الخروج من جميع الأجهزة',
+          onTap: securitySettingsDialog,
         ),
         item(
           icon: Icons.notifications_outlined,
