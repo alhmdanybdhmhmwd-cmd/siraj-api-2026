@@ -250,6 +250,19 @@ async function authenticate(request, env) {
 }
 
 
+function normalizeInternationalPhone(value) {
+  // Accept common international formatting and Arabic/Persian numerals, then
+  // store one canonical E.164 value so equivalent inputs cannot create duplicates.
+  let raw = String(value || "").trim().replace(/[٠-٩۰-۹]/g, digit => {
+    const code = digit.charCodeAt(0);
+    return String(code >= 0x06f0 ? code - 0x06f0 : code - 0x0660);
+  });
+  raw = raw.replace(/[\\s().-]/g, "");
+  if (raw.startsWith("00")) raw = "+" + raw.slice(2);
+  if (!raw.startsWith("+") || !/^\\+[1-9][0-9]{7,14}$/.test(raw)) return "";
+  return raw;
+}
+
 function phoneVariants(value) {
   // Accept Arabic-Indic and Persian digits commonly used in saved phone contacts.
   const normalized = String(value || "").replace(/[٠-٩۰-۹]/g, digit => {
@@ -830,7 +843,7 @@ export default {
         const displayName = String(body.displayName || body.name || body.display_name || "").trim();
         let username = String(body.username || body.userName || "").trim().toLowerCase();
         const password = String(body.password || "");
-        const phone = String(body.phone || "").trim();
+        let phone = normalizeInternationalPhone(body.phone);
         if (!displayName || !phone || !password) {
           return json({
             error: "Display name, international phone number and password are required"
@@ -1035,7 +1048,10 @@ export default {
         // Apply independent per-identifier and per-client limits. The identifier
         // bucket prevents IP rotation from bypassing protection; the IP bucket
         // limits bursts across many account names from one client.
-        const clientIp = request.headers.get("CF-Connecting-IP") || "unknown";
+        // Limit attempts against each account identifier to slow password guessing.
+        // Network limits are applied only when the trusted edge IP exists; a shared
+        // "unknown" bucket would otherwise block unrelated users globally.
+        const clientIp = request.headers.get("CF-Connecting-IP");
         // Canonicalize phone identifiers so local, international, and formatted
         // versions of the same number share one account-level rate-limit bucket.
         const phoneIdentifierVariants = phoneVariants(username);
@@ -1043,8 +1059,10 @@ export default {
           ? phoneIdentifierVariants.sort((a, b) => a.length - b.length)[0]
           : username;
         const [identifierAllowed, clientAllowed] = await Promise.all([
-          consumeLoginAttempt(env, "identifier", rateLimitIdentifier),
-          consumeLoginAttempt(env, "client", clientIp)
+          consumeLoginAttempt(env, "identifier", rateLimitIdentifier, 10),
+          clientIp && clientIp.trim()
+            ? consumeLoginAttempt(env, "client", clientIp, 40)
+            : Promise.resolve(true)
         ]);
         if (!identifierAllowed || !clientAllowed) {
           return new Response(JSON.stringify({
