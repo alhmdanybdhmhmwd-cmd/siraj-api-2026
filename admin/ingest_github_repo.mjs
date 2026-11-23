@@ -1,6 +1,7 @@
 import { pathToFileURL } from "node:url";
 
 const MAX_CHUNK_CHARS = 18000;
+const MAX_FILES_PER_RUN = 300;
 const ALLOWED_EXTENSIONS = new Set([
   ".md", ".mdx", ".txt", ".dart", ".js", ".mjs", ".ts", ".tsx",
   ".jsx", ".sql", ".yaml", ".yml", ".toml"
@@ -14,7 +15,7 @@ const SECRET_CONTENT = [
 ];
 
 export function shouldIndexPath(input) {
-  if (typeof input !== "string" || !input || input.length > 500) return false;
+  if (typeof input !== "string" || !input || input.length > 160) return false;
   const path = input.replace(/\\/g, "/");
   if (path.startsWith("/") || path.split("/").some(part => part === ".." || part === ".")) return false;
   if (SENSITIVE_PATH.test(path)) return false;
@@ -103,7 +104,7 @@ export async function ingestRepository({ repository, ref = "HEAD", githubToken, 
   if (tree.truncated) throw new Error("repository_tree_truncated_refusing_partial_index");
   let indexed = 0;
   let skipped = 0;
-  for (const entry of tree.tree || []) {
+  for (const entry of (tree.tree || []).filter(item => item.type === "blob" && shouldIndexPath(item.path) && item.size <= 120000).slice(0, MAX_FILES_PER_RUN)) {
     if (entry.type !== "blob" || !shouldIndexPath(entry.path) || entry.size > 120000) {
       skipped++;
       continue;
