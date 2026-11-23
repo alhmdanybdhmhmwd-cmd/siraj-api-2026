@@ -114,7 +114,38 @@ async function getSessionVersion(env, userId) {
   return Number(row?.session_version || 0);
 }
 
-async function signToken(user, secret, sessionVersion = 0) {
+async function ensureDeviceSessions(env) {
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS device_sessions (
+      user_id TEXT NOT NULL,
+      device_id TEXT NOT NULL,
+      device_name TEXT NOT NULL DEFAULT 'جهاز غير معروف',
+      first_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      revoked_at TEXT,
+      PRIMARY KEY (user_id, device_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `).run();
+}
+
+async function registerDeviceSession(env, userId, deviceId, deviceName = "جهاز غير معروف") {
+  await ensureDeviceSessions(env);
+  const existing = await env.DB.prepare(
+    "SELECT device_id FROM device_sessions WHERE user_id = ? AND device_id = ? AND revoked_at IS NULL"
+  ).bind(userId, deviceId).first();
+  await env.DB.prepare(`
+    INSERT INTO device_sessions (user_id, device_id, device_name, first_seen_at, last_seen_at, revoked_at)
+    VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL)
+    ON CONFLICT(user_id, device_id) DO UPDATE SET
+      device_name = excluded.device_name,
+      last_seen_at = CURRENT_TIMESTAMP,
+      revoked_at = NULL
+  `).bind(userId, deviceId, String(deviceName || "جهاز غير معروف").slice(0, 80)).run();
+  return !existing;
+}
+
+async function signToken(user, secret, sessionVersion = 0, deviceId = null) {
   const header = base64url(
     encoder.encode(JSON.stringify({ alg: "HS256", typ: "JWT" }))
   );
@@ -124,6 +155,7 @@ async function signToken(user, secret, sessionVersion = 0) {
       sub: user.id,
       username: user.username,
       sv: Number(sessionVersion || 0),
+      ...(deviceId ? { did: deviceId } : {}),
       exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30
     }))
   );
@@ -236,6 +268,16 @@ async function authenticate(request, env) {
     if (!row || !Number.isSafeInteger(Number(row.session_version)) ||
         payload.sv !== Number(row.session_version)) {
       return null;
+    }
+    if (payload.did) {
+      await ensureDeviceSessions(env);
+      const device = await env.DB.prepare(
+        "SELECT device_id FROM device_sessions WHERE user_id = ? AND device_id = ? AND revoked_at IS NULL"
+      ).bind(payload.sub, payload.did).first();
+      if (!device) return null;
+      await env.DB.prepare(
+        "UPDATE device_sessions SET last_seen_at = CURRENT_TIMESTAMP WHERE user_id = ? AND device_id = ? AND revoked_at IS NULL"
+      ).bind(payload.sub, payload.did).run();
     }
     const tokenHash = await sha256Hex(token);
     const revoked = await env.DB.prepare(
@@ -924,6 +966,11 @@ export default {
 
         const passwordHash = await hashPassword(password, salt);
 
+        const deviceId = String(body.deviceId || "");
+        const deviceName = String(body.deviceName || "جهاز غير معروف").slice(0, 80);
+        if (!/^[a-f0-9-]{36}$/i.test(deviceId)) {
+          return json({ error: "معرّف الجهاز غير صالح. حدّث التطبيق وحاول مجددًا." }, 400);
+        }
         const recovery = await generateRecoveryCode();
         const createdAt = Math.floor(Date.now() / 1000);
         const registrationStatements = [
@@ -957,7 +1004,8 @@ export default {
 
         const recoveryCode = recovery.code;
         const sessionVersion = await getSessionVersion(env, id);
-        const token = await signToken(user, env.JWT_SECRET, sessionVersion);
+        await registerDeviceSession(env, id, deviceId, deviceName);
+        const token = await signToken(user, env.JWT_SECRET, sessionVersion, deviceId);
 
         return json({
           user: cleanUser(user),
@@ -1064,6 +1112,11 @@ export default {
 
         const username = String(body.username || "").trim().toLowerCase();
         const password = String(body.password || "");
+        const deviceId = String(body.deviceId || "");
+        const deviceName = String(body.deviceName || "جهاز غير معروف").slice(0, 80);
+        if (!/^[a-f0-9-]{36}$/i.test(deviceId)) {
+          return json({ error: "معرّف الجهاز غير صالح. حدّث التطبيق وحاول مجددًا." }, 400);
+        }
 
         // Apply independent per-identifier and per-client limits. The identifier
         // bucket prevents IP rotation from bypassing protection; the IP bucket
@@ -1112,11 +1165,13 @@ export default {
         }
 
         const sessionVersion = await getSessionVersion(env, user.id);
-        const token = await signToken(user, env.JWT_SECRET, sessionVersion);
+        const isNewDevice = await registerDeviceSession(env, user.id, deviceId, deviceName);
+        const token = await signToken(user, env.JWT_SECRET, sessionVersion, deviceId);
 
         return json({
           user: cleanUser(user),
-          token
+          token,
+          isNewDevice
         });
       }
 
