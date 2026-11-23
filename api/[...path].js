@@ -2,6 +2,7 @@
 // Production remains on its existing upstream unless explicitly configured.
 const PREVIEW_UPSTREAM = "https://barq-api-phase2-test.alhmdanybdhmhmwd.workers.dev";
 const DEFAULT_PRODUCTION_UPSTREAM = "https://siraj-api.alhmdanybdhmhmwd.workers.dev";
+const IS_PREVIEW_DEPLOYMENT = process.env.VERCEL_ENV === "preview";
 
 function safeHttpsOrigin(value) {
   if (typeof value !== "string" || !value.trim()) return null;
@@ -18,7 +19,7 @@ function safeHttpsOrigin(value) {
 }
 
 function getUpstreamCandidates(env = process.env) {
-  const isPreview = env.VERCEL_ENV === "preview";
+  const isPreview = IS_PREVIEW_DEPLOYMENT || env.VERCEL_ENV === "preview";
   const configuredPreview = safeHttpsOrigin(env.BARQ_API_UPSTREAM);
   const isFallbackWorker = configuredPreview &&
     new URL(configuredPreview).hostname.startsWith("barq-api-phase2-fallback-test.");
