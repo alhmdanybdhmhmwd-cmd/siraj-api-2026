@@ -54,6 +54,16 @@ export function validateVisionInput(value, maxImageBytes = 4 * 1024 * 1024) {
     const decoded = atob(match[2]);
     if (btoa(decoded) !== match[2]) return { ok: false, error: "invalid_image_or_prompt" };
     imageBytes = decoded.length;
+    const bytes = Uint8Array.from(decoded, char => char.charCodeAt(0));
+    const isPng = bytes.length >= 8 &&
+      [137, 80, 78, 71, 13, 10, 26, 10].every((value, index) => bytes[index] === value);
+    const isJpeg = bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
+    const isWebp = bytes.length >= 12 &&
+      String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" &&
+      String.fromCharCode(...bytes.slice(8, 12)) === "WEBP";
+    const signatureMatches = match[1] === "image/png" ? isPng :
+      match[1] === "image/jpeg" ? isJpeg : isWebp;
+    if (!signatureMatches) return { ok: false, error: "invalid_image_or_prompt" };
   } catch {
     return { ok: false, error: "invalid_image_or_prompt" };
   }
