@@ -15,6 +15,7 @@ import 'package:record/record.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:wechat_assets_picker/wechat_assets_picker.dart';
@@ -151,6 +152,8 @@ final ValueNotifier<Map<String, String>?> barqPendingNotificationTap =
 
 final GlobalKey<ScaffoldMessengerState> barqScaffoldMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
+final FlutterLocalNotificationsPlugin barqLocalNotifications =
+    FlutterLocalNotificationsPlugin();
 
 /// Known push categories only; never expose sender names or message bodies.
 String? barqForegroundPushLabel(
@@ -593,6 +596,7 @@ class BarqTranslator {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+  await SirajPush.initializeLocalNotifications();
   FirebaseMessaging.onBackgroundMessage(barqFcmBackgroundHandler);
   try {
     final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
@@ -698,19 +702,99 @@ class SirajPush {
     try { await storage.delete(key: 'barq_notification_prefs'); } catch (_) {}
   }
 
+  static bool _localNotificationsReady = false;
+
+  static Future<void> initializeLocalNotifications() async {
+    try {
+      const settings = InitializationSettings(
+        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      );
+      await barqLocalNotifications.initialize(
+        settings,
+        onDidReceiveNotificationResponse: (response) {
+          final raw = response.payload;
+          if (raw == null || raw.isEmpty) return;
+          try {
+            final decoded = jsonDecode(raw);
+            if (decoded is Map) {
+              queueNotificationTap(RemoteMessage(
+                data: Map<String, dynamic>.from(decoded),
+              ));
+            }
+          } catch (_) {}
+        },
+      );
+      _localNotificationsReady = true;
+    } catch (_) {
+      _localNotificationsReady = false;
+    }
+  }
+
+  static String _channelFor(RemoteMessage message) {
+    switch (message.data['type']?.toString()) {
+      case 'group_message':
+        return 'barq_groups';
+      case 'status_update':
+        return 'barq_statuses';
+      default:
+        return 'barq_messages';
+    }
+  }
+
+  static Future<void> _showForegroundNotification(
+    RemoteMessage message,
+    String label,
+  ) async {
+    if (_localNotificationsReady) {
+      final type = message.data['type']?.toString();
+      final title = message.notification?.title ??
+          (type == 'group_message' ? 'رسالة جديدة في مجموعة برق'
+            : type == 'status_update' ? 'لحظة جديدة في SPARK'
+            : 'رسالة جديدة في برق');
+      final body = message.notification?.body ?? label;
+      final channelId = _channelFor(message);
+      final channelName = channelId == 'barq_groups' ? 'رسائل مجموعات برق'
+          : channelId == 'barq_statuses' ? 'حالات برق' : 'رسائل برق الخاصة';
+      try {
+        await barqLocalNotifications.show(
+          message.messageId?.hashCode ?? DateTime.now().millisecondsSinceEpoch.remainder(0x7fffffff),
+          title,
+          body,
+          NotificationDetails(
+            android: AndroidNotificationDetails(
+              channelId,
+              channelName,
+              channelDescription: 'إشعارات تطبيق برق',
+              importance: channelId == 'barq_statuses'
+                  ? Importance.defaultImportance : Importance.high,
+              priority: Priority.high,
+              icon: '@mipmap/ic_launcher',
+              playSound: true,
+              enableVibration: true,
+            ),
+          ),
+          payload: jsonEncode(message.data),
+        );
+        return;
+      } catch (_) {}
+    }
+    final messenger = barqScaffoldMessengerKey.currentState;
+    if (messenger != null) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+          content: Text(label),
+        ));
+    }
+  }
+
   static void _handleForegroundMessage(RemoteMessage message) {
     if (Api.token == null) return;
     final label = barqForegroundPushLabel(message.data, _preferences);
     if (label == null) return;
-    final messenger = barqScaffoldMessengerKey.currentState;
-    if (messenger == null) return;
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 4),
-        content: Text(label),
-      ));
+    unawaited(_showForegroundNotification(message, label));
   }
 
   static Future<void> register() async {
