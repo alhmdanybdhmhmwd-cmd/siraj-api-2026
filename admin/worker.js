@@ -390,7 +390,7 @@ export function validateKnowledgeInput(value) {
 
 export function knowledgeSearchTerms(query, limit = 12) {
   const safeLimit = Number.isSafeInteger(limit) ? Math.max(1, Math.min(20, limit)) : 12;
-  return [...new Set((String(query || "").toLowerCase().match(/[\\p{L}\\p{N}]{3,}/gu) || []))]
+  return [...new Set((String(query || "").toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []))]
     .slice(0, safeLimit);
 }
 
@@ -429,23 +429,21 @@ async function retrieveKnowledgeForTask(env, workspaceId, query) {
     );
     const bindings = [workspaceId];
     for (const token of tokens) {
-      const pattern = "%" + token.replace(/[\\%_]/g, "\\\\export function rankKnowledgeChunks(chunks, query, limit = 6) {
-  const tokens = [...new Set((String(query || "").toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []))];
-  return (chunks || []).map(chunk => {
-    const title = String(chunk.title || "").toLowerCase();
-    const path = String(chunk.source_path || "").toLowerCase();
-    const content = String(chunk.content || "").toLowerCase();
-    let score = 0;
-    for (const token of tokens) {
-      if (title.includes(token)) score += 5;
-      if (path.includes(token)) score += 3;
-      if (content.includes(token)) score += 1;
+      const pattern = "%" + token + "%";
+      bindings.push(pattern, pattern, pattern);
     }
-    return { ...chunk, relevance_score: score };
-  }).filter(chunk => chunk.relevance_score > 0)
-    .sort((a, b) => b.relevance_score - a.relevance_score ||
-      String(b.updated_at || "").localeCompare(String(a.updated_at || "")))
-    .slice(0, limit);
+    const sql = "SELECT source_type, source_path, source_revision, title, content, updated_at " +
+      "FROM admin_project_knowledge WHERE workspace_id = ? AND (" +
+      clauses.join(" OR ") + ") ORDER BY updated_at DESC LIMIT 500";
+    statement = env.ADMIN_DB.prepare(sql).bind(...bindings);
+  } else {
+    statement = env.ADMIN_DB.prepare(
+      "SELECT source_type, source_path, source_revision, title, content, updated_at " +
+      "FROM admin_project_knowledge WHERE workspace_id = ? ORDER BY updated_at DESC LIMIT 100"
+    ).bind(workspaceId);
+  }
+  const rows = await statement.all();
+  return rankKnowledgeChunks(rows.results || [], query, 6);
 }
 
 async function sha256Hex") + "%";
