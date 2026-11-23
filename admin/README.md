@@ -51,7 +51,7 @@ The Queue consumer and server-side assistant draft path exist in code, but dedic
 
 ## Flutter owner app (initial client shell)
 
-The Flutter sources are formatted with the repository formatter; CI enforces `dart format --output=none --set-exit-if-changed` before analysis and tests.
+The Flutter sources are formatted with the repository formatter; CI enforces `dart format --output=none --set-exit-if-changed` before analysis and tests. The temporary formatter workflow has been removed.
 
 The independent Flutter client is under `admin/mobile`. It includes an Arabic RTL owner dashboard, task list, approvals view, secure token storage, cached workspace/task/approval snapshots, and a local outbox for tasks created while offline. The outbox synchronizes with the server on the next successful app refresh/resume.
 
