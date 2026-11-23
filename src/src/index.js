@@ -968,7 +968,7 @@ export default {
 
         const deviceId = String(body.deviceId || "");
         const deviceName = String(body.deviceName || "جهاز غير معروف").slice(0, 80);
-        if (!/^[a-f0-9-]{36}$/i.test(deviceId)) {
+        if (deviceId && !/^[a-f0-9-]{36}$/i.test(deviceId)) {
           return json({ error: "معرّف الجهاز غير صالح. حدّث التطبيق وحاول مجددًا." }, 400);
         }
         const recovery = await generateRecoveryCode();
@@ -1004,8 +1004,8 @@ export default {
 
         const recoveryCode = recovery.code;
         const sessionVersion = await getSessionVersion(env, id);
-        await registerDeviceSession(env, id, deviceId, deviceName);
-        const token = await signToken(user, env.JWT_SECRET, sessionVersion, deviceId);
+        if (deviceId) await registerDeviceSession(env, id, deviceId, deviceName);
+        const token = await signToken(user, env.JWT_SECRET, sessionVersion, deviceId || null);
 
         return json({
           user: cleanUser(user),
@@ -1165,8 +1165,10 @@ export default {
         }
 
         const sessionVersion = await getSessionVersion(env, user.id);
-        const isNewDevice = await registerDeviceSession(env, user.id, deviceId, deviceName);
-        const token = await signToken(user, env.JWT_SECRET, sessionVersion, deviceId);
+        const isNewDevice = deviceId
+          ? await registerDeviceSession(env, user.id, deviceId, deviceName)
+          : false;
+        const token = await signToken(user, env.JWT_SECRET, sessionVersion, deviceId || null);
 
         return json({
           user: cleanUser(user),
