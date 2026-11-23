@@ -10246,7 +10246,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                         visualDensity: VisualDensity.compact,
                         tooltip: 'اختيار صورة أو فيديو',
                         onPressed: sending ? null : pickAndSendMedia,
-                        icon: const Icon(Icons.photo_camera_outlined, color: Colors.white70),
+                        icon: const Icon(Icons.photo_library_outlined, color: Colors.white70),
                       ),
                       ValueListenableBuilder<TextEditingValue>(
                         valueListenable: controller,
@@ -11747,7 +11747,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                       visualDensity: VisualDensity.compact,
                       tooltip: 'اختيار صورة أو فيديو',
                       onPressed: sending ? null : pickAndSendMedia,
-                      icon: const Icon(Icons.photo_camera_outlined, color: Colors.white70),
+                      icon: const Icon(Icons.photo_library_outlined, color: Colors.white70),
                     ),
                     ValueListenableBuilder<TextEditingValue>(
                       valueListenable: controller,
