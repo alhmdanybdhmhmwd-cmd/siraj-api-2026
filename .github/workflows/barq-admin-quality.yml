@@ -156,8 +156,14 @@ jobs:
           assert config["queues"]["producers"][0]["binding"] == "ADMIN_TASK_QUEUE"
           consumer = config["queues"]["consumers"][0]
           assert consumer["queue"] == "barq-admin-preview-tasks"
-assert consumer["max_batch_size"] == 1, "Long-running AI tasks must use isolated queue deliveries"
+          assert consumer["max_batch_size"] == 1, "Long-running AI tasks must use isolated queue deliveries"
           assert consumer["dead_letter_queue"] == "barq-admin-preview-dlq"
+          dlq_consumers = [item for item in config["queues"]["consumers"] if item["queue"] == "barq-admin-preview-dlq"]
+          assert len(dlq_consumers) == 1, "Dead-letter queue must have a dedicated consumer"
+          assert dlq_consumers[0]["max_retries"] == 3
+          worker_source = Path("admin/worker.js").read_text()
+          assert 'batch.queue === "barq-admin-preview-dlq"' in worker_source
+          assert "task.server_execution.dead_lettered" in worker_source
           assert config["ai"]["binding"] == "ADMIN_AI"
           assert config["observability"]["enabled"] is True
           assert "REPLACE_WITH" in config["vars"]["BARQ_ADMIN_ALLOWED_ORIGIN"]
