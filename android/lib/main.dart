@@ -289,8 +289,6 @@ Future<FilePickerResult?> showBarqMediaPicker(
     throw Exception('تعذر قراءة الوسائط المختارة من الجهاز.');
   }
   if (!context.mounted) return null;
-  final confirmed = await _showBarqMediaPreview(context, selectedFiles);
-  if (confirmed != true) return null;
   return FilePickerResult(selectedFiles);
 }
 
@@ -1812,11 +1810,12 @@ class Api {
     required String contentType,
     String? recipientId,
     String? groupId,
+    String caption = '',
     void Function(double progress)? onProgress,
   }) async {
     onProgress?.call(0);
     final fingerprintInput = utf8.encode(
-      '${recipientId ?? ''}|${groupId ?? ''}|$fileName|$contentType|${crypto.sha256.convert(bytes)}',
+      '${recipientId ?? ''}|${groupId ?? ''}|$fileName|$contentType|$caption|${crypto.sha256.convert(bytes)}',
     );
     final resumeStorageKey = 'barq_upload_resume_${crypto.sha256.convert(fingerprintInput)}';
     final idempotencyKey = await storage.read(key: resumeStorageKey) ?? newBarqMessageId();
@@ -1825,6 +1824,7 @@ class Api {
       'size': bytes.length,
       'fileName': fileName,
       'contentType': contentType,
+      'caption': caption.trim(),
       if (recipientId != null) 'recipientId': recipientId,
       if (groupId != null) 'groupId': groupId,
       'idempotencyKey': idempotencyKey,
@@ -1898,6 +1898,7 @@ class Api {
     required String contentType,
     String? recipientId,
     String? groupId,
+    String caption = '',
     void Function(double progress)? onProgress,
   }) async {
     if ((recipientId == null) == (groupId == null)) {
@@ -1915,6 +1916,7 @@ class Api {
         contentType: contentType,
         recipientId: recipientId,
         groupId: groupId,
+        caption: caption,
         onProgress: onProgress,
       );
       return;
@@ -1929,6 +1931,7 @@ class Api {
           'X-File-Name': Uri.encodeComponent(fileName),
           if (recipientId != null) 'X-Recipient-Id': recipientId,
           if (groupId != null) 'X-Group-Id': groupId,
+          if (caption.trim().isNotEmpty) 'X-Caption': Uri.encodeComponent(caption.trim()),
         })
         ..contentLength = bytes.length;
       final responseFuture = client.send(upload);
@@ -7855,6 +7858,7 @@ Future<bool> showBarqAttachmentPreview(
   required String fileName,
   required String contentType,
   required Uint8List bytes,
+  TextEditingController? captionController,
 }) async {
   final type = contentType.toLowerCase();
   final isImage = type.startsWith('image/');
@@ -7906,6 +7910,23 @@ Future<bool> showBarqAttachmentPreview(
                 const SizedBox(height: 12),
                 Text(fileName, maxLines: 2, overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontWeight: FontWeight.w600)),
+                if (isImage || isVideo) ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: captionController,
+                    minLines: 1,
+                    maxLines: 4,
+                    maxLength: 2000,
+                    textDirection: TextDirection.rtl,
+                    decoration: InputDecoration(
+                      hintText: 'أضف تعليقاً...',
+                      counterText: '',
+                      filled: true,
+                      fillColor: scheme.surfaceContainerHighest.withValues(alpha: .45),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(13), borderSide: BorderSide.none),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 4),
                 Text('${(bytes.length / (1024 * 1024)).toStringAsFixed(2)} MB',
                   style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
@@ -8152,6 +8173,7 @@ class _AttachmentTileState extends State<_AttachmentTile> {
   @override
   Widget build(BuildContext context) {
     final name = field(widget.attachment, ['fileName'], 'ملف مرفق');
+    final caption = field(widget.attachment, ['caption']);
     final icon = _isImage ? Icons.image_outlined
         : _isVideo ? Icons.video_file_outlined
         : _isAudio ? Icons.audio_file_outlined
@@ -8308,6 +8330,10 @@ class _AttachmentTileState extends State<_AttachmentTile> {
               )),
               IconButton(onPressed: _downloadLoading ? null : _download, icon: _downloadLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.download_rounded), tooltip: 'تنزيل الملف'),
             ]),
+          if (caption.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(caption, style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.35)),
+          ],
           if (_downloadLoading) ...[
             const SizedBox(height: 6),
             Row(children: [
@@ -9579,6 +9605,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         fileName: field(attachment, ['fileName'], 'barq-file'),
         contentType: field(attachment, ['contentType'], 'application/octet-stream'),
         recipientId: friendId,
+        caption: field(attachment, ['caption']),
         onProgress: (value) { if (mounted) setState(() => attachment['localUploadProgress'] = value); },
       );
       if (mounted) setState(() => messages.removeWhere((item) => field(item, ['id']) == id));
@@ -9609,12 +9636,17 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       final bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
       final contentType = file.extension == null ? 'application/octet-stream' : _mimeForExtension(file.extension!);
       if (!mounted) return;
+      final captionController = TextEditingController();
       final confirmed = await showBarqAttachmentPreview(context,
-        fileName: file.name, contentType: contentType, bytes: bytes);
+        fileName: file.name, contentType: contentType, bytes: bytes,
+        captionController: captionController);
       if (!mounted || !confirmed) {
+        captionController.dispose();
         return;
       }
       final local = _newPendingAttachment(bytes, file.name, contentType);
+      (local['local_attachment'] as Map<String, dynamic>)['caption'] = captionController.text.trim();
+      captionController.dispose();
       setState(() => messages = mergeMessages(messages, [local]));
       unawaited(_uploadPendingAttachment(local));
     } catch (error) { if (mounted) showMsg(context, cleanError(error)); }
@@ -10971,6 +11003,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
         fileName: field(attachment, ['fileName'], 'barq-file'),
         contentType: field(attachment, ['contentType'], 'application/octet-stream'),
         groupId: groupId,
+        caption: field(attachment, ['caption']),
         onProgress: (value) { if (mounted) setState(() => attachment['localUploadProgress'] = value); },
       );
       if (mounted) setState(() => messages.removeWhere((item) => field(item, ['id']) == id));
@@ -10999,12 +11032,17 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
       final bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
       final contentType = file.extension == null ? 'application/octet-stream' : _mimeForExtension(file.extension!);
       if (!mounted) return;
+      final captionController = TextEditingController();
       final confirmed = await showBarqAttachmentPreview(context,
-        fileName: file.name, contentType: contentType, bytes: bytes);
+        fileName: file.name, contentType: contentType, bytes: bytes,
+        captionController: captionController);
       if (!mounted || !confirmed) {
+        captionController.dispose();
         return;
       }
       final local = _newPendingAttachment(bytes, file.name, contentType);
+      (local['local_attachment'] as Map<String, dynamic>)['caption'] = captionController.text.trim();
+      captionController.dispose();
       setState(() => messages = mergeMessages(messages, [local]));
       unawaited(_uploadPendingAttachment(local));
     } catch (error) { if (mounted) showMsg(context, cleanError(error)); }
@@ -11647,11 +11685,8 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                               backgroundColor: Theme.of(context).colorScheme.primary,
                               foregroundColor: Theme.of(context).colorScheme.onPrimary,
                             ),
-                            onPressed: sending ? null : send,
-                            icon: sending
-                                ? const SizedBox(width: 18, height: 18,
-                                    child: CircularProgressIndicator(strokeWidth: 2))
-                                : const Icon(Icons.send_rounded),
+                            onPressed: send,
+                            icon: const Icon(Icons.send_rounded),
                           ),
                         );
                       },
