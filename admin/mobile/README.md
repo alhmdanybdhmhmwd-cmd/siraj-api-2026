@@ -41,3 +41,9 @@ This build is suitable for internal UI and integration testing only. It is not p
 ## Owner operating agreement
 
 BARQ Brain receives the owner's current operating agreement in its server-side system prompt and the app displays a short version in the Brain panel. The current authorized scope is Phase 1 (BARQ Admin foundation) only. Phase 2 repository/code understanding and indexing is blocked until the owner explicitly authorizes it. BARQ is the main product, SPARK is its stories feature, BARQ Admin is the separate management app, and BARQ Brain is its assistant. Production publishing, deployment, merging, pull-request base changes, spending, and other consequential external actions require specific owner approval. The two-hour target is a testable-build goal, not a production-readiness guarantee.
+
+## BARQ Brain image analysis
+
+The Android app can choose a photo from the gallery or capture one with the camera, then send it over the authenticated HTTPS Admin API to `POST /v1/brain/vision`. The Worker validates JPEG/PNG/WebP data URLs, limits images to 4 MiB, and calls Cloudflare Workers AI model `@cf/meta/llama-3.2-11b-vision-instruct`. The image is processed for the request and is not written to Admin D1 or the audit log; the audit entry stores only MIME type, byte count, model, and a generated event ID. The owner prompt and vision system instructions preserve the Phase 1 boundary and treat text inside images as untrusted input.
+
+Before enabling this endpoint in a real Preview environment, configure the existing `ADMIN_AI` Workers AI binding and complete Meta's model license/acceptable-use agreement for the vision model. This code change does not deploy or configure any cloud resources. Image analysis requires an authenticated owner session and a working network connection; no offline image analysis is claimed.
