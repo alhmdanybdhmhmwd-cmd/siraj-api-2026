@@ -1,0 +1,38 @@
+# Copy to wrangler.toml only after creating dedicated BARQ Admin Preview resources.
+# Never point this Worker at BARQ production databases or queues.
+name = "barq-admin-preview"
+main = "worker.js"
+compatibility_date = "2026-11-24"
+workers_dev = true
+preview_urls = true
+
+[vars]
+# Replace with the exact Android AppAuth redirect origin allowed by the mobile client.
+BARQ_ADMIN_ALLOWED_ORIGIN = "REPLACE_WITH_ADMIN_APP_ORIGIN"
+BARQ_GOOGLE_OIDC_CLIENT_ID = "REPLACE_WITH_GOOGLE_WEB_OR_ANDROID_CLIENT_ID"
+BARQ_ADMIN_OWNER_EMAIL = "REPLACE_WITH_VERIFIED_OWNER_EMAIL"
+# Pin only after the first verified owner enrollment.
+# BARQ_ADMIN_OWNER_SUBJECT = "REPLACE_WITH_GOOGLE_OIDC_SUB"
+
+[[d1_databases]]
+binding = "ADMIN_DB"
+database_name = "barq-admin-preview"
+database_id = "REPLACE_WITH_DEDICATED_PREVIEW_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[[queues.producers]]
+binding = "ADMIN_TASK_QUEUE"
+queue = "barq-admin-preview-tasks"
+
+[[queues.consumers]]
+queue = "barq-admin-preview-tasks"
+max_batch_size = 5
+max_batch_timeout = 5
+max_retries = 5
+dead_letter_queue = "barq-admin-preview-dlq"
+
+[ai]
+binding = "ADMIN_AI"
+
+[observability]
+enabled = true
