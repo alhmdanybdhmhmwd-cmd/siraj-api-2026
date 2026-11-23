@@ -84,6 +84,12 @@ test("BARQ Brain prompts include current workspace context and no execution auth
   assert.match(messages[1].content, /Current phase: global-launch/);
   assert.match(messages[0].content, /no authority to publish/);
   assert.match(messages[0].content, /Never claim an action was performed/);
+  assert.match(messages[0].content, /PHASE 1 ONLY/);
+  assert.match(messages[0].content, /Do not start PHASE 2/);
+  assert.match(messages[0].content, /SPARK/);
+  assert.match(messages[0].content, /BARQ Admin/);
+  assert.match(messages[0].content, /Never publish to production/);
+  assert.match(messages[0].content, /two-hour target/);
 });
 
 test("knowledge sources are versioned, typed, and bounded", () => {
