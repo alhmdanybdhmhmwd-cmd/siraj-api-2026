@@ -269,6 +269,27 @@ test("chat wallpaper is selectable and persists per conversation", () => {
   assert.ok(flutterApp.includes("barq_chat_wallpaper_"));
 });
 
+test("private chat tools are available in a collapsible toolbar, not only profile menus", () => {
+  const privateHeader = flutterApp.slice(
+    flutterApp.indexOf("class _ChatPageState"),
+    flutterApp.indexOf("class _GroupChatPageState"),
+  );
+  assert.ok(privateHeader.includes("chatToolsExpanded"));
+  assert.ok(privateHeader.includes("إظهار أدوات المحادثة"));
+  assert.ok(privateHeader.includes("PreferredSize"));
+  assert.ok(privateHeader.includes("Api.searchPrivateMessages"));
+  assert.ok(privateHeader.includes("Api.summarizePrivateConversation"));
+  assert.ok(privateHeader.includes("showBarqMessageCollectionDialog"));
+  assert.ok(privateHeader.includes("_chooseChatWallpaper"));
+  assert.ok(privateHeader.includes("_clearConversationHistory"));
+  const groupStart = flutterApp.indexOf("class _GroupChatPageState");
+  const groupHeader = flutterApp.slice(groupStart, flutterApp.indexOf("class ", groupStart + 10));
+  assert.ok(groupHeader.includes("إظهار أدوات المجموعة"));
+  assert.ok(groupHeader.includes("Api.searchGroupMessages"));
+  assert.ok(groupHeader.includes("إضافة أعضاء"));
+  assert.ok(groupHeader.includes("current_role"));
+});
+
 test("private and group chat composers use the unified Barq pill layout and reply previews", () => {
   assert.ok(flutterApp.includes("class BarqReplyPreview extends StatelessWidget"));
   assert.ok(flutterApp.includes("tooltip: 'إلغاء الرد'"));
