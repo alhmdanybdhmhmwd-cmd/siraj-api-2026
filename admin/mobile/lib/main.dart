@@ -315,7 +315,6 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
     );
     if (saved == true) {
       final base = baseController.text.trim().replaceFirst(RegExp(r'/+$'), '');
-      final uri = Uri.tryParse(base);
       if (!isValidAdminApiBase(base) || tokenController.text.trim().isEmpty) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('أدخل عنوان HTTPS صحيحًا ورمز جلسة غير فارغ')),
