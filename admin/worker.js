@@ -457,7 +457,7 @@ function response(data, status = 200, origin = "") {
   if (origin) {
     headers["Access-Control-Allow-Origin"] = origin;
     headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, X-Idempotency-Key";
-    headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, OPTIONS";
+    headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS";
   }
   return new Response(JSON.stringify(data), { status, headers });
 }
@@ -647,7 +647,7 @@ async function handle(request, env) {
     return response({ devices: result.results || [] }, 200, allowedOrigin);
   }
 
-  if (request.method === "DELETE" && /^\\/v1\\/devices\\/[0-9a-f-]{36}$/i.test(url.pathname)) {
+  if (request.method === "DELETE" && url.pathname.startsWith("/v1/devices/") && /^[0-9a-f-]{36}$/i.test(url.pathname.slice("/v1/devices/".length))) {
     const deviceId = url.pathname.split("/").pop();
     const revoked = await env.ADMIN_DB.batch([
       env.ADMIN_DB.prepare(`
