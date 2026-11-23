@@ -4277,6 +4277,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Map<String, dynamic> notificationPrefs = {'messages': true, 'groups': true, 'statuses': true};
   Timer? offlineSyncTimer;
   bool _handlingNotificationTap = false;
+  bool _refreshingAll = false;
+  DateTime? _lastResumeRefreshAt;
   StreamSubscription<Uri>? _groupInviteLinkSubscription;
   final Set<String> _handledGroupInviteCodes = <String>{};
 
@@ -4390,6 +4392,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _syncRealtimeConnection();
       BarqOfflineQueue.syncOutbox();
       if (phoneContactsPermissionGranted) matchPhoneContacts(silent: true);
+      final lastRefresh = _lastResumeRefreshAt;
+      if (!_refreshingAll && (lastRefresh == null ||
+          DateTime.now().difference(lastRefresh) > const Duration(seconds: 12))) {
+        _lastResumeRefreshAt = DateTime.now();
+        unawaited(refreshAll());
+      }
     } else if (barqShouldPauseBackgroundWork(state)) {
       _stopOfflineSyncTimer();
       unawaited(SirajRealtime.instance.stop());
@@ -4501,6 +4509,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> refreshAll() async {
+    if (_refreshingAll) return;
+    _refreshingAll = true;
     // Keep the current tabs visible during background refreshes. The initial
     // loading state is already true until the first refresh completes.
     try {
@@ -4552,6 +4562,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           if (mounted) _handlePendingNotificationTap();
         });
       }
+      _refreshingAll = false;
     }
   }
 
@@ -9290,6 +9301,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                       ),
                                     if (_attachmentData(m) case final attachment?) ...[
                                       GestureDetector(
+                                        onHorizontalDragEnd: (details) {
+                                          if ((details.primaryVelocity ?? 0).abs() > 180 && m['is_ephemeral'] != true) {
+                                            setState(() => replyToMessage = Map<String, dynamic>.from(m));
+                                          }
+                                        },
+                                        onDoubleTap: () async {
+                                          await Api.reactPrivateMessage(field(m, ['id', 'message_id']), '❤️');
+                                          if (mounted) await loadMessages(silent: true);
+                                        },
                                         onLongPress: () => showMessageActions(
                                           context,
                                           message: m,
@@ -9344,6 +9364,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                         ),
                                     ] else ...[
                                       GestureDetector(
+                                        onHorizontalDragEnd: (details) {
+                                          if ((details.primaryVelocity ?? 0).abs() > 180 && m['is_ephemeral'] != true) {
+                                            setState(() => replyToMessage = Map<String, dynamic>.from(m));
+                                          }
+                                        },
+                                        onDoubleTap: () async {
+                                          await Api.reactPrivateMessage(field(m, ['id', 'message_id']), '❤️');
+                                          if (mounted) await loadMessages(silent: true);
+                                        },
                                         onLongPress: () => showMessageActions(
                                           context,
                                           message: m,
@@ -10607,6 +10636,15 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                             ),
                           if (_attachmentData(m) case final attachment?) ...[
                             GestureDetector(
+                              onHorizontalDragEnd: (details) {
+                                if ((details.primaryVelocity ?? 0).abs() > 180) {
+                                  setState(() => replyToMessage = Map<String, dynamic>.from(m));
+                                }
+                              },
+                              onDoubleTap: () async {
+                                await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), '❤️');
+                                if (mounted) await loadMessages(silent: true);
+                              },
                               onLongPress: () => showMessageActions(
                                 context,
                                 message: m,
@@ -10660,6 +10698,15 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                               ),
                           ] else ...[
                             GestureDetector(
+                              onHorizontalDragEnd: (details) {
+                                if ((details.primaryVelocity ?? 0).abs() > 180) {
+                                  setState(() => replyToMessage = Map<String, dynamic>.from(m));
+                                }
+                              },
+                              onDoubleTap: () async {
+                                await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), '❤️');
+                                if (mounted) await loadMessages(silent: true);
+                              },
                               onLongPress: () => showMessageActions(
                                 context,
                                 message: m,
