@@ -70,3 +70,29 @@ G. Test device replacement, concurrent sessions, offline/reconnect, recovery, an
 
 ## Scope boundary
 This is the agreed planning baseline. It does not mean BARQ Admin has been implemented or connected to production. BARQ Android APK delivery remains the immediate priority; admin implementation must not block it.
+
+## Always-on execution while the owner is offline
+- The owner's phone is a control and monitoring client, not the execution host. Closing the app, disconnecting mobile data/Wi-Fi, or switching devices must not stop an accepted server-side task.
+- Every long-running task is submitted to a durable server queue and claimed by a worker with a renewable lease/heartbeat. A worker crash or deployment restarts the task from the latest committed checkpoint.
+- Persist each step's input reference, output reference, status, timestamps, retry count, idempotency key, and checkpoint before acknowledging progress.
+- Use bounded retries for transient failures; pause for owner input or approval when needed. Never repeat a payment, public post, destructive action, or production mutation without idempotency protection and the required approval.
+- The app shows queued/running/paused/needs-approval/failed/completed states, last checkpoint, next action, and last server sync. Push notifications are optional alerts; work continues without push delivery.
+- Provide owner controls to pause, resume, cancel, inspect logs, and revoke a worker's authority. Cancellation must be cooperative and report any irreversible step already completed.
+
+## BARQ launch and growth companion
+BARQ Brain includes a dedicated launch-and-growth workspace to help the owner take BARQ from testing through global release and sustainable growth:
+- Build and maintain a staged go-to-market plan for launch readiness, beta testing, country/language expansion, app-store listing, launch campaigns, and post-launch retention.
+- Research target audiences, markets, competitor positioning, localization needs, store policies, and channel opportunities; attach sources and dates to market claims.
+- Draft Arabic and English store descriptions, landing-page copy, social posts, short-video scripts, press kits, creator outreach, community announcements, and support responses in BARQ's approved brand voice.
+- Plan campaigns and budgets, define measurable goals (installs, activation, retention, referrals only if later approved, and support quality), and report results from connected analytics sources when authorized.
+- Maintain a content calendar, campaign/task checkpoints, creative versions, approval history, and lessons learned centrally so work can continue from any device.
+- Recommend experiments and explain expected cost, reach, risk, and success metrics. Distinguish verified results from estimates and assumptions.
+- Do not publish posts, contact creators, buy ads, spend money, change store listings, or make public product claims without explicit owner approval. Never promise rankings or guaranteed virality; optimize ethically for user value, trust, safety, and retention.
+
+## Additional acceptance tests: offline work and growth operations
+8. Submit a long-running task, disconnect every owner device, and verify the server worker continues to the next durable checkpoint.
+9. Restart a worker mid-task and verify recovery from the last committed checkpoint without duplicate side effects.
+10. Reconnect from a different phone and verify current status, logs, outputs, approvals, and next action are synchronized.
+11. Draft a launch campaign while offline from the phone cache; queue the draft safely and reconcile it on reconnect without overwriting newer server data.
+12. Require owner approval before any external publication, paid promotion, creator outreach, or store-listing change.
+
