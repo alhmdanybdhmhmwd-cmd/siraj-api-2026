@@ -294,6 +294,40 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
     }
   }
 
+  Future<void> _logout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('إنهاء جلسة الإدارة؟'),
+        content: const Text('سيُحذف رمز الجلسة والبيانات المخزنة محليًا من هذا الهاتف. المهام التي لم تُرسل بعد ستُحذف أيضًا.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('إنهاء الجلسة')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final prefs = await SharedPreferences.getInstance();
+    await _secure.delete(key: 'barq_admin_owner_token');
+    for (final key in [_cacheWorkspace, _cacheTasks, _cacheApprovals, _cacheAudit, _outboxKey]) {
+      await prefs.remove(key);
+    }
+    await prefs.remove('barq_admin_api_base');
+    if (!mounted) return;
+    setState(() {
+      _apiBase = '';
+      _token = '';
+      _workspace = {};
+      _tasks = [];
+      _approvals = [];
+      _auditEvents = [];
+      _online = false;
+      _loading = false;
+      _connectionMessage = 'تم إنهاء الجلسة';
+      _tab = 0;
+    });
+  }
+
   Future<void> _showSettings() async {
     final baseController = TextEditingController(text: _apiBase);
     final tokenController = TextEditingController(text: _token);
@@ -389,6 +423,8 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
         actions: [
           IconButton(tooltip: 'إعدادات الاتصال', onPressed: _showSettings,
             icon: const Icon(Icons.settings_outlined)),
+          IconButton(tooltip: 'إنهاء الجلسة', onPressed: _token.isEmpty ? null : _logout,
+            icon: const Icon(Icons.logout)),
           const SizedBox(width: 6),
         ],
       ),
