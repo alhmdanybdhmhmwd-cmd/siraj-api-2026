@@ -775,12 +775,15 @@ class _AdminHomePageState extends State<AdminHomePage>
   Future<void> _showBrainChat() async {
     if (_token.isEmpty || !_online) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('اتصل بخادم BARQ Admin أولًا لبدء محادثة محفوظة')),
+        const SnackBar(
+          content: Text('اتصل بخادم BARQ Admin أولًا لبدء محادثة محفوظة'),
+        ),
       );
       return;
     }
     final prefs = await SharedPreferences.getInstance();
-    String? conversationId = prefs.getString('barq_admin_brain_conversation_id');
+    String? conversationId =
+        prefs.getString('barq_admin_brain_conversation_id');
     final controller = TextEditingController();
     final messages = <Map<String, String>>[];
     var sending = false;
@@ -800,7 +803,8 @@ class _AdminHomePageState extends State<AdminHomePage>
         }
       } catch (_) {
         conversationId = null;
-        await prefs.remove('barq_admin_brain_conversation_id');
+        await prefs.remove(
+                                    'barq_admin_brain_conversation_id');
       }
     }
 
@@ -823,7 +827,8 @@ class _AdminHomePageState extends State<AdminHomePage>
                     headers: _headers,
                     body: jsonEncode({
                       'message': prompt,
-                      if (conversationId != null) 'conversationId': conversationId,
+                      if (conversationId != null)
+                        'conversationId': conversationId,
                     }),
                   )
                   .timeout(const Duration(seconds: 90));
@@ -857,7 +862,9 @@ class _AdminHomePageState extends State<AdminHomePage>
                 final references = sources.whereType<Map>().map((source) {
                   final path = (source['sourcePath'] ?? '').toString();
                   final revision = (source['sourceRevision'] ?? '').toString();
-                  return revision.isEmpty ? '• ' + path : '• ' + path + ' @ ' + revision;
+                  return revision.isEmpty
+                      ? '• ' + path
+                      : '• ' + path + ' @ ' + revision;
                 }).join('\n');
                 answer += '\n\nالمصادر التي استند إليها:\n' + references;
               }
@@ -895,7 +902,8 @@ class _AdminHomePageState extends State<AdminHomePage>
                         const Expanded(
                           child: Text(
                             'محادثة BARQ Brain',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 17),
                           ),
                         ),
                         TextButton(
@@ -938,8 +946,10 @@ class _AdminHomePageState extends State<AdminHomePage>
                                       ? Alignment.centerLeft
                                       : Alignment.centerRight,
                                   child: Container(
-                                    constraints: const BoxConstraints(maxWidth: 520),
-                                    margin: const EdgeInsets.symmetric(vertical: 5),
+                                    constraints:
+                                      const BoxConstraints(maxWidth: 520),
+                                    margin:
+                                      const EdgeInsets.symmetric(vertical: 5),
                                     padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
                                       color: isError
@@ -949,7 +959,8 @@ class _AdminHomePageState extends State<AdminHomePage>
                                               : _surface,
                                       borderRadius: BorderRadius.circular(14),
                                     ),
-                                    child: SelectableText(item['content'] ?? ''),
+                                    child:
+                                        SelectableText(item['content'] ?? ''),
                                   ),
                                 );
                               },
