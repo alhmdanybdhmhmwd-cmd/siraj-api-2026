@@ -193,6 +193,7 @@ jobs:
         with:
           packages: "platform-tools platforms;android-36 build-tools;36.0.0"
       - name: Install Flutter-pinned Android NDK with transient-download retries
+        timeout-minutes: 15
         shell: bash
         run: |
           for attempt in 1 2 3; do
