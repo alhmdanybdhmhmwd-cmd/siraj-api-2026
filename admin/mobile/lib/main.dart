@@ -482,6 +482,19 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
             ]),
             const SizedBox(height: 12),
             const Text('أرسل له مهمة أو اطلب تحليلًا أو خطة تسويق. عند اتصال خدمة الخادم، تُنفّذ مهام التحليل والصياغة بعيدًا عن هاتفك.'),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0x1A2785FF),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _blue.withValues(alpha: .25)),
+              ),
+              child: const Text(
+                'اتفاق المالك: المرحلة الأولى فقط حاليًا. لا يبدأ فهم أو فهرسة كود BARQ قبل إذن صريح. لا دمج أو نشر أو تغيير إنتاج دون موافقة محددة. BARQ هو المنتج، وSPARK ميزة القصص، وBARQ Admin تطبيق الإدارة المستقل.',
+                style: TextStyle(fontSize: 12, height: 1.5, color: Colors.white70),
+              ),
+            ),
             const SizedBox(height: 12),
             OutlinedButton.icon(onPressed: () => _showCreateTask(assistant: true),
               icon: const Icon(Icons.add), label: const Text('إرسال مهمة للمساعد')),
