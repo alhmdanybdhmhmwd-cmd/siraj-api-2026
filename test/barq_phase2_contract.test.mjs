@@ -750,6 +750,8 @@ test("SPARK media uploads validate file signatures and enforce the ten-item serv
   assert.ok(uploadRoute.includes("SELECT COUNT(*) AS count FROM status_media WHERE status_id = ?"));
   assert.ok(worker.includes("const SPARK_MEDIA_PER_STATUS = 10"));
   assert.ok(uploadRoute.includes("existingMediaCount?.count || 0) >= SPARK_MEDIA_PER_STATUS"));
+  assert.ok(uploadRoute.includes('toISOString().slice(0, 19).replace("T", " ")'),
+    "new media SPARK expiry must use the same SQLite-comparable timestamp format");
   assert.ok(uploadRoute.includes("WHERE (SELECT COUNT(*) FROM status_media WHERE status_id = ?) < ${SPARK_MEDIA_PER_STATUS}"));
   assert.ok(uploadRoute.includes("savedRows?.[mediaInsertIndex]?.meta?.changes || 0) !== 1"));
   assert.ok(uploadRoute.includes("at most 10 media files"));
