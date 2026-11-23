@@ -13,6 +13,7 @@ if (!base) {
 
 async function call(path, { method = "GET", token, body, expected = 200 } = {}) {
   const response = await fetch(new URL(path, base), {
+    signal: AbortSignal.timeout(20000),
     method,
     headers: {
       ...(body === undefined ? {} : { "Content-Type": "application/json" }),
