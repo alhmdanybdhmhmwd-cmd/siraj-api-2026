@@ -29,7 +29,7 @@ let cachedJwks = null;
 let cachedJwksAt = 0;
 
 async function googleJwks(fetcher = fetch, nowMs = Date.now()) {
-  if (cachedJwks && nowMs - cachedJwksAt < 60 * 60 * 1000) return cachedJwks;
+  if (fetcher === fetch && cachedJwks && nowMs - cachedJwksAt < 60 * 60 * 1000) return cachedJwks;
   const response = await fetcher("https://www.googleapis.com/oauth2/v3/certs", {
     headers: { Accept: "application/json" },
     cf: { cacheTtl: 3600, cacheEverything: true }
@@ -37,8 +37,10 @@ async function googleJwks(fetcher = fetch, nowMs = Date.now()) {
   if (!response.ok) throw new Error("google_jwks_unavailable");
   const body = await response.json();
   if (!Array.isArray(body.keys) || body.keys.length === 0) throw new Error("google_jwks_invalid");
-  cachedJwks = body.keys;
-  cachedJwksAt = nowMs;
+  if (fetcher === fetch) {
+    cachedJwks = body.keys;
+    cachedJwksAt = nowMs;
+  }
   return cachedJwks;
 }
 
