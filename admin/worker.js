@@ -400,6 +400,20 @@ async function sha256Hex(value) {
   return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
 }
 
+export function validateAdminAccessClaims(claims, now = Math.floor(Date.now() / 1000)) {
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return Boolean(claims && typeof claims === "object" && !Array.isArray(claims) &&
+    claims.iss === "barq-admin-auth" && claims.aud === "barq-admin" &&
+    typeof claims.sub === "string" && claims.sub.length > 0 && claims.sub.length <= 255 &&
+    typeof claims.sid === "string" && uuid.test(claims.sid) &&
+    typeof claims.did === "string" && uuid.test(claims.did) &&
+    typeof claims.jti === "string" && claims.jti.length >= 16 && claims.jti.length <= 128 &&
+    Number.isSafeInteger(claims.iat) && claims.iat <= now + 60 && claims.iat >= now - 660 &&
+    Number.isSafeInteger(claims.nbf) && claims.nbf <= now &&
+    Number.isSafeInteger(claims.exp) && claims.exp > now &&
+    claims.exp > claims.iat && claims.exp - claims.iat <= 600);
+}
+
 async function verifyOwnerToken(request, env) {
   const authorization = request.headers.get("Authorization") || "";
   if (!authorization.startsWith("Bearer ")) return null;
@@ -421,13 +435,7 @@ async function verifyOwnerToken(request, env) {
     if (!valid) return null;
     const claims = JSON.parse(new TextDecoder().decode(decodeBase64url(parts[1])));
     const now = Math.floor(Date.now() / 1000);
-    if (claims.iss !== "barq-admin-auth" || claims.aud !== "barq-admin" ||
-        typeof claims.sub !== "string" ||
-        typeof claims.sid !== "string" || typeof claims.did !== "string" ||
-        !Number.isSafeInteger(claims.exp) || claims.exp <= now ||
-        (claims.nbf !== undefined && (!Number.isSafeInteger(claims.nbf) || claims.nbf > now))) {
-      return null;
-    }
+    if (!validateAdminAccessClaims(claims, now)) return null;
     const active = await env.ADMIN_DB.prepare(`
       SELECT s.id FROM admin_owner_sessions s
       JOIN admin_owner_devices d ON d.id = s.device_id
