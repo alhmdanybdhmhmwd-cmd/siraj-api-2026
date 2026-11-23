@@ -5,7 +5,7 @@
   "scripts": {
     "test": "node --test",
     "check": "node --check worker.js",
-    "knowledge:ingest": "node scripts/ingest_github_repo.mjs"
+    "knowledge:ingest": "node ingest_github_repo.mjs"
   },
   "engines": {
     "node": ">=20"
