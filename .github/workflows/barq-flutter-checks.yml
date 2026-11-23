@@ -7,6 +7,7 @@ on:
       - barq/phase4-messaging-interactions-2026-11-22
       - barq/phase5-feature-audit-2026-11-22
       - barq/media-experience-2026-11-22
+      - barq/ux-media-chat-spark-2026-11-23
     paths:
       - "android/**"
       - ".github/workflows/barq-flutter-checks.yml"
