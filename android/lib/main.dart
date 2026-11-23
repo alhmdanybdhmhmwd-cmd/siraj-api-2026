@@ -9911,7 +9911,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                           onProgress: onProgress,
                                         ), onRetry: attachment['localBytes'] is Uint8List ? () => _uploadPendingAttachment(m) : null),
                                       ),
-                                      if (field(attachment, ['contentType']).startsWith('audio/'))
+                                      if (field(attachment, ['contentType']).startsWith('audio/') && field(attachment, ['attachmentId']).isNotEmpty)
                                         TextButton.icon(
                                           onPressed: transcribingMessageIds.contains(field(m, ['id', 'message_id']))
                                               ? null : () => _transcribeVoiceMessage(m, attachment),
@@ -11408,7 +11408,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                                 onProgress: onProgress,
                               ), onRetry: attachment['localBytes'] is Uint8List ? () => _uploadPendingAttachment(m) : null),
                             ),
-                            if (field(attachment, ['contentType']).startsWith('audio/'))
+                            if (field(attachment, ['contentType']).startsWith('audio/') && field(attachment, ['attachmentId']).isNotEmpty)
                               TextButton.icon(
                                 onPressed: transcribingMessageIds.contains(field(m, ['id', 'message_id']))
                                     ? null : () => _transcribeVoiceMessage(m, attachment),
