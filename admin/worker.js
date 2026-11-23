@@ -405,7 +405,7 @@ async function verifyOwnerToken(request, env) {
   if (!authorization.startsWith("Bearer ")) return null;
   const token = authorization.slice(7);
   if (token.length > 8192 || !env.BARQ_ADMIN_JWT_SECRET ||
-      env.BARQ_ADMIN_JWT_SECRET.length < 32 || !env.BARQ_ADMIN_OWNER_SUBJECT) return null;
+      env.BARQ_ADMIN_JWT_SECRET.length < 32) return null;
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return null;
@@ -422,7 +422,7 @@ async function verifyOwnerToken(request, env) {
     const claims = JSON.parse(new TextDecoder().decode(decodeBase64url(parts[1])));
     const now = Math.floor(Date.now() / 1000);
     if (claims.iss !== "barq-admin-auth" || claims.aud !== "barq-admin" ||
-        typeof claims.sub !== "string" || claims.sub !== env.BARQ_ADMIN_OWNER_SUBJECT ||
+        typeof claims.sub !== "string" ||
         typeof claims.sid !== "string" || typeof claims.did !== "string" ||
         !Number.isSafeInteger(claims.exp) || claims.exp <= now ||
         (claims.nbf !== undefined && (!Number.isSafeInteger(claims.nbf) || claims.nbf > now))) {
