@@ -51,3 +51,14 @@ CREATE TABLE IF NOT EXISTS admin_auth_rate_limits (
 );
 CREATE INDEX IF NOT EXISTS idx_admin_auth_rate_limits_window
   ON admin_auth_rate_limits(window_start);
+
+-- Hash history distinguishes a real refresh-token replay from an arbitrary invalid token.
+CREATE TABLE IF NOT EXISTS admin_owner_refresh_token_history (
+  token_hash TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  used_at TEXT,
+  FOREIGN KEY (session_id) REFERENCES admin_owner_sessions(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_admin_owner_refresh_history_session
+  ON admin_owner_refresh_token_history(session_id, created_at DESC);
