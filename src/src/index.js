@@ -2189,7 +2189,7 @@ export default {
                   CASE WHEN pp.user_id IS NOT NULL
                     THEN '/api/profile/photo/' || u.id ELSE NULL END AS photoUrl,
                   pp.updated_at AS photoUpdatedAt,
-                  (SELECT COUNT(*) FROM status_views sv WHERE sv.status_id = s.id) AS viewCount
+                  CASE WHEN s.user_id = ? THEN (SELECT COUNT(*) FROM status_views sv WHERE sv.status_id = s.id) ELSE 0 END AS viewCount
            FROM status_posts s
            JOIN users u ON u.id = s.user_id
            LEFT JOIN profile_photos pp ON pp.user_id = u.id
@@ -2212,7 +2212,7 @@ export default {
              )
            ORDER BY s.created_at DESC
            LIMIT 100`
-        ).bind(currentUser.sub, currentUser.sub, currentUser.sub, currentUser.sub, currentUser.sub).all();
+        ).bind(currentUser.sub, currentUser.sub, currentUser.sub, currentUser.sub, currentUser.sub, currentUser.sub).all();
 
         const statuses = result.results || [];
         if (statuses.length) {
@@ -2285,10 +2285,13 @@ export default {
               "INSERT OR IGNORE INTO status_views (status_id, viewer_id) VALUES (?, ?)"
             ).bind(statusId, currentUser.sub).run();
           }
-          const count = await env.DB.prepare(
-            "SELECT COUNT(*) AS count FROM status_views WHERE status_id = ?"
-          ).bind(statusId).first();
-          return json({ statusId, viewCount: Number(count?.count || 0) });
+          if (status.user_id === currentUser.sub) {
+            const count = await env.DB.prepare(
+              "SELECT COUNT(*) AS count FROM status_views WHERE status_id = ?"
+            ).bind(statusId).first();
+            return json({ statusId, viewCount: Number(count?.count || 0) });
+          }
+          return json({ statusId, viewed: true });
         }
         if (action === "viewers" && method === "GET") {
           if (status.user_id !== currentUser.sub) return json({ error: "Only the status owner can view this list" }, 403);
