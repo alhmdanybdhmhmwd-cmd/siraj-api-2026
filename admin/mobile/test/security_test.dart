@@ -18,16 +18,17 @@ void main() {
   });
 }
 
-test('creates a strong nonce and canonical Google native redirect URI', () {
-  final first = createOidcNonce();
-  final second = createOidcNonce();
-  expect(first, isNot(equals(second)));
-  expect(first.length, greaterThanOrEqualTo(40));
-  expect(googleOidcRedirectUri(
-    '1234567890-abcdef.apps.googleusercontent.com',
-  ), 'com.googleusercontent.apps.1234567890-abcdef:/oauth2redirect');
-  expect(
-    () => googleOidcRedirectUri('not-a-google-client-id'),
-    throwsArgumentError,
-  );
-});
+  test('creates a strong nonce and canonical Google native redirect URI', () {
+    final first = createOidcNonce();
+    final second = createOidcNonce();
+    expect(first, isNot(equals(second)));
+    expect(first.length, greaterThanOrEqualTo(40));
+    expect(googleOidcRedirectUri(
+      '1234567890-abcdef.apps.googleusercontent.com',
+    ), 'com.googleusercontent.apps.1234567890-abcdef:/oauth2redirect');
+    expect(
+      () => googleOidcRedirectUri('not-a-google-client-id'),
+      throwsArgumentError,
+    );
+  });
+}
