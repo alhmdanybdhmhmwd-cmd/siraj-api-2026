@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, rankKnowledgeChunks, validateAdminAccessClaims } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, rankKnowledgeChunks, validateAdminAccessClaims, processAdminDeadLetterMessage } from "./worker.js";
 
 test("task input is normalized and bounded", () => {
   assert.deepEqual(validateTaskInput({ title: "  Prepare global launch  ", priority: "high" }), {
@@ -211,4 +211,54 @@ test("Admin access-token claims require bounded lifetime and valid session bindi
   ]) {
     assert.equal(validateAdminAccessClaims({ ...valid, ...override }, now), false);
   }
+});
+
+
+test("dead-letter delivery marks a still-active task failed and audits the incident", async () => {
+  const calls = [];
+  const env = { ADMIN_DB: {
+    prepare(sql) {
+      return { bind(...args) { return { async run() {
+        calls.push({ sql, args });
+        return { meta: { changes: sql.includes("UPDATE admin_tasks") ? 1 : 1 } };
+      } }; } };
+    }
+  } };
+  const actions = [];
+  await processAdminDeadLetterMessage({
+    body: { taskId: "task-1", workspaceId: "workspace-1" },
+    ack() { actions.push("ack"); },
+    retry() { actions.push("retry"); }
+  }, env);
+  assert.deepEqual(actions, ["ack"]);
+  assert.equal(calls.length, 2);
+  assert.match(calls[0].sql, /status = 'failed'/);
+  assert.match(calls[0].sql, /lease_owner = NULL, lease_expires_at = NULL/);
+  assert.match(calls[1].sql, /INSERT INTO admin_audit_events/);
+  assert.match(calls[1].args[4], /dead_lettered/);
+});
+
+test("dead-letter redelivery does not overwrite or re-audit an already terminal task", async () => {
+  let calls = 0;
+  const env = { ADMIN_DB: {
+    prepare() { return { bind() { return { async run() { calls += 1; return { meta: { changes: 0 } }; } }; } }; }
+  } };
+  const actions = [];
+  await processAdminDeadLetterMessage({
+    body: { taskId: "task-2", workspaceId: "workspace-1" },
+    ack() { actions.push("ack"); },
+    retry() { actions.push("retry"); }
+  }, env);
+  assert.deepEqual(actions, ["ack"]);
+  assert.equal(calls, 1);
+});
+
+test("dead-letter delivery is retried when durable storage is unavailable", async () => {
+  const actions = [];
+  await processAdminDeadLetterMessage({
+    body: { taskId: "task-3", workspaceId: "workspace-1" },
+    ack() { actions.push("ack"); },
+    retry(options) { actions.push(options); }
+  }, {});
+  assert.deepEqual(actions, [{ delaySeconds: 60 }]);
 });
