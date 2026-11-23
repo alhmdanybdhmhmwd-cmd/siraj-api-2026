@@ -692,10 +692,10 @@ class _AdminHomePageState extends State<AdminHomePage>
                       ? 'صيغة الصورة غير مدعومة أو لا يطابق محتواها نوعها؛ استخدم JPEG أو PNG أو WebP'
                       : data is Map &&
                               data['error'] == 'vision_analysis_failed'
-                              ? 'تعذر على نموذج الرؤية تحليل الصورة؛ جرّب صورة أوضح أو أعد المحاولة'
-                              : 'تعذر تحليل الصورة (' +
-                                  response.statusCode.toString() +
-                                  ')';
+                          ? 'تعذر على نموذج الرؤية تحليل الصورة؛ جرّب صورة أوضح أو أعد المحاولة'
+                          : 'تعذر تحليل الصورة (' +
+                              response.statusCode.toString() +
+                              ')';
       throw Exception(message);
     }
     final answer = data is Map ? (data['answer'] ?? '').toString().trim() : '';
@@ -729,13 +729,13 @@ class _AdminHomePageState extends State<AdminHomePage>
               ? 'اكتب وصفًا للصورة لا يتجاوز 1600 حرف'
               : data is Map &&
                       data['error'] == 'image_generation_model_terms_required'
-                      ? 'يلزم قبول شروط نموذج إنشاء الصور في حساب Cloudflare قبل استخدامه'
-                      : data is Map &&
-                              data['error'] == 'image_generation_failed'
-                          ? 'تعذر إنشاء الصورة؛ تحقق من تفعيل Workers AI ثم أعد المحاولة'
-                          : 'تعذر إنشاء الصورة (' +
-                              response.statusCode.toString() +
-                              ')';
+                  ? 'يلزم قبول شروط نموذج إنشاء الصور في حساب Cloudflare قبل استخدامه'
+                  : data is Map &&
+                          data['error'] == 'image_generation_failed'
+                      ? 'تعذر إنشاء الصورة؛ تحقق من تفعيل Workers AI ثم أعد المحاولة'
+                      : 'تعذر إنشاء الصورة (' +
+                          response.statusCode.toString() +
+                          ')';
       throw Exception(message);
     }
     final imageUri = data is Map ? (data['image'] ?? '').toString() : '';
