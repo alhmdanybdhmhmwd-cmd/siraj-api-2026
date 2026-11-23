@@ -2028,7 +2028,7 @@ export default {
             // Enforce the 10-file ceiling atomically in D1 as well as with the
             // early count check above, so concurrent uploads cannot exceed it.
             env.DB.prepare(
-              "INSERT INTO status_media (id, status_id, object_key, file_name, content_type, size, caption, created_at) SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM status_media WHERE status_id = ?) < ${SPARK_MEDIA_PER_STATUS}"
+              `INSERT INTO status_media (id, status_id, object_key, file_name, content_type, size, caption, created_at) SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM status_media WHERE status_id = ?) < ${SPARK_MEDIA_PER_STATUS}`
             ).bind(mediaId, id, objectKey, suppliedName, contentType, bytes.byteLength, caption, new Date().toISOString(), id),
             env.DB.prepare(
               "INSERT INTO media_expirations (object_key, expires_at) SELECT ?, ? WHERE EXISTS (SELECT 1 FROM status_media WHERE object_key = ?)"
