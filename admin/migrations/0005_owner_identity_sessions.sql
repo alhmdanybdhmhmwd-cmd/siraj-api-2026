@@ -40,3 +40,14 @@ CREATE TABLE IF NOT EXISTS admin_oidc_nonce_uses (
 );
 CREATE INDEX IF NOT EXISTS idx_admin_oidc_nonce_expiry
   ON admin_oidc_nonce_uses(expires_at);
+
+-- Short-window auth throttles only; no daily or monthly image quotas are introduced.
+CREATE TABLE IF NOT EXISTS admin_auth_rate_limits (
+  bucket_key TEXT NOT NULL,
+  window_start INTEGER NOT NULL,
+  request_count INTEGER NOT NULL DEFAULT 0 CHECK (request_count >= 0),
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (bucket_key, window_start)
+);
+CREATE INDEX IF NOT EXISTS idx_admin_auth_rate_limits_window
+  ON admin_auth_rate_limits(window_start);
