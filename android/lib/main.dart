@@ -8304,7 +8304,10 @@ class PublicProfilePage extends StatelessWidget {
                         title: Text(tool.title),
                         subtitle: Text(tool.subtitle,
                           style: const TextStyle(color: Colors.white54, fontSize: 11)),
-                        onTap: tool.onTap,
+                        onTap: () {
+                          Navigator.pop(context);
+                          tool.onTap();
+                        },
                       ),
                   ],
                 ),
