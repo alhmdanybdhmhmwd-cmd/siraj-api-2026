@@ -872,7 +872,8 @@ export default {
         }
 
         // Cloudflare's connecting-IP header is trusted at the Worker edge. Never put all
-        // users into one shared "unknown" bucket when the header is absent.
+        // users into one shared "unknown" bucket when the header is absent. Keep this network
+        // ceiling generous for carrier-grade NAT and shared household/mobile connections.
         const registrationIp = request.headers.get("CF-Connecting-IP");
         if (registrationIp && registrationIp.trim() &&
             !(await consumeLoginAttempt(env, "register-client", registrationIp, 20))) {
