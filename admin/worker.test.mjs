@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canTransitionTask, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision } from "./worker.js";
+import { canTransitionTask, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages } from "./worker.js";
 
 test("task input is normalized and bounded", () => {
   assert.deepEqual(validateTaskInput({ title: "  Prepare global launch  ", priority: "high" }), {
@@ -64,4 +64,15 @@ test("approval decisions are limited to one explicit owner decision", () => {
   });
   assert.equal(validateApprovalDecision({ status: "pending" }).ok, false);
   assert.equal(validateApprovalDecision({ status: "rejected", note: "x".repeat(501) }).ok, false);
+});
+
+test("BARQ Brain prompts include current workspace context and no execution authority", () => {
+  const messages = buildAssistantMessages(
+    { title: "Prepare launch plan", description: "Draft Arabic and English campaign copy" },
+    { current_project: "BARQ", current_phase: "global-launch" }
+  );
+  assert.equal(messages.length, 2);
+  assert.match(messages[1].content, /Current phase: global-launch/);
+  assert.match(messages[0].content, /no authority to publish/);
+  assert.match(messages[0].content, /Never claim an action was performed/);
 });
