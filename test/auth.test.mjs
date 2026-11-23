@@ -851,7 +851,7 @@ test("group conversation pagination uses the same stable cursor contract", async
   assert.deepEqual(data.nextCursor, { before: "2026-11-18 11:00:00", beforeId: "page-item" });
   assert.match(db.lastGroupMessageQuery, /gm.created_at < \? OR \(gm.created_at = \? AND gm.id < \?\)/);
   assert.deepEqual(db.lastGroupMessageParams, [
-    "group-1", "2026-11-18 12:00:00", "2026-11-18 12:00:00", "latest", 2
+    "group-1", user.id, "2026-11-18 12:00:00", "2026-11-18 12:00:00", "latest", 2
   ]);
 });
 
