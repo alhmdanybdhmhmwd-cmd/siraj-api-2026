@@ -1,6 +1,6 @@
 // Preview can be pinned to its isolated fallback Worker through BARQ_API_UPSTREAM.
 // Production remains on its existing upstream unless explicitly configured.
-const PREVIEW_UPSTREAM = "https://barq-api-phase2-test.alhmdanybdhmhmwd.workers.dev";
+const PREVIEW_UPSTREAM = "https://barq-api-phase2-fallback-test.alhmdanybdhmhmwd.workers.dev";
 const DEFAULT_PRODUCTION_UPSTREAM = "https://siraj-api.alhmdanybdhmhmwd.workers.dev";
 const IS_PREVIEW_DEPLOYMENT = process.env.VERCEL_ENV === "preview";
 
