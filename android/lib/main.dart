@@ -1188,9 +1188,8 @@ class Api {
     bytes[6] = (bytes[6] & 15) | 64;
     bytes[8] = (bytes[8] & 63) | 128;
     final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-    value = hex.substring(0, 8) + '-' + hex.substring(8, 12) + '-' +
-        hex.substring(12, 16) + '-' + hex.substring(16, 20) + '-' +
-        hex.substring(20);
+    value = '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
+        '${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
     await storage.write(key: 'barq_installation_id', value: value);
     return value;
   }
