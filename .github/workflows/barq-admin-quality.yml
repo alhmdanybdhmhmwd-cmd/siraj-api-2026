@@ -62,7 +62,26 @@ jobs:
                   raise AssertionError("Audit event mutation unexpectedly succeeded")
               except sqlite3.IntegrityError:
                   pass
-          print("Admin schema and immutable audit checks passed.")
+          for _ in range(3):
+              row = db.execute("""
+                  INSERT INTO admin_ai_usage_limits (workspace_id, window_start, request_count)
+                  VALUES ('owner:test', 1, 1)
+                  ON CONFLICT(workspace_id, window_start) DO UPDATE SET
+                    request_count = request_count + 1
+                  WHERE request_count < 3
+                  RETURNING request_count
+              """).fetchone()
+              assert row is not None
+          blocked = db.execute("""
+              INSERT INTO admin_ai_usage_limits (workspace_id, window_start, request_count)
+              VALUES ('owner:test', 1, 1)
+              ON CONFLICT(workspace_id, window_start) DO UPDATE SET
+                request_count = request_count + 1
+              WHERE request_count < 3
+              RETURNING request_count
+          """).fetchone()
+          assert blocked is None, "Vision rate limit allowed a fourth request"
+          print("Admin schema, immutable audit, and vision rate-limit checks passed.")
           PY
 
   admin-mobile-quality:
