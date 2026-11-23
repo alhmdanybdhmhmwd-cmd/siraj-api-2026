@@ -382,7 +382,7 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
     if (action === "complete" && method === "POST") {
       if (session.state === "completed") {
         return json({ attachment: { attachmentId: session.object_key, fileName: session.file_name,
-          contentType: session.content_type, size: Number(session.total_size),
+          contentType: session.content_type, size: Number(session.total_size), caption: session.caption || '',
           recipientId: session.recipient_id, groupId: session.group_id }, alreadyCompleted: true });
       }
       if (session.state !== "uploading" && session.state !== "completing") return json({ error: "Upload session cannot be completed" }, 409);
@@ -500,7 +500,7 @@ export async function handleResumableMediaUpload(request, env, currentUser, url,
       }
 
       return json({ attachment: { attachmentId: session.object_key, fileName: session.file_name,
-        contentType: session.content_type, size: Number(session.total_size),
+        contentType: session.content_type, size: Number(session.total_size), caption: session.caption || '',
         recipientId: session.recipient_id, groupId: session.group_id } }, 201);
     }
 
