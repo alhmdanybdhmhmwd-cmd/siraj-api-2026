@@ -5800,7 +5800,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Widget _friendsPage() {
     return ListView(
-      padding: const EdgeInsets.all(9),
+      padding: const EdgeInsets.all(12),
       children: [
         Row(
           children: [
@@ -11338,7 +11338,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                     return Align(
                       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
                       child: Container(
-                        constraints: const BoxConstraints(maxWidth: 292),
+                        constraints: const BoxConstraints(maxWidth: 280),
                         margin: const EdgeInsets.symmetric(vertical: 4),
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                         decoration: BoxDecoration(
