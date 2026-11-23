@@ -2892,6 +2892,18 @@ export default {
           )
         `).run();
         await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS group_invites (
+            token TEXT PRIMARY KEY,
+            group_id TEXT NOT NULL,
+            created_by TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at TEXT NOT NULL,
+            revoked_at TEXT,
+            FOREIGN KEY (group_id) REFERENCES chat_groups(id) ON DELETE CASCADE,
+            FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+          )
+        `).run();
+        await env.DB.prepare(`
           CREATE TABLE IF NOT EXISTS group_messages (
             id TEXT PRIMARY KEY,
             group_id TEXT NOT NULL,
@@ -2942,6 +2954,47 @@ export default {
           ).bind(id, currentUser.sub)
         ]);
         return json({ group: { id, name, description, owner_id: currentUser.sub, member_count: 1 } }, 201);
+      }
+
+      const groupInviteCreateMatch = path.match(/^\\/api\\/groups\\/([^/]+)\\/invites$/);
+      if (method === "POST" && groupInviteCreateMatch) {
+        const groupId = groupInviteCreateMatch[1];
+        const group = await env.DB.prepare(
+          "SELECT owner_id FROM chat_groups WHERE id = ?"
+        ).bind(groupId).first();
+        if (!group) return json({ error: "Group not found" }, 404);
+        const actorRole = group.owner_id === currentUser.sub ? "owner" :
+          (await env.DB.prepare(
+            "SELECT role FROM group_member_roles WHERE group_id = ? AND user_id = ?"
+          ).bind(groupId, currentUser.sub).first())?.role || "member";
+        if (actorRole !== "owner" && actorRole !== "admin") {
+          return json({ error: "Only group owners and admins can create invite links" }, 403);
+        }
+        const token = crypto.randomUUID();
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        await env.DB.prepare(
+          "INSERT INTO group_invites (token, group_id, created_by, expires_at) VALUES (?, ?, ?, ?)"
+        ).bind(token, groupId, currentUser.sub, expiresAt).run();
+        return json({
+          inviteCode: token,
+          inviteUrl: "barq://group/join?code=" + encodeURIComponent(token),
+          expiresAt,
+        }, 201);
+      }
+
+      const groupInviteAcceptMatch = path.match(/^\\/api\\/groups\\/invites\\/([^/]+)\\/accept$/);
+      if (method === "POST" && groupInviteAcceptMatch) {
+        const token = groupInviteAcceptMatch[1];
+        const invite = await env.DB.prepare(
+          `SELECT i.group_id AS groupId, g.name
+           FROM group_invites i JOIN chat_groups g ON g.id = i.group_id
+           WHERE i.token = ? AND i.revoked_at IS NULL AND i.expires_at > ?`
+        ).bind(token, new Date().toISOString()).first();
+        if (!invite) return json({ error: "Invite link is invalid or expired" }, 404);
+        await env.DB.prepare(
+          "INSERT OR IGNORE INTO group_members (group_id, user_id) VALUES (?, ?)"
+        ).bind(invite.groupId, currentUser.sub).run();
+        return json({ message: "Joined group", groupId: invite.groupId, groupName: invite.name });
       }
 
       const groupMemberMatch = path.match(/^\/api\/groups\/([^/]+)\/members$/);
