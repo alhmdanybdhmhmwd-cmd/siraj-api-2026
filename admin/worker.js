@@ -502,15 +502,22 @@ async function handle(request, env) {
     const contentHash = await sha256Hex(parsed.value.content);
     const candidateId = crypto.randomUUID();
     await env.ADMIN_DB.prepare(`
-      INSERT OR IGNORE INTO admin_project_knowledge
+      INSERT INTO admin_project_knowledge
         (id, workspace_id, source_type, source_path, source_revision, title, content, content_hash, created_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(workspace_id, source_path, source_revision) DO UPDATE SET
+        source_type = excluded.source_type,
+        title = excluded.title,
+        content = excluded.content,
+        content_hash = excluded.content_hash,
+        created_by = excluded.created_by,
+        updated_at = CURRENT_TIMESTAMP
     `).bind(candidateId, workspace, parsed.value.sourceType, parsed.value.sourcePath,
       parsed.value.sourceRevision, parsed.value.title, parsed.value.content, contentHash, actor.subject).run();
     const source = await env.ADMIN_DB.prepare(`
       SELECT id, source_type, source_path, source_revision, title, content_hash, updated_at
-      FROM admin_project_knowledge WHERE workspace_id = ? AND source_path = ? AND content_hash = ?
-    `).bind(workspace, parsed.value.sourcePath, contentHash).first();
+      FROM admin_project_knowledge WHERE workspace_id = ? AND source_path = ? AND source_revision = ?
+    `).bind(workspace, parsed.value.sourcePath, parsed.value.sourceRevision).first();
     await audit(env, workspace, actor, "knowledge.source.indexed", "knowledge", source.id,
       { sourceType: parsed.value.sourceType, sourcePath: parsed.value.sourcePath, revision: parsed.value.sourceRevision });
     return response({ source, duplicate: source.id !== candidateId }, 201, allowedOrigin);
