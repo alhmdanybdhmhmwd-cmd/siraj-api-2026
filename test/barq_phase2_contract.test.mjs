@@ -768,6 +768,8 @@ test("SPARK media uploads validate file signatures and enforce the ten-item serv
   const uploadRoute = worker.slice(uploadStart, uploadEnd);
   assert.ok(uploadRoute.includes("SELECT COUNT(*) AS count FROM status_media WHERE status_id = ?"));
   assert.ok(worker.includes("const SPARK_MEDIA_PER_STATUS = 10"));
+  assert.ok(worker.includes('statusMediaColumnNames.has("caption")'));
+  assert.ok(worker.includes('ALTER TABLE status_media ADD COLUMN caption TEXT NOT NULL DEFAULT \'\''));
   assert.ok(uploadRoute.includes("existingMediaCount?.count || 0) >= SPARK_MEDIA_PER_STATUS"));
   assert.ok(uploadRoute.includes('toISOString().slice(0, 19).replace("T", " ")'),
     "new media SPARK expiry must use the same SQLite-comparable timestamp format");
