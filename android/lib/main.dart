@@ -1167,6 +1167,8 @@ Future<Uint8List> readBarqPickedFileBytes(PlatformFile file) async {
 }
 
 class Api {
+  // Reuse a persistent client so sequential chat, media and sync requests can reuse keep-alive connections.
+  static final http.Client _client = http.Client();
   static String? token;
   static String? lastRecoveryCode;
 
@@ -1185,25 +1187,25 @@ class Api {
     try {
       switch (method.toUpperCase()) {
         case 'GET':
-          response = await http.get(uri, headers: headers)
+          response = await _client.get(uri, headers: headers)
               .timeout(const Duration(seconds: 25));
           break;
         case 'DELETE':
-          response = await http.delete(
+          response = await _client.delete(
             uri,
             headers: headers,
             body: body == null ? null : jsonEncode(body),
           ).timeout(const Duration(seconds: 25));
           break;
         case 'POST':
-          response = await http.post(
+          response = await _client.post(
             uri,
             headers: headers,
             body: jsonEncode(body ?? <String, dynamic>{}),
           ).timeout(const Duration(seconds: 25));
           break;
         case 'PATCH':
-          response = await http.patch(
+          response = await _client.patch(
             uri,
             headers: headers,
             body: jsonEncode(body ?? <String, dynamic>{}),
@@ -1310,7 +1312,7 @@ class Api {
       }))['user']);
 
   static Future<void> uploadProfilePhoto(List<int> bytes, String contentType) async {
-    final response = await http.post(
+    final response = await _client.post(
       Uri.parse('$apiBase/api/profile/photo/me'),
       headers: {
         if (token != null) 'Authorization': 'Bearer $token',
@@ -1850,7 +1852,7 @@ class Api {
       Object? lastError;
       for (var attempt = 0; attempt < 3; attempt++) {
         try {
-          response = await http.put(uri, headers: {
+          response = await _client.put(uri, headers: {
             if (token != null) 'Authorization': 'Bearer $token',
             'Content-Type': 'application/octet-stream',
             'Content-Length': chunk.length.toString(),
@@ -1964,7 +1966,7 @@ class Api {
     Object? lastError;
     for (final base in bases) {
       try {
-        final response = await http.post(
+        final response = await _client.post(
           Uri.parse('$base$path'),
           headers: headers,
           body: bytes,
@@ -1987,7 +1989,7 @@ class Api {
     Object? lastError;
     for (final base in bases) {
       try {
-        final response = await http.get(
+        final response = await _client.get(
           Uri.parse('$base$path'),
           headers: headers,
         ).timeout(timeout);
@@ -2038,13 +2040,13 @@ class Api {
     const String? fallbackTranscribeBase = null;
     http.Response response;
     try {
-      response = await http.post(
+      response = await _client.post(
         Uri.parse('$primaryTranscribeBase/api/transcribe'),
         headers: {...requestHeaders, 'Content-Type': contentType},
         body: audioBytes,
       ).timeout(const Duration(minutes: 3));
       if (response.statusCode >= 500 && fallbackTranscribeBase != null) {
-        response = await http.post(
+        response = await _client.post(
           Uri.parse('$fallbackTranscribeBase/api/transcribe'),
           headers: {...requestHeaders, 'Content-Type': contentType},
           body: audioBytes,
@@ -2052,7 +2054,7 @@ class Api {
       }
     } catch (_) {
       if (fallbackTranscribeBase == null) rethrow;
-      response = await http.post(
+      response = await _client.post(
         Uri.parse('$fallbackTranscribeBase/api/transcribe'),
         headers: {...requestHeaders, 'Content-Type': contentType},
         body: audioBytes,
