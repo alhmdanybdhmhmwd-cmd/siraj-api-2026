@@ -299,15 +299,22 @@ test("voice messages show animated Barq waveforms during recording and playback"
   assert.ok(flutterApp.includes("Icons.bolt_rounded"));
 });
 
-test("account deletion is authenticated, username-confirmed, and revokes owned media", () => {
-  assert.ok(worker.includes('method === "DELETE" && path === "/api/account"'));
+test("account deletion is authenticated, username-confirmed, and cleans account data and owned media", () => {
+  assert.equal((worker.match(/method === "DELETE" && path === "\/api\/account"/g) || []).length, 1);
   assert.ok(worker.includes("confirmation.toLowerCase() !== String(account.username || \"\").toLowerCase()"));
   assert.ok(worker.includes("DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?"));
   assert.ok(worker.includes("DELETE FROM group_messages WHERE sender_id = ?"));
+  assert.ok(worker.includes("DELETE FROM private_memory_media WHERE owner_id = ?"));
+  assert.ok(worker.includes("DELETE FROM chat_groups WHERE owner_id = ?"));
+  assert.ok(worker.includes("DELETE FROM device_tokens WHERE user_id = ?"));
+  assert.ok(worker.includes("DELETE FROM recovery_codes WHERE user_id = ?"));
   assert.ok(worker.includes("INSERT INTO media_expirations (object_key, expires_at)"));
   assert.ok(worker.includes("DELETE FROM media_access WHERE owner_id = ?"));
+  assert.ok(worker.includes("cleanupExpiredUploadSessions(env)"));
   assert.ok(worker.includes('return json({ message: "Account deleted"'));
   assert.ok(flutterApp.includes("static Future<void> deleteAccount(String confirmUsername)"));
+  assert.ok(flutterApp.includes("_deletingAccount ? null : () async"));
+  assert.ok(flutterApp.includes("اسم المستخدم غير مطابق؛ لم يتم حذف الحساب."));
 });
 
 test("private and group attachments appear locally before background upload", () => {
