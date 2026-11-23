@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { shouldIndexPath, splitKnowledgeContent, inferSourceType } from "./ingest_github_repo.mjs";
+import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl } from "./ingest_github_repo.mjs";
 
 test("repository ingestion allowlists project files and excludes secrets/build output", () => {
   assert.equal(shouldIndexPath("docs/BARQ_PRODUCT.md"), true);
@@ -24,4 +24,11 @@ test("repository source type follows the project documentation category", () => 
   assert.equal(inferSourceType("docs/BARQ_PRODUCT_REQUIREMENTS.md"), "product_requirement");
   assert.equal(inferSourceType("migrations/0001_core.sql"), "api_contract");
   assert.equal(inferSourceType("src/src/index.js"), "repository_file");
+});
+
+test("knowledge ingestion only accepts HTTPS Admin API endpoints", () => {
+  assert.equal(normalizeAdminApiUrl("https://admin.example.com/").toString(), "https://admin.example.com");
+  assert.throws(() => normalizeAdminApiUrl("http://admin.example.com"), /must_be_https/);
+  assert.throws(() => normalizeAdminApiUrl("https://user:pass@admin.example.com"), /must_be_https/);
+  assert.throws(() => normalizeAdminApiUrl("not-a-url"), /invalid_admin_api_url/);
 });
