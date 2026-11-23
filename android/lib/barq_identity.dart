@@ -4,7 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
-/// الهويات الأربع المعتمدة لتطبيق برق. SPARK اسم ميزة الحالات فقط.
+/// الهويات الأربع المعتمدة لتطبيق برق. SPARK اسم الميزة الاجتماعية داخل التطبيق.
 enum BarqIdentity {
   blueLightning,
   butterfly,
