@@ -858,11 +858,26 @@ export default {
         if (await phoneAlreadyInUse(env, phone)) {
           return json({ error: "Phone number is already registered" }, 409);
         }
-        // Limit automated account creation before the expensive password hash.
-        const registrationIp = request.headers.get("CF-Connecting-IP") || "unknown";
-        if (!(await consumeLoginAttempt(env, "register-client", registrationIp, 20))) {
+        // Apply independent, privacy-preserving registration limits before password hashing.
+        // The phone identifier is hashed inside consumeLoginAttempt; the raw number is not stored
+        // in the rate-limit table. A per-phone bucket also protects deployments where the
+        // trusted Cloudflare client-IP header is unavailable.
+        if (!(await consumeLoginAttempt(env, "register-phone", phone, 5))) {
           return new Response(JSON.stringify({
-            error: "Too many registration attempts. Please try again in 15 minutes."
+            error: "Too many registration attempts for this number. Please try again in 15 minutes."
+          }), {
+            status: 429,
+            headers: { ...corsHeaders, "Retry-After": "900" }
+          });
+        }
+
+        // Cloudflare's connecting-IP header is trusted at the Worker edge. Never put all
+        // users into one shared "unknown" bucket when the header is absent.
+        const registrationIp = request.headers.get("CF-Connecting-IP");
+        if (registrationIp && registrationIp.trim() &&
+            !(await consumeLoginAttempt(env, "register-client", registrationIp, 20))) {
+          return new Response(JSON.stringify({
+            error: "Too many registration attempts from this network. Please try again in 15 minutes."
           }), {
             status: 429,
             headers: { ...corsHeaders, "Retry-After": "900" }
