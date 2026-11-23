@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models.dart';
@@ -373,6 +375,168 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
     tokenController.dispose();
   }
 
+  Future<String> _requestImageAnalysis(Uint8List bytes, String mimeType, String prompt) async {
+    if (_apiBase.isEmpty || _token.isEmpty || !isValidAdminApiBase(_apiBase)) {
+      throw Exception('أكمل إعداد اتصال HTTPS وجلسة المالك أولًا');
+    }
+    if (bytes.isEmpty || bytes.length > 4 * 1024 * 1024) {
+      throw Exception('حجم الصورة يجب ألا يتجاوز 4 ميغابايت');
+    }
+    final response = await http.post(
+      Uri.parse(_base + '/v1/brain/vision'),
+      headers: _headers,
+      body: jsonEncode({
+        'prompt': prompt.trim().isEmpty ? 'حلل هذه الصورة واشرح ما يظهر فيها.' : prompt.trim(),
+        'image': 'data:' + mimeType + ';base64,' + base64Encode(bytes),
+      }),
+    ).timeout(const Duration(seconds: 90));
+    final data = jsonDecode(response.body);
+    if (response.statusCode != 200) {
+      final message = data is Map && data['error'] == 'admin_ai_unavailable'
+          ? 'خدمة الذكاء الاصطناعي غير مهيأة على الخادم بعد'
+          : data is Map && data['error'] == 'image_too_large'
+              ? 'الصورة أكبر من الحد المسموح'
+              : 'تعذر تحليل الصورة (' + response.statusCode.toString() + ')';
+      throw Exception(message);
+    }
+    final answer = data is Map ? (data['answer'] ?? '').toString().trim() : '';
+    if (answer.isEmpty) throw Exception('لم يُرجع المساعد نتيجة');
+    return answer;
+  }
+
+  Future<void> _showVisionAnalysis() async {
+    if (_apiBase.isEmpty || _token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('اضبط اتصال الخادم وجلسة المالك أولًا')),
+      );
+      return;
+    }
+    final picker = ImagePicker();
+    final promptController = TextEditingController(text: 'حلل الصورة بالتفصيل، واشرح العناصر المهمة وأي نص ظاهر فيها.');
+    Uint8List? selectedBytes;
+    String selectedMime = 'image/jpeg';
+    String selectedName = '';
+    bool busy = false;
+    String? result;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: _surface,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(18, 18, 18, MediaQuery.of(context).viewInsets.bottom + 20),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * .82),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('تحليل صورة مع BARQ Brain',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    const Text('اختر صورة من المعرض أو التقط صورة بالكاميرا. الحد الأقصى 4 ميغابايت، ولا تُحفظ الصورة على الخادم.',
+                      style: TextStyle(color: Colors.white60, fontSize: 12)),
+                    const SizedBox(height: 14),
+                    if (selectedBytes == null)
+                      Container(
+                        height: 150,
+                        decoration: BoxDecoration(color: const Color(0xFF202B42),
+                          borderRadius: BorderRadius.circular(16)),
+                        child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                          Icon(Icons.add_photo_alternate_outlined, size: 42, color: Colors.white54),
+                          SizedBox(height: 8),
+                          Text('لم يتم اختيار صورة بعد', style: TextStyle(color: Colors.white60)),
+                        ]),
+                      )
+                    else
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                        child: Image.memory(selectedBytes!, height: 210, fit: BoxFit.contain),
+                      ),
+                    if (selectedName.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(selectedName, textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 11, color: Colors.white54)),
+                    ],
+                    const SizedBox(height: 10),
+                    Row(children: [
+                      Expanded(child: OutlinedButton.icon(
+                        onPressed: busy ? null : () async {
+                          final file = await picker.pickImage(source: ImageSource.gallery, imageQuality: 88);
+                          if (file == null) return;
+                          final bytes = await file.readAsBytes();
+                          final ext = file.name.toLowerCase().split('.').last;
+                          final mime = ext == 'png' ? 'image/png' : ext == 'webp' ? 'image/webp' : 'image/jpeg';
+                          if (bytes.length > 4 * 1024 * 1024) {
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              const SnackBar(content: Text('اختر صورة لا تتجاوز 4 ميغابايت')),
+                            );
+                            return;
+                          }
+                          setSheetState(() { selectedBytes = bytes; selectedMime = mime; selectedName = file.name; });
+                        },
+                        icon: const Icon(Icons.photo_library_outlined), label: const Text('المعرض'))),
+                      const SizedBox(width: 8),
+                      Expanded(child: OutlinedButton.icon(
+                        onPressed: busy ? null : () async {
+                          final file = await picker.pickImage(source: ImageSource.camera, imageQuality: 88);
+                          if (file == null) return;
+                          final bytes = await file.readAsBytes();
+                          final ext = file.name.toLowerCase().split('.').last;
+                          final mime = ext == 'png' ? 'image/png' : ext == 'webp' ? 'image/webp' : 'image/jpeg';
+                          if (bytes.length > 4 * 1024 * 1024) {
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              const SnackBar(content: Text('اختر صورة لا تتجاوز 4 ميغابايت')),
+                            );
+                            return;
+                          }
+                          setSheetState(() { selectedBytes = bytes; selectedMime = mime; selectedName = file.name; });
+                        },
+                        icon: const Icon(Icons.camera_alt_outlined), label: const Text('الكاميرا'))),
+                    ]),
+                    const SizedBox(height: 12),
+                    TextField(controller: promptController, maxLines: 3,
+                      decoration: const InputDecoration(labelText: 'ماذا تريد أن تعرف عن الصورة؟')),
+                    const SizedBox(height: 14),
+                    FilledButton.icon(
+                      onPressed: busy || selectedBytes == null ? null : () async {
+                        setSheetState(() => busy = true);
+                        try {
+                          result = await _requestImageAnalysis(selectedBytes!, selectedMime, promptController.text);
+                          if (sheetContext.mounted) Navigator.pop(sheetContext);
+                          if (mounted && result != null) {
+                            await showDialog<void>(context: this.context, builder: (dialogContext) => AlertDialog(
+                              title: const Text('نتيجة تحليل الصورة'),
+                              content: SingleChildScrollView(child: SelectableText(result!)),
+                              actions: [TextButton(onPressed: () => Navigator.pop(dialogContext),
+                                child: const Text('إغلاق'))],
+                            ));
+                          }
+                        } catch (error) {
+                          setSheetState(() => busy = false);
+                          if (mounted) ScaffoldMessenger.of(this.context).showSnackBar(
+                            SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+                          );
+                        }
+                      },
+                      icon: busy
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.auto_awesome),
+                      label: Text(busy ? 'جارٍ تحليل الصورة...' : 'حلّل الصورة'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    promptController.dispose();
+  }
+
   Future<void> _showCreateTask({bool assistant = false}) async {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
@@ -498,6 +662,9 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
             const SizedBox(height: 12),
             OutlinedButton.icon(onPressed: () => _showCreateTask(assistant: true),
               icon: const Icon(Icons.add), label: const Text('إرسال مهمة للمساعد')),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(onPressed: _showVisionAnalysis,
+              icon: const Icon(Icons.image_search_outlined), label: const Text('أرسل صورة لتحليلها')),
           ]),
         )),
         const SizedBox(height: 18),
