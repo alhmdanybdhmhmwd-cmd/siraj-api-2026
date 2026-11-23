@@ -4262,7 +4262,7 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
               SizedBox(
                 height: 52,
                 child: FilledButton(
-                  style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary),
+                  style: FilledButton.styleFrom(backgroundColor: photoPalette.primary, foregroundColor: photoPalette.onPrimary),
                   onPressed: busy ? null : submit,
                   child: busy
                       ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
@@ -6505,10 +6505,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         return;
       }
       if (!mounted) return;
+      final photoPalette = Theme.of(context).colorScheme;
       final accepted = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          backgroundColor: Theme.of(context).colorScheme.surface,
+          backgroundColor: photoPalette.surface,
           title: const Text('معاينة صورة الملف الشخصي'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -6519,7 +6520,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ),
               const SizedBox(height: 10),
               Text(file.name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white70)),
+                  style: TextStyle(color: photoPalette.onSurface.withValues(alpha: .72))),
               const SizedBox(height: 4),
               const Text('سيتم رفع الصورة بشكل خاص إلى حسابك.',
                   style: TextStyle(color: Colors.white60, fontSize: 12)),
