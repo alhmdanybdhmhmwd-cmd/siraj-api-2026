@@ -45,7 +45,7 @@ export function validateVisionInput(value, maxImageBytes = 4 * 1024 * 1024) {
   }
   const image = typeof value.image === "string" ? value.image : "";
   const prompt = typeof value.prompt === "string" ? value.prompt.trim() : "";
-  const match = image.match(/^data:(image\\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/);
+  const match = image.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/);
   if (!match || !prompt || prompt.length > 2000) {
     return { ok: false, error: "invalid_image_or_prompt" };
   }
