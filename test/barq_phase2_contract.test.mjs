@@ -290,6 +290,33 @@ test("private chat tools are available in a collapsible toolbar, not only profil
   assert.ok(groupHeader.includes("current_role"));
 });
 
+test("voice messages show animated Barq waveforms during recording and playback", () => {
+  assert.ok(flutterApp.includes("class _BarqWaveform extends StatelessWidget"));
+  assert.ok(flutterApp.includes("AnimatedContainer("));
+  assert.ok(flutterApp.includes("Timer.periodic(const Duration(milliseconds: 120)"));
+  assert.ok(flutterApp.includes("_BarqWaveform(phase: _wavePhase"));
+  assert.ok(flutterApp.includes("phase: _audioPosition.inMilliseconds / 135"));
+  assert.ok(flutterApp.includes("Icons.bolt_rounded"));
+});
+
+test("private and group attachments require a pre-send preview and confirmation", () => {
+  assert.ok(flutterApp.includes("Future<bool> showBarqAttachmentPreview("));
+  assert.ok(flutterApp.includes("معاينة قبل الإرسال"));
+  assert.ok(flutterApp.includes("if (!await showBarqAttachmentPreview("));
+  assert.ok(flutterApp.includes("if (!mounted) return;\n      setState(() { sending = true; mediaUploadProgress = 0; });"));
+  assert.ok(flutterApp.includes("contentType: contentType,"));
+  assert.ok(flutterApp.includes("رفع المرفق"));
+});
+
+test("message reactions and bidirectional swipe-to-reply stay available in both chat types", () => {
+  assert.ok(flutterApp.includes("Widget messageReactionBar("));
+  assert.ok(flutterApp.includes("barqReactionEmojis"));
+  assert.ok(flutterApp.includes("Icons.favorite"));
+  assert.ok((flutterApp.match(/_replySwipeDistance\.abs\(\) > 48/g) || []).length >= 4);
+  assert.ok((flutterApp.match(/\(details\.primaryVelocity \?\? 0\)\.abs\(\) > 260/g) || []).length >= 4);
+  assert.ok(flutterApp.includes("onDoubleTap: () async"));
+});
+
 test("private and group chat composers use the unified Barq pill layout and reply previews", () => {
   assert.ok(flutterApp.includes("class BarqReplyPreview extends StatelessWidget"));
   assert.ok(flutterApp.includes("tooltip: 'إلغاء الرد'"));
