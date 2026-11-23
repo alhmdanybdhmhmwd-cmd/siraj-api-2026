@@ -8,7 +8,7 @@ import { handleResumableMediaUpload, cleanupExpiredUploadSessions } from "./medi
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, Range, X-File-Name, X-Recipient-Id, X-Group-Id, X-Idempotency-Key, X-Status-Caption, X-Status-Id, X-Audio-Duration-Ms",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, Range, X-File-Name, X-Recipient-Id, X-Group-Id, X-Idempotency-Key, X-Caption, X-Status-Caption, X-Status-Id, X-Audio-Duration-Ms",
   "Access-Control-Expose-Headers": "Accept-Ranges, Content-Range, Content-Disposition, ETag, X-Request-Id",
   "Content-Type": "application/json; charset=utf-8",
   "Cache-Control": "no-store",
@@ -4126,12 +4126,17 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         if (!putResponse.ok) {
           return json({ error: "Media storage upload failed", storageStatus: putResponse.status }, 502);
         }
+        let caption = "";
+        try { caption = decodeURIComponent(request.headers.get("X-Caption") || "").trim(); }
+        catch (_) { return json({ error: "Invalid media caption encoding" }, 400); }
+        if (caption.length > 2000) return json({ error: "Media caption must not exceed 2000 characters" }, 400);
         const attachmentBody = JSON.stringify({
           type: "attachment",
           attachmentId: key,
           fileName: suppliedName,
           contentType,
-          size: bytes.byteLength
+          size: bytes.byteLength,
+          caption
         });
         const messageId = crypto.randomUUID();
         try {
