@@ -173,8 +173,9 @@ jobs:
           done
           echo "Unable to install the Flutter-pinned NDK after 3 attempts." >&2
           exit 1
+      - uses: gradle/actions/setup-gradle@v4
       - name: Validate Android AppAuth platform wiring without building an APK
-        timeout-minutes: 8
+        timeout-minutes: 15
         run: |
           test -f android/gradlew
           grep -Fq 'applicationId = "com.barq.admin"' android/app/build.gradle.kts
