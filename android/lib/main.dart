@@ -5155,42 +5155,106 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _showSparkViewers(String statusId) async {
+    // The viewer list is private: only the owner can request or see it.
+    if (!mounted || myId.isEmpty) return;
     try {
       final viewers = await Api.sparkViewers(statusId);
       if (!mounted) return;
+      final palette = Theme.of(context).colorScheme;
       await showModalBottomSheet<void>(
         context: context,
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        builder: (context) => SafeArea(
+        isScrollControlled: true,
+        backgroundColor: palette.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        builder: (sheetContext) => SafeArea(
           child: SizedBox(
-            height: MediaQuery.sizeOf(context).height * .62,
+            height: MediaQuery.sizeOf(sheetContext).height * .68,
             child: Column(children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 38, height: 4,
+                decoration: BoxDecoration(
+                  color: palette.onSurface.withValues(alpha: .24),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(18, 18, 18, 10),
+                padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
                 child: Row(children: [
-                  Icon(Icons.visibility_outlined, color: Theme.of(context).colorScheme.primary),
-                  const SizedBox(width: 9),
-                  Expanded(child: Text('مشاهدو SPARK',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
-                  Text('${viewers.length}',
-                    style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w800)),
+                  Container(
+                    width: 42, height: 42,
+                    decoration: BoxDecoration(
+                      color: palette.primary.withValues(alpha: .12),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(Icons.visibility_rounded, color: palette.primary),
+                  ),
+                  const SizedBox(width: 11),
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('مشاهدو SPARK',
+                        style: Theme.of(sheetContext).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                      Text('قائمة خاصة لا يراها إلا صاحب الحالة',
+                        style: Theme.of(sheetContext).textTheme.bodySmall?.copyWith(
+                          color: palette.onSurface.withValues(alpha: .62),
+                        )),
+                    ],
+                  )),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: palette.primary.withValues(alpha: .12),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Text('${viewers.length}',
+                      style: TextStyle(color: palette.primary, fontWeight: FontWeight.w900)),
+                  ),
                 ]),
               ),
-              const Divider(height: 1),
-              Expanded(child: ListView(
-                children: [
-              if (viewers.isEmpty)
-                const ListTile(title: Text('لم يشاهدها أحد بعد', style: TextStyle(color: Colors.white60))),
-              if (viewers.isEmpty)
-                const ListTile(title: Text('لم يشاهدها أحد بعد', style: TextStyle(color: Colors.white60))),
-              for (final viewer in viewers)
-                ListTile(
-                  leading: const CircleAvatar(child: Icon(Icons.person)),
-                  title: Text(field(viewer, ['displayName', 'username'], 'مستخدم برق')),
-                  subtitle: Text(field(viewer, ['viewedAt'])),
-                ),
-                ],
-              )),
+              Divider(height: 1, color: palette.outlineVariant.withValues(alpha: .5)),
+              Expanded(
+                child: viewers.isEmpty
+                    ? Center(child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.visibility_off_outlined, size: 42,
+                            color: palette.onSurface.withValues(alpha: .38)),
+                          const SizedBox(height: 10),
+                          Text('لا توجد مشاهدات حتى الآن',
+                            style: TextStyle(color: palette.onSurface.withValues(alpha: .68))),
+                        ],
+                      ))
+                    : ListView.separated(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        itemCount: viewers.length,
+                        separatorBuilder: (_, __) => Divider(
+                          height: 1, indent: 58,
+                          color: palette.outlineVariant.withValues(alpha: .35),
+                        ),
+                        itemBuilder: (_, index) {
+                          final viewer = viewers[index];
+                          final name = field(viewer, ['displayName', 'display_name', 'username'], 'مستخدم برق');
+                          final viewedAt = field(viewer, ['viewedAt', 'viewed_at']);
+                          return ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                            leading: CircleAvatar(
+                              backgroundColor: palette.primary.withValues(alpha: .13),
+                              child: Text(name.trim().isEmpty ? 'ب' : name.trim().characters.first,
+                                style: TextStyle(color: palette.primary, fontWeight: FontWeight.w800)),
+                            ),
+                            title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.w700)),
+                            subtitle: Text(viewedAt.isEmpty ? 'شاهد SPARK' : viewedAt,
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                            trailing: Icon(Icons.check_circle_rounded, size: 18,
+                              color: palette.primary.withValues(alpha: .7)),
+                          );
+                        },
+                      ),
+              ),
             ]),
           ),
         ),
@@ -9890,6 +9954,8 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
   }
 
   Future<void> _react(String emoji) async {
+    final canReply = widget.authorId.isNotEmpty && widget.authorId != widget.currentUserId;
+    if (!canReply) return;
     try {
       await Api.reactSparkStatus(widget.statusId, emoji);
       if (mounted) showMsg(context, 'تم إرسال تفاعلك.');
@@ -9899,6 +9965,7 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
   }
 
   Future<void> _sendReply() async {
+    if (widget.authorId.isEmpty || widget.authorId == widget.currentUserId) return;
     final value = _replyController.text.trim();
     if (value.isEmpty || _sendingReply) return;
     setState(() => _sendingReply = true);
@@ -9920,6 +9987,7 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
   }
 
   Future<void> _toggleAudioReplyRecording() async {
+    if (widget.authorId.isEmpty || widget.authorId == widget.currentUserId) return;
     if (_uploadingAudioReply) return;
     if (_recordingAudioReply) {
       await _finishAudioReplyRecording();
@@ -10020,7 +10088,10 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
         title: Text(widget.author),
         foregroundColor: Colors.white,
         actions: [
-          if (widget.showViewCount)
+          if (widget.showViewCount &&
+              widget.authorId.isNotEmpty &&
+              widget.authorId == widget.currentUserId &&
+              widget.onShowViewers != null)
             Padding(
               padding: const EdgeInsetsDirectional.only(end: 12),
               child: Center(
@@ -10120,10 +10191,26 @@ class _SparkMediaViewerState extends State<SparkMediaViewer> {
             width: double.infinity, padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
             decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, border: Border(top: BorderSide(color: Theme.of(context).colorScheme.primary.withValues(alpha: .2)))),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-                for (final emoji in ['❤️', '🔥', '😂', '👍'])
-                  TextButton(onPressed: () => _react(emoji), child: Text(emoji, style: const TextStyle(fontSize: 24))),
-              ]),
+              if (canReply)
+                Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+                  for (final emoji in ['❤️', '🔥', '😂', '👍'])
+                    TextButton(
+                      onPressed: _sendingReply ? null : () => _react(emoji),
+                      child: Text(emoji, style: const TextStyle(fontSize: 24)),
+                    ),
+                ])
+              else
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 9),
+                  child: Text(
+                    'هذه حالتك أنت — أدوات الرد والتفاعل غير ظاهرة للمالك',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .62),
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
               if (canReply) ...[
                 Container(
                   width: double.infinity,
