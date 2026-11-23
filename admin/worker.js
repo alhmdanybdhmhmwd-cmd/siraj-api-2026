@@ -480,6 +480,21 @@ async function handle(request, env) {
       return response({ error: validated.error, maxBytes: maxImageBytes }, validated.error === "image_too_large" ? 413 : 400, allowedOrigin);
     }
     const { image, prompt, mimeType, imageBytes } = validated.value;
+    const windowStart = Math.floor(Date.now() / 60000);
+    await env.ADMIN_DB.prepare(
+      "DELETE FROM admin_ai_usage_limits WHERE workspace_id = ? AND window_start < ?"
+    ).bind(workspace, windowStart - 60).run();
+    const usage = await env.ADMIN_DB.prepare(`
+      INSERT INTO admin_ai_usage_limits (workspace_id, window_start, request_count)
+      VALUES (?, ?, 1)
+      ON CONFLICT(workspace_id, window_start) DO UPDATE SET
+        request_count = request_count + 1, updated_at = CURRENT_TIMESTAMP
+      WHERE request_count < 3
+      RETURNING request_count
+    `).bind(workspace, windowStart).first();
+    if (!usage) {
+      return response({ error: "vision_rate_limited", retryAfterSeconds: 60 }, 429, allowedOrigin);
+    }
     const model = "@cf/meta/llama-3.2-11b-vision-instruct";
     try {
       const generated = await env.ADMIN_AI.run(model, {
