@@ -431,7 +431,7 @@ test("Preview gateway remains pinned to its isolated upstream and ignores fallba
     BARQ_API_FALLBACK_UPSTREAM: "https://production-fallback.example"
   });
   assert.deepEqual(candidates, [
-    "https://barq-api-phase2-test.alhmdanybdhmhmwd.workers.dev"
+    "https://barq-api-phase2-fallback-test.alhmdanybdhmhmwd.workers.dev"
   ]);
 });
 
