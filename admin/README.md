@@ -6,11 +6,11 @@ This directory is a separate Admin service boundary. It is not part of the BARQ 
 
 - Owner-scoped workspace bootstrap.
 - Task creation/listing with idempotency keys.
-- Durable task states and optimistic checkpoint versions.
+- Durable task states, server Queue consumer, lease-based task claiming, bounded retries, server-side BARQ Brain draft generation, and optimistic checkpoint versions.
 - Append-only audit events enforced by SQLite triggers.
 - Explicit approval records in the schema.
 - Owner-only JWT validation. The owner subject is configured server-side; a client cannot grant itself a role.
-- Unit tests and isolated SQLite schema checks.
+- Versioned project knowledge ingestion API and an initial guarded GitHub repository indexing script.\n- Unit tests and isolated SQLite schema checks.
 
 ## Required runtime bindings
 
@@ -38,7 +38,7 @@ Accepted bearer tokens must be issued by a trusted server-side identity componen
 - `GET /v1/knowledge`, `POST /v1/knowledge`, `GET /v1/knowledge/:id` (versioned project source index)
 - `GET /v1/audit` (latest append-only audit events)
 
-The checkpoint API stores step input/output references, completed step, next action, and monotonically increasing version. Clients must reload after a version conflict rather than overwrite a newer checkpoint. BARQ Brain retrieves relevant indexed sources by task terms and cites their source paths/revisions; source ingestion is currently owner/API-driven, with automatic GitHub repository indexing planned as a later connector. Each source is retained by repository path and revision, so BARQ Brain can cite the exact indexed version.
+The checkpoint API stores step input/output references, completed step, next action, and monotonically increasing version. Clients must reload after a version conflict rather than overwrite a newer checkpoint. BARQ Brain retrieves relevant indexed sources by task terms and cites their source paths/revisions. An initial GitHub indexing script now reads an explicit repository ref, skips sensitive paths and likely secret content, limits file sizes and per-run file count, and posts versioned chunks to the Admin API. It has not yet been run against a configured Admin Preview environment.
 
 ## Not implemented yet
 
