@@ -505,6 +505,22 @@ async function listTasks(env, workspace) {
   return result.results || [];
 }
 
+async function consumeAdminAuthRateLimit(env, bucketKey, maximum) {
+  const windowStart = Math.floor(Date.now() / 60000);
+  await env.ADMIN_DB.prepare(
+    "DELETE FROM admin_auth_rate_limits WHERE window_start < ?"
+  ).bind(windowStart - 2).run();
+  const row = await env.ADMIN_DB.prepare(`
+    INSERT INTO admin_auth_rate_limits (bucket_key, window_start, request_count)
+    VALUES (?, ?, 1)
+    ON CONFLICT(bucket_key, window_start) DO UPDATE SET
+      request_count = request_count + 1, updated_at = CURRENT_TIMESTAMP
+    WHERE request_count < ?
+    RETURNING request_count
+  `).bind(bucketKey, windowStart, maximum).first();
+  return Boolean(row);
+}
+
 async function handle(request, env) {
   const url = new URL(request.url);
   const configuredOrigin = env.BARQ_ADMIN_ALLOWED_ORIGIN || "";
@@ -526,6 +542,11 @@ async function handle(request, env) {
     if (!env.BARQ_ADMIN_JWT_SECRET || env.BARQ_ADMIN_JWT_SECRET.length < 32 ||
         (!env.BARQ_ADMIN_OWNER_EMAIL && !env.BARQ_ADMIN_OWNER_SUBJECT)) {
       return response({ error: "owner_identity_not_configured" }, 503, allowedOrigin);
+    }
+    const clientIp = request.headers.get("CF-Connecting-IP") || "unknown";
+    const loginBucket = "oidc-exchange:" + await authSha256Hex(clientIp);
+    if (!await consumeAdminAuthRateLimit(env, loginBucket, 5)) {
+      return response({ error: "auth_rate_limited", retryAfterSeconds: 60 }, 429, allowedOrigin);
     }
     const body = await readJson(request);
     if (!body || typeof body.idToken !== "string" || typeof body.nonce !== "string") {
@@ -581,6 +602,10 @@ async function handle(request, env) {
     const body = await readJson(request);
     if (!body || typeof body.sessionId !== "string" || typeof body.refreshToken !== "string") {
       return response({ error: "invalid_refresh_request" }, 400, allowedOrigin);
+    }
+    const refreshBucket = "refresh:" + await authSha256Hex(body.sessionId);
+    if (!await consumeAdminAuthRateLimit(env, refreshBucket, 10)) {
+      return response({ error: "auth_rate_limited", retryAfterSeconds: 60 }, 429, allowedOrigin);
     }
     const session = await env.ADMIN_DB.prepare(`
       SELECT s.id, s.owner_subject, s.device_id, s.refresh_token_hash,
