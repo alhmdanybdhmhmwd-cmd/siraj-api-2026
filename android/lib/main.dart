@@ -9376,8 +9376,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                         onHorizontalDragStart: (_) => _replySwipeDistance = 0,
                                         onHorizontalDragUpdate: (details) => _replySwipeDistance += details.delta.dx,
                                         onHorizontalDragEnd: (details) {
-                                          final swiped = _replySwipeDistance.abs() > 42 ||
-                                              (details.primaryVelocity ?? 0).abs() > 180;
+                                          final swiped = _replySwipeDistance > 48 ||
+                                              (details.primaryVelocity ?? 0) > 260;
                                           _replySwipeDistance = 0;
                                           if (swiped && m['is_ephemeral'] != true) {
                                             setState(() => replyToMessage = Map<String, dynamic>.from(m));
@@ -9442,7 +9442,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                     ] else ...[
                                       GestureDetector(
                                         onHorizontalDragEnd: (details) {
-                                          if ((details.primaryVelocity ?? 0).abs() > 180 && m['is_ephemeral'] != true) {
+                                          if ((details.primaryVelocity ?? 0) > 260 && m['is_ephemeral'] != true) {
                                             setState(() => replyToMessage = Map<String, dynamic>.from(m));
                                           }
                                         },
@@ -10784,7 +10784,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                           ] else ...[
                             GestureDetector(
                               onHorizontalDragEnd: (details) {
-                                if ((details.primaryVelocity ?? 0).abs() > 180) {
+                                if ((details.primaryVelocity ?? 0) > 260) {
                                   setState(() => replyToMessage = Map<String, dynamic>.from(m));
                                 }
                               },
