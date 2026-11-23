@@ -40,9 +40,9 @@ Accepted bearer tokens must be issued by a trusted server-side identity componen
 
 The checkpoint API stores step input/output references, completed step, next action, and monotonically increasing version. Clients must reload after a version conflict rather than overwrite a newer checkpoint. BARQ Brain retrieves relevant indexed sources by task terms and cites their source paths/revisions. An initial GitHub indexing script now reads an explicit repository ref, skips sensitive paths and likely secret content, limits file sizes and per-run file count, and posts versioned chunks to the Admin API. It has not yet been run against a configured Admin Preview environment.
 
-## Not implemented yet
+## Still incomplete
 
-Durable Queue/worker execution, assistant tool orchestration, project knowledge ingestion, cross-device UI, push notifications, owner approval decision endpoints, device/session management, and the growth-campaign workspace are follow-on work. A queued task is persisted but is not yet executed by a background worker. No production data or services are changed by this foundation.
+The Queue consumer and server-side assistant draft path exist in code, but dedicated Admin Preview Queue, D1, AI bindings, and end-to-end execution have not been configured or verified. Lease heartbeat/renewal, recovery after worker termination, and dead-letter monitoring remain incomplete. BARQ Brain currently drafts and checkpoints a result; it does not autonomously modify repositories or deploy services. Cross-device session management, push notifications, production-grade owner identity/token issuance, key rotation, rate limiting, and the growth workspace remain follow-on work. No production data or services are changed by this foundation.
 
 ## Flutter owner app (initial client shell)
 
