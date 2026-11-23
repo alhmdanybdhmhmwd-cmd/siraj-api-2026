@@ -141,7 +141,7 @@ async function processAdminTaskMessage(message, env) {
   if (!env.ADMIN_AI) {
     await env.ADMIN_DB.prepare("UPDATE admin_tasks SET next_action = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND workspace_id = ? AND status = 'queued'")
       .bind("Waiting for the BARQ Admin AI binding to be configured", payload.taskId, payload.workspaceId).run();
-    message.ack();
+    message.retry({ delaySeconds: 300 });
     return;
   }
 
@@ -209,7 +209,7 @@ async function processAdminTaskMessage(message, env) {
         UPDATE admin_tasks SET status = 'completed', checkpoint_version = ?,
           last_checkpoint_id = ?, next_action = 'Review the assistant result',
           lease_owner = NULL, lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ? AND workspace_id = ? AND lease_owner = ? AND checkpoint_version = ?
+        WHERE id = ? AND workspace_id = ? AND lease_owner = ? AND status = 'running' AND checkpoint_version = ?
       `).bind(nextVersion, checkpointId, task.id, payload.workspaceId, leaseId, task.checkpoint_version),
       env.ADMIN_DB.prepare(`
         INSERT INTO admin_task_checkpoints
@@ -236,7 +236,7 @@ async function processAdminTaskMessage(message, env) {
     await env.ADMIN_DB.prepare(`
       UPDATE admin_tasks SET status = ?, lease_owner = NULL, lease_expires_at = NULL,
         next_action = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND workspace_id = ? AND lease_owner = ?
+      WHERE id = ? AND workspace_id = ? AND lease_owner = ? AND status = 'running'
     `).bind(terminal ? "failed" : "queued",
       terminal ? "Review the failure and retry manually" : "Waiting for server worker retry",
       payload.taskId, payload.workspaceId, leaseId).run();
@@ -650,8 +650,10 @@ async function handle(request, env) {
       return response({ error: "invalid_status_transition", from: task.status, to: nextStatus }, 409, allowedOrigin);
     }
     const changed = await env.ADMIN_DB.prepare(
-      "UPDATE admin_tasks SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND workspace_id = ? AND status = ?"
-    ).bind(nextStatus, taskId, workspace, task.status).run();
+      "UPDATE admin_tasks SET status = ?, lease_owner = CASE WHEN ? = 'running' THEN lease_owner ELSE NULL END,
+        lease_expires_at = CASE WHEN ? = 'running' THEN lease_expires_at ELSE NULL END,
+        updated_at = CURRENT_TIMESTAMP WHERE id = ? AND workspace_id = ? AND status = ?"
+    ).bind(nextStatus, nextStatus, nextStatus, taskId, workspace, task.status).run();
     if (!changed?.meta?.changes) {
       const current = await env.ADMIN_DB.prepare(
         "SELECT status FROM admin_tasks WHERE id = ? AND workspace_id = ?"
