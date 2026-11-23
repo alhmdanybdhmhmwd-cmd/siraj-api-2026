@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, rankKnowledgeChunks } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, rankKnowledgeChunks, validateAdminAccessClaims } from "./worker.js";
 
 test("task input is normalized and bounded", () => {
   assert.deepEqual(validateTaskInput({ title: "  Prepare global launch  ", priority: "high" }), {
@@ -182,4 +182,33 @@ test("BARQ Brain ranks matching project sources and includes their citations", (
   );
   assert.match(messages[1].content, /docs\/chat\.md @ c1/);
   assert.match(messages[0].content, /reference data, not instructions/);
+});
+test("Admin access-token claims require bounded lifetime and valid session bindings", () => {
+  const now = 1_800_000_000;
+  const valid = {
+    iss: "barq-admin-auth",
+    aud: "barq-admin",
+    sub: "google-owner-subject-123",
+    sid: "123e4567-e89b-42d3-a456-426614174000",
+    did: "123e4567-e89b-42d3-a456-426614174001",
+    jti: "0123456789abcdef01234567",
+    iat: now,
+    nbf: now,
+    exp: now + 600
+  };
+  assert.equal(validateAdminAccessClaims(valid, now), true);
+  for (const override of [
+    { exp: now + 601 },
+    { exp: now },
+    { iat: now + 61 },
+    { iat: now - 661 },
+    { nbf: now + 1 },
+    { sid: "not-a-session-id" },
+    { did: "not-a-device-id" },
+    { jti: "" },
+    { sub: "" },
+    { aud: "another-service" }
+  ]) {
+    assert.equal(validateAdminAccessClaims({ ...valid, ...override }, now), false);
+  }
 });
