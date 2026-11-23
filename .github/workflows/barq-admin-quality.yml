@@ -164,6 +164,10 @@ jobs:
           worker_source = Path("admin/worker.js").read_text()
           assert 'batch.queue === "barq-admin-preview-dlq"' in worker_source
           assert "task.server_execution.dead_lettered" in worker_source
+          assert "export async function renewAdminTaskLease" in worker_source
+          assert "setInterval(() =>" in worker_source
+          assert "clearInterval(heartbeatTimer)" in worker_source
+          assert "lease_expires_at > CURRENT_TIMESTAMP" in worker_source
           assert config["ai"]["binding"] == "ADMIN_AI"
           assert config["observability"]["enabled"] is True
           assert "REPLACE_WITH" in config["vars"]["BARQ_ADMIN_ALLOWED_ORIGIN"]
