@@ -23,7 +23,8 @@ const corsHeaders = {
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), {
     status,
-    headers: corsHeaders
+    // Unique response IDs help trace incidents without exposing user data.
+    headers: { ...corsHeaders, "X-Request-Id": crypto.randomUUID() }
   });
 
 const SPARK_STATUS_BACKGROUNDS = new Set(["electric_blue", "violet", "gold", "midnight"]);
@@ -792,12 +793,26 @@ export default {
   async fetch(request, env, ctx) {
     env = { ...env, DB: createDatabaseProvider(env.DB) };
     if (request.method === "OPTIONS") {
-      return new Response(null, { headers: corsHeaders });
+      return new Response(null, {
+        headers: { ...corsHeaders, "X-Request-Id": crypto.randomUUID() }
+      });
     }
 
     const url = new URL(request.url);
-    const path = url.pathname.replace(/\/+$/, "") || "/";
+    const path = url.pathname.replace(/\\/+$/, "") || "/";
     const method = request.method;
+
+    // Reject oversized request targets and unsupported HTTP verbs before
+    // database access or route processing.
+    if (url.href.length > 8192) {
+      return json({ error: "Request URL is too long" }, 414);
+    }
+    if (!["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+      return new Response(JSON.stringify({ error: "Method not allowed" }), {
+        status: 405,
+        headers: { ...corsHeaders, "Allow": "GET, HEAD, POST, PUT, PATCH, DELETE", "X-Request-Id": crypto.randomUUID() }
+      });
+    }
 
     try {
       // Liveness is intentionally independent of D1 and secrets so platform
@@ -4676,6 +4691,12 @@ const groupMessageSearchMatch = path.match(/^\/api\/groups\/([^/]+)\/messages\/s
         }, 409);
       }
 
+      // Log only method, route, and error class; never log secrets or request data.
+      console.error("Unhandled API request failure:", {
+        method,
+        path,
+        error: error?.name || "Error"
+      });
       return json({
         error: "Internal server error"
       }, 500);
