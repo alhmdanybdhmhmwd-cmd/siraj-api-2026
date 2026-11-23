@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'dart:math';
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
@@ -16,6 +18,7 @@ const _blue = Color(0xFF2785FF);
 const _gold = Color(0xFFE8B95B);
 const _surface = Color(0xFF151E31);
 const _background = Color(0xFF0A1020);
+const _googleOidcClientId = String.fromEnvironment('BARQ_GOOGLE_OIDC_CLIENT_ID');
 
 void main() => runApp(const BarqAdminApp());
 
@@ -59,6 +62,7 @@ class AdminHomePage extends StatefulWidget {
 
 class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserver {
   static const _secure = FlutterSecureStorage();
+  static final _appAuth = FlutterAppAuth();
   static const _cacheWorkspace = 'barq_admin_workspace_cache';
   static const _cacheTasks = 'barq_admin_tasks_cache';
   static const _cacheApprovals = 'barq_admin_approvals_cache';
@@ -67,6 +71,8 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
 
   String _apiBase = '';
   String _token = '';
+  String _refreshToken = '';
+  String _sessionId = '';
   String _connectionMessage = 'غير متصل';
   Map<String, dynamic> _workspace = {};
   List<AdminTask> _tasks = [];
@@ -105,12 +111,14 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
     final prefs = await SharedPreferences.getInstance();
     _apiBase = prefs.getString('barq_admin_api_base') ?? '';
     _token = await _secure.read(key: 'barq_admin_owner_token') ?? '';
+    _refreshToken = await _secure.read(key: 'barq_admin_refresh_token') ?? '';
+    _sessionId = await _secure.read(key: 'barq_admin_session_id') ?? '';
     _readCache(prefs);
     if (_apiBase.isEmpty || _token.isEmpty) {
       if (mounted) setState(() {
         _loading = false;
         _online = false;
-        _connectionMessage = 'أكمل إعداد الاتصال';
+        _connectionMessage = _apiBase.isEmpty ? 'أدخل عنوان خادم الإدارة' : 'سجّل الدخول بحساب المالك عبر Google';
       });
       return;
     }
@@ -128,11 +136,16 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
     });
     try {
       await _syncOutbox(prefs);
-      final workspaceResponse = await http.get(
+      var workspaceResponse = await http.get(
         Uri.parse(_base + '/v1/workspace'), headers: _headers,
       ).timeout(const Duration(seconds: 18));
+      if (workspaceResponse.statusCode == 401 && await _refreshSession()) {
+        workspaceResponse = await http.get(
+          Uri.parse(_base + '/v1/workspace'), headers: _headers,
+        ).timeout(const Duration(seconds: 18));
+      }
       if (workspaceResponse.statusCode == 401) {
-        throw Exception('انتهت صلاحية جلسة المالك؛ أعد تسجيل الدخول');
+        throw Exception('انتهت جلسة المالك؛ سجّل الدخول مجددًا عبر Google');
       }
       if (workspaceResponse.statusCode != 200) {
         throw Exception('تعذر تحميل مساحة العمل (' + workspaceResponse.statusCode.toString() + ')');
@@ -185,12 +198,117 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
   }
 
   Future<Map<String, dynamic>> _getJson(String path) async {
-    final response = await http.get(Uri.parse(_base + path), headers: _headers)
+    var response = await http.get(Uri.parse(_base + path), headers: _headers)
       .timeout(const Duration(seconds: 18));
+    if (response.statusCode == 401 && await _refreshSession()) {
+      response = await http.get(Uri.parse(_base + path), headers: _headers)
+        .timeout(const Duration(seconds: 18));
+    }
     if (response.statusCode != 200) {
       throw Exception('تعذر تحميل البيانات (' + response.statusCode.toString() + ')');
     }
     return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+  }
+
+  Future<bool> _refreshSession() async {
+    if (_refreshToken.isEmpty || _sessionId.isEmpty || _apiBase.isEmpty) return false;
+    try {
+      final response = await http.post(
+        Uri.parse(_base + '/v1/auth/refresh'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'sessionId': _sessionId, 'refreshToken': _refreshToken}),
+      ).timeout(const Duration(seconds: 18));
+      if (response.statusCode != 200) {
+        if (_sessionId.isNotEmpty && _refreshToken.isNotEmpty && _apiBase.isNotEmpty) {
+      try {
+        await http.post(Uri.parse(_base + '/v1/auth/logout'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'sessionId': _sessionId, 'refreshToken': _refreshToken}),
+        ).timeout(const Duration(seconds: 8));
+      } catch (_) {}
+    }
+    await _secure.delete(key: 'barq_admin_owner_token');
+    await _secure.delete(key: 'barq_admin_refresh_token');
+    await _secure.delete(key: 'barq_admin_session_id');
+        await _secure.delete(key: 'barq_admin_refresh_token');
+        await _secure.delete(key: 'barq_admin_session_id');
+        _token = '';
+        _refreshToken = '';
+        _sessionId = '';
+        return false;
+      }
+      final data = Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+      _token = (data['accessToken'] ?? '').toString();
+      _refreshToken = (data['refreshToken'] ?? '').toString();
+      if (_token.isEmpty || _refreshToken.isEmpty) return false;
+      await _secure.write(key: 'barq_admin_owner_token', value: _token);
+      await _secure.write(key: 'barq_admin_refresh_token', value: _refreshToken);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _loginWithGoogle() async {
+    if (!isValidAdminApiBase(_apiBase)) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('أدخل عنوان خادم BARQ Admin من إعدادات الاتصال أولًا')),
+      );
+      return;
+    }
+    if (_googleOidcClientId.isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لم يُضبط Google OAuth Client ID في نسخة التطبيق بعد')),
+      );
+      return;
+    }
+    try {
+      final nonce = createOidcNonce();
+      final redirectUri = googleOidcRedirectUri(_googleOidcClientId);
+      final result = await _appAuth.authorizeAndExchangeCode(
+        AuthorizationTokenRequest(
+          _googleOidcClientId,
+          redirectUri,
+          issuer: 'https://accounts.google.com',
+          scopes: const ['openid', 'email', 'profile'],
+          nonce: nonce,
+        ),
+      );
+      final idToken = result?.idToken;
+      if (idToken == null || idToken.isEmpty) {
+        throw Exception('لم يُرجع Google إثبات هوية صالحًا');
+      }
+      final response = await http.post(
+        Uri.parse(_base + '/v1/auth/exchange'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'idToken': idToken,
+          'nonce': nonce,
+          'deviceName': Platform.isIOS ? 'BARQ Admin — iPhone' : 'BARQ Admin — Android',
+          'platform': Platform.isIOS ? 'ios' : 'android',
+        }),
+      ).timeout(const Duration(seconds: 25));
+      final data = Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+      if (response.statusCode != 200) {
+        throw Exception(data['error'] == 'identity_verification_failed'
+          ? 'رفض الخادم إثبات Google؛ تحقق من حساب المالك وإعدادات Preview'
+          : 'تعذر إنشاء جلسة الإدارة (' + response.statusCode.toString() + ')');
+      }
+      _token = (data['accessToken'] ?? '').toString();
+      _refreshToken = (data['refreshToken'] ?? '').toString();
+      _sessionId = (data['sessionId'] ?? '').toString();
+      if (_token.isEmpty || _refreshToken.isEmpty || _sessionId.isEmpty) {
+        throw Exception('استجابة إنشاء الجلسة غير مكتملة');
+      }
+      await _secure.write(key: 'barq_admin_owner_token', value: _token);
+      await _secure.write(key: 'barq_admin_refresh_token', value: _refreshToken);
+      await _secure.write(key: 'barq_admin_session_id', value: _sessionId);
+      await _load();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
   }
 
   Future<void> _syncOutbox(SharedPreferences prefs) async {
@@ -320,6 +438,8 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
     setState(() {
       _apiBase = '';
       _token = '';
+      _refreshToken = '';
+      _sessionId = '';
       _workspace = {};
       _tasks = [];
       _approvals = [];
@@ -333,7 +453,6 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
 
   Future<void> _showSettings() async {
     final baseController = TextEditingController(text: _apiBase);
-    final tokenController = TextEditingController(text: _token);
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -346,13 +465,10 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
           children: [
             const Text('إعداد الاتصال الآمن', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            const Text('عنوان خادم الإدارة ورمز جلسة المالك. لا تضع أسرار الخادم هنا.'),
+            const Text('عنوان خادم الإدارة فقط. تسجيل الدخول يتم عبر Google ولا تُدخل أي رمز يدويًا.'),
             const SizedBox(height: 16),
             TextField(controller: baseController, keyboardType: TextInputType.url,
               decoration: const InputDecoration(labelText: 'عنوان خادم BARQ Admin')),
-            const SizedBox(height: 12),
-            TextField(controller: tokenController, obscureText: true,
-              decoration: const InputDecoration(labelText: 'رمز جلسة المالك')),
             const SizedBox(height: 16),
             FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('حفظ الاتصال')),
           ],
@@ -361,19 +477,17 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
     );
     if (saved == true) {
       final base = baseController.text.trim().replaceFirst(RegExp(r'/+$'), '');
-      if (!isValidAdminApiBase(base) || tokenController.text.trim().isEmpty) {
+      if (!isValidAdminApiBase(base)) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('أدخل عنوان HTTPS صحيحًا ورمز جلسة غير فارغ')),
+          const SnackBar(content: Text('أدخل عنوان HTTPS صحيحًا لخادم الإدارة')),
         );
       } else {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('barq_admin_api_base', base);
-        await _secure.write(key: 'barq_admin_owner_token', value: tokenController.text.trim());
         await _load();
       }
     }
     baseController.dispose();
-    tokenController.dispose();
   }
 
   Future<String> _requestImageAnalysis(Uint8List bytes, String mimeType, String prompt) async {
@@ -779,6 +893,8 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
         actions: [
           IconButton(tooltip: 'إعدادات الاتصال', onPressed: _showSettings,
             icon: const Icon(Icons.settings_outlined)),
+          IconButton(tooltip: 'الأجهزة', onPressed: _token.isEmpty ? null : _showDevices,
+            icon: const Icon(Icons.devices_outlined)),
           IconButton(tooltip: 'إنهاء الجلسة', onPressed: _token.isEmpty ? null : _logout,
             icon: const Icon(Icons.logout)),
           const SizedBox(width: 6),
@@ -817,6 +933,7 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
       children: [
+        if (_token.isEmpty) _signInCard(),
         _workspaceCard(),
         const SizedBox(height: 14),
         Row(children: [
@@ -871,6 +988,95 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
         else ..._tasks.take(3).map(_taskTile),
       ],
     );
+  }
+
+  Widget _signInCard() => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(18),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const Icon(Icons.verified_user_outlined, color: _gold, size: 34),
+        const SizedBox(height: 10),
+        const Text('تسجيل دخول مالك BARQ Admin',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 7),
+        const Text('استخدم حساب Google المعتمد للمالك. سيُفتح تسجيل الدخول الآمن عبر المتصفح مع PKCE.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.white70, height: 1.4)),
+        const SizedBox(height: 14),
+        FilledButton.icon(
+          onPressed: _apiBase.isEmpty ? _showSettings : _loginWithGoogle,
+          icon: const Icon(Icons.login),
+          label: Text(_apiBase.isEmpty ? 'إعداد عنوان الخادم' : 'المتابعة باستخدام Google'),
+        ),
+      ]),
+    ),
+  );
+
+  Future<void> _showDevices() async {
+    try {
+      final data = await _getJson('/v1/devices');
+      final devices = (data['devices'] as List? ?? [])
+        .whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('أجهزة المالك والجلسات'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: devices.isEmpty
+              ? const Text('لا توجد أجهزة مسجلة')
+              : ListView(
+                  shrinkWrap: true,
+                  children: devices.map((device) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.phone_android),
+                    title: Text((device['device_name'] ?? 'جهاز').toString()),
+                    subtitle: Text(
+                      (device['platform'] ?? '').toString() + ' • آخر نشاط: ' +
+                      (device['last_seen_at'] ?? '-').toString() +
+                      ((device['revoked_at'] == null) ? '' : ' • ملغى'),
+                    ),
+                    trailing: device['revoked_at'] == null
+                      ? IconButton(
+                          tooltip: 'إبطال هذا الجهاز',
+                          icon: const Icon(Icons.block, color: Colors.redAccent),
+                          onPressed: () async {
+                            final id = (device['id'] ?? '').toString();
+                            final response = await http.delete(
+                              Uri.parse(_base + '/v1/devices/' + id), headers: _headers,
+                            ).timeout(const Duration(seconds: 15));
+                            if (response.statusCode == 200 && dialogContext.mounted) {
+                              Navigator.pop(dialogContext);
+                              await _load();
+                            }
+                          },
+                        )
+                      : const Icon(Icons.check_circle_outline, color: Colors.white38),
+                  )).toList(),
+                ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                final response = await http.post(
+                  Uri.parse(_base + '/v1/devices/revoke-all'), headers: _headers,
+                ).timeout(const Duration(seconds: 15));
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+                if (response.statusCode == 200) await _logout();
+              },
+              child: const Text('إبطال جميع الأجهزة'),
+            ),
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق')),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر تحميل الأجهزة: ' + error.toString())),
+      );
+    }
   }
 
   Widget _workspaceCard() {
