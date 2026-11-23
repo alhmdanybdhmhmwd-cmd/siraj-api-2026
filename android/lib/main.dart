@@ -7798,8 +7798,17 @@ Widget _barqAttachmentTile(Map<String, dynamic> attachment,
               borderRadius: BorderRadius.circular(11),
               child: isImage
                   ? Image.memory(bytes, width: 244, height: 176, fit: BoxFit.cover)
-                  : Container(width: 244, height: 150, color: Colors.black45,
-                      child: const Icon(Icons.play_circle_fill, color: Colors.white, size: 58)),
+                  : attachment['localPath'] is String && (attachment['localPath'] as String).isNotEmpty
+                      ? SizedBox(
+                          width: 244, height: 150,
+                          child: _BarqPickedVideoThumbnail(file: PlatformFile(
+                            name: field(attachment, ['fileName'], 'barq-video'),
+                            path: attachment['localPath'] as String,
+                            size: bytes.length,
+                          )),
+                        )
+                      : Container(width: 244, height: 150, color: Colors.black45,
+                          child: const Icon(Icons.play_circle_fill, color: Colors.white, size: 58)),
             ),
             Container(
               width: 58, height: 58,
@@ -9649,7 +9658,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
         captionController.dispose();
         return;
       }
-      final local = _newPendingAttachment(bytes, file.name, contentType);
+      final local = _newPendingAttachment(bytes, file.name, contentType, localPath: file.path);
       (local['local_attachment'] as Map<String, dynamic>)['caption'] = captionController.text.trim();
       captionController.dispose();
       setState(() => messages = mergeMessages(messages, [local]));
