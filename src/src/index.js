@@ -799,7 +799,7 @@ export default {
     }
 
     const url = new URL(request.url);
-    const path = url.pathname.replace(/\\/+$/, "") || "/";
+    const path = url.pathname.replace(/\/+$/, "") || "/";
     const method = request.method;
 
     // Reject oversized request targets and unsupported HTTP verbs before
