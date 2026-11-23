@@ -190,6 +190,8 @@ jobs:
           grep -q 'applicationId = "com.barq.admin"' android/app/build.gradle.kts
           grep -q 'manifestPlaceholders["appAuthRedirectScheme"]' android/app/build.gradle.kts
           grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
+          sdk_path="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          printf "flutter.sdk=%s\nsdk.dir=%s\n" "$FLUTTER_ROOT" "$sdk_path" > android/local.properties
           cd android
           ./gradlew :app:processDebugManifest
       - name: Enforce Dart formatting
