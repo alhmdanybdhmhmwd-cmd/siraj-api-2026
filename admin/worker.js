@@ -523,6 +523,10 @@ async function handle(request, env) {
   if (!env.ADMIN_DB) return response({ error: "admin_database_unavailable" }, 503, allowedOrigin);
 
   if (request.method === "POST" && url.pathname === "/v1/auth/exchange") {
+    if (!env.BARQ_ADMIN_JWT_SECRET || env.BARQ_ADMIN_JWT_SECRET.length < 32 ||
+        (!env.BARQ_ADMIN_OWNER_EMAIL && !env.BARQ_ADMIN_OWNER_SUBJECT)) {
+      return response({ error: "owner_identity_not_configured" }, 503, allowedOrigin);
+    }
     const body = await readJson(request);
     if (!body || typeof body.idToken !== "string" || typeof body.nonce !== "string") {
       return response({ error: "invalid_identity_request" }, 400, allowedOrigin);
