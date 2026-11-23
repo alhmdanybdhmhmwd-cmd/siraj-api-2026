@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, rankKnowledgeChunks, validateAdminAccessClaims, processAdminDeadLetterMessage, renewAdminTaskLease } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, knowledgeSearchTerms, rankKnowledgeChunks, validateAdminAccessClaims, processAdminDeadLetterMessage, renewAdminTaskLease } from "./worker.js";
 
 test("task input is normalized and bounded", () => {
   assert.deepEqual(validateTaskInput({ title: "  Prepare global launch  ", priority: "high" }), {
@@ -283,4 +283,26 @@ test("lease renewal reports ownership loss without modifying another worker's ta
     prepare() { return { bind() { return { async run() { return { meta: { changes: 0 } }; } }; } }; }
   } };
   assert.equal(await renewAdminTaskLease(env, "task-9", "workspace-2", "stale-lease"), false);
+});
+
+
+test("BARQ Brain extracts bounded multilingual search terms for knowledge retrieval", () => {
+  assert.deepEqual(knowledgeSearchTerms("BARQ برق chat messages SPARK"), [
+    "barq", "برق", "chat", "messages", "spark"
+  ]);
+  assert.equal(knowledgeSearchTerms("a b", 20).length, 0);
+  assert.equal(knowledgeSearchTerms("alpha beta gamma delta", 2).length, 2);
+  assert.equal(knowledgeSearchTerms("one two three", 999).length, 3);
+});
+
+test("knowledge ranking prefers title/path evidence and safely bounds result count", () => {
+  const chunks = [
+    { title: "General notes", source_path: "docs/other.md", content: "BARQ messages" },
+    { title: "BARQ messaging architecture", source_path: "docs/barq-chat.md", content: "delivery and retries" },
+    { title: "BARQ API", source_path: "src/api.js", content: "messages" }
+  ];
+  const ranked = rankKnowledgeChunks(chunks, "BARQ messages", 100);
+  assert.equal(ranked.length, 3);
+  assert.equal(ranked[0].source_path, "docs/barq-chat.md");
+  assert.ok(ranked[0].matched_terms >= 1);
 });
