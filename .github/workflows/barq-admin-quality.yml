@@ -38,13 +38,14 @@ jobs:
           db = sqlite3.connect(":memory:")
           db.executescript(Path("admin/migrations/0001_admin_workspace.sql").read_text())
           db.executescript(Path("admin/migrations/0002_project_knowledge.sql").read_text())
+          db.executescript(Path("admin/migrations/0003_vision_usage_limits.sql").read_text())
           names = {row[0] for row in db.execute(
               "SELECT name FROM sqlite_master WHERE type IN ('table','trigger')"
           )}
           required = {
               "admin_workspaces", "admin_tasks", "admin_task_checkpoints",
               "admin_approvals", "admin_audit_events", "admin_project_knowledge",
-              "admin_audit_no_update", "admin_audit_no_delete"
+              "admin_ai_usage_limits", "admin_audit_no_update", "admin_audit_no_delete"
           }
           missing = required - names
           assert not missing, f"Missing schema objects: {sorted(missing)}"
