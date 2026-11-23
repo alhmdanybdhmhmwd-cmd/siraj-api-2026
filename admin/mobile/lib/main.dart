@@ -73,6 +73,7 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
   String _token = '';
   String _refreshToken = '';
   String _sessionId = '';
+  Future<bool>? _refreshFuture;
   String _connectionMessage = 'غير متصل';
   Map<String, dynamic> _workspace = {};
   List<AdminTask> _tasks = [];
@@ -210,7 +211,17 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
     return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
   }
 
-  Future<bool> _refreshSession() async {
+  Future<bool> _refreshSession() {
+    final inFlight = _refreshFuture;
+    if (inFlight != null) return inFlight;
+    final refresh = _performSessionRefresh();
+    _refreshFuture = refresh;
+    return refresh.whenComplete(() {
+      _refreshFuture = null;
+    });
+  }
+
+  Future<bool> _performSessionRefresh() async {
     if (_refreshToken.isEmpty || _sessionId.isEmpty || _apiBase.isEmpty) return false;
     try {
       final response = await http.post(
@@ -218,7 +229,7 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'sessionId': _sessionId, 'refreshToken': _refreshToken}),
       ).timeout(const Duration(seconds: 18));
-      if (response.statusCode != 200) {
+      if (response.statusCode == 401 || response.statusCode == 403) {
         await _secure.delete(key: 'barq_admin_owner_token');
         await _secure.delete(key: 'barq_admin_refresh_token');
         await _secure.delete(key: 'barq_admin_session_id');
@@ -227,6 +238,7 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
         _sessionId = '';
         return false;
       }
+      if (response.statusCode != 200) return false;
       final data = Map<String, dynamic>.from(jsonDecode(response.body) as Map);
       final nextAccess = (data['accessToken'] ?? '').toString();
       final nextRefresh = (data['refreshToken'] ?? '').toString();
