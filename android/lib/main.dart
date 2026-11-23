@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/services.dart';
+import 'package:app_links/app_links.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:pdfrx/pdfrx.dart';
@@ -1639,6 +1640,12 @@ class Api {
         'name': name,
         'description': description,
       }))['group']);
+
+  static Future<Map<String, dynamic>> createGroupInvite(String groupId) async =>
+      request('POST', '/api/groups/${Uri.encodeComponent(groupId)}/invites');
+
+  static Future<Map<String, dynamic>> joinGroupInvite(String inviteCode) async =>
+      request('POST', '/api/groups/invites/${Uri.encodeComponent(inviteCode)}/accept');
 
   static Future<void> addGroupMember(String groupId, String userId) async {
     await request('POST', '/api/groups/$groupId/members', body: {'userId': userId});
@@ -4270,6 +4277,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Map<String, dynamic> notificationPrefs = {'messages': true, 'groups': true, 'statuses': true};
   Timer? offlineSyncTimer;
   bool _handlingNotificationTap = false;
+  StreamSubscription<Uri>? _groupInviteLinkSubscription;
+  final Set<String> _handledGroupInviteCodes = <String>{};
 
   String get myId => field(me, ['id', 'user_id']);
 
@@ -4278,6 +4287,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     barqPendingNotificationTap.addListener(_handlePendingNotificationTap);
+    _initializeGroupInviteLinks();
     _syncRealtimeConnection();
     _loadCachedFriends().whenComplete(() { if (mounted) refreshAll(); });
     _startOfflineSyncTimer();
@@ -4287,8 +4297,65 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     barqPendingNotificationTap.removeListener(_handlePendingNotificationTap);
+    _groupInviteLinkSubscription?.cancel();
     offlineSyncTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _initializeGroupInviteLinks() async {
+    final links = AppLinks();
+    try {
+      final initial = await links.getInitialLink();
+      if (initial != null) unawaited(_handleGroupInviteLink(initial));
+    } catch (_) {}
+    _groupInviteLinkSubscription = links.uriLinkStream.listen((uri) {
+      unawaited(_handleGroupInviteLink(uri));
+    }, onError: (_) {});
+  }
+
+  Future<void> _handleGroupInviteLink(Uri uri) async {
+    if (uri.scheme != 'barq' || uri.host != 'group' || uri.path != '/join') return;
+    final code = (uri.queryParameters['code'] ?? '').trim();
+    if (code.isEmpty || !_handledGroupInviteCodes.add(code) || !mounted) return;
+    try {
+      final joined = await Api.joinGroupInvite(code);
+      await refreshAll();
+      if (!mounted) return;
+      setState(() => selectedTab = 3);
+      final groupId = field(joined, ['groupId']);
+      Map<String, dynamic>? target;
+      for (final item in groups) {
+        if (field(item, ['id', 'group_id']) == groupId) { target = item; break; }
+      }
+      showMsg(context, 'انضممت إلى مجموعة ${field(joined, ['groupName'], 'برق')} بنجاح.');
+      if (target != null) {
+        await Navigator.push<void>(context, MaterialPageRoute(
+          builder: (_) => GroupChatPage(
+            group: target!,
+            currentUserId: myId,
+            onAddMember: () => addMemberDialog(target!),
+            onShareInvite: () => shareGroupInvite(target!),
+            onGroupChanged: refreshAll,
+          ),
+        ));
+      }
+    } catch (error) {
+      if (mounted) showMsg(context, 'تعذر الانضمام عبر الرابط: ${cleanError(error)}');
+    }
+  }
+
+  Future<void> shareGroupInvite(Map<String, dynamic> group) async {
+    try {
+      final invite = await Api.createGroupInvite(field(group, ['id']));
+      final link = field(invite, ['inviteUrl']);
+      if (link.isEmpty) throw Exception('لم يتم إنشاء رابط الدعوة.');
+      await SharePlus.instance.share(ShareParams(
+        text: 'انضم إلى مجموعة "${field(group, ['name'], 'برق')}" على برق عبر الرابط التالي (صالح لمدة 7 أيام):\n$link',
+        subject: 'دعوة للانضمام إلى مجموعة برق',
+      ));
+    } catch (error) {
+      if (mounted) showMsg(context, cleanError(error));
+    }
   }
 
   void _startOfflineSyncTimer() {
@@ -4382,6 +4449,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 group: targetGroup,
                 currentUserId: myId,
                 onAddMember: () => addMemberDialog(targetGroup),
+                onShareInvite: () => shareGroupInvite(targetGroup),
                 onGroupChanged: refreshAll,
               ),
             ));
@@ -5487,6 +5555,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                         group: group,
                         currentUserId: myId,
                         onAddMember: () => addMemberDialog(group),
+                        onShareInvite: () => shareGroupInvite(group),
                         onGroupChanged: refreshAll,
                       ),
                     )),
@@ -9873,12 +9942,14 @@ class GroupChatPage extends StatefulWidget {
   final Map<String, dynamic> group;
   final String currentUserId;
   final VoidCallback onAddMember;
+  final VoidCallback onShareInvite;
   final Future<void> Function() onGroupChanged;
   const GroupChatPage({
     super.key,
     required this.group,
     required this.currentUserId,
     required this.onAddMember,
+    required this.onShareInvite,
     required this.onGroupChanged,
   });
 
@@ -10371,6 +10442,8 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                   showGroupMembers();
                 } else if (value == 'wallpaper') {
                   _chooseGroupWallpaper();
+                } else if (value == 'invite') {
+                  widget.onShareInvite();
                 }
               },
               itemBuilder: (_) => const [
@@ -10384,6 +10457,9 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                   dense: true, leading: Icon(Icons.perm_media_outlined), title: Text('الوسائط والملفات'))),
                 PopupMenuItem(value: 'wallpaper', child: ListTile(
                   dense: true, leading: Icon(Icons.wallpaper_outlined), title: Text('خلفية المحادثة'))),
+                if (['owner', 'admin'].contains(field(widget.group, ['current_role'], 'member')))
+                  PopupMenuItem(value: 'invite', child: ListTile(
+                    dense: true, leading: Icon(Icons.link_rounded), title: Text('مشاركة رابط الانضمام'))),
               ],
             ),
             if (['owner', 'admin'].contains(field(widget.group, ['current_role'], 'member')))
