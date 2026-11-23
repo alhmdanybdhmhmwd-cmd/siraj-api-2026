@@ -15,8 +15,6 @@ function b64url(value) {
 async function fixture(overrides = {}) {
   const { publicKey, privateKey } = await generateKeyPair("rsa", {
     modulusLength: 2048,
-    publicKeyEncoding: { type: "spki", format: "pem" },
-    privateKeyEncoding: { type: "pkcs8", format: "pem" }
   });
   const jwk = { ...publicKey.export({ format: "jwk" }), kid: "test-key", use: "sig", alg: "RS256" };
   const claims = {
