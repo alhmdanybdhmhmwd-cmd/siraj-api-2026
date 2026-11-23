@@ -32,6 +32,13 @@ max_batch_timeout = 5
 max_retries = 5
 dead_letter_queue = "barq-admin-preview-dlq"
 
+# Consume exhausted deliveries and mark their durable task record failed.
+[[queues.consumers]]
+queue = "barq-admin-preview-dlq"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
+
 [ai]
 binding = "ADMIN_AI"
 
