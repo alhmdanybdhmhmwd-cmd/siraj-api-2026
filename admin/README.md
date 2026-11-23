@@ -21,10 +21,10 @@ The future dedicated Admin Preview Worker requires:
 - `ADMIN_TASK_QUEUE`: a dedicated Cloudflare Queue for durable background tasks.
 - `ADMIN_AI`: a server-side Workers AI binding used by BARQ Brain for analysis and draft generation.
 - `BARQ_ADMIN_JWT_SECRET`: a server-side HS256 secret of at least 32 characters.\n- `BARQ_GOOGLE_OIDC_CLIENT_ID`: the Google OAuth client ID registered for the native BARQ Admin Android app.\n- `BARQ_ADMIN_OWNER_SUBJECT`: the exact Google OIDC `sub` of the one permitted owner; do not use an email address as the primary identity key.
-- `BARQ_ADMIN_OWNER_SUBJECT`: the exact owner subject allowed to administer this workspace.
+- `BARQ_ADMIN_OWNER_EMAIL`: the exact verified Google email allowed to administer this workspace. Optionally pin `BARQ_ADMIN_OWNER_SUBJECT` after first enrollment.
 - `BARQ_ADMIN_ALLOWED_ORIGIN`: the exact Admin client origin; no wildcard origin is supported.
 
-The mobile app performs Google Authorization Code + PKCE using AppAuth and sends the Google ID token plus its OIDC nonce to `POST /v1/auth/exchange`. The Worker validates the token against Google signing keys and the configured client ID, then issues a 10-minute Admin access token and a 30-day rotating opaque refresh token. Every API request checks the associated session and device are still active. Refresh-token replay revokes that session. Google client IDs are public identifiers; `BARQ_ADMIN_JWT_SECRET` remains server-only and must never be embedded in an APK. Do not deploy until Google credentials, the exact owner subject, dedicated Preview resources, key rotation, and rate limiting are configured and reviewed.
+The mobile app performs Google Authorization Code + PKCE using AppAuth and sends the Google ID token plus its OIDC nonce to `POST /v1/auth/exchange`. The Worker validates the token against Google signing keys and the configured client ID, then issues a 10-minute Admin access token and a 30-day rotating opaque refresh token. Every API request checks the associated session and device are still active. Refresh-token replay revokes that session. Google client IDs are public identifiers; `BARQ_ADMIN_JWT_SECRET` remains server-only and must never be embedded in an APK. Sign-in exchanges are limited to five attempts per minute per source IP and refreshes to ten per minute per session; these are short-window abuse controls, not daily quotas. Do not deploy until Google credentials, the exact owner subject, dedicated Preview resources, key rotation, and rate limiting are configured and reviewed.
 
 ## API surface
 
