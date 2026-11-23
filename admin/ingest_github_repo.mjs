@@ -14,6 +14,20 @@ const SECRET_CONTENT = [
   /(?:api[_-]?key|access[_-]?token|client[_-]?secret)\s*[:=]\s*["'][^"']{12,}["']/i
 ];
 
+export function normalizeAdminApiUrl(input) {
+  let parsed;
+  try {
+    parsed = new URL(input);
+  } catch {
+    throw new TypeError("invalid_admin_api_url");
+  }
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password ||
+      parsed.search || parsed.hash) {
+    throw new TypeError("admin_api_url_must_be_https_without_credentials_or_query");
+  }
+  return parsed.toString().replace(/\\/+$/, "");
+}
+
 export function shouldIndexPath(input) {
   if (typeof input !== "string" || !input || input.length > 160) return false;
   const path = input.replace(/\\/g, "/");
