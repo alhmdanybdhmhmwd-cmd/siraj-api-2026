@@ -3082,7 +3082,10 @@ Future<void> showMessageActions(
   } else if (action == 'reply' && onReply != null) {
     await onReply(message);
   } else if (action == 'edit' && onEdit != null && context.mounted) {
-    final initial = field(message, ['body', 'content', 'message']);
+    final attachmentForEdit = _attachmentData(message);
+    final initial = attachmentForEdit == null
+        ? field(message, ['body', 'content', 'message'])
+        : field(attachmentForEdit, ['caption']);
     final edited = await showEditMessageDialog(context, initial);
     if (edited != null && edited.trim() != initial.trim()) {
       try {
@@ -9928,6 +9931,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                           },
                                           onForward: _attachmentData(m) != null
                                               ? () => forwardBarqMessage(context, m) : null,
+                                          onEdit: mine && _attachmentData(m) != null &&
+                                                  m['is_ephemeral'] != true && m['is_offline_pending'] != true
+                                              ? (caption) async {
+                                                  final updated = {..._attachmentData(m)!, 'caption': caption};
+                                                  await Api.editPrivateMessage(
+                                                    field(m, ['id', 'message_id']), jsonEncode(updated));
+                                                  if (mounted) await loadMessages();
+                                                }
+                                              : null,
                                           onReact: (emoji, remove) async {
                                             await Api.reactPrivateMessage(field(m, ['id', 'message_id']), emoji, remove: remove);
                                             if (mounted) await loadMessages(silent: true);
@@ -11431,6 +11443,13 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                                 },
                                 onForward: _attachmentData(m) != null
                                     ? () => forwardBarqMessage(context, m) : null,
+                                onEdit: mine && _attachmentData(m) != null
+                                    ? (caption) async {
+                                        final updated = {..._attachmentData(m)!, 'caption': caption};
+                                        await Api.editGroupMessage(groupId, field(m, ['id', 'message_id']), jsonEncode(updated));
+                                        if (mounted) await loadMessages();
+                                      }
+                                    : null,
                                 onReact: (emoji, remove) async {
                                   await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), emoji, remove: remove);
                                   if (mounted) await loadMessages(silent: true);
