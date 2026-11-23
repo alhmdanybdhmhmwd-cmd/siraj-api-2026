@@ -226,7 +226,7 @@ export function buildAssistantMessages(task, workspace, knowledge = []) {
         "Details: " + String(task.description || ""),
         "Relevant indexed project knowledge:",
         context || "No matching project knowledge has been indexed yet.",
-        "Return a practical result, cite relevant source paths, note assumptions and risks, and identify any owner approval needed."
+        "Return a practical result. Cite only the numbered indexed sources actually supplied above, with their exact source paths and revisions; never invent citations. If relevant evidence is missing, say so. Note assumptions and risks, and identify any owner approval needed."
       ].join("\n")
     }
   ];
@@ -301,15 +301,7 @@ async function processAdminTaskMessage(message, env) {
     const model = env.BARQ_ADMIN_AI_MODEL || "@cf/meta/llama-3.1-8b-instruct";
     const generated = await env.ADMIN_AI.run(model, {
       messages: buildAssistantMessages(task, workspace,
-        rankKnowledgeChunks(
-          (await env.ADMIN_DB.prepare(`
-            SELECT source_type, source_path, source_revision, title, content, updated_at
-            FROM admin_project_knowledge WHERE workspace_id = ?
-            ORDER BY updated_at DESC LIMIT 200
-          `).bind(payload.workspaceId).all()).results || [],
-          task.title + " " + task.description,
-          6
-        )),
+        await retrieveKnowledgeForTask(env, payload.workspaceId, task.title + " " + task.description)),
       max_tokens: 1800
     });
     if (leaseLost) throw new Error("task_lease_lost");
@@ -396,7 +388,48 @@ export function validateKnowledgeInput(value) {
   return { ok: true, value: { sourceType, sourcePath, sourceRevision, title, content } };
 }
 
+export function knowledgeSearchTerms(query, limit = 12) {
+  const safeLimit = Number.isSafeInteger(limit) ? Math.max(1, Math.min(20, limit)) : 12;
+  return [...new Set((String(query || "").toLowerCase().match(/[\\p{L}\\p{N}]{3,}/gu) || []))]
+    .slice(0, safeLimit);
+}
+
 export function rankKnowledgeChunks(chunks, query, limit = 6) {
+  const tokens = knowledgeSearchTerms(query);
+  const safeLimit = Number.isSafeInteger(limit) ? Math.max(1, Math.min(12, limit)) : 6;
+  return (chunks || []).map(chunk => {
+    const title = String(chunk.title || "").toLowerCase();
+    const path = String(chunk.source_path || "").toLowerCase();
+    const content = String(chunk.content || "").toLowerCase();
+    let score = 0;
+    let matched = 0;
+    for (const token of tokens) {
+      const inTitle = title.includes(token);
+      const inPath = path.includes(token);
+      const inContent = content.includes(token);
+      if (inTitle) score += 7;
+      if (inPath) score += 4;
+      if (inContent) score += 1;
+      if (inTitle || inPath || inContent) matched++;
+    }
+    const coverage = tokens.length ? matched / tokens.length : 0;
+    return { ...chunk, relevance_score: score + coverage, matched_terms: matched };
+  }).filter(chunk => chunk.relevance_score > 0)
+    .sort((a, b) => b.relevance_score - a.relevance_score ||
+      String(b.updated_at || "").localeCompare(String(a.updated_at || "")))
+    .slice(0, safeLimit);
+}
+
+async function retrieveKnowledgeForTask(env, workspaceId, query) {
+  const tokens = knowledgeSearchTerms(query);
+  let statement;
+  if (tokens.length) {
+    const clauses = tokens.map(() =>
+      "(title LIKE ? OR source_path LIKE ? OR content LIKE ?)"
+    );
+    const bindings = [workspaceId];
+    for (const token of tokens) {
+      const pattern = "%" + token.replace(/[\\%_]/g, "\\\\export function rankKnowledgeChunks(chunks, query, limit = 6) {
   const tokens = [...new Set((String(query || "").toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []))];
   return (chunks || []).map(chunk => {
     const title = String(chunk.title || "").toLowerCase();
@@ -413,6 +446,26 @@ export function rankKnowledgeChunks(chunks, query, limit = 6) {
     .sort((a, b) => b.relevance_score - a.relevance_score ||
       String(b.updated_at || "").localeCompare(String(a.updated_at || "")))
     .slice(0, limit);
+}
+
+async function sha256Hex") + "%";
+      bindings.push(pattern, pattern, pattern);
+    }
+    statement = env.ADMIN_DB.prepare(`
+      SELECT source_type, source_path, source_revision, title, content, updated_at
+      FROM admin_project_knowledge
+      WHERE workspace_id = ? AND (${clauses.join(" OR ")})
+      ORDER BY updated_at DESC LIMIT 500
+    `).bind(...bindings);
+  } else {
+    statement = env.ADMIN_DB.prepare(`
+      SELECT source_type, source_path, source_revision, title, content, updated_at
+      FROM admin_project_knowledge WHERE workspace_id = ?
+      ORDER BY updated_at DESC LIMIT 100
+    `).bind(workspaceId);
+  }
+  const rows = await statement.all();
+  return rankKnowledgeChunks(rows.results || [], query, 6);
 }
 
 async function sha256Hex(value) {
