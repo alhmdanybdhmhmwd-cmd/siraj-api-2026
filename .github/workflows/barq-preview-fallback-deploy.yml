@@ -7,6 +7,7 @@ on:
     branches:
       - barq/phase8-cleanup-preview-readiness-2026-11-23
       - barq/repair-batch-2026-11-23
+      - barq/ux-media-chat-spark-2026-11-23
     paths:
       - "src/**"
       - "api/**"
@@ -27,7 +28,7 @@ permissions:
 
 jobs:
   deploy-preview-fallback:
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy_preview_fallback == true)
+    if: (github.event_name == 'push' && (github.ref == 'refs/heads/barq/phase8-cleanup-preview-readiness-2026-11-23' || github.ref == 'refs/heads/barq/repair-batch-2026-11-23' || github.ref == 'refs/heads/barq/ux-media-chat-spark-2026-11-23')) || (github.event_name == 'workflow_dispatch' && inputs.deploy_preview_fallback == true)
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -115,23 +116,6 @@ jobs:
           console.log('Isolated fallback Worker is live and its shared Preview D1 is ready.');
           NODE
           echo "Fallback Preview Worker URL: $BARQ_FALLBACK_PREVIEW_URL" >> "$GITHUB_STEP_SUMMARY"
-      - name: Verify branch-scoped Vercel proxy for phone networks
-        shell: bash
-        env:
-          BARQ_VERCEL_PREVIEW_BASE: https://siraj-api-2026-git-barq-repair-batch-2026-11-23-siraj-01fc.vercel.app
-        run: |
-          set -euo pipefail
-          curl --connect-timeout 10 --max-time 30 --silent --show-error --fail "$BARQ_VERCEL_PREVIEW_BASE/health/live" > vercel-live.json
-          curl --connect-timeout 10 --max-time 30 --silent --show-error --fail "$BARQ_VERCEL_PREVIEW_BASE/health/ready" > vercel-ready.json
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          const live = JSON.parse(fs.readFileSync('vercel-live.json', 'utf8'));
-          const ready = JSON.parse(fs.readFileSync('vercel-ready.json', 'utf8'));
-          if (live.status !== 'alive' || live.service !== 'barq-api') throw new Error('Vercel proxy liveness verification failed');
-          if (ready.status !== 'ready' || ready.service !== 'barq-api') throw new Error('Vercel proxy upstream/D1 readiness verification failed');
-          console.log('Vercel preview proxy successfully reached the isolated fallback Worker and Preview D1.');
-          NODE
-          echo "Phone-facing Preview API: $BARQ_VERCEL_PREVIEW_BASE" >> "$GITHUB_STEP_SUMMARY"
       - name: Run account, privacy, contacts, messaging, reactions, pinning, SPARK, and groups integration
         env:
           BARQ_PREVIEW_URL: ${{ steps.deploy.outputs.url }}
@@ -192,11 +176,11 @@ jobs:
         if: success()
         working-directory: android
         env:
-          BARQ_API_BASE: https://siraj-api-2026-git-barq-repair-batch-2026-11-23-siraj-01fc.vercel.app
-          BARQ_MEDIA_BASE: https://siraj-api-2026-git-barq-repair-batch-2026-11-23-siraj-01fc.vercel.app
         run: |
           set -euo pipefail
-          case "$BARQ_API_BASE" in https://*.vercel.app) ;; *) echo "::error::API endpoint is not the isolated Vercel Preview proxy."; exit 1;; esac
+          BARQ_API_BASE="$BARQ_FALLBACK_PREVIEW_URL"
+          BARQ_MEDIA_BASE="$BARQ_FALLBACK_PREVIEW_URL"
+          case "$BARQ_API_BASE" in https://*.workers.dev) ;; *) echo "::error::API endpoint is not this run's isolated Preview Worker."; exit 1;; esac
           test "$BARQ_MEDIA_BASE" = "$BARQ_API_BASE"
           flutter build apk --release --target-platform android-arm64 --split-per-abi \
             --dart-define=BARQ_API_BASE="$BARQ_API_BASE" \
