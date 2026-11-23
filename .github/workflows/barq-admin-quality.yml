@@ -184,6 +184,9 @@ jobs:
           cache: true
       - name: Resolve Flutter dependencies
         run: flutter pub get
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-36 build-tools;36.0.0"
       - name: Validate Android AppAuth platform wiring without building an APK
         run: |
           test -f android/gradlew
@@ -193,7 +196,7 @@ jobs:
           sdk_path="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
           printf "flutter.sdk=%s\nsdk.dir=%s\n" "$FLUTTER_ROOT" "$sdk_path" > android/local.properties
           cd android
-          ./gradlew :app:processDebugManifest
+          bash gradlew :app:processDebugManifest --stacktrace
       - name: Enforce Dart formatting
         run: dart format --output=none --set-exit-if-changed lib test
       - name: Analyze Admin mobile app
