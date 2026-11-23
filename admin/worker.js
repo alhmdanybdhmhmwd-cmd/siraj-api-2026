@@ -1110,7 +1110,7 @@ async function handle(request, env) {
   return response({ error: "not_found" }, 404, allowedOrigin);
 }
 
-async function processAdminDeadLetterMessage(message, env) {
+export async function processAdminDeadLetterMessage(message, env) {
   const payload = message.body;
   if (!payload || typeof payload.taskId !== "string" || typeof payload.workspaceId !== "string") {
     message.ack();
