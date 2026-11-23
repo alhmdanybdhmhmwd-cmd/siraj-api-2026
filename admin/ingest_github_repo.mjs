@@ -25,7 +25,7 @@ export function normalizeAdminApiUrl(input) {
       parsed.search || parsed.hash) {
     throw new TypeError("admin_api_url_must_be_https_without_credentials_or_query");
   }
-  return parsed.toString().replace(/\\/+$/, "");
+  return parsed.toString().replace(/\/+$/, "");
 }
 
 export function shouldIndexPath(input) {
