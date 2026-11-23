@@ -20,7 +20,7 @@ on:
         default: false
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   deploy-preview-fallback:
@@ -185,6 +185,15 @@ jobs:
           path: android/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           if-no-files-found: error
           retention-days: 14
+      - name: Publish direct Preview APK download
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: barq-preview-${{ github.run_number }}-${{ github.run_attempt }}
+          name: BARQ Preview APK ${{ github.run_number }}
+          prerelease: true
+          files: android/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          fail_on_unmatched_files: true
       - name: Publish isolated Preview integration summary
         if: always()
         run: |
