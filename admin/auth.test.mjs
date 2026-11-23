@@ -81,3 +81,32 @@ test("refresh tokens are high entropy and only their SHA-256 hash is persisted",
   assert.equal(await sha256Hex(first), await sha256Hex(first));
   assert.notEqual(await sha256Hex(first), first);
 });
+
+test("owner email allowlist works without a pre-known Google subject", async () => {
+  const item = await fixture();
+  const env = {
+    BARQ_GOOGLE_OIDC_CLIENT_ID: clientId,
+    BARQ_ADMIN_OWNER_EMAIL: "OWNER@EXAMPLE.TEST"
+  };
+  const identity = await verifyGoogleIdToken(item.token, nonce, env, {
+    fetcher: item.fetcher, nowMs: now * 1000
+  });
+  assert.equal(identity.subject, ownerSub);
+  await assert.rejects(() => verifyGoogleIdToken(item.token, nonce, {
+    ...env, BARQ_ADMIN_OWNER_EMAIL: "other@example.test"
+  }, { fetcher: item.fetcher, nowMs: now * 1000 }));
+});
+
+test("Google ID token rejects tampered signatures and unauthorized azp", async () => {
+  const item = await fixture();
+  const env = { BARQ_GOOGLE_OIDC_CLIENT_ID: clientId, BARQ_ADMIN_OWNER_SUBJECT: ownerSub };
+  const parts = item.token.split(".");
+  const tampered = parts[0] + "." + parts[1] + "." + (parts[2].slice(0, -1) + (parts[2].endsWith("A") ? "B" : "A"));
+  await assert.rejects(() => verifyGoogleIdToken(tampered, nonce, env, {
+    fetcher: item.fetcher, nowMs: now * 1000
+  }), /invalid_google_signature/);
+  const wrongAzp = await fixture({ aud: [clientId, "another-client"], azp: "another-client" });
+  await assert.rejects(() => verifyGoogleIdToken(wrongAzp.token, nonce, env, {
+    fetcher: wrongAzp.fetcher, nowMs: now * 1000
+  }), /claims_rejected/);
+});
