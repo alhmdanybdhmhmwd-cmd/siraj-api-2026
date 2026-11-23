@@ -7876,12 +7876,56 @@ class _AttachmentTileState extends State<_AttachmentTile> {
         },
       );
     } else if (_isAudio) {
-      leading = IconButton(
-        tooltip: _audioPlaying ? 'إيقاف مؤقت' : 'تشغيل التسجيل الصوتي',
-        onPressed: _audioLoading ? null : _toggleAudio,
-        icon: _audioLoading
-            ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
-            : Icon(_audioPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill, size: 34),
+      final audioAccent = Theme.of(context).colorScheme.primary;
+      leading = Tooltip(
+        message: _audioPlaying ? 'إيقاف مؤقت' : 'تشغيل التسجيل الصوتي',
+        child: InkWell(
+          onTap: _audioLoading ? null : _toggleAudio,
+          customBorder: const CircleBorder(),
+          child: SizedBox(
+            width: 48,
+            height: 48,
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: audioAccent.withValues(alpha: .16),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: audioAccent.withValues(alpha: .62), width: 1.3),
+                  ),
+                  child: Center(
+                    child: _audioLoading
+                        ? SizedBox(width: 20, height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: audioAccent))
+                        : Icon(
+                            _audioPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                            size: 27,
+                            color: audioAccent,
+                          ),
+                  ),
+                ),
+                Positioned(
+                  right: -1,
+                  bottom: 0,
+                  child: Container(
+                    width: 18,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: audioAccent, width: 1),
+                    ),
+                    child: Icon(Icons.bolt_rounded, size: 12, color: audioAccent),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     } else if (_isVideo) {
       leading = _BarqRemoteVideoThumbnail(
