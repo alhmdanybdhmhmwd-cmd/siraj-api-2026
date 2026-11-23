@@ -440,9 +440,11 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
               ? 'اكتب وصفًا للصورة لا يتجاوز 1600 حرف'
               : data is Map && data['error'] == 'image_generation_rate_limited'
                   ? 'وصلت إلى الحد المؤقت: صورتان في الدقيقة. انتظر قليلًا ثم حاول مجددًا'
-                  : data is Map && data['error'] == 'image_generation_failed'
-                      ? 'تعذر إنشاء الصورة؛ تحقق من تفعيل Workers AI ثم أعد المحاولة'
-                      : 'تعذر إنشاء الصورة (' + response.statusCode.toString() + ')';
+                  : data is Map && data['error'] == 'image_generation_model_terms_required'
+                      ? 'يلزم قبول شروط نموذج إنشاء الصور في حساب Cloudflare قبل استخدامه'
+                      : data is Map && data['error'] == 'image_generation_failed'
+                          ? 'تعذر إنشاء الصورة؛ تحقق من تفعيل Workers AI ثم أعد المحاولة'
+                          : 'تعذر إنشاء الصورة (' + response.statusCode.toString() + ')';
       throw Exception(message);
     }
     final imageUri = data is Map ? (data['image'] ?? '').toString() : '';
