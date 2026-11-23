@@ -6,7 +6,7 @@ This directory is a separate Admin service boundary. It is not part of the BARQ 
 
 - Owner-scoped workspace bootstrap.
 - Task creation/listing with idempotency keys.
-- Durable task states, server Queue consumer, lease-based task claiming, bounded retries, server-side BARQ Brain draft generation, and optimistic checkpoint versions. The Preview Queue is configured for one message per delivery so a slow AI task cannot hold up unrelated messages in the same sequential batch.
+- Durable task states, server Queue consumer, lease-based task claiming, bounded retries, server-side BARQ Brain draft generation, and optimistic checkpoint versions. The Preview Queue is configured for one message per delivery. A dedicated dead-letter consumer marks exhausted queued/running tasks as failed, clears their lease, and writes an audit event for owner review.
 - Append-only audit events enforced by SQLite triggers.
 - Explicit approval records in the schema.
 - Google OpenID Connect identity exchange using Authorization Code + PKCE in the native client; the Worker verifies Google RS256 signatures, issuer, audience, verified email, exact owner subject, expiry, and one-time nonce use.
