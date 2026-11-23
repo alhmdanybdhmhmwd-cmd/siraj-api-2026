@@ -1,0 +1,64 @@
+name: BARQ Admin Quality
+
+on:
+  pull_request:
+    paths:
+      - "admin/**"
+      - ".github/workflows/barq-admin-quality.yml"
+  push:
+    branches:
+      - "barq-admin-foundation-2026-11-23"
+    paths:
+      - "admin/**"
+      - ".github/workflows/barq-admin-quality.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  admin-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check Worker syntax
+        working-directory: admin
+        run: npm run check
+      - name: Run Admin unit tests
+        working-directory: admin
+        run: npm test
+      - name: Validate isolated Admin schema and audit immutability
+        run: |
+          python3 - <<'PY'
+          import sqlite3
+          from pathlib import Path
+          db = sqlite3.connect(":memory:")
+          db.executescript(Path("admin/migrations/0001_admin_workspace.sql").read_text())
+          names = {row[0] for row in db.execute(
+              "SELECT name FROM sqlite_master WHERE type IN ('table','trigger')"
+          )}
+          required = {
+              "admin_workspaces", "admin_tasks", "admin_task_checkpoints",
+              "admin_approvals", "admin_audit_events",
+              "admin_audit_no_update", "admin_audit_no_delete"
+          }
+          missing = required - names
+          assert not missing, f"Missing schema objects: {sorted(missing)}"
+          db.execute("INSERT INTO admin_workspaces(id, owner_subject) VALUES ('owner:test', 'test')")
+          db.execute("""INSERT INTO admin_audit_events
+              (id, workspace_id, actor_subject, event_type, target_type, target_id)
+              VALUES ('evt', 'owner:test', 'test', 'test', 'test', 'test')""")
+          for statement in (
+              "UPDATE admin_audit_events SET event_type='tampered' WHERE id='evt'",
+              "DELETE FROM admin_audit_events WHERE id='evt'"
+          ):
+              try:
+                  db.execute(statement)
+                  raise AssertionError("Audit event mutation unexpectedly succeeded")
+              except sqlite3.IntegrityError:
+                  pass
+          print("Admin schema and immutable audit checks passed.")
+          PY
