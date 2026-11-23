@@ -5351,288 +5351,246 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Widget _statusesPage() {
-    return RefreshIndicator(
-      color: Theme.of(context).colorScheme.primary,
-      onRefresh: refreshAll,
-      child: ListView(
-        padding: const EdgeInsets.all(12),
+    final palette = Theme.of(context).colorScheme;
+    final ownStatuses = statuses.where((item) =>
+      field(item, ['userId', 'user_id']) == myId).toList();
+    final friendStatuses = statuses.where((item) =>
+      field(item, ['userId', 'user_id']) != myId).toList();
+
+    Widget storyAvatar(Map<String, dynamic> status, {bool own = false}) {
+      final photo = field(status, ['photoUrl', 'photo_url']);
+      return Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 6, 8, 12),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(18),
+          Stack(clipBehavior: Clip.none, children: [
+            Container(
+              padding: const EdgeInsets.all(3),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(22),
+                shape: BoxShape.circle,
                 gradient: LinearGradient(
-                  begin: Alignment.topRight, end: Alignment.bottomLeft,
-                  colors: [
-                    Theme.of(context).colorScheme.primary.withValues(alpha: .28),
-                    Theme.of(context).colorScheme.secondary.withValues(alpha: .12),
-                    Theme.of(context).colorScheme.surface,
-                  ],
+                  colors: [palette.primary, palette.secondary, gold],
+                  begin: Alignment.topRight,
+                  end: Alignment.bottomLeft,
                 ),
-                border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: .28)),
                 boxShadow: [BoxShadow(
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: .12),
-                  blurRadius: 22, spreadRadius: 1,
+                  color: palette.primary.withValues(alpha: .20),
+                  blurRadius: 12,
+                  spreadRadius: 1,
                 )],
               ),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Icon(Icons.bolt_rounded, color: Theme.of(context).colorScheme.primary, size: 26),
-                  const SizedBox(width: 8),
-                  Text('SPARK', style: TextStyle(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontSize: 23, fontWeight: FontWeight.w900, letterSpacing: 1.5,
-                  )),
-                  const Spacer(),
-                  const Icon(Icons.auto_awesome_rounded, color: gold, size: 20),
-                ]),
-                const SizedBox(height: 7),
-                const Text('لحظاتك… بنبض الضوء',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 4),
-                const Text('شارك نصاً أو صورة أو فيديو، وأضف تعليقك لتصل اللحظة كاملة إلى أصدقائك.',
-                  style: TextStyle(color: Colors.white70, height: 1.45, fontSize: 12)),
-                const SizedBox(height: 14),
-                Wrap(spacing: 7, runSpacing: 7, children: [
-                  _sparkFeaturePill(Icons.timer_outlined, '24 ساعة'),
-                  _sparkFeaturePill(Icons.perm_media_outlined, 'صور وفيديو'),
-                  _sparkFeaturePill(Icons.forum_outlined, 'ردود وتفاعلات'),
-                ]),
-              ]),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Row(children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: publishStatusDialog,
-                  icon: const Icon(Icons.edit_note_rounded),
-                  label: const Text('نشر نص'),
-                  style: OutlinedButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.primary, side: BorderSide(color: Theme.of(context).colorScheme.primary)),
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: palette.surface,
+                  shape: BoxShape.circle,
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: publishSparkMediaDialog,
-                  icon: const Icon(Icons.add_photo_alternate_outlined),
-                  label: const Text('صورة أو فيديو'),
-                  style: OutlinedButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.primary, side: BorderSide(color: Theme.of(context).colorScheme.primary)),
-                ),
-              ),
-            ]),
-          ),
-          if (statuses.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
-              child: Row(children: [
-                Icon(Icons.auto_awesome_rounded, color: Theme.of(context).colorScheme.secondary, size: 18),
-                const SizedBox(width: 7),
-                const Expanded(child: Text('لحظات الأصدقاء', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14))),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary.withValues(alpha: .12),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: .25)),
+                child: CircleAvatar(
+                  radius: 29,
+                  backgroundColor: palette.surfaceContainerHighest,
+                  backgroundImage: photo.isEmpty ? null : NetworkImage(
+                    '$apiBase$photo?v=${Uri.encodeComponent(field(status, ['photoUpdatedAt', 'photo_updated_at']))}',
+                    headers: {'Authorization': 'Bearer ${Api.token}'},
                   ),
-                  child: Text('${statuses.length} لحظة', style: TextStyle(
-                    color: Theme.of(context).colorScheme.primary, fontSize: 10, fontWeight: FontWeight.w700)),
+                  child: photo.isEmpty
+                    ? Icon(Icons.person_rounded, color: palette.onSurfaceVariant, size: 27)
+                    : null,
                 ),
-              ]),
+              ),
             ),
-          if (statuses.isNotEmpty)
-            SizedBox(
-              height: 104,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                children: [
-                  for (final status in statuses)
-                    GestureDetector(
-                      onTap: () => _openSparkStatus(status),
-                      child: SizedBox(
-                        width: 78,
-                        child: Column(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(3),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: LinearGradient(colors: [
-                                  Theme.of(context).colorScheme.primary,
-                                  Theme.of(context).colorScheme.secondary,
-                                ]),
-                                boxShadow: [BoxShadow(
-                                  color: Theme.of(context).colorScheme.primary.withValues(alpha: .18),
-                                  blurRadius: 10,
-                                )],
-                              ),
-                              child: CircleAvatar(
-                                radius: 29,
-                                backgroundColor: Theme.of(context).colorScheme.surface,
-                                child: ClipOval(
-                                  child: field(status, ['photoUrl', 'photo_url']).isEmpty
-                                      ? const Icon(Icons.person, size: 28)
-                                      : Image.network(
-                                          '$apiBase${field(status, ['photoUrl', 'photo_url'])}?v=${Uri.encodeComponent(field(status, ['photoUpdatedAt', 'photo_updated_at']))}',
-                                          width: 58,
-                                          height: 58,
-                                          fit: BoxFit.cover,
-                                          headers: {'Authorization': 'Bearer ${Api.token}'},
-                                          errorBuilder: (_, __, ___) => const Icon(Icons.person),
-                                        ),
+            if (own)
+              Positioned(
+                bottom: -1,
+                right: -2,
+                child: Container(
+                  width: 23, height: 23,
+                  decoration: BoxDecoration(
+                    color: palette.primary,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: palette.surface, width: 2),
+                  ),
+                  child: const Icon(Icons.add_rounded, size: 16, color: Colors.white),
+                ),
+              ),
+          ]),
+          const SizedBox(height: 7),
+          SizedBox(
+            width: 72,
+            child: Text(
+              own ? 'حالتي' : field(status, ['displayName', 'display_name', 'username'], 'مستخدم'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: own ? FontWeight.w800 : FontWeight.w500,
+                color: palette.onSurface,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return RefreshIndicator(
+      color: palette.primary,
+      onRefresh: refreshAll,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+        children: [
+          Row(children: [
+            Container(
+              width: 42, height: 42,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                color: palette.primary.withValues(alpha: .13),
+                border: Border.all(color: palette.primary.withValues(alpha: .28)),
+              ),
+              child: Icon(Icons.bolt_rounded, color: palette.primary, size: 25),
+            ),
+            const SizedBox(width: 11),
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('SPARK', style: TextStyle(
+                  color: palette.primary,
+                  fontSize: 21,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.4,
+                )),
+                Text('لحظات تنبض بالضوء',
+                  style: TextStyle(color: palette.onSurfaceVariant, fontSize: 11)),
+              ],
+            )),
+            IconButton(
+              tooltip: 'نشر لحظة',
+              onPressed: publishSparkMediaDialog,
+              icon: Icon(Icons.add_circle_outline_rounded, color: palette.primary, size: 27),
+            ),
+          ]),
+          const SizedBox(height: 18),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 12),
+            decoration: BoxDecoration(
+              color: palette.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: palette.outline.withValues(alpha: .16)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Text('اللحظات', style: TextStyle(
+                    color: palette.onSurface, fontSize: 15, fontWeight: FontWeight.w800)),
+                  const Spacer(),
+                  Text('تختفي بعد 24 ساعة', style: TextStyle(
+                    color: palette.onSurfaceVariant, fontSize: 10)),
+                ]),
+                const SizedBox(height: 14),
+                SizedBox(
+                  height: 99,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: [
+                      GestureDetector(
+                        onTap: ownStatuses.isEmpty ? publishStatusDialog : () => _openSparkStatus(ownStatuses.first),
+                        child: SizedBox(
+                          width: 78,
+                          child: ownStatuses.isEmpty
+                            ? Column(mainAxisSize: MainAxisSize.min, children: [
+                                Container(
+                                  padding: const EdgeInsets.all(3),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: palette.outline.withValues(alpha: .35), width: 1.5),
+                                  ),
+                                  child: CircleAvatar(
+                                    radius: 29,
+                                    backgroundColor: palette.surfaceContainerHighest,
+                                    child: Icon(Icons.person_outline_rounded, color: palette.onSurfaceVariant, size: 27),
+                                  ),
                                 ),
-                              ),
-                            ),
-                            const SizedBox(height: 5),
-                            Text(
-                              field(status, ['displayName', 'display_name', 'username'], 'مستخدم'),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 11),
-                            ),
-                          ],
+                                const SizedBox(height: 7),
+                                const Text('حالتي', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+                              ])
+                            : storyAvatar(ownStatuses.first, own: true),
                         ),
                       ),
-                    ),
-                ],
-              ),
+                      const SizedBox(width: 8),
+                      for (final status in friendStatuses)
+                        Padding(
+                          padding: const EdgeInsetsDirectional.only(end: 9),
+                          child: GestureDetector(
+                            onTap: () => _openSparkStatus(status),
+                            child: storyAvatar(status),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
             ),
+          ),
+          const SizedBox(height: 18),
+          Row(children: [
+            Icon(Icons.auto_awesome_rounded, color: palette.primary, size: 18),
+            const SizedBox(width: 7),
+            Text('شارك لحظتك', style: TextStyle(
+              color: palette.onSurface, fontSize: 14, fontWeight: FontWeight.w800)),
+          ]),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: _sparkComposeAction(
+              icon: Icons.text_fields_rounded,
+              label: 'حالة نصية',
+              onTap: publishStatusDialog,
+            )),
+            const SizedBox(width: 9),
+            Expanded(child: _sparkComposeAction(
+              icon: Icons.photo_library_outlined,
+              label: 'صورة أو فيديو',
+              onTap: publishSparkMediaDialog,
+            )),
+          ]),
           if (statuses.isEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 45, horizontal: 18),
+              padding: const EdgeInsets.only(top: 38),
               child: Column(children: [
-                const Icon(Icons.circle_outlined, size: 54),
-                const SizedBox(height: 12),
-                Text('لا توجد لحظات نشطة في SPARK', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 18)),
-                const SizedBox(height: 6),
-                const Text('انشر أول لحظة في SPARK لتظهر هنا.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60)),
+                Icon(Icons.bolt_rounded, color: palette.primary.withValues(alpha: .65), size: 45),
+                const SizedBox(height: 10),
+                Text('مساحتك تبدأ من هنا', style: TextStyle(
+                  color: palette.onSurface, fontWeight: FontWeight.w800, fontSize: 15)),
+                const SizedBox(height: 5),
+                Text('انشر أول لحظة لتشارك أصدقاءك ما يحدث معك.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: palette.onSurfaceVariant, fontSize: 12)),
               ]),
             ),
-          for (final status in statuses)
-            Card(
-              margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-              clipBehavior: Clip.antiAlias,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-                side: BorderSide(color: Theme.of(context).colorScheme.primary.withValues(alpha: .18)),
-              ),
-              child: InkWell(
-                onTap: () => _openSparkStatus(status),
-                child: Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topRight,
-                      end: Alignment.bottomLeft,
-                      colors: [
-                        Theme.of(context).colorScheme.primary.withValues(alpha: .10),
-                        Theme.of(context).colorScheme.surface,
-                        Theme.of(context).colorScheme.secondary.withValues(alpha: .06),
-                      ],
-                    ),
-                  ),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Row(children: [
-                      Container(
-                        padding: const EdgeInsets.all(2.5),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(colors: [
-                            Theme.of(context).colorScheme.primary,
-                            Theme.of(context).colorScheme.secondary,
-                            gold,
-                          ]),
-                        ),
-                        child: CircleAvatar(
-                          radius: 23,
-                          backgroundColor: Theme.of(context).colorScheme.surface,
-                          child: ClipOval(
-                            child: field(status, ['photoUrl', 'photo_url']).isEmpty
-                                ? const Icon(Icons.person)
-                                : Image.network(
-                                    '$apiBase${field(status, ['photoUrl', 'photo_url'])}?v=${Uri.encodeComponent(field(status, ['photoUpdatedAt', 'photo_updated_at']))}',
-                                    width: 46,
-                                    height: 46,
-                                    fit: BoxFit.cover,
-                                    headers: {'Authorization': 'Bearer ${Api.token}'},
-                                    errorBuilder: (_, __, ___) => const Icon(Icons.person),
-                                  ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 11),
-                      Expanded(
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(field(status, ['displayName', 'display_name', 'username'], 'مستخدم برق'),
-                            maxLines: 1, overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
-                          const SizedBox(height: 3),
-                          const Text('لحظة على SPARK',
-                            style: TextStyle(color: Colors.white54, fontSize: 11)),
-                        ]),
-                      ),
-                      if (status['userId']?.toString() == myId)
-                        InkWell(
-                          borderRadius: BorderRadius.circular(24),
-                          onTap: () => _showSparkViewers(field(status, ['id'])),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-                            decoration: BoxDecoration(
-                              color: gold.withValues(alpha: .12),
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(color: gold.withValues(alpha: .35)),
-                            ),
-                            child: Row(mainAxisSize: MainAxisSize.min, children: [
-                              const Icon(Icons.visibility_outlined, color: gold, size: 15),
-                              const SizedBox(width: 6),
-                              Text(
-                                '${status['viewCount'] ?? 0} مشاهدة',
-                                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
-                              ),
-                            ]),
-                          ),
-                        )
-                      else
-                        Icon(Icons.play_circle_fill_rounded,
-                          color: Theme.of(context).colorScheme.primary, size: 28),
-                    ]),
-                    if (field(status, ['content']).trim().isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: .16),
-                          borderRadius: BorderRadius.circular(13),
-                        ),
-                        child: Text(field(status, ['content']),
-                          maxLines: 4, overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(height: 1.45, fontSize: 13)),
-                      ),
-                    ],
-                    if (status['media'] is List && (status['media'] as List).isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Row(children: [
-                        Icon(Icons.perm_media_outlined, size: 16,
-                          color: Theme.of(context).colorScheme.primary),
-                        const SizedBox(width: 6),
-                        Text('${(status['media'] as List).length} وسائط مرفقة',
-                          style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 11, fontWeight: FontWeight.w700)),
-                        const Spacer(),
-                        const Text('اضغط للمشاهدة', style: TextStyle(color: Colors.white54, fontSize: 10)),
-                      ]),
-                    ],
-                  ]),
-                ),
-              ),
-            ),
         ],
+      ),
+    );
+  }
+
+  Widget _sparkComposeAction({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    final palette = Theme.of(context).colorScheme;
+    return Material(
+      color: palette.primary.withValues(alpha: .09),
+      borderRadius: BorderRadius.circular(15),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(15),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 10),
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(icon, color: palette.primary, size: 20),
+            const SizedBox(width: 8),
+            Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: palette.primary, fontSize: 12, fontWeight: FontWeight.w800))),
+          ]),
+        ),
       ),
     );
   }
@@ -5648,42 +5606,74 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final visibleGroups = groups.where((group) => query.isEmpty ||
       field(group, ['name']).toLowerCase().contains(query) ||
       field(group, ['description']).toLowerCase().contains(query)).toList();
-    Widget sectionTile({
-      required int index,
-      required IconData icon,
-      required String label,
-      required String count,
-    }) {
+
+    Widget sectionChip({required int index, required IconData icon, required String label, required String count}) {
       final selected = selectedConversationSection == index;
-      return Expanded(
-        child: Card(
-          margin: EdgeInsets.zero,
-          color: selected ? palette.primary.withValues(alpha: .16) : palette.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: BorderSide(
-              color: selected ? palette.primary : palette.outline.withValues(alpha: .22),
-              width: selected ? 1.5 : 0.7,
+      return Expanded(child: Padding(
+        padding: const EdgeInsetsDirectional.only(end: 6),
+        child: Material(
+          color: selected ? palette.primary.withValues(alpha: .15) : palette.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(13),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(13),
+            onTap: () => setState(() => selectedConversationSection = index),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 3),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(13),
+                border: Border.all(color: selected ? palette.primary.withValues(alpha: .65) : palette.outline.withValues(alpha: .14)),
+              ),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Icon(icon, size: 19, color: selected ? palette.primary : palette.onSurfaceVariant),
+                const SizedBox(height: 4),
+                Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800,
+                    color: selected ? palette.primary : palette.onSurface)),
+                Text(count, style: TextStyle(fontSize: 9, color: palette.onSurfaceVariant)),
+              ]),
             ),
           ),
+        ),
+      ));
+    }
+
+    Widget personRow(Map<String, dynamic> person) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Material(
+          color: palette.surface,
+          borderRadius: BorderRadius.circular(17),
           child: InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: () => setState(() => selectedConversationSection = index),
+            borderRadius: BorderRadius.circular(17),
+            onTap: () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => ChatPage(friend: person, currentUserId: myId),
+            )).then((_) { if (mounted) refreshAll(); }),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, color: selected ? palette.primary : palette.onSurface.withValues(alpha: .72), size: 23),
-                  const SizedBox(height: 5),
-                  Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
-                      color: selected ? palette.primary : palette.onSurface)),
-                  const SizedBox(height: 2),
-                  Text(count, style: TextStyle(fontSize: 10,
-                    color: palette.onSurface.withValues(alpha: .62))),
-                ],
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+              child: Row(children: [
+                Container(
+                  padding: const EdgeInsets.all(2.2),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: palette.primary.withValues(alpha: .55), width: 1.4),
+                  ),
+                  child: personAvatar(person),
+                ),
+                const SizedBox(width: 11),
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_personName(person), maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: palette.onSurface, fontSize: 13, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 4),
+                    Text('@${_personUsername(person)}',
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: palette.onSurfaceVariant, fontSize: 11)),
+                  ],
+                )),
+                Icon(Icons.chat_bubble_rounded, color: palette.primary, size: 19),
+                const SizedBox(width: 5),
+              ]),
             ),
           ),
         ),
@@ -5694,94 +5684,87 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       color: palette.primary,
       onRefresh: refreshAll,
       child: ListView(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 26),
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 8, 4, 12),
-            child: Text('محادثاتك',
-              style: TextStyle(color: palette.primary, fontSize: 21, fontWeight: FontWeight.bold)),
-          ),
+          Row(children: [
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('المحادثات', style: TextStyle(
+                color: palette.onSurface, fontSize: 22, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 3),
+              Text('تواصل بنبض الضوء', style: TextStyle(
+                color: palette.onSurfaceVariant, fontSize: 11)),
+            ])),
+            Container(
+              width: 40, height: 40,
+              decoration: BoxDecoration(
+                color: palette.primary.withValues(alpha: .12),
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: Icon(Icons.bolt_rounded, color: palette.primary, size: 23),
+            ),
+          ]),
+          const SizedBox(height: 15),
           TextField(
             onChanged: (value) => setState(() => conversationQuery = value),
             textInputAction: TextInputAction.search,
             decoration: InputDecoration(
-              hintText: 'ابحث في المحادثات وجهات الاتصال والمجموعات...',
-              prefixIcon: const Icon(Icons.search_rounded),
+              hintText: 'ابحث عن محادثة أو شخص...',
+              prefixIcon: Icon(Icons.search_rounded, color: palette.primary),
               suffixIcon: conversationQuery.isEmpty ? null : IconButton(
                 tooltip: 'مسح البحث', icon: const Icon(Icons.close_rounded),
                 onPressed: () => setState(() => conversationQuery = ''),
               ),
-              filled: true, fillColor: palette.surfaceContainerHighest,
+              filled: true,
+              fillColor: palette.surfaceContainerHighest.withValues(alpha: .72),
+              contentPadding: const EdgeInsets.symmetric(vertical: 13),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
             ),
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              sectionTile(index: 0, icon: Icons.chat_bubble_outline_rounded,
-                label: 'المحادثات', count: '${friends.where((person) => person['chatHidden'] != true).length}'),
-              const SizedBox(width: 7),
-              sectionTile(index: 1, icon: Icons.groups_rounded,
-                label: 'المجموعات', count: '${groups.length}'),
-              const SizedBox(width: 7),
-              sectionTile(index: 2, icon: Icons.call_outlined,
-                label: 'المكالمات', count: 'السجل'),
-              const SizedBox(width: 7),
-              sectionTile(index: 3, icon: Icons.contacts_outlined,
-                label: 'جهات الاتصال', count: '${friends.length}'),
-            ],
-          ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
+          Row(children: [
+            sectionChip(index: 0, icon: Icons.chat_bubble_outline_rounded,
+              label: 'الدردشات', count: '${visibleChats.length}'),
+            sectionChip(index: 1, icon: Icons.groups_rounded,
+              label: 'المجموعات', count: '${groups.length}'),
+            sectionChip(index: 2, icon: Icons.call_outlined,
+              label: 'المكالمات', count: 'السجل'),
+            sectionChip(index: 3, icon: Icons.contacts_outlined,
+              label: 'الأشخاص', count: '${friends.length}'),
+          ]),
+          const SizedBox(height: 16),
           if (selectedConversationSection == 0 || selectedConversationSection == 3) ...[
             Row(children: [
-              Icon(selectedConversationSection == 0 ? Icons.chat_bubble_outline_rounded : Icons.contacts_outlined,
-                color: palette.primary),
-              const SizedBox(width: 8),
-              Text(selectedConversationSection == 0 ? 'المحادثات الفردية' : 'جهات الاتصال',
-                style: TextStyle(color: palette.primary, fontWeight: FontWeight.w700)),
+              Text(selectedConversationSection == 0 ? 'كل المحادثات' : 'جهات الاتصال',
+                style: TextStyle(color: palette.onSurface, fontSize: 14, fontWeight: FontWeight.w900)),
+              const Spacer(),
+              if (selectedConversationSection == 3)
+                IconButton(
+                  tooltip: 'البحث عن أشخاص',
+                  onPressed: searchUsers,
+                  icon: Icon(Icons.person_search_rounded, color: palette.primary),
+                ),
             ]),
             if ((selectedConversationSection == 0 ? visibleChats : visibleFriends).isEmpty)
-              Card(child: ListTile(
-                leading: Icon(query.isEmpty ? Icons.person_search_outlined : Icons.search_off_rounded),
-                title: Text(query.isEmpty
-                  ? (selectedConversationSection == 0 ? 'لا توجد محادثات بعد' : 'لا توجد جهات اتصال')
-                  : 'لا توجد نتائج مطابقة'),
-                subtitle: Text(query.isEmpty
-                  ? (selectedConversationSection == 0 ? 'ابدأ محادثة مع أحد جهات اتصالك.' : 'أضف أشخاصاً من البحث لتظهر جهات اتصالك هنا.')
-                  : 'جرّب اسماً أو اسم مستخدم أو رقم هاتف آخر.'),
-              ))
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 38, horizontal: 16),
+                child: Column(children: [
+                  Icon(Icons.forum_outlined, size: 42, color: palette.primary.withValues(alpha: .7)),
+                  const SizedBox(height: 10),
+                  Text(query.isEmpty ? 'لا توجد محادثات بعد' : 'لا توجد نتائج مطابقة',
+                    style: TextStyle(color: palette.onSurface, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 5),
+                  Text(query.isEmpty ? 'ابدأ محادثة جديدة مع أحد أصدقائك.' : 'جرّب البحث باسم أو اسم مستخدم آخر.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: palette.onSurfaceVariant, fontSize: 11)),
+                ]),
+              )
             else
-              for (final friend in (selectedConversationSection == 0 ? visibleChats : visibleFriends))
-                Card(
-                  color: palette.surface,
-                  child: ListTile(
-                    leading: InkWell(
-                      customBorder: const CircleBorder(),
-                      onTap: () => Navigator.push(context, MaterialPageRoute(
-                        builder: (_) => PublicProfilePage(person: friend, currentUserId: myId, canMessage: true),
-                      )),
-                      child: personAvatar(friend),
-                    ),
-                    title: InkWell(
-                      onTap: () => Navigator.push(context, MaterialPageRoute(
-                        builder: (_) => PublicProfilePage(person: friend, currentUserId: myId, canMessage: true),
-                      )),
-                      child: Text(_personName(friend)),
-                    ),
-                    subtitle: Text('@${_personUsername(friend)}'),
-                    trailing: IconButton(
-                      tooltip: 'فتح المحادثة',
-                      icon: const Icon(Icons.chat_bubble_outline),
-                      onPressed: () => Navigator.push(context, MaterialPageRoute(
-                        builder: (_) => ChatPage(friend: friend, currentUserId: myId),
-                      )).then((_) { if (mounted) refreshAll(); }),
-                    ),
-                  ),
-                ),
+              for (final person in (selectedConversationSection == 0 ? visibleChats : visibleFriends))
+                personRow(person),
           ] else if (selectedConversationSection == 1) ...[
             Row(children: [
-              Expanded(child: Text('مجموعاتك',
-                style: TextStyle(color: palette.primary, fontWeight: FontWeight.w700))),
+              Expanded(child: Text('مجموعاتك', style: TextStyle(
+                color: palette.onSurface, fontSize: 14, fontWeight: FontWeight.w900))),
               IconButton(
                 tooltip: 'إنشاء مجموعة',
                 onPressed: createGroupDialog,
@@ -5789,60 +5772,72 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ),
             ]),
             if (visibleGroups.isEmpty)
-              Card(child: ListTile(
-                leading: Icon(query.isEmpty ? Icons.group_add_outlined : Icons.search_off_rounded),
-                title: Text(query.isEmpty ? 'أنشئ مجموعتك الأولى' : 'لا توجد مجموعات مطابقة'),
-                subtitle: Text(query.isEmpty ? 'اجمع أصدقاءك في محادثة واحدة' : 'جرّب اسماً أو وصفاً آخر.'),
-                onTap: query.isEmpty ? createGroupDialog : null,
-              ))
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 32),
+                child: Column(children: [
+                  Icon(Icons.groups_rounded, size: 42, color: palette.primary),
+                  const SizedBox(height: 9),
+                  Text(query.isEmpty ? 'أنشئ مجموعتك الأولى' : 'لا توجد مجموعات مطابقة',
+                    style: TextStyle(color: palette.onSurface, fontWeight: FontWeight.w800)),
+                  Text('اجمع أصدقاءك في محادثة واحدة',
+                    style: TextStyle(color: palette.onSurfaceVariant, fontSize: 11)),
+                  TextButton.icon(onPressed: createGroupDialog,
+                    icon: const Icon(Icons.add_rounded), label: const Text('إنشاء مجموعة')),
+                ]),
+              )
             else
               for (final group in visibleGroups)
-                Card(
-                  color: palette.surface,
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: palette.primary.withValues(alpha: .14),
-                      child: Icon(Icons.groups_rounded, color: palette.primary),
-                    ),
-                    title: Text(field(group, ['name'], 'مجموعة')),
-                    subtitle: Text('${field(group, ['description'], 'مجموعة برق')} • ${field(group, ['member_count'], '1')} أعضاء'),
-                    trailing: const Icon(Icons.chevron_left_rounded),
-                    onTap: () => Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => GroupChatPage(
-                        group: group,
-                        currentUserId: myId,
-                        onAddMember: () => addMemberDialog(group),
-                        onShareInvite: () => shareGroupInvite(group),
-                        onGroupChanged: refreshAll,
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Material(
+                    color: palette.surface,
+                    borderRadius: BorderRadius.circular(17),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+                      leading: CircleAvatar(
+                        backgroundColor: palette.primary.withValues(alpha: .14),
+                        child: Icon(Icons.groups_rounded, color: palette.primary),
                       ),
-                    )),
+                      title: Text(field(group, ['name'], 'مجموعة'),
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                      subtitle: Text('${field(group, ['description'], 'مجموعة برق')} • ${field(group, ['member_count'], '1')} أعضاء',
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 10, color: palette.onSurfaceVariant)),
+                      trailing: Icon(Icons.chevron_left_rounded, color: palette.primary),
+                      onTap: () => Navigator.push(context, MaterialPageRoute(
+                        builder: (_) => GroupChatPage(
+                          group: group,
+                          currentUserId: myId,
+                          onAddMember: () => addMemberDialog(group),
+                          onShareInvite: () => shareGroupInvite(group),
+                          onGroupChanged: refreshAll,
+                        ),
+                      )),
+                    ),
                   ),
                 ),
           ] else ...[
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    CircleAvatar(
-                      radius: 36,
-                      backgroundColor: palette.primary.withValues(alpha: .14),
-                      child: Icon(Icons.call_outlined, size: 34, color: palette.primary),
-                    ),
-                    const SizedBox(height: 14),
-                    const Text('المكالمات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'سيظهر هنا سجل المكالمات الواردة والصادرة والفائتة عند ربط خدمة الاتصال.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white70, height: 1.5),
-                    ),
-                    const SizedBox(height: 10),
-                    Text('خدمة الاتصال الفعلية لم تُربط بعد.',
-                      style: TextStyle(color: Theme.of(context).colorScheme.secondary, fontSize: 12)),
-                  ],
-                ),
+            Container(
+              padding: const EdgeInsets.all(22),
+              decoration: BoxDecoration(
+                color: palette.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: palette.outline.withValues(alpha: .16)),
               ),
+              child: Column(children: [
+                CircleAvatar(
+                  radius: 30,
+                  backgroundColor: palette.primary.withValues(alpha: .14),
+                  child: Icon(Icons.call_outlined, size: 28, color: palette.primary),
+                ),
+                const SizedBox(height: 12),
+                Text('المكالمات', style: TextStyle(
+                  color: palette.onSurface, fontSize: 16, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 7),
+                Text('سيظهر هنا سجل المكالمات الواردة والصادرة والفائتة عند ربط خدمة الاتصال.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: palette.onSurfaceVariant, fontSize: 11, height: 1.5)),
+              ]),
             ),
           ],
         ],
