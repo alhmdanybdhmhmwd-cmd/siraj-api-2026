@@ -19,8 +19,11 @@ function safeHttpsOrigin(value) {
 
 function getUpstreamCandidates(env = process.env) {
   const isPreview = env.VERCEL_ENV === "preview";
+  const configuredPreview = safeHttpsOrigin(env.BARQ_API_UPSTREAM);
+  const isFallbackWorker = configuredPreview &&
+    new URL(configuredPreview).hostname.startsWith("barq-api-phase2-fallback-test.");
   const configuredPrimary = isPreview
-    ? (env.BARQ_API_UPSTREAM || PREVIEW_UPSTREAM)
+    ? (isFallbackWorker ? configuredPreview : PREVIEW_UPSTREAM)
     : (env.BARQ_API_UPSTREAM || DEFAULT_PRODUCTION_UPSTREAM);
   const primary = safeHttpsOrigin(configuredPrimary) ||
     (isPreview ? PREVIEW_UPSTREAM : DEFAULT_PRODUCTION_UPSTREAM);
