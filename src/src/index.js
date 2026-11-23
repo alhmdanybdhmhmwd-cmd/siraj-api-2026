@@ -1416,6 +1416,31 @@ export default {
         return json({ message: "تم تسجيل الخروج من جميع الأجهزة. سجّل الدخول مجددًا على هذا الجهاز." });
       }
 
+      // List active device sessions without exposing installation identifiers.
+      if (method === "GET" && path === "/api/security/devices") {
+        await ensureDeviceSessions(env);
+        const result = await env.DB.prepare(
+          "SELECT device_name AS deviceName, first_seen_at AS firstSeenAt, last_seen_at AS lastSeenAt, device_id = ? AS isCurrent FROM device_sessions WHERE user_id = ? AND revoked_at IS NULL ORDER BY last_seen_at DESC LIMIT 20"
+        ).bind(String(currentUser.did || ""), currentUser.sub).all();
+        return json({ devices: result?.results || [] });
+      }
+
+      // Revoke one device session. The current device may also revoke itself.
+      if (method === "DELETE" && path.startsWith("/api/security/devices/")) {
+        const targetDeviceId = decodeURIComponent(path.slice("/api/security/devices/".length));
+        if (!/^[a-f0-9-]{36}$/i.test(targetDeviceId)) {
+          return json({ error: "معرّف الجهاز غير صالح." }, 400);
+        }
+        await ensureDeviceSessions(env);
+        const result = await env.DB.prepare(
+          "UPDATE device_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE user_id = ? AND device_id = ? AND revoked_at IS NULL"
+        ).bind(currentUser.sub, targetDeviceId).run();
+        if (Number(result?.meta?.changes || 0) !== 1) {
+          return json({ error: "الجهاز غير موجود أو تم إنهاء جلسته." }, 404);
+        }
+        return json({ message: "تم إنهاء جلسة الجهاز." });
+      }
+
       // Private memories are isolated by owner_id; saved message text is copied
       // into the private vault and does not depend on the source chat remaining.
       if (path === "/api/private-memories" || path.startsWith("/api/private-memories/")) {
