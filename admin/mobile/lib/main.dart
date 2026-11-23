@@ -821,6 +821,7 @@ class _AdminHomePageState extends State<AdminHomePage>
 
     await showDialog<void>(
       context: context,
+      barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
           Future<void> sendMessage() async {
