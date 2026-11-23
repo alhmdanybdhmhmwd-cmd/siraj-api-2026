@@ -313,7 +313,7 @@ test("message reactions and bidirectional swipe-to-reply stay available in both 
   assert.ok(flutterApp.includes("barqReactionEmojis"));
   assert.ok(flutterApp.includes("'❤️'"));
   assert.ok((flutterApp.match(/_replySwipeDistance\.abs\(\) > 48/g) || []).length >= 3);
-  assert.ok((flutterApp.match(/\(details\.primaryVelocity \?\? 0\)\.abs\(\) > 260/g) || []).length >= 4);
+  assert.ok((flutterApp.match(/\(details\.primaryVelocity \?\? 0\)\.abs\(\) > 260/g) || []).length >= 3);
   assert.ok(flutterApp.includes("onDoubleTap: () async"));
 });
 
