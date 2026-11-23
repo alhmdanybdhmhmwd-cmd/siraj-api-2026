@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models.dart';
+import 'security.dart';
 
 const _blue = Color(0xFF2785FF);
 const _gold = Color(0xFFE8B95B);
@@ -105,6 +106,14 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
         _loading = false;
         _online = false;
         _connectionMessage = 'أكمل إعداد الاتصال';
+      });
+      return;
+    }
+    if (!isValidAdminApiBase(_apiBase)) {
+      if (mounted) setState(() {
+        _loading = false;
+        _online = false;
+        _connectionMessage = 'عنوان الخادم غير آمن؛ استخدم HTTPS صحيحًا';
       });
       return;
     }
@@ -307,9 +316,9 @@ class _AdminHomePageState extends State<AdminHomePage> with WidgetsBindingObserv
     if (saved == true) {
       final base = baseController.text.trim().replaceFirst(RegExp(r'/+$'), '');
       final uri = Uri.tryParse(base);
-      if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) {
+      if (!isValidAdminApiBase(base) || tokenController.text.trim().isEmpty) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('يجب إدخال عنوان HTTPS صحيح')),
+          const SnackBar(content: Text('أدخل عنوان HTTPS صحيحًا ورمز جلسة غير فارغ')),
         );
       } else {
         final prefs = await SharedPreferences.getInstance();
