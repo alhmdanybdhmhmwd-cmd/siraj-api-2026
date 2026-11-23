@@ -976,11 +976,11 @@ async function handle(request, env) {
   }
 
   if (request.method === "GET" && url.pathname === "/v1/brain/conversations") {
-    const rows = await env.ADMIN_DB.prepare(\`
+    const rows = await env.ADMIN_DB.prepare(`
       SELECT id, title, created_at, updated_at
       FROM admin_brain_conversations WHERE workspace_id = ?
       ORDER BY updated_at DESC LIMIT 50
-    \`).bind(workspace).all();
+    `).bind(workspace).all();
     return response({ conversations: rows.results || [] }, 200, allowedOrigin);
   }
 
@@ -998,24 +998,24 @@ async function handle(request, env) {
     } else {
       conversationId = crypto.randomUUID();
       const title = parsed.value.message.replace(/\s+/g, " ").slice(0, 120);
-      await env.ADMIN_DB.prepare(\`
+      await env.ADMIN_DB.prepare(`
         INSERT INTO admin_brain_conversations (id, workspace_id, title, created_by)
         VALUES (?, ?, ?, ?)
-      \`).bind(conversationId, workspace, title, actor.subject).run();
+      `).bind(conversationId, workspace, title, actor.subject).run();
     }
 
-    const historyRows = await env.ADMIN_DB.prepare(\`
+    const historyRows = await env.ADMIN_DB.prepare(`
       SELECT role, content FROM admin_brain_messages
       WHERE conversation_id = ? AND workspace_id = ?
       ORDER BY created_at DESC LIMIT 20
-    \`).bind(conversationId, workspace).all();
+    `).bind(conversationId, workspace).all();
     const history = (historyRows.results || []).reverse();
     const userMessageId = crypto.randomUUID();
-    await env.ADMIN_DB.prepare(\`
+    await env.ADMIN_DB.prepare(`
       INSERT INTO admin_brain_messages
         (id, conversation_id, workspace_id, role, content)
       VALUES (?, ?, ?, 'user', ?)
-    \`).bind(userMessageId, conversationId, workspace, parsed.value.message).run();
+    `).bind(userMessageId, conversationId, workspace, parsed.value.message).run();
 
     try {
       const knowledge = await retrieveKnowledgeForTask(env, workspace, parsed.value.message);
@@ -1049,11 +1049,11 @@ async function handle(request, env) {
         title: item.title
       }));
       await env.ADMIN_DB.batch([
-        env.ADMIN_DB.prepare(\`
+        env.ADMIN_DB.prepare(`
           INSERT INTO admin_brain_messages
             (id, conversation_id, workspace_id, role, content, source_refs_json, model)
           VALUES (?, ?, ?, 'assistant', ?, ?, ?)
-        \`).bind(crypto.randomUUID(), conversationId, workspace, boundedAnswer,
+        `).bind(crypto.randomUUID(), conversationId, workspace, boundedAnswer,
           JSON.stringify(sourceRefs), model),
         env.ADMIN_DB.prepare(
           "UPDATE admin_brain_conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ? AND workspace_id = ?"
@@ -1075,11 +1075,11 @@ async function handle(request, env) {
       "SELECT id FROM admin_brain_conversations WHERE id = ? AND workspace_id = ?"
     ).bind(conversationId, workspace).first();
     if (!conversation) return response({ error: "conversation_not_found" }, 404, allowedOrigin);
-    const rows = await env.ADMIN_DB.prepare(\`
+    const rows = await env.ADMIN_DB.prepare(`
       SELECT id, role, content, source_refs_json, model, created_at
       FROM admin_brain_messages WHERE conversation_id = ? AND workspace_id = ?
       ORDER BY created_at ASC LIMIT 100
-    \`).bind(conversationId, workspace).all();
+    `).bind(conversationId, workspace).all();
     return response({ conversationId, messages: rows.results || [] }, 200, allowedOrigin);
   }
 
