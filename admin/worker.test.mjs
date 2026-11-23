@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, rankKnowledgeChunks } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, getUtcDailyWindow, validateKnowledgeInput, rankKnowledgeChunks } from "./worker.js";
 
 test("task input is normalized and bounded", () => {
   assert.deepEqual(validateTaskInput({ title: "  Prepare global launch  ", priority: "high" }), {
@@ -103,6 +103,19 @@ test("image generation prompt is required and bounded", () => {
   assert.equal(validateImageGenerationInput({ prompt: "x".repeat(1601) }).error, "invalid_image_prompt");
   assert.equal(validateImageGenerationInput({ prompt: 42 }).ok, false);
   assert.equal(validateImageGenerationInput(null).ok, false);
+});
+
+test("daily image quotas use UTC calendar-day boundaries", () => {
+  const beforeUtcMidnight = getUtcDailyWindow(Date.UTC(2026, 10, 23, 23, 59, 59));
+  assert.deepEqual(beforeUtcMidnight, {
+    day: "2026-11-23",
+    resetAt: "2026-11-24T00:00:00.000Z"
+  });
+  const afterUtcMidnight = getUtcDailyWindow(Date.UTC(2026, 10, 24, 0, 0, 0));
+  assert.deepEqual(afterUtcMidnight, {
+    day: "2026-11-24",
+    resetAt: "2026-11-25T00:00:00.000Z"
+  });
 });
 
 test("generated images must be canonical bounded JPEG base64", () => {
