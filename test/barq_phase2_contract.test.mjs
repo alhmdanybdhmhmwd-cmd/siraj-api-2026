@@ -303,7 +303,7 @@ test("private and group attachments require a pre-send preview and confirmation"
   assert.ok(flutterApp.includes("Future<bool> showBarqAttachmentPreview("));
   assert.ok(flutterApp.includes("معاينة قبل الإرسال"));
   assert.ok(flutterApp.includes("final confirmed = await showBarqAttachmentPreview("));
-  assert.ok(flutterApp.includes("if (!mounted || !confirmed) {\n        return;\n      }"));
+  assert.ok(flutterApp.includes("if (!mounted || !confirmed) {\n        captionController.dispose();\n        return;\n      }"));
   assert.ok(flutterApp.includes("contentType: contentType,"));
   assert.ok(flutterApp.includes("رفع المرفق"));
 });
