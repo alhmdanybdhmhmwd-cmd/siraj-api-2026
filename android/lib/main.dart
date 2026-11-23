@@ -9570,7 +9570,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   Future<void> _uploadPendingAttachment(Map<String, dynamic> message) async {
     final attachment = message['local_attachment'];
-    if (attachment is! Map || attachment['localBytes'] is! Uint8List) return;
+    if (attachment is! Map<String, dynamic> || attachment['localBytes'] is! Uint8List) return;
     final id = field(message, ['id']);
     if (mounted) setState(() { attachment['localUploadFailed'] = false; attachment['localUploadProgress'] = 0.0; });
     try {
@@ -10962,7 +10962,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
 
   Future<void> _uploadPendingAttachment(Map<String, dynamic> message) async {
     final attachment = message['local_attachment'];
-    if (attachment is! Map || attachment['localBytes'] is! Uint8List) return;
+    if (attachment is! Map<String, dynamic> || attachment['localBytes'] is! Uint8List) return;
     final id = field(message, ['id']);
     if (mounted) setState(() { attachment['localUploadFailed'] = false; attachment['localUploadProgress'] = 0.0; });
     try {
@@ -11660,7 +11660,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                 ),
               ),
             ),
-          )),
+          ),
         ])),
       ),
     );
