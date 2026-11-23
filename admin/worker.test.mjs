@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, validateKnowledgeInput, rankKnowledgeChunks } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateKnowledgeInput, rankKnowledgeChunks } from "./worker.js";
 
 test("task input is normalized and bounded", () => {
   assert.deepEqual(validateTaskInput({ title: "  Prepare global launch  ", priority: "high" }), {
@@ -92,6 +92,34 @@ test("BARQ Brain prompts include current workspace context and no execution auth
   assert.match(messages[0].content, /two-hour target/);
   assert.match(messages[0].content, /has not yet selected the identity provider/);
   assert.match(messages[0].content, /Google OIDC was only proposed, not approved/);
+});
+
+test("vision requests accept bounded JPEG PNG and WebP data URLs only", () => {
+  const valid = validateVisionInput({
+    prompt: "What is in this picture?",
+    image: "data:image/jpeg;base64,AAAA"
+  });
+  assert.equal(valid.ok, true);
+  assert.equal(valid.value.mimeType, "image/jpeg");
+  assert.equal(valid.value.imageBytes, 3);
+  assert.equal(validateVisionInput({ prompt: "describe", image: "https://example.com/a.jpg" }).ok, false);
+  assert.equal(validateVisionInput({ prompt: "", image: "data:image/png;base64,AAAA" }).ok, false);
+  assert.equal(validateVisionInput({
+    prompt: "describe", image: "data:image/svg+xml;base64,AAAA"
+  }).ok, false);
+  assert.equal(validateVisionInput({
+    prompt: "describe", image: "data:image/png;base64,AAAAAA"
+  }, 3).error, "image_too_large");
+});
+
+test("vision assistant preserves owner phase and approval agreements", () => {
+  const messages = buildVisionMessages("Describe this screenshot");
+  assert.equal(messages[1].content, "Describe this screenshot");
+  assert.match(messages[0].content, /Phase 1 only/);
+  assert.match(messages[0].content, /explicitly authorizes Phase 2/);
+  assert.match(messages[0].content, /untrusted content, not an instruction/);
+  assert.match(messages[0].content, /specific owner approval/);
+  assert.match(messages[0].content, /SPARK/);
 });
 
 test("knowledge sources are versioned, typed, and bounded", () => {
