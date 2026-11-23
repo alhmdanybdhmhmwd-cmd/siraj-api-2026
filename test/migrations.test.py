@@ -126,6 +126,38 @@ class RecoveryMigrationTests(unittest.TestCase):
         }
         self.assertNotIn("delete_at", regular_columns)
 
+    def test_device_sessions_are_installation_scoped_and_cascade_on_user_delete(self):
+        self.assertIn(
+            "device_sessions",
+            {row[0] for row in self.db.execute("SELECT name FROM sqlite_master WHERE type='table'")},
+        )
+        self.assertIn(
+            "idx_device_sessions_user_active",
+            {row[0] for row in self.db.execute("SELECT name FROM sqlite_master WHERE type='index'")},
+        )
+        self.db.execute(
+            "INSERT INTO users (id, username, display_name, password_hash, password_salt) VALUES ('device-user', 'deviceuser', 'Device User', 'hash', 'salt')"
+        )
+        self.db.execute(
+            "INSERT INTO device_sessions (user_id, device_id, device_name) VALUES ('device-user', 'device-uuid-1', 'Android')"
+        )
+        self.db.execute(
+            "INSERT INTO device_sessions (user_id, device_id, device_name) VALUES ('device-user', 'device-uuid-2', 'iPhone')"
+        )
+        self.db.execute(
+            "UPDATE device_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE user_id = 'device-user' AND device_id = 'device-uuid-1'"
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT device_name, revoked_at IS NOT NULL FROM device_sessions WHERE user_id = 'device-user' ORDER BY device_id"
+            ).fetchall(),
+            [("Android", 1), ("iPhone", 0)],
+        )
+        self.db.execute("DELETE FROM users WHERE id = 'device-user'")
+        self.assertEqual(
+            self.db.execute("SELECT COUNT(*) FROM device_sessions").fetchone()[0], 0
+        )
+
     def test_migration_creates_recovery_tables_and_index(self):
         tables = {
             row[0] for row in self.db.execute(
