@@ -19,13 +19,14 @@ import {
 test("multipart declaration accepts supported files and sanitizes file names", () => {
   assert.deepEqual(validateMultipartDeclaration({
     size: 10, contentType: "IMAGE/PNG; charset=binary", fileName: "../photo.png"
-  }), { size: 10, contentType: "image/png", fileName: ".._photo.png" });
+  }), { size: 10, contentType: "image/png", fileName: ".._photo.png", caption: "" });
 });
 
 test("multipart declaration rejects empty, oversized and unsupported files", () => {
   assert.throws(() => validateMultipartDeclaration({ size: 0, contentType: "image/png" }), RangeError);
   assert.throws(() => validateMultipartDeclaration({ size: MEDIA_MULTIPART_MAX_SIZE + 1, contentType: "image/png" }), RangeError);
   assert.throws(() => validateMultipartDeclaration({ size: 5, contentType: "application/x-executable" }), TypeError);
+  assert.throws(() => validateMultipartDeclaration({ size: 5, contentType: "image/png", caption: "x".repeat(2001) }), RangeError);
 });
 
 test("part bounds use 5 MiB pieces and permit a smaller final part", () => {
@@ -104,6 +105,7 @@ test("resuming an upload requires the exact file and conversation declaration", 
   };
   const declaration = { size: 1234, contentType: "image/png", fileName: "photo.png" };
   assert.equal(matchesUploadDeclaration(existing, declaration, "friend-1", null), true);
+  assert.equal(matchesUploadDeclaration(existing, { ...declaration, caption: "تعليق" }, "friend-1", null), false);
   assert.equal(matchesUploadDeclaration(existing, declaration, "friend-2", null), false);
   assert.equal(matchesUploadDeclaration(existing, declaration, null, "group-1"), false);
   assert.equal(matchesUploadDeclaration(existing, { ...declaration, fileName: "other.png" }, "friend-1", null), false);
