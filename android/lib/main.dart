@@ -7772,14 +7772,82 @@ class _BarqMessageBodyState extends State<BarqMessageBody> {
 }
 
 Map<String, dynamic>? _attachmentData(Map<String, dynamic> message) {
+  final local = message['local_attachment'];
+  if (local is Map) return Map<String, dynamic>.from(local);
   final raw = field(message, ['body', 'content', 'message']);
   try {
     final decoded = jsonDecode(raw);
-    if (decoded is Map<String, dynamic> && decoded['type'] == 'attachment') {
-      return decoded;
-    }
+    if (decoded is Map<String, dynamic> && decoded['type'] == 'attachment') return decoded;
   } catch (_) {}
   return null;
+}
+
+Widget _barqAttachmentTile(Map<String, dynamic> attachment,
+    Future<void> Function(void Function(double progress) onProgress) onDownload,
+    {Future<void> Function()? onRetry}) {
+  if (attachment['localBytes'] is Uint8List) {
+    final bytes = attachment['localBytes'] as Uint8List;
+    final type = field(attachment, ['contentType']).toLowerCase();
+    final failed = attachment['localUploadFailed'] == true;
+    final raw = attachment['localUploadProgress'];
+    final progress = raw is num ? raw.toDouble().clamp(0.0, 1.0) : 0.0;
+    final isImage = type.startsWith('image/');
+    final isVideo = type.startsWith('video/');
+    final isAudio = type.startsWith('audio/');
+    return Container(
+      constraints: BoxConstraints(maxWidth: isImage || isVideo ? 260 : 290),
+      padding: const EdgeInsets.all(7),
+      decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(14)),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        if (isImage || isVideo)
+          Stack(alignment: Alignment.center, children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(11),
+              child: isImage
+                  ? Image.memory(bytes, width: 244, height: 176, fit: BoxFit.cover)
+                  : Container(width: 244, height: 150, color: Colors.black45,
+                      child: const Icon(Icons.play_circle_fill, color: Colors.white, size: 58)),
+            ),
+            Container(
+              width: 58, height: 58,
+              decoration: BoxDecoration(color: Colors.black54, shape: BoxShape.circle,
+                border: Border.all(color: Colors.white70)),
+              child: Stack(alignment: Alignment.center, children: [
+                if (!failed) SizedBox(width: 50, height: 50,
+                  child: CircularProgressIndicator(value: progress > 0 ? progress : null,
+                    strokeWidth: 2.5, color: Colors.white)),
+                Icon(failed ? Icons.refresh_rounded : Icons.bolt_rounded,
+                  color: Colors.white, size: 30),
+              ]),
+            ),
+          ])
+        else
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            SizedBox(width: 52, height: 52,
+              child: Stack(alignment: Alignment.center, children: [
+                if (!failed) CircularProgressIndicator(value: progress > 0 ? progress : null,
+                  strokeWidth: 2.5, color: Colors.white),
+                Icon(failed ? Icons.refresh_rounded : isAudio ? Icons.graphic_eq_rounded : Icons.bolt_rounded,
+                  color: Colors.white, size: 27),
+              ])),
+            const SizedBox(width: 9),
+            Flexible(child: Text(field(attachment, ['fileName'], 'مرفق'),
+              style: const TextStyle(color: Colors.white), maxLines: 2,
+              overflow: TextOverflow.ellipsis)),
+          ]),
+        const SizedBox(height: 5),
+        Row(children: [
+          Expanded(child: Text(failed ? 'تعذر الإرسال — أعد المحاولة'
+              : progress > 0 ? 'جارٍ الإرسال ${(progress * 100).round()}%'
+              : 'جارٍ الإرسال...', style: const TextStyle(color: Colors.white70, fontSize: 11))),
+          if (failed && onRetry != null)
+            IconButton(tooltip: 'إعادة المحاولة', visualDensity: VisualDensity.compact,
+              onPressed: onRetry, icon: const Icon(Icons.refresh_rounded, color: Colors.white)),
+        ]),
+      ]),
+    );
+  }
+  return _attachmentTile(attachment, onDownload);
 }
 
 Future<bool> showBarqAttachmentPreview(
@@ -9493,70 +9561,61 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _sendVoiceRecording(List<int> bytes, Duration duration) async {
-    if (blockedByMe) {
-      showMsg(context, 'ألغِ حظر المستخدم أولاً لإرسال الرسائل.');
-      return;
-    }
-    if (sending) return;
-    setState(() { sending = true; mediaUploadProgress = 0; });
+  Map<String, dynamic> _newPendingAttachment(Uint8List bytes, String fileName, String contentType) => {
+    'id': newBarqMessageId(), 'sender_id': widget.currentUserId, 'receiver_id': friendId,
+    'body': '', 'created_at': DateTime.now().toUtc().toIso8601String(), 'is_sending': true,
+    'local_attachment': {'type':'attachment','fileName':fileName,'contentType':contentType,
+      'size':bytes.length,'localBytes':bytes,'localUploadProgress':0.0},
+  };
+
+  Future<void> _uploadPendingAttachment(Map<String, dynamic> message) async {
+    final attachment = message['local_attachment'];
+    if (attachment is! Map || attachment['localBytes'] is! Uint8List) return;
+    final id = field(message, ['id']);
+    if (mounted) setState(() { attachment['localUploadFailed'] = false; attachment['localUploadProgress'] = 0.0; });
     try {
       await Api.uploadAttachment(
-        bytes: bytes,
-        fileName: 'barq_voice_${DateTime.now().millisecondsSinceEpoch}.m4a',
-        contentType: 'audio/mp4',
+        bytes: attachment['localBytes'] as Uint8List,
+        fileName: field(attachment, ['fileName'], 'barq-file'),
+        contentType: field(attachment, ['contentType'], 'application/octet-stream'),
         recipientId: friendId,
-        onProgress: (progress) {
-          if (mounted) setState(() => mediaUploadProgress = progress);
-        },
+        onProgress: (value) { if (mounted) setState(() => attachment['localUploadProgress'] = value); },
       );
-      await loadMessages();
-      if (mounted) showMsg(context, 'تم إرسال التسجيل الصوتي (${formatBarqMediaDuration(duration)}).');
+      if (mounted) setState(() => messages.removeWhere((item) => field(item, ['id']) == id));
+      await loadMessages(silent: true);
     } catch (error) {
-      if (mounted) showMsg(context, cleanError(error));
-    } finally {
-      if (mounted) setState(() { sending = false; mediaUploadProgress = null; });
+      if (mounted) {
+        setState(() { attachment['localUploadFailed'] = true; message['is_sending'] = false; });
+        showMsg(context, cleanError(error));
+      }
     }
   }
 
+  Future<void> _sendVoiceRecording(List<int> bytes, Duration duration) async {
+    if (blockedByMe) { showMsg(context, 'ألغِ حظر المستخدم أولاً لإرسال الرسائل.'); return; }
+    final local = _newPendingAttachment(Uint8List.fromList(bytes),
+      'barq_voice_${DateTime.now().millisecondsSinceEpoch}.m4a', 'audio/mp4');
+    if (mounted) setState(() => messages = mergeMessages(messages, [local]));
+    unawaited(_uploadPendingAttachment(local));
+  }
+
   Future<void> pickAndSendFile() async {
-    if (blockedByMe) {
-      showMsg(context, 'ألغِ حظر المستخدم أولاً لإرسال الرسائل.');
-      return;
-    }
+    if (blockedByMe) { showMsg(context, 'ألغِ حظر المستخدم أولاً لإرسال الرسائل.'); return; }
     try {
-      final result = await showBarqMediaPicker(
-        context, allowMultiple: false, title: 'إرسال وسائط أو ملف', withData: false,
-      );
+      final result = await showBarqMediaPicker(context, allowMultiple: false,
+        title: 'إرسال وسائط أو ملف', withData: false);
       if (result == null || result.files.isEmpty) return;
       final file = result.files.single;
-      final bytes = await readBarqPickedFileBytes(file);
-      final contentType = file.extension == null
-          ? 'application/octet-stream' : _mimeForExtension(file.extension!);
+      final bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
+      final contentType = file.extension == null ? 'application/octet-stream' : _mimeForExtension(file.extension!);
       if (!mounted) return;
-      final confirmed = await showBarqAttachmentPreview(
-        context, fileName: file.name, contentType: contentType, bytes: bytes,
-      );
-      if (!mounted || !confirmed) {
-        return;
-      }
-      setState(() { sending = true; mediaUploadProgress = 0; });
-      await Api.uploadAttachment(
-        bytes: bytes,
-        fileName: file.name,
-        contentType: contentType,
-        recipientId: friendId,
-        onProgress: (progress) {
-          if (mounted) setState(() => mediaUploadProgress = progress);
-        },
-      );
-      await loadMessages();
-      if (mounted) showMsg(context, 'تم إرسال الملف.');
-    } catch (e) {
-      if (mounted) showMsg(context, cleanError(e));
-    } finally {
-      if (mounted) setState(() { sending = false; mediaUploadProgress = null; });
-    }
+      final confirmed = await showBarqAttachmentPreview(context,
+        fileName: file.name, contentType: contentType, bytes: bytes);
+      if (!mounted || !confirmed) return;
+      final local = _newPendingAttachment(bytes, file.name, contentType);
+      setState(() => messages = mergeMessages(messages, [local]));
+      unawaited(_uploadPendingAttachment(local));
+    } catch (error) { if (mounted) showMsg(context, cleanError(error)); }
   }
 
   Future<void> _loadChatWallpaper() async {
@@ -9846,11 +9905,11 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                                 } : null,
                                           isPinned: m['is_pinned'] == true,
                                         ),
-                                        child: _attachmentTile(attachment, (onProgress) => Api.downloadAttachment(
+                                        child: _barqAttachmentTile(attachment, (onProgress) => Api.downloadAttachment(
                                           attachmentId: field(attachment, ['attachmentId']),
                                           fileName: field(attachment, ['fileName'], 'attachment'),
                                           onProgress: onProgress,
-                                        )),
+                                        ), onRetry: attachment['localBytes'] is Uint8List ? () => _uploadPendingAttachment(m) : null),
                                       ),
                                       if (field(attachment, ['contentType']).startsWith('audio/'))
                                         TextButton.icon(
@@ -10892,62 +10951,59 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
     } finally { if (mounted) setState(() => sending = false); }
   }
 
-  Future<void> _sendVoiceRecording(List<int> bytes, Duration duration) async {
-    if (sending) return;
-    setState(() { sending = true; mediaUploadProgress = 0; });
+  Map<String, dynamic> _newPendingAttachment(Uint8List bytes, String fileName, String contentType) => {
+    'id': newBarqMessageId(), 'sender_id': widget.currentUserId, 'group_id': groupId,
+    'body': '', 'created_at': DateTime.now().toUtc().toIso8601String(), 'is_sending': true,
+    'local_attachment': {'type':'attachment','fileName':fileName,'contentType':contentType,
+      'size':bytes.length,'localBytes':bytes,'localUploadProgress':0.0},
+  };
+
+  Future<void> _uploadPendingAttachment(Map<String, dynamic> message) async {
+    final attachment = message['local_attachment'];
+    if (attachment is! Map || attachment['localBytes'] is! Uint8List) return;
+    final id = field(message, ['id']);
+    if (mounted) setState(() { attachment['localUploadFailed'] = false; attachment['localUploadProgress'] = 0.0; });
     try {
       await Api.uploadAttachment(
-        bytes: bytes,
-        fileName: 'barq_voice_${DateTime.now().millisecondsSinceEpoch}.m4a',
-        contentType: 'audio/mp4',
+        bytes: attachment['localBytes'] as Uint8List,
+        fileName: field(attachment, ['fileName'], 'barq-file'),
+        contentType: field(attachment, ['contentType'], 'application/octet-stream'),
         groupId: groupId,
-        onProgress: (progress) {
-          if (mounted) setState(() => mediaUploadProgress = progress);
-        },
+        onProgress: (value) { if (mounted) setState(() => attachment['localUploadProgress'] = value); },
       );
-      await loadMessages();
-      if (mounted) showMsg(context, 'تم إرسال التسجيل الصوتي (${formatBarqMediaDuration(duration)}) للمجموعة.');
+      if (mounted) setState(() => messages.removeWhere((item) => field(item, ['id']) == id));
+      await loadMessages(silent: true);
     } catch (error) {
-      if (mounted) showMsg(context, cleanError(error));
-    } finally {
-      if (mounted) setState(() { sending = false; mediaUploadProgress = null; });
+      if (mounted) {
+        setState(() { attachment['localUploadFailed'] = true; message['is_sending'] = false; });
+        showMsg(context, cleanError(error));
+      }
     }
+  }
+
+  Future<void> _sendVoiceRecording(List<int> bytes, Duration duration) async {
+    final local = _newPendingAttachment(Uint8List.fromList(bytes),
+      'barq_voice_${DateTime.now().millisecondsSinceEpoch}.m4a', 'audio/mp4');
+    if (mounted) setState(() => messages = mergeMessages(messages, [local]));
+    unawaited(_uploadPendingAttachment(local));
   }
 
   Future<void> pickAndSendFile() async {
     try {
-      final result = await showBarqMediaPicker(
-        context, allowMultiple: false, title: 'إرسال وسائط أو ملف للمجموعة', withData: false,
-      );
+      final result = await showBarqMediaPicker(context, allowMultiple: false,
+        title: 'إرسال وسائط أو ملف للمجموعة', withData: false);
       if (result == null || result.files.isEmpty) return;
       final file = result.files.single;
-      final bytes = await readBarqPickedFileBytes(file);
-      final contentType = file.extension == null
-          ? 'application/octet-stream' : _mimeForExtension(file.extension!);
+      final bytes = Uint8List.fromList(await readBarqPickedFileBytes(file));
+      final contentType = file.extension == null ? 'application/octet-stream' : _mimeForExtension(file.extension!);
       if (!mounted) return;
-      final confirmed = await showBarqAttachmentPreview(
-        context, fileName: file.name, contentType: contentType, bytes: bytes,
-      );
-      if (!mounted || !confirmed) {
-        return;
-      }
-      setState(() { sending = true; mediaUploadProgress = 0; });
-      await Api.uploadAttachment(
-        bytes: bytes,
-        fileName: file.name,
-        contentType: file.extension == null ? 'application/octet-stream' : _mimeForExtension(file.extension!),
-        groupId: groupId,
-        onProgress: (progress) {
-          if (mounted) setState(() => mediaUploadProgress = progress);
-        },
-      );
-      await loadMessages();
-      if (mounted) showMsg(context, 'تم إرسال الملف للمجموعة.');
-    } catch (e) {
-      if (mounted) showMsg(context, cleanError(e));
-    } finally {
-      if (mounted) setState(() { sending = false; mediaUploadProgress = null; });
-    }
+      final confirmed = await showBarqAttachmentPreview(context,
+        fileName: file.name, contentType: contentType, bytes: bytes);
+      if (!mounted || !confirmed) return;
+      final local = _newPendingAttachment(bytes, file.name, contentType);
+      setState(() => messages = mergeMessages(messages, [local]));
+      unawaited(_uploadPendingAttachment(local));
+    } catch (error) { if (mounted) showMsg(context, cleanError(error)); }
   }
 
   Future<void> showGroupMembers() async {
@@ -11346,11 +11402,11 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                                 },
                                 isPinned: m['is_pinned'] == true,
                               ),
-                              child: _attachmentTile(attachment, (onProgress) => Api.downloadAttachment(
+                              child: _barqAttachmentTile(attachment, (onProgress) => Api.downloadAttachment(
                                 attachmentId: field(attachment, ['attachmentId']),
                                 fileName: field(attachment, ['fileName'], 'attachment'),
                                 onProgress: onProgress,
-                              )),
+                              ), onRetry: attachment['localBytes'] is Uint8List ? () => _uploadPendingAttachment(m) : null),
                             ),
                             if (field(attachment, ['contentType']).startsWith('audio/'))
                               TextButton.icon(
