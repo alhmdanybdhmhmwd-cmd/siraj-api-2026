@@ -5790,6 +5790,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> addMemberDialog(Map<String, dynamic> group) async {
     final controller = TextEditingController();
     final existingMembers = await Api.groupMembers(field(group, ['id']));
+    if (!mounted) return;
     final existingIds = existingMembers.map((item) => field(item, ['id', 'user_id'])).toSet();
     final contactCandidates = friends.map((item) {
       final nested = item['user'] is Map ? Map<String, dynamic>.from(item['user']) : item;
@@ -10556,7 +10557,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                 const PopupMenuItem(value: 'wallpaper', child: ListTile(
                   dense: true, leading: Icon(Icons.wallpaper_outlined), title: Text('خلفية المحادثة'))),
                 if (['owner', 'admin'].contains(field(widget.group, ['current_role'], 'member')))
-                  PopupMenuItem(value: 'invite', child: ListTile(
+                  PopupMenuItem(value: 'invite', child: const ListTile(
                     dense: true, leading: Icon(Icons.link_rounded), title: Text('مشاركة رابط الانضمام'))),
               ],
             ),
