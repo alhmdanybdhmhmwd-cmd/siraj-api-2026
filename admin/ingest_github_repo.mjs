@@ -14,6 +14,20 @@ const SECRET_CONTENT = [
   /(?:api[_-]?key|access[_-]?token|client[_-]?secret)\s*[:=]\s*["'][^"']{12,}["']/i
 ];
 
+export function summarizeIndexCoverage(eligibleFiles, processedFiles) {
+  if (!Number.isSafeInteger(eligibleFiles) || eligibleFiles < 0 ||
+      !Number.isSafeInteger(processedFiles) || processedFiles < 0 ||
+      processedFiles > eligibleFiles) {
+    throw new TypeError("invalid_index_coverage");
+  }
+  return {
+    eligibleFiles,
+    processedFiles,
+    remainingFiles: eligibleFiles - processedFiles,
+    complete: processedFiles === eligibleFiles
+  };
+}
+
 export function normalizeAdminApiUrl(input) {
   let parsed;
   try {
@@ -162,10 +176,7 @@ export async function ingestRepository({ repository, ref = "HEAD", githubToken, 
   }
   return {
     repository, revision, indexed, skipped,
-    eligibleFiles: eligibleEntries.length,
-    processedFiles: selectedEntries.length,
-    remainingFiles: Math.max(0, eligibleEntries.length - selectedEntries.length),
-    complete: eligibleEntries.length <= selectedEntries.length
+    ...summarizeIndexCoverage(eligibleEntries.length, selectedEntries.length)
   };
 }
 
