@@ -83,6 +83,7 @@ export async function verifyGoogleIdToken(idToken, expectedNonce, env, options =
       (claims.azp !== undefined && claims.azp !== env.BARQ_GOOGLE_OIDC_CLIENT_ID) ||
       !Number.isSafeInteger(claims.exp) || claims.exp <= now ||
       !Number.isSafeInteger(claims.iat) || claims.iat > now + 60 ||
+      claims.iat < now - 3600 || claims.exp - claims.iat > 3600 ||
       (claims.nbf !== undefined && (!Number.isSafeInteger(claims.nbf) || claims.nbf > now)) ||
       typeof claims.sub !== "string" || claims.sub.length === 0 || claims.email_verified !== true ||
       (env.BARQ_ADMIN_OWNER_SUBJECT && claims.sub !== env.BARQ_ADMIN_OWNER_SUBJECT) ||
