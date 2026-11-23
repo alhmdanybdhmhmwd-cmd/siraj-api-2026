@@ -10000,7 +10000,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                             await Api.reactPrivateMessage(field(m, ['id', 'message_id']), '❤️');
                                             if (mounted) await loadMessages(silent: true);
                                           } catch (error) {
-                                            if (mounted) showMsg(context, cleanError(error));
+                                            if (context.mounted) showMsg(context, cleanError(error));
                                           }
                                         },
                                         onLongPress: () => showMessageActions(
@@ -10082,7 +10082,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                             await Api.reactPrivateMessage(field(m, ['id', 'message_id']), '❤️');
                                             if (mounted) await loadMessages(silent: true);
                                           } catch (error) {
-                                            if (mounted) showMsg(context, cleanError(error));
+                                            if (context.mounted) showMsg(context, cleanError(error));
                                           }
                                         },
                                         onLongPress: () => showMessageActions(
@@ -11594,7 +11594,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                                   await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), '❤️');
                                   if (mounted) await loadMessages(silent: true);
                                 } catch (error) {
-                                  if (mounted) showMsg(context, cleanError(error));
+                                  if (context.mounted) showMsg(context, cleanError(error));
                                 }
                               },
                               onLongPress: () => showMessageActions(
@@ -11677,7 +11677,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
                                   await Api.reactGroupMessage(groupId, field(m, ['id', 'message_id']), '❤️');
                                   if (mounted) await loadMessages(silent: true);
                                 } catch (error) {
-                                  if (mounted) showMsg(context, cleanError(error));
+                                  if (context.mounted) showMsg(context, cleanError(error));
                                 }
                               },
                               onLongPress: () => showMessageActions(
