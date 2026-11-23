@@ -181,6 +181,27 @@ class ProductionGroupsCompatibilityTests(unittest.TestCase):
         )
         self.assertEqual(self.db.execute("PRAGMA foreign_key_check").fetchall(), [])
 
+    def test_production_device_sessions_migration_tracks_and_revokes_installations(self):
+        migration = ROOT / "migrations" / "production" / "0006_device_sessions.sql"
+        self.db.executescript(migration.read_text(encoding="utf-8"))
+        self.db.execute(
+            "INSERT INTO device_sessions (user_id, device_id, device_name) VALUES ('owner-1', 'install-1', 'Android')"
+        )
+        self.db.execute(
+            "INSERT INTO device_sessions (user_id, device_id, device_name) VALUES ('owner-1', 'install-2', 'iPhone')"
+        )
+        self.db.execute(
+            "UPDATE device_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE user_id = 'owner-1' AND device_id = 'install-2'"
+        )
+        rows = self.db.execute(
+            "SELECT device_id, revoked_at IS NOT NULL FROM device_sessions WHERE user_id = 'owner-1' ORDER BY device_id"
+        ).fetchall()
+        self.assertEqual(rows, [("install-1", 0), ("install-2", 1)])
+        self.db.execute("DELETE FROM users WHERE id = 'owner-1'")
+        self.assertEqual(
+            self.db.execute("SELECT COUNT(*) FROM device_sessions").fetchone()[0], 0
+        )
+
     def test_admin_role_is_scoped_to_an_existing_membership(self):
         self.db.executescript(MIGRATION.read_text(encoding="utf-8"))
         self.db.execute(
