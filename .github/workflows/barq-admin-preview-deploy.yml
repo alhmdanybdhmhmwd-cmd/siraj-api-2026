@@ -35,22 +35,17 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           ADMIN_D1_DATABASE_ID: ${{ vars.ADMIN_D1_DATABASE_ID }}
-          BARQ_ADMIN_JWT_SECRET: ${{ secrets.BARQ_ADMIN_JWT_SECRET }}
           BARQ_GOOGLE_OIDC_CLIENT_ID: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID }}
           BARQ_ADMIN_OWNER_EMAIL: ${{ vars.BARQ_ADMIN_OWNER_EMAIL }}
           BARQ_ADMIN_ALLOWED_ORIGIN: ${{ vars.BARQ_ADMIN_ALLOWED_ORIGIN }}
         run: |
           set -euo pipefail
-          for key in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID ADMIN_D1_DATABASE_ID BARQ_ADMIN_JWT_SECRET BARQ_GOOGLE_OIDC_CLIENT_ID BARQ_ADMIN_OWNER_EMAIL BARQ_ADMIN_ALLOWED_ORIGIN; do
+          for key in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID ADMIN_D1_DATABASE_ID BARQ_GOOGLE_OIDC_CLIENT_ID BARQ_ADMIN_OWNER_EMAIL BARQ_ADMIN_ALLOWED_ORIGIN; do
             if [ -z "${!key:-}" ]; then
               echo "::error::Missing required GitHub Environment secret/variable: $key"
               exit 1
             fi
           done
-          if [ "${#BARQ_ADMIN_JWT_SECRET}" -lt 32 ]; then
-            echo "::error::BARQ_ADMIN_JWT_SECRET must contain at least 32 characters."
-            exit 1
-          fi
           case "$BARQ_ADMIN_ALLOWED_ORIGIN" in
             *REPLACE_WITH*|*'*'*) echo "::error::Allowed origin must be exact; wildcards/placeholders are forbidden."; exit 1 ;;
           esac
@@ -122,7 +117,6 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          BARQ_ADMIN_JWT_SECRET: ${{ secrets.BARQ_ADMIN_JWT_SECRET }}
         run: printf '%s' "$BARQ_ADMIN_JWT_SECRET" | npx --yes wrangler@4 secret put BARQ_ADMIN_JWT_SECRET --name barq-admin-preview
 
       - name: Deploy BARQ Admin Preview Worker
