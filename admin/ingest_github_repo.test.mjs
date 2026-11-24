@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl, summarizeIndexCoverage, selectIndexBatch, normalizeAllowedRepositories, selectIndexBatchWithSkips, containsLikelySecret, ingestRepository } from "./ingest_github_repo.mjs";
+import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl, summarizeIndexCoverage, selectIndexBatch, normalizeAllowedRepositories, selectIndexBatchWithSkips, containsLikelySecret, ingestRepository, fetchWithRetry } from "./ingest_github_repo.mjs";
 
 test("repository ingestion allowlists project files and excludes secrets/build output", () => {
   assert.equal(shouldIndexPath("docs/BARQ_PRODUCT.md"), true);
@@ -143,4 +143,48 @@ test("knowledge ingestion rejects common provider credential formats and keeps o
   assert.equal(containsLikelySecret("Example: set the API key in your local secret manager."), false);
   assert.equal(containsLikelySecret('{"private_key":"synthetic-private-value-long-enough"}'), true);
   assert.equal(containsLikelySecret('{"refresh_token":"synthetic-refresh-token-value"}'), true);
+});
+
+test("knowledge ingestion retries transient rate limits and server errors", async () => {
+  const statuses = [503, 429, 201];
+  const delays = [];
+  let calls = 0;
+  const response = await fetchWithRetry("https://admin-preview.example.workers.dev/v1/knowledge", {
+    method: "POST"
+  }, {
+    fetchImpl: async () => new Response("", { status: statuses[calls++] }),
+    sleep: async milliseconds => { delays.push(milliseconds); },
+    maxAttempts: 3
+  });
+  assert.equal(response.status, 201);
+  assert.equal(calls, 3);
+  assert.deepEqual(delays, [250, 500]);
+});
+
+test("knowledge ingestion bounds retries and surfaces persistent failures", async () => {
+  let calls = 0;
+  const delays = [];
+  const response = await fetchWithRetry("https://admin-preview.example.workers.dev/v1/knowledge", {}, {
+    fetchImpl: async () => { calls++; return new Response("", { status: 503 }); },
+    sleep: async milliseconds => { delays.push(milliseconds); },
+    maxAttempts: 3
+  });
+  assert.equal(response.status, 503);
+  assert.equal(calls, 3);
+  assert.deepEqual(delays, [250, 500]);
+});
+
+test("knowledge ingestion retries transient network errors without an unbounded loop", async () => {
+  let calls = 0;
+  const response = await fetchWithRetry("https://admin-preview.example.workers.dev/v1/knowledge", {}, {
+    fetchImpl: async () => {
+      calls++;
+      if (calls < 3) throw new Error("temporary network failure");
+      return new Response("", { status: 201 });
+    },
+    sleep: async () => {},
+    maxAttempts: 3
+  });
+  assert.equal(response.status, 201);
+  assert.equal(calls, 3);
 });
