@@ -18,8 +18,8 @@ const SECRET_CONTENT = [
   /GOCSPX-[A-Za-z0-9_-]{20,}/,
   /npm_[A-Za-z0-9]{30,}/,
   /pypi-[A-Za-z0-9_-]{50,}/,
-  /SG\\.[A-Za-z0-9_-]{16,}\\.[A-Za-z0-9_-]{16,}/,
-  /(?:api[_-]?key|access[_-]?token|client[_-]?secret|auth[_-]?token|password)\\s*[:=]\\s*["'][^"']{12,}["']/i
+  /SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}/,
+  /(?:api[_-]?key|access[_-]?token|client[_-]?secret|auth[_-]?token|password)\s*[:=]\s*["'][^"']{12,}["']/i
 ];
 
 export function normalizeAllowedRepositories(value) {
