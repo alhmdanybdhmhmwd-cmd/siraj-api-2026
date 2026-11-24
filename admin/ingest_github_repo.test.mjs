@@ -72,3 +72,21 @@ test("repository indexing can continue in ordered batches without skipping files
   assert.equal(last.nextStartAfter, null);
   assert.throws(() => selectIndexBatch(entries, "../unsafe", 2), /invalid_index_batch/);
 });
+
+test("repository indexing requires an explicit exact allowlist", () => {
+  assert.deepEqual(normalizeAllowedRepositories("owner/barq; owner/admin;owner/barq"), [
+    "owner/barq", "owner/admin"
+  ]);
+  assert.throws(() => normalizeAllowedRepositories(""), /allowlist_required/);
+  assert.throws(() => normalizeAllowedRepositories("owner/barq;../private"), /invalid_repository_allowlist/);
+});
+
+test("repository ingestion rejects repositories outside the approved scope", async () => {
+  await assert.rejects(ingestRepository({
+    repository: "other/private-project",
+    githubToken: "read-only-test-token",
+    adminApiUrl: "https://admin-preview.example.workers.dev",
+    ownerToken: "short-lived-test-token",
+    allowedRepositories: ["alhmdanybdhmhmwd-cmd/siraj-api-2026"]
+  }), /repository_not_owner_approved/);
+});
