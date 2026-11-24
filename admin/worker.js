@@ -471,7 +471,7 @@ export function rankKnowledgeChunks(chunks, query, limit = 6) {
       if (inTitle || inPath || inContent) matched++;
     }
     const coverage = tokens.length ? matched / tokens.length : 0;
-    return { ...chunk, relevance_score: score + coverage, matched_terms: matched };
+    return { ...chunk, relevance_score: score + coverage - (chunk.is_stale ? 1000 : 0), matched_terms: matched };
   }).filter(chunk => chunk.relevance_score > 0)
     .sort((a, b) => b.relevance_score - a.relevance_score ||
       String(b.updated_at || "").localeCompare(String(a.updated_at || "")))
