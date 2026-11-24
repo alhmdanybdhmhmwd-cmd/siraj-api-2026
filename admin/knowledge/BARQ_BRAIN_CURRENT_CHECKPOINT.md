@@ -111,3 +111,16 @@ Say exactly what is complete, what has only passed CI, what is blocked, and what
 - Important: the Android release build currently uses the Gradle debug signing configuration for preview installs. It is not a production/release signing setup. Physical installation, Android 8 compatibility, Google OIDC sign-in, and live Admin API access on the Galaxy S7 remain untested.
 - The artifact was built from workflow run head SHA `b2771509c87d0700f5870d9758e55cadfb30c5e5`; it predates the latest indexer regression repair/checkpoint commit `0002d57a0f36df46d42cdc4b78d6c1f3c939895a`. Do not represent this APK as built from the latest branch head.
 - Admin Quality run `45310249447` remains pending with no jobs exposed yet. Backend tests on the checkpoint revision passed in run `45310249463`.
+
+
+## Preview knowledge-ingestion workflow prepared (2026-11-24)
+
+- Added manual-only workflow `.github/workflows/barq-admin-knowledge-ingest.yml` to run one resumable batch of the repository indexer against Admin Preview.
+- The workflow uses the built-in GitHub token with `contents: read`, an exact repository allowlist (`alhmdanybdhmhmwd-cmd/siraj-api-2026`), and an explicit ref/cursor input. It does not merge, deploy, or write to GitHub.
+- A preflight guard refuses to send knowledge to any host other than an HTTPS `barq-admin-preview*.workers.dev` hostname. This prevents accidental ingestion into the consumer API or an unapproved production endpoint.
+- The workflow runs `node --test ingest_github_repo.test.mjs` before ingestion and writes the pinned commit, indexed count, skipped count, remaining count, completion flag, and next cursor to the GitHub Actions summary.
+- Added Admin Quality workflow checks for the ingestion workflow's manual-only trigger, read-only GitHub permission, exact repository allowlist, Preview host guard, and absence of deploy commands.
+- This is infrastructure/code preparation only. It has NOT run and no repository data has been ingested into D1 yet.
+- To enable a run, the repository's GitHub Actions secrets must contain `BARQ_ADMIN_PREVIEW_API_URL` (the actual HTTPS Preview Worker URL matching the guarded host) and `BARQ_ADMIN_PREVIEW_OWNER_TOKEN` (an owner token scoped to the isolated Admin Preview workspace). Never put either value in chat or source files.
+- If those secrets or the isolated Preview D1 are not configured, the workflow will stop at preflight; it will not fall back to a production API.
+- Latest workflow changes: ingestion workflow commit `88fe9170b69e825703b17ae2caf3921a7c1256f3`, checkout/host guard correction `ee3559226b60212bde929335b8f354954116e15a`, and safety-test commits `75ac1c2b92d1f32e03dca4a11d98a6393c29d299`, `ef32a00ac31d9ea2df8b953cb27abb1ff261853b`, `f43b7b985e02c13a11a2fc179761102fc803e7f5`.
