@@ -63,6 +63,7 @@ Status: Owner-approved project context for BARQ Brain indexing. This document is
 - Phase 12 real-device testing must cover installation/update/reinstall, sign-in and session refresh/revocation, all core screens and actions, network loss/recovery, offline drafts/outbox and duplicate prevention, notifications/deep links/permissions/background behavior, image upload/analysis/generation where actually connected, Arabic RTL and English layouts, security/session expiry, and regression retests.
 - Record device model, Android version, build revision, test steps, pass/fail/blocked status, and evidence. Do not call a feature tested if it is not connected to a real service.
 - Release acceptance requires critical real-device tests to pass, no open critical/high defects, blocked items documented, and owner approval.
+- **Owner scheduling decision (2026-11-24): public user registration/onboarding features and the News feature are deferred to the final project phase. They must not block the current Admin Phase 2 work. This does not defer the separate owner-only Google OIDC authentication required to secure BARQ Admin itself.**
 
 ## 6. BARQ Admin and BARQ Brain
 
