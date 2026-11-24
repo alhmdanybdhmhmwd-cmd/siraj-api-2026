@@ -859,7 +859,8 @@ class SirajPush {
 }
 
 class SirajApp extends StatelessWidget {
-  const SirajApp({super.key});
+  final Widget? homeOverride;
+  const SirajApp({super.key, this.homeOverride});
 
   @override
   Widget build(BuildContext context) {
@@ -988,7 +989,7 @@ class SirajApp extends StatelessWidget {
             ),
             useMaterial3: true,
           ),
-          home: const StartupPage(),
+          home: homeOverride ?? const StartupPage(),
         );
       },
     );
@@ -4347,7 +4348,8 @@ bool barqShouldPauseBackgroundWork(AppLifecycleState state) =>
 
 class HomePage extends StatefulWidget {
   final Map<String, dynamic> user;
-  const HomePage({super.key, required this.user});
+  final bool screenshotMode;
+  const HomePage({super.key, required this.user, this.screenshotMode = false});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -4385,6 +4387,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    if (widget.screenshotMode) {
+      friends = [
+        {'id': 'demo-friend-1', 'displayName': 'سارة أحمد', 'username': 'sara', 'phone': '+967770000001', 'last_message': 'وصلت رسالتك، شكراً لك', 'lastMessage': 'وصلت رسالتك، شكراً لك', 'unread_count': 2},
+        {'id': 'demo-friend-2', 'displayName': 'محمد خالد', 'username': 'mohammed', 'phone': '+967770000002', 'last_message': 'نلتقي لاحقاً بإذن الله', 'lastMessage': 'نلتقي لاحقاً بإذن الله'},
+      ];
+      groups = [
+        {'id': 'demo-group-1', 'name': 'فريق برق', 'description': 'مساحة الفريق ومناقشاته', 'last_message': 'تم تحديث التصميم الجديد'},
+      ];
+      statuses = [
+        {'id': 'demo-spark-1', 'user_id': 'demo-friend-1', 'display_name': 'سارة أحمد', 'username': 'sara', 'caption': 'لحظات جميلة تستحق المشاركة ✨', 'media': <Map<String, dynamic>>[]},
+      ];
+      loading = false;
+      initialRefreshComplete = true;
+      return;
+    }
     WidgetsBinding.instance.addObserver(this);
     barqPendingNotificationTap.addListener(_handlePendingNotificationTap);
     _pushRefreshSubscription = SirajRealtime.instance.events.listen((event) {
@@ -8661,7 +8678,8 @@ class _BarqMediaViewerState extends State<_BarqMediaViewer> {
 class NearbyDevicesPage extends StatefulWidget {
   final Map<String, dynamic> user;
   final List<Map<String, dynamic>> friends;
-  const NearbyDevicesPage({super.key, required this.user, required this.friends});
+  final bool screenshotMode;
+  const NearbyDevicesPage({super.key, required this.user, required this.friends, this.screenshotMode = false});
 
   @override
   State<NearbyDevicesPage> createState() => _NearbyDevicesPageState();
@@ -8677,6 +8695,12 @@ class _NearbyDevicesPageState extends State<NearbyDevicesPage> {
   @override
   void initState() {
     super.initState();
+    if (widget.screenshotMode) {
+      friends = widget.friends;
+      starting = false;
+      statusText = 'يعرض هذا المشهد واجهة الاتصال القريب في وضع المعاينة.';
+      return;
+    }
     subscription = BarqNearbyService.instance.events.listen(_onNearbyEvent);
     _start();
   }
@@ -9024,7 +9048,8 @@ class PublicProfilePage extends StatelessWidget {
 class ChatPage extends StatefulWidget {
   final Map<String, dynamic> friend;
   final String currentUserId;
-  const ChatPage({super.key, required this.friend, required this.currentUserId});
+  final bool screenshotMode;
+  const ChatPage({super.key, required this.friend, required this.currentUserId, this.screenshotMode = false});
 
   @override
   State<ChatPage> createState() => _ChatPageState();
@@ -9069,6 +9094,15 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    if (widget.screenshotMode) {
+      messages = [
+        {'id': 'demo-message-1', 'sender_id': widget.currentUserId, 'receiver_id': friendId, 'body': 'مرحباً! أهلاً بك في برق 👋', 'created_at': '2026-11-25T09:15:00Z', 'is_pinned': true, 'reactions': <String, dynamic>{}},
+        {'id': 'demo-message-2', 'sender_id': friendId, 'receiver_id': widget.currentUserId, 'body': 'سعيد بتجربة المحادثة الجديدة. التصميم جميل وسريع!', 'created_at': '2026-11-25T09:16:00Z', 'reactions': <String, dynamic>{}},
+        {'id': 'demo-message-3', 'sender_id': widget.currentUserId, 'receiver_id': friendId, 'body': 'شكراً لك! هذه مجرد بداية 🚀', 'created_at': '2026-11-25T09:17:00Z', 'reactions': <String, dynamic>{}},
+      ];
+      loading = false;
+      return;
+    }
     WidgetsBinding.instance.addObserver(this);
     messagesScrollController.addListener(_maybeLoadOlderMessages);
     loadMessages();
@@ -10572,6 +10606,7 @@ class _SparkVideoPageState extends State<_SparkVideoPage> {
 class GroupChatPage extends StatefulWidget {
   final Map<String, dynamic> group;
   final String currentUserId;
+  final bool screenshotMode;
   final VoidCallback onAddMember;
   final VoidCallback onShareInvite;
   final Future<void> Function() onGroupChanged;
@@ -10579,6 +10614,7 @@ class GroupChatPage extends StatefulWidget {
     super.key,
     required this.group,
     required this.currentUserId,
+    this.screenshotMode = false,
     required this.onAddMember,
     required this.onShareInvite,
     required this.onGroupChanged,
@@ -10617,6 +10653,14 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
   @override
   void initState() {
     super.initState();
+    if (widget.screenshotMode) {
+      messages = [
+        {'id': 'demo-group-message-1', 'sender_id': widget.currentUserId, 'body': 'أهلاً بالفريق! نراجع آخر تحديثات برق هنا.', 'created_at': '2026-11-25T10:00:00Z'},
+        {'id': 'demo-group-message-2', 'sender_id': 'demo-friend-1', 'body': 'تم تجهيز واجهة SPARK، أرسل لكم الصور بعد قليل.', 'created_at': '2026-11-25T10:02:00Z'},
+      ];
+      loading = false;
+      return;
+    }
     WidgetsBinding.instance.addObserver(this);
     messagesScrollController.addListener(_maybeLoadOlderMessages);
     loadMessages();
