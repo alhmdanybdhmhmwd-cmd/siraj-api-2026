@@ -11,7 +11,7 @@ test("repository coverage reports eligible domains, file types, and explicit exc
     { type: "blob", path: ".github/workflows/check.yml", size: 400 },
     { type: "blob", path: "docs/guide.md", size: 500 },
     { type: "blob", path: "android/app/google-services.json", size: 800 },
-    { type: "blob", path: "android/build/output.apk", size: 200000 },
+    { type: "blob", path: "android/docs/large.md", size: 200000 },
     { type: "blob", path: "assets/logo.svg", size: 100 }
   ]);
   assert.equal(report.treeBlobs, 8);
