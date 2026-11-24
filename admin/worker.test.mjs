@@ -106,6 +106,13 @@ test("BARQ Brain prompts include current workspace context and no execution auth
   );
   assert.equal(messages.length, 2);
   assert.match(messages[1].content, /Current phase: global-launch/);
+  const staleMessages = buildAssistantMessages(
+    { title: "Check current design", description: "Verify the design source" },
+    { current_project: "BARQ", current_phase: "phase-2" },
+    [{ title: "Old design", source_path: "repo/docs/design.md", source_revision: "old-commit",
+      content: "Historical design evidence", is_stale: 1 }]
+  );
+  assert.match(staleMessages[0].content, /STALE SOURCE — historical evidence; verify before treating as current/);
   assert.match(messages[0].content, /no authority to publish/);
   assert.match(messages[0].content, /Never claim an action was performed/);
   assert.match(messages[0].content, /explicitly authorized PHASE 2/);
