@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, validateAdminAccessClaims, processAdminDeadLetterMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateBrainChatInput, knowledgeSearchTerms, isContinuationRequest, rankKnowledgeChunks, validateAdminAccessClaims, processAdminDeadLetterMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches } from "./worker.js";
 
 test("idempotency keys are bounded and cannot be silently truncated", () => {
   assert.deepEqual(validateIdempotencyKey(null), { ok: true, value: null });
@@ -321,6 +321,28 @@ test("BARQ Brain extracts bounded multilingual search terms for knowledge retrie
   assert.equal(knowledgeSearchTerms("a b", 20).length, 0);
   assert.equal(knowledgeSearchTerms("alpha beta gamma delta", 2).length, 2);
   assert.equal(knowledgeSearchTerms("one two three", 999).length, 3);
+});
+
+test("BARQ Brain recognizes Arabic and English resume commands", () => {
+  assert.equal(isContinuationRequest("واصل اشتغل وابنِ نفسك"), true);
+  assert.equal(isContinuationRequest("كمل من آخر نقطة"), true);
+  assert.equal(isContinuationRequest("continue from the last checkpoint"), true);
+  assert.equal(isContinuationRequest("What is the BARQ architecture?"), false);
+});
+
+test("BARQ Brain preserves long canonical owner context instead of truncating it like ordinary chunks", () => {
+  const marker = "OWNER_CONTEXT_END_MARKER";
+  const messages = buildAssistantMessages(
+    { title: "Continue", description: "Resume from the last point" },
+    { current_project: "BARQ", current_phase: "phase-2" },
+    [{
+      title: "BARQ owner context",
+      source_path: "owner/repo/admin/knowledge/BARQ_OWNER_CONTEXT.md#chunk-2",
+      source_revision: "commit-123",
+      content: "x".repeat(4000) + marker
+    }]
+  );
+  assert.ok(messages[1].content.includes(marker));
 });
 
 test("knowledge ranking prefers title/path evidence and safely bounds result count", () => {
