@@ -50,25 +50,27 @@ jobs:
           flutter analyze
           flutter test
 
-      - name: Build ARM64-only debug APK for Galaxy S7
+      - name: Build optimized ARM64 release-mode preview APK for Galaxy S7
         working-directory: admin/mobile
-        run: flutter build apk --debug --target-platform android-arm64 --split-per-abi
+        run: flutter build apk --release --target-platform android-arm64 --split-per-abi --obfuscate --split-debug-info=build/symbols
 
       - name: Verify APK exists and report size
         id: apk
         shell: bash
         run: |
-          APK="admin/mobile/build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk"
+          APK="admin/mobile/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
           test -s "$APK"
           APK_SIZE="$(stat -c '%s' "$APK")"
           echo "size_bytes=$APK_SIZE" >> "$GITHUB_OUTPUT"
           echo "APK size: $APK_SIZE bytes"
           sha256sum "$APK"
 
-      - name: Upload BARQ Admin Galaxy S7 APK
+      - name: Upload BARQ Admin Galaxy S7 optimized APK and symbols
         uses: actions/upload-artifact@v4
         with:
-          name: barq-admin-galaxy-s7-arm64-debug
-          path: admin/mobile/build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk
+          name: barq-admin-galaxy-s7-arm64-optimized
+          path: |
+            admin/mobile/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            admin/mobile/build/symbols/
           if-no-files-found: error
           retention-days: 14
