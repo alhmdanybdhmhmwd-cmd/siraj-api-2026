@@ -458,6 +458,22 @@ export function rankKnowledgeChunks(chunks, query, limit = 6) {
     .slice(0, safeLimit);
 }
 
+export function mergePinnedKnowledge(ranked, pinned, limit = 8) {
+  const safeLimit = Number.isSafeInteger(limit) ? Math.max(1, Math.min(12, limit)) : 8;
+  const seen = new Set();
+  const merged = [];
+  // Canonical owner context and navigation sources must outrank ordinary keyword matches.
+  for (const item of [...(pinned || []), ...(ranked || [])]) {
+    if (!item || typeof item !== "object") continue;
+    const key = String(item.source_path || "") + "@" + String(item.source_revision || "");
+    if (!item.source_path || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
+    if (merged.length >= safeLimit) break;
+  }
+  return merged;
+}
+
 async function retrieveKnowledgeForTask(env, workspaceId, query) {
   const tokens = knowledgeSearchTerms(query);
   let statement;
@@ -486,19 +502,23 @@ async function retrieveKnowledgeForTask(env, workspaceId, query) {
 
   // Always include the compact navigation map when resuming, even if the
   // short user command does not contain the document's title words.
-  const pinned = await env.ADMIN_DB.prepare(
-    "SELECT source_type, source_path, source_revision, title, content, updated_at " +
-    "FROM admin_project_knowledge WHERE workspace_id = ? " +
-    "AND source_path LIKE ? ORDER BY updated_at DESC LIMIT 2"
-  ).bind(workspaceId, "%BARQ_BRAIN_MASTER_INDEX_AR.md%").all();
-  const combined = [...(pinned.results || []), ...ranked];
-  const seen = new Set();
-  return combined.filter(item => {
-    const key = String(item.source_path || "") + "@" + String(item.source_revision || "");
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).slice(0, 8);
+  const [ownerContext, masterIndex] = await Promise.all([
+    env.ADMIN_DB.prepare(
+      "SELECT source_type, source_path, source_revision, title, content, updated_at " +
+      "FROM admin_project_knowledge WHERE workspace_id = ? AND source_path LIKE ? " +
+      "ORDER BY source_path ASC LIMIT 1"
+    ).bind(workspaceId, "%BARQ_OWNER_CONTEXT.md%").all(),
+    env.ADMIN_DB.prepare(
+      "SELECT source_type, source_path, source_revision, title, content, updated_at " +
+      "FROM admin_project_knowledge WHERE workspace_id = ? AND source_path LIKE ? " +
+      "ORDER BY source_path ASC LIMIT 1"
+    ).bind(workspaceId, "%BARQ_BRAIN_MASTER_INDEX_AR.md%").all()
+  ]);
+  return mergePinnedKnowledge(
+    ranked,
+    [...(ownerContext.results || []), ...(masterIndex.results || [])],
+    8
+  );
 }
 
 export function validateAdminAccessClaims(claims, now = Math.floor(Date.now() / 1000)) {
