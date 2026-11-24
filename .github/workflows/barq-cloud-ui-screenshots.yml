@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: barq-cloud-ui-screenshots-api30
+  group: barq-cloud-ui-screenshots-diagnostics
   cancel-in-progress: true
 
 jobs:
@@ -38,18 +38,24 @@ jobs:
         working-directory: android
         run: flutter pub get
       - name: Capture real BARQ screens on Android emulator
+        timeout-minutes: 22
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
           target: google_apis
           arch: x86_64
           profile: pixel_6
+          emulator-boot-timeout: 600
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           disable-animations: true
           script: |
             set -euo pipefail
             cd android
             mkdir -p ../artifacts
+            trap 'status=$?; echo "capture_exit_code=$status" > ../artifacts/capture-diagnostics.txt; adb devices -l >> ../artifacts/capture-diagnostics.txt 2>&1 || true; adb -s emulator-5554 shell getprop sys.boot_completed >> ../artifacts/capture-diagnostics.txt 2>&1 || true; exit $status' EXIT
+            echo 'DIAG: emulator is ready; listing connected devices'
+            adb devices -l
+            echo 'DIAG: starting BARQ integration screenshot test'
             flutter test integration_test/barq_screenshots_test.dart -d emulator-5554 --reporter expanded
             cd ..
             count="$(find artifacts/barq-ui-screenshots -type f -iname '*.png' | wc -l)"
@@ -63,5 +69,5 @@ jobs:
         with:
           name: barq-ui-screenshots-${{ github.run_number }}
           path: artifacts/
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 30
