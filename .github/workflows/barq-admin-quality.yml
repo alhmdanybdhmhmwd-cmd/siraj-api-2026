@@ -312,7 +312,7 @@ jobs:
         run: |
           for attempt in 1 2 3; do
             if sdkmanager --install "ndk;28.2.13676358"; then
-              exit 0
+              break
             fi
             rm -rf "${ANDROID_HOME}/ndk/28.2.13676358"
             if [ "$attempt" -lt 3 ]; then
@@ -344,8 +344,10 @@ jobs:
               sleep 20
             fi
           done
-          echo "AppAuth manifest validation failed after 3 attempts." >&2
-          exit 1
+          if [ "$attempt" -eq 3 ]; then
+            echo "AppAuth manifest validation failed after 3 attempts." >&2
+            exit 1
+          fi
           manifest="$(find ../build/app/intermediates -path '*merged_manifest*' -name AndroidManifest.xml -print -quit)"
           test -n "$manifest"
           grep -Fq 'com.googleusercontent.apps.1234567890' "$manifest"
