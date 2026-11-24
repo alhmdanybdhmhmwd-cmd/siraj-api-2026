@@ -4,9 +4,9 @@ const MAX_CHUNK_CHARS = 18000;
 const MAX_FILES_PER_RUN = 300;
 const ALLOWED_EXTENSIONS = new Set([
   ".md", ".mdx", ".txt", ".dart", ".js", ".mjs", ".ts", ".tsx",
-  ".jsx", ".sql", ".yaml", ".yml", ".toml", ".xml", ".gradle", ".kts", ".properties", ".py", ".sh"
+  ".jsx", ".html", ".css", ".json", ".sql", ".yaml", ".yml", ".toml", ".xml", ".gradle", ".kts", ".properties", ".py", ".sh"
 ]);
-const SENSITIVE_PATH = /(^|\/)(\.git|\.next|\.dart_tool|build|dist|node_modules|vendor|coverage|secrets?|credentials?)(\/|$)|(^|\/)(\.env[^/]*|.*\.(pem|key|p12|pfx|keystore|jks|apk|aab|ipa|sqlite|db|lock))$/i;
+const SENSITIVE_PATH = /(^|\/)(\.git|\.next|\.dart_tool|\.firebase|\.gradle|build|dist|node_modules|vendor|coverage|secrets?|credentials?)(\/|$)|(^|\/)(\.env[^/]*|local\.properties|key\.properties|.*\.(pem|key|p12|pfx|keystore|jks|apk|aab|ipa|sqlite|db|lock|tfvars))$/i;
 const SECRET_CONTENT = [
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
   /AIza[0-9A-Za-z_-]{30,}/,
@@ -19,7 +19,7 @@ const SECRET_CONTENT = [
   /npm_[A-Za-z0-9]{30,}/,
   /pypi-[A-Za-z0-9_-]{50,}/,
   /SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}/,
-  /(?:api[_-]?key|access[_-]?token|client[_-]?secret|auth[_-]?token|password)\s*[:=]\s*["'][^"']{12,}["']/i
+  /(?:api[_-]?key|private[_-]?key|signing[_-]?key|secret|access[_-]?token|refresh[_-]?token|client[_-]?secret|auth[_-]?token|password)\s*[:=]\s*["'][^"']{12,}["']/i
 ];
 
 export function normalizeAllowedRepositories(value) {
