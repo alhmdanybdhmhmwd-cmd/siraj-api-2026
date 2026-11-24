@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateBrainChatInput, knowledgeSearchTerms, isContinuationRequest, rankKnowledgeChunks, validateAdminAccessClaims, processAdminDeadLetterMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateBrainChatInput, knowledgeSearchTerms, isContinuationRequest, rankKnowledgeChunks, validateAdminAccessClaims, mergePinnedKnowledge, processAdminDeadLetterMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches } from "./worker.js";
 
 test("idempotency keys are bounded and cannot be silently truncated", () => {
   assert.deepEqual(validateIdempotencyKey(null), { ok: true, value: null });
@@ -385,4 +385,30 @@ test("BARQ Brain recognizes the owner's approved autonomous development-toolchai
   assert.match(system, /Production deployment, merge/);
   assert.match(system, /not an autonomous code editor/);
   assert.match(system, /phone-to-PR-to-CI-to-resume loop passes/);
+});
+
+
+test("BARQ Brain always pins canonical owner decisions and the master index ahead of keyword matches", () => {
+  const owner = {
+    source_path: "repo/admin/knowledge/BARQ_OWNER_CONTEXT.md#chunk-1",
+    source_revision: "rev-1",
+    title: "Canonical owner decisions"
+  };
+  const index = {
+    source_path: "repo/admin/knowledge/BARQ_BRAIN_MASTER_INDEX_AR.md#chunk-1",
+    source_revision: "rev-1",
+    title: "Project navigation map"
+  };
+  const ranked = Array.from({ length: 10 }, (_, i) => ({
+    source_path: "repo/docs/ordinary-" + i + ".md",
+    source_revision: "rev-" + i,
+    title: "Ordinary matching source " + i
+  }));
+  const merged = mergePinnedKnowledge(ranked, [owner, index], 8);
+  assert.equal(merged[0].source_path, owner.source_path);
+  assert.equal(merged[1].source_path, index.source_path);
+  assert.equal(merged.length, 8);
+  assert.equal(mergePinnedKnowledge(ranked, [owner, index, owner], 8).filter(
+    item => item.source_path === owner.source_path
+  ).length, 1);
 });
