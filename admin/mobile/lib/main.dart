@@ -94,6 +94,7 @@ class _AdminHomePageState extends State<AdminHomePage>
   bool _loading = true;
   bool _online = false;
   bool _syncing = false;
+  Future<void>? _loadFuture;
 
   @override
   void initState() {
@@ -119,7 +120,17 @@ class _AdminHomePageState extends State<AdminHomePage>
         'Content-Type': 'application/json',
       };
 
-  Future<void> _load() async {
+  Future<void> _load() {
+    final activeLoad = _loadFuture;
+    if (activeLoad != null) return activeLoad;
+    final load = _performLoad();
+    _loadFuture = load;
+    return load.whenComplete(() {
+      if (identical(_loadFuture, load)) _loadFuture = null;
+    });
+  }
+
+  Future<void> _performLoad() async {
     final prefs = await SharedPreferences.getInstance();
     _apiBase = prefs.getString('barq_admin_api_base') ?? '';
     _token = await _secure.read(key: 'barq_admin_owner_token') ?? '';
