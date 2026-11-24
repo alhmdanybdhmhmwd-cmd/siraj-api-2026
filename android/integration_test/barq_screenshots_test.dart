@@ -28,7 +28,8 @@ void main() {
 
     Future<void> capture(String name, Widget screen) async {
       await tester.pumpWidget(barq.SirajApp(homeOverride: screen));
-      await tester.pumpAndSettle(const Duration(milliseconds: 250));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 900));
       await binding.takeScreenshot(name);
     }
 
@@ -40,15 +41,18 @@ void main() {
       const barq.HomePage(user: demoUser, screenshotMode: true),
     );
     await tester.tap(find.text('SPARK').last);
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 700));
     await binding.takeScreenshot('04-home-spark');
 
     await tester.tap(find.text('جهات الاتصال').last);
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 700));
     await binding.takeScreenshot('05-home-contacts');
 
     await tester.tap(find.text('حسابي').last);
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 700));
     await binding.takeScreenshot('06-home-account');
 
     await capture(
