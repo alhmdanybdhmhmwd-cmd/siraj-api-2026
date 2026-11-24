@@ -1,0 +1,98 @@
+name: BARQ Admin Preview Knowledge Ingestion
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Exact branch, tag, or commit to index"
+        required: true
+        default: "barq-admin-s7-optimized-2026-11-24"
+        type: string
+      start_after:
+        description: "Resume cursor from the previous batch (leave empty for the first batch)"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: barq-admin-preview-knowledge-ingest
+  cancel-in-progress: false
+
+jobs:
+  ingest-preview-knowledge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout the ingestion code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate isolated Preview configuration
+        env:
+          BARQ_ADMIN_API_URL: ${{ secrets.BARQ_ADMIN_PREVIEW_API_URL }}
+          BARQ_ADMIN_OWNER_TOKEN: ${{ secrets.BARQ_ADMIN_PREVIEW_OWNER_TOKEN }}
+          BARQ_ADMIN_GITHUB_REF: ${{ inputs.ref }}
+          BARQ_ADMIN_GITHUB_START_AFTER: ${{ inputs.start_after }}
+        run: |
+          set -euo pipefail
+          test -n "$BARQ_ADMIN_API_URL" || { echo "Missing secret: BARQ_ADMIN_PREVIEW_API_URL" >&2; exit 1; }
+          test -n "$BARQ_ADMIN_OWNER_TOKEN" || { echo "Missing secret: BARQ_ADMIN_PREVIEW_OWNER_TOKEN" >&2; exit 1; }
+          node --input-type=module - <<'NODE'
+          const url = new URL(process.env.BARQ_ADMIN_API_URL);
+          if (url.protocol !== "https:" || !/^barq-admin-preview(?:-[a-z0-9-]+)?\\.[a-z0-9-]+\\.workers\\.dev$/i.test(url.hostname)) {
+            throw new Error("Refusing knowledge ingestion: API URL is not the isolated barq-admin-preview workers.dev host");
+          }
+          if (!process.env.BARQ_ADMIN_GITHUB_REF || process.env.BARQ_ADMIN_GITHUB_REF.length > 160) {
+            throw new Error("Invalid repository ref");
+          }
+          if (process.env.BARQ_ADMIN_GITHUB_START_AFTER.length > 160 ||
+              process.env.BARQ_ADMIN_GITHUB_START_AFTER.startsWith("/") ||
+              process.env.BARQ_ADMIN_GITHUB_START_AFTER.split("/").includes("..")) {
+            throw new Error("Invalid ingestion cursor");
+          }
+          console.log("Preview host and ingestion cursor validated; credentials are present.");
+          NODE
+      - name: Run indexer regression tests
+        working-directory: admin
+        run: node --test ingest_github_repo.test.mjs
+      - name: Index one resumable repository batch into isolated Admin Preview
+        working-directory: admin
+        env:
+          BARQ_ADMIN_GITHUB_REPOSITORY: alhmdanybdhmhmwd-cmd/siraj-api-2026
+          BARQ_ADMIN_GITHUB_ALLOWED_REPOSITORIES: alhmdanybdhmhmwd-cmd/siraj-api-2026
+          BARQ_ADMIN_GITHUB_REF: ${{ inputs.ref }}
+          BARQ_ADMIN_GITHUB_START_AFTER: ${{ inputs.start_after }}
+          BARQ_ADMIN_GITHUB_TOKEN: ${{ github.token }}
+          BARQ_ADMIN_API_URL: ${{ secrets.BARQ_ADMIN_PREVIEW_API_URL }}
+          BARQ_ADMIN_OWNER_TOKEN: ${{ secrets.BARQ_ADMIN_PREVIEW_OWNER_TOKEN }}
+        run: |
+          set -euo pipefail
+          node ingest_github_repo.mjs | tee /tmp/barq-knowledge-result.json
+          node --input-type=module - <<'NODE'
+          import fs from "node:fs";
+          const result = JSON.parse(fs.readFileSync("/tmp/barq-knowledge-result.json", "utf8"));
+          const lines = [
+            "## BARQ Brain Preview knowledge batch",
+            "",
+            "- Repository: `" + result.repository + "`",
+            "- Indexed revision: `" + result.revision + "`",
+            "- Files/chunks indexed in this batch: **" + result.indexed + "**",
+            "- Files skipped: **" + result.skipped + "**",
+            "- Eligible files in repository: **" + result.eligibleFiles + "**",
+            "- Processed through cursor: **" + result.processedFiles + "**",
+            "- Remaining eligible files after cursor: **" + result.remainingFiles + "**",
+            "- Complete: **" + result.complete + "**",
+            "- Next cursor: `" + (result.nextStartAfter || "(none)") + "`",
+            "",
+            "For the next batch, dispatch this workflow again and paste the exact next cursor into `start_after`."
+          ];
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
+          console.log(JSON.stringify(result));
+          NODE
