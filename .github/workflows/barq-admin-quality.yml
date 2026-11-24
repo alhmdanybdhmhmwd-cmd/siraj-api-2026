@@ -271,6 +271,7 @@ jobs:
           assert "barq-admin-preview" in workflow and "workers" in workflow and ".dev" in workflow
           assert "alhmdanybdhmhmwd-cmd/siraj-api-2026" in workflow
           assert "ref: ${{ github.ref }}" in workflow
+          assert "BARQ_ADMIN_GITHUB_REF: ${{ inputs.ref }}" in workflow
           assert "wrangler deploy" not in workflow.lower()
           assert "contents: write" not in workflow
           print("Knowledge ingestion is manual-only, read-only on GitHub, allowlisted to this repository, and guarded to the isolated Preview host.")
