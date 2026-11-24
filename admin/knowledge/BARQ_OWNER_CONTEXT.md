@@ -271,3 +271,12 @@ The owner explicitly requires the following policy to be part of the build, deve
 6. **Safety:** never merge to production, deploy production, mutate production data, rotate/access secrets, spend money or perform irreversible actions without separate action-specific owner approval. No update is automatically downloaded or installed without the owner's explicit consent.
 
 This is an accepted roadmap requirement, not a claim that both apps already implement the complete approval UI, updater, performance instrumentation or release pipeline. Track implementation and acceptance tests separately for BARQ Admin and BARQ Messenger.
+
+### 10.13 Proactive discovery gate before consumer BARQ app updates (2026-11-25)
+
+- If BARQ Brain discovers a verified defect or worthwhile improvement that requires changing and releasing the installed consumer **BARQ (برق)** app while inspecting code, reviewing work, running CI/builds, monitoring or diagnosing issues, it must stop before implementation and ask the owner for explicit permission to begin that specific BARQ update.
+- The proposal must state the evidence and verification, why a consumer-app update is needed (rather than a server-only fix), affected screens/modules/APIs, proposed change, benefits, urgency, risks, validation/performance plan and expected release impact. Invite the owner to add or change scope.
+- Until explicit approval, do not modify consumer-app code, create its update branch/PR, or trigger its update build for that finding. Safe investigation and unrelated already-approved work may continue.
+- If the issue is entirely server-side, clearly explain that no consumer app update is required and follow the applicable server-side approval/safety rules.
+- Approval to investigate or to start implementation is not approval to download/install. The separate pre-download consent and measurable smoothness/performance gate in section 10.12 still apply.
+- This gate is in addition to (not a replacement for) the existing proposal-before-each-batch and separate pre-download approval rules. BARQ and BARQ Admin remain separate products and release channels.
