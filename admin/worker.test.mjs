@@ -430,6 +430,15 @@ test("BARQ Brain preserves long canonical owner context instead of truncating it
   assert.ok(messages[1].content.includes(marker));
 });
 
+test("knowledge ranking puts fresh evidence ahead of stronger stale historical matches", () => {
+  const ranked = rankKnowledgeChunks([
+    { title: "BARQ messaging architecture", source_path: "docs/old.md", content: "messages delivery", is_stale: 1 },
+    { title: "General notes", source_path: "docs/current.md", content: "messages", is_stale: 0 }
+  ], "BARQ messaging architecture", 2);
+  assert.equal(ranked[0].source_path, "docs/current.md");
+  assert.equal(ranked[1].source_path, "docs/old.md");
+});
+
 test("knowledge ranking prefers title/path evidence and safely bounds result count", () => {
   const chunks = [
     { title: "General notes", source_path: "docs/other.md", content: "BARQ messages" },
