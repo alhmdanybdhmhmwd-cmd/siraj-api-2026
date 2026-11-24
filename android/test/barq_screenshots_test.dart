@@ -40,16 +40,18 @@ void main() {
       await tester.pump(const Duration(milliseconds: 900));
       final boundary = boundaryKey.currentContext!.findRenderObject()
           as RenderRepaintBoundary;
-      final image = await boundary.toImage(pixelRatio: 1);
-      try {
-        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-        if (bytes == null) throw StateError('PNG encoding failed for $name');
-        await File('${output.path}/$name.png')
-            .writeAsBytes(bytes.buffer.asUint8List(), flush: true);
-        print('BARQ_SCREENSHOT_SAVED: $name');
-      } finally {
-        image.dispose();
-      }
+      await tester.runAsync(() async {
+        final image = await boundary.toImage(pixelRatio: 1);
+        try {
+          final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+          if (bytes == null) throw StateError('PNG encoding failed for $name');
+          await File('${output.path}/$name.png')
+              .writeAsBytes(bytes.buffer.asUint8List(), flush: true);
+          print('BARQ_SCREENSHOT_SAVED: $name');
+        } finally {
+          image.dispose();
+        }
+      });
     }
 
     Future<void> capture(String name, Widget screen) async {
