@@ -39,7 +39,10 @@ export async function fetchWithRetry(url, options = {}, dependencies = {}) {
       const retryable = response.status === 408 || response.status === 425 ||
         response.status === 429 || response.status >= 500;
       if (!retryable || attempt === maxAttempts) return response;
-      const retryAfter = Number(response.headers?.get?.("retry-after"));
+      const retryAfterHeader = response.headers?.get?.("retry-after");
+      const retryAfter = retryAfterHeader == null || retryAfterHeader.trim() === ""
+        ? Number.NaN
+        : Number(retryAfterHeader);
       const delay = Number.isFinite(retryAfter) && retryAfter >= 0
         ? Math.min(retryAfter * 1000, 5000)
         : Math.min(250 * (2 ** (attempt - 1)), 2000);
