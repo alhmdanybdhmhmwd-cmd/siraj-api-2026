@@ -19,6 +19,7 @@ const demoFriend = <String, dynamic>{
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  var surfaceConverted = false;
 
   testWidgets('capture BARQ actual UI screens using isolated demo fixtures', (tester) async {
     tester.view.physicalSize = const Size(432, 960);
@@ -28,6 +29,10 @@ void main() {
 
     Future<void> capture(String name, Widget screen) async {
       await tester.pumpWidget(barq.SirajApp(homeOverride: screen));
+      if (!surfaceConverted) {
+        await binding.convertFlutterSurfaceToImage();
+        surfaceConverted = true;
+      }
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 900));
       await binding.takeScreenshot(name);
