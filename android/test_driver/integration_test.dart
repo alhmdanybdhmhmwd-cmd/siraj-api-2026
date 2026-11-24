@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:integration_test/integration_test_driver_extended.dart';
 
 Future<void> main() async {
-  final directory = Directory('artifacts/barq-ui-screenshots');
+  final directory = Directory('../artifacts/barq-ui-screenshots');
   await directory.create(recursive: true);
   var written = 0;
 
