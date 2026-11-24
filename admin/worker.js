@@ -206,10 +206,15 @@ export function validateApprovalDecision(value) {
 
 export function buildAssistantMessages(task, workspace, knowledge = []) {
   const context = knowledge.map((item, index) => {
-    const reference = String(item.source_path || "unknown") +
+    const sourcePath = String(item.source_path || "unknown");
+    const reference = sourcePath +
       (item.source_revision ? " @ " + item.source_revision : "");
+    const contextLimit = sourcePath.includes("BARQ_OWNER_CONTEXT.md") ? 16000
+      : sourcePath.includes("BARQ_BRAIN_MASTER_INDEX_AR.md") ? 8000
+      : sourcePath.includes("PHASE2_SCOPE.md") ? 7000
+      : 3000;
     return "[" + (index + 1) + "] " + String(item.title || "") +
-      " (" + reference + ")\n" + String(item.content || "").slice(0, 3000);
+      " (" + reference + ")\n" + String(item.content || "").slice(0, contextLimit);
   }).join("\n\n");
   return [
     {
@@ -416,6 +421,11 @@ export function validateKnowledgeInput(value) {
   return { ok: true, value: { sourceType, sourcePath, sourceRevision, title, content } };
 }
 
+export function isContinuationRequest(query) {
+  return /(?:واصل|كمل|استمر|ابن[ِ ]?نفسك|تابع|continue|resume|pick up|build yourself)/iu
+    .test(String(query || ""));
+}
+
 export function knowledgeSearchTerms(query, limit = 12) {
   const safeLimit = Number.isSafeInteger(limit) ? Math.max(1, Math.min(20, limit)) : 12;
   return [...new Set((String(query || "").toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []))]
@@ -471,7 +481,24 @@ async function retrieveKnowledgeForTask(env, workspaceId, query) {
     ).bind(workspaceId);
   }
   const rows = await statement.all();
-  return rankKnowledgeChunks(rows.results || [], query, 6);
+  const ranked = rankKnowledgeChunks(rows.results || [], query, 8);
+  if (!isContinuationRequest(query)) return ranked.slice(0, 6);
+
+  // Always include the compact navigation map when resuming, even if the
+  // short user command does not contain the document's title words.
+  const pinned = await env.ADMIN_DB.prepare(
+    "SELECT source_type, source_path, source_revision, title, content, updated_at " +
+    "FROM admin_project_knowledge WHERE workspace_id = ? " +
+    "AND source_path LIKE ? ORDER BY updated_at DESC LIMIT 2"
+  ).bind(workspaceId, "%BARQ_BRAIN_MASTER_INDEX_AR.md%").all();
+  const combined = [...(pinned.results || []), ...ranked];
+  const seen = new Set();
+  return combined.filter(item => {
+    const key = String(item.source_path || "") + "@" + String(item.source_revision || "");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 8);
 }
 
 export function validateAdminAccessClaims(claims, now = Math.floor(Date.now() / 1000)) {
