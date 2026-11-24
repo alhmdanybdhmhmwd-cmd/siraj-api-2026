@@ -1,12 +1,6 @@
 name: BARQ Admin Preview Deploy
 
 on:
-  push:
-    branches:
-      - barq-admin-foundation-2026-11-23
-    paths:
-      - "admin/**"
-      - ".github/workflows/barq-admin-preview-deploy.yml"
   workflow_dispatch:
 
 permissions:
