@@ -457,14 +457,19 @@ export function isContinuationRequest(query) {
 }
 
 export function knowledgeMatchesProject(item, currentProject) {
-  const sourcePath = String(item?.source_path || "").replace(/\\\\/g, "/").toLowerCase();
+  const sourcePath = String(item?.source_path || "").toLowerCase();
   const fileName = sourcePath.split("/").pop();
   // These curated owner/navigation records intentionally describe both products.
   if (fileName === "barq_owner_context.md" || fileName === "barq_brain_master_index_ar.md") return true;
   const selectedProject = String(currentProject || "BARQ").toLowerCase().includes("admin")
     ? "admin" : "barq";
-  if (/(^|\\/)admin\\//.test(sourcePath)) return selectedProject === "admin";
-  if (/(^|\\/)(android|src|api|worker|workers)\\//.test(sourcePath)) return selectedProject === "barq";
+  if (sourcePath.startsWith("admin/") || sourcePath.includes("/admin/")) {
+    return selectedProject === "admin";
+  }
+  const segments = sourcePath.split("/");
+  if (segments.some(segment => ["android", "src", "api", "worker", "workers"].includes(segment))) {
+    return selectedProject === "barq";
+  }
   // Root-level docs and shared CI/configuration remain visible to both projects.
   return true;
 }
