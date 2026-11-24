@@ -258,6 +258,23 @@ jobs:
           assert "siraj-production" not in serialized
           print("Admin Preview Wrangler template is valid TOML and isolated from production identifiers.")
           PY
+      - name: Validate Preview knowledge-ingestion workflow safety
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          workflow = Path(".github/workflows/barq-admin-knowledge-ingest.yml").read_text()
+          assert "workflow_dispatch:" in workflow
+          assert "pull_request:" not in workflow
+          assert "permissions:\\n  contents: read" in workflow
+          assert "BARQ_ADMIN_PREVIEW_API_URL" in workflow
+          assert "BARQ_ADMIN_PREVIEW_OWNER_TOKEN" in workflow
+          assert "barq-admin-preview" in workflow and "workers\\\\.dev" in workflow
+          assert "alhmdanybdhmhmwd-cmd/siraj-api-2026" in workflow
+          assert "ref: ${{ github.ref }}" in workflow
+          assert "wrangler deploy" not in workflow.lower()
+          assert "contents: write" not in workflow
+          print("Knowledge ingestion is manual-only, read-only on GitHub, allowlisted to this repository, and guarded to the isolated Preview host.")
+          PY
 
   admin-mobile-quality:
     runs-on: ubuntu-latest
