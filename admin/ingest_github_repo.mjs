@@ -170,7 +170,7 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
   );
   if (tree.truncated) throw new Error("repository_tree_truncated_refusing_partial_index");
   let indexed = 0;
-  let skipped = skippedOversize;
+  let skipped = 0;
   const candidateEntries = (tree.tree || []).filter(item =>
     item.type === "blob" && shouldIndexPath(item.path)
   );
@@ -184,6 +184,7 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
     entry.size > 120000 && entry.path > startAfter &&
     (!lastSelectedPath || entry.path <= lastSelectedPath || batch.remaining === 0)
   ).length;
+  skipped = skippedOversize;
   for (const entry of selectedEntries) {
     if (entry.type !== "blob" || !shouldIndexPath(entry.path) || entry.size > 120000) {
       skipped++;
