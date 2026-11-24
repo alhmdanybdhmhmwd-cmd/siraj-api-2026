@@ -367,3 +367,18 @@ test("BARQ Brain chat input is bounded and conversation-scoped", () => {
   assert.equal(validateBrainChatInput({ message: "hello", conversationId: "bad-id" }).ok, false);
   assert.equal(validateBrainChatInput(null).ok, false);
 });
+
+
+test("BARQ Brain recognizes the owner's approved autonomous development-toolchain scope without overstating live execution", () => {
+  const messages = buildAssistantMessages(
+    { title: "واصل", description: "Continue building BARQ Admin and BARQ" },
+    { current_project: "BARQ", current_phase: "development-toolchain" },
+    []
+  );
+  const system = messages[0].content;
+  assert.match(system, /OWNER AUTHORIZATION UPDATE/);
+  assert.match(system, /isolated-branch edit\/repair tools/);
+  assert.match(system, /Production deployment, merge/);
+  assert.match(system, /not an autonomous code editor/);
+  assert.match(system, /phone-to-PR-to-CI-to-resume loop passes/);
+});
