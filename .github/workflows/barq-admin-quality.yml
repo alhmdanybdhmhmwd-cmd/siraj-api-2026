@@ -335,6 +335,7 @@ jobs:
           printf "flutter.sdk=%s\nsdk.dir=%s\n" "$FLUTTER_ROOT" "$sdk_path" > android/local.properties
           cd android
           export BARQ_GOOGLE_OIDC_CLIENT_ID="1234567890-test.apps.googleusercontent.com"
+          gradle_ok=0
           for attempt in 1 2 3; do
             if bash gradlew :app:processDebugManifest --no-daemon --console=plain --stacktrace --info; then
               exit 0
@@ -344,10 +345,7 @@ jobs:
               sleep 20
             fi
           done
-          if [ "$attempt" -eq 3 ]; then
-            echo "AppAuth manifest validation failed after 3 attempts." >&2
-            exit 1
-          fi
+          test "$gradle_ok" -eq 1 || { echo "AppAuth manifest validation failed after 3 attempts." >&2; exit 1; }
           manifest="$(find ../build/app/intermediates -path '*merged_manifest*' -name AndroidManifest.xml -print -quit)"
           test -n "$manifest"
           grep -Fq 'com.googleusercontent.apps.1234567890' "$manifest"
