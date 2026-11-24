@@ -147,3 +147,16 @@ Say exactly what is complete, what has only passed CI, what is blocked, and what
 - The Android AppAuth Gradle step was also corrected so it retries transient failures and checks the merged manifest after Gradle succeeds; latest mobile job must verify it.
 - Backend tests on the immediately preceding revision `d7ed2624c1fc8b64954f960a924a31a3a22acab2` passed (run `45311856812`). A fresh backend check for `84cd4b6f2dcc16cabe8bfa6ea1a400aef7ec7f22` is not yet confirmed.
 - Autonomous GitHub source editing, test/build execution by BARQ Brain, automatic PR creation, and phone-to-server resume are still NOT implemented or acceptance-tested. The current queue still produces AI drafts/checkpoints only.
+
+
+## Continuation checkpoint — 2026-11-24 14:15 UTC
+
+- Current branch head before this checkpoint note: `ca74381ee921bf93dc5405bbeea75ce8217b57b5`.
+- Improved BARQ Brain continuation retrieval in `admin/worker.js`: every Arabic/English resume request now pins the first canonical `BARQ_OWNER_CONTEXT.md` chunk and the first `BARQ_BRAIN_MASTER_INDEX_AR.md` chunk before ordinary keyword-ranked sources. This ensures the owner's accepted/rejected/postponed decisions and project navigation map are not crowded out by recent keyword matches.
+- Added exported, bounded/deduplicating helper `mergePinnedKnowledge` and regression test proving canonical sources stay first, duplicates are removed, and the context result remains capped.
+- Code commits: `45df486a59ee312f500496ea198a38d44d40211b` (retrieval implementation) and `ca74381ee921bf93dc5405bbeea75ce8217b57b5` (tests).
+- Exact-revision Admin quality run `45411505375`: Admin Worker/unit/schema/task/checkpoint/Preview-ingestion-safety job passed. Android mobile-quality job is still running at Flutter setup; do not call Android CI complete until final result.
+- Exact-revision Backend tests run `45411526067` completed successfully.
+- Preview deploy run `45411505641` failed safely at Preview-only configuration validation. Required GitHub Environment values remain unavailable; no deploy or production changes occurred.
+- Live repository ingestion into Admin Preview D1 is still blocked by the missing dedicated Preview configuration/owner credentials. No claim of complete repository knowledge is permitted.
+- Continue next: confirm the mobile-quality job result; keep all tests cloud-side; do not ask the owner to use the Galaxy S7 yet. Resolve Preview configuration only with owner-provided/authorized isolated resources; then run the resumable indexer to `complete=true` and validate retrieval across both products. Autonomous GitHub edit/test/build execution and phone-to-server continuation remain unimplemented until the secure runner and end-to-end acceptance tests pass.
