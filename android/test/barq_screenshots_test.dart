@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use, avoid_print
+
 import 'dart:io';
 import 'dart:ui' as ui;
 
