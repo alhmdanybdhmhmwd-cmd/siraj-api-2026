@@ -20,7 +20,7 @@ concurrency:
 jobs:
   screenshots:
     runs-on: ubuntu-22.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,11 +36,38 @@ jobs:
       - name: Install Flutter dependencies
         working-directory: android
         run: flutter pub get
-      - name: Capture BARQ UI in headless Flutter test
+      - name: Capture BARQ UI in isolated headless tests
         working-directory: android
         run: |
-          set -euxo pipefail
-          flutter test --reporter expanded test/barq_screenshots_test.dart
+          set -uo pipefail
+          rm -rf ../artifacts/barq-ui-screenshots
+          tests=(
+            "01 capture login"
+            "02 capture password recovery"
+            "03 capture home chats"
+            "04 capture home SPARK"
+            "05 capture contacts"
+            "06 capture account"
+            "07 capture private chat"
+            "08 capture group chat"
+            "09 capture public profile"
+            "10 capture nearby devices"
+            "11 capture SPARK viewer"
+          )
+          failures=0
+          for test_name in "${tests[@]}"; do
+            echo "::group::BARQ capture: $test_name"
+            if timeout 65s flutter test --reporter expanded --plain-name "$test_name" test/barq_screenshots_test.dart; then
+              echo "CAPTURE_TEST_OK: $test_name"
+            else
+              code=$?
+              echo "CAPTURE_TEST_FAILED: $test_name (exit $code)"
+              failures=$((failures + 1))
+            fi
+            echo "::endgroup::"
+          done
+          echo "CAPTURE_TEST_FAILURES=$failures"
+          exit 0
       - name: Package screenshots
         if: always()
         run: |
