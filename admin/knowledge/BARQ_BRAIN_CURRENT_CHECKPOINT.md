@@ -91,3 +91,11 @@ Say exactly what is complete, what has only passed CI, what is blocked, and what
 - The optimized ARM64 release build run `45308936229` remains in progress at the APK build step at the last poll; no APK artifact or final size is available yet.
 - The previous full Admin quality run `45308948107` passed, including AppAuth wiring and Kotlin compilation, but it predates the latest indexer/test changes.
 - No live D1 ingestion or complete repo-coverage proof exists yet; the expanded filters improve what can be indexed but do not themselves ingest anything.
+
+## Latest regression repair (2026-11-24)
+
+- A backend-wide CI run exposed one regression in the new indexer secret-scanning test: the matcher detected assignment-style secret fields but did not recognize JSON-quoted property names.
+- Fixed the matcher to accept quoted JSON keys before the colon, retaining the existing provider-specific credential patterns.
+- Fix committed as `660bbdb7d616499a3ffb04d456e43b3b6f8fc1cd`.
+- The failing test was isolated to the new synthetic JSON private-key sample (341/342 tests passed); no production backend behavior was implicated by the failure.
+- CI for this repair is awaiting confirmation; do not report the fix as passed until a fresh run completes.
