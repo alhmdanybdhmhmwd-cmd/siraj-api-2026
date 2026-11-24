@@ -512,7 +512,7 @@ async function retrieveKnowledgeForTask(env, workspaceId, query) {
     statement = env.ADMIN_DB.prepare(sql).bind(...bindings);
   } else {
     statement = env.ADMIN_DB.prepare(
-      "SELECT source_type, source_path, source_revision, title, content, updated_at " +
+      "SELECT source_type, source_path, source_revision, title, content, is_stale, updated_at " +
       "FROM admin_project_knowledge WHERE workspace_id = ? ORDER BY is_stale ASC, updated_at DESC LIMIT 100"
     ).bind(workspaceId);
   }
@@ -526,12 +526,12 @@ async function retrieveKnowledgeForTask(env, workspaceId, query) {
     env.ADMIN_DB.prepare(
       "SELECT source_type, source_path, source_revision, title, content, is_stale, updated_at " +
       "FROM admin_project_knowledge WHERE workspace_id = ? AND source_path LIKE ? " +
-      "ORDER BY source_path ASC LIMIT 1"
+      "ORDER BY is_stale ASC, source_path ASC LIMIT 1"
     ).bind(workspaceId, "%BARQ_OWNER_CONTEXT.md%").all(),
     env.ADMIN_DB.prepare(
-      "SELECT source_type, source_path, source_revision, title, content, updated_at " +
+      "SELECT source_type, source_path, source_revision, title, content, is_stale, updated_at " +
       "FROM admin_project_knowledge WHERE workspace_id = ? AND source_path LIKE ? " +
-      "ORDER BY source_path ASC LIMIT 1"
+      "ORDER BY is_stale ASC, source_path ASC LIMIT 1"
     ).bind(workspaceId, "%BARQ_BRAIN_MASTER_INDEX_AR.md%").all()
   ]);
   return mergePinnedKnowledge(
