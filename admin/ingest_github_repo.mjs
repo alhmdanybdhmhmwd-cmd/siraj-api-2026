@@ -19,7 +19,7 @@ const SECRET_CONTENT = [
   /npm_[A-Za-z0-9]{30,}/,
   /pypi-[A-Za-z0-9_-]{50,}/,
   /SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}/,
-  /(?:api[_-]?key|private[_-]?key|signing[_-]?key|secret|access[_-]?token|refresh[_-]?token|client[_-]?secret|auth[_-]?token|password)\s*[:=]\s*["'][^"']{12,}["']/i
+  /(?:api[_-]?key|private[_-]?key|signing[_-]?key|secret|access[_-]?token|refresh[_-]?token|client[_-]?secret|auth[_-]?token|password)["']?\s*[:=]\s*["'][^"']{12,}["']/i
 ];
 
 export function normalizeAllowedRepositories(value) {
