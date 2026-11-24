@@ -25,6 +25,24 @@ function decodeBase64url(value) {
   return Uint8Array.from(binary, char => char.charCodeAt(0));
 }
 
+export function validateIdempotencyKey(value) {
+  if (value === null || value === undefined || value === "") {
+    return { ok: true, value: null };
+  }
+  if (typeof value !== "string" || value.length < 8 || value.length > 128 ||
+      !/^[A-Za-z0-9._:-]+$/.test(value)) {
+    return { ok: false, error: "invalid_idempotency_key" };
+  }
+  return { ok: true, value };
+}
+
+export function idempotentTaskMatches(existing, requested) {
+  return Boolean(existing && requested &&
+    existing.title === requested.title &&
+    (existing.description || "") === requested.description &&
+    existing.priority === requested.priority);
+}
+
 export function validateTaskInput(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return { ok: false, error: "invalid_body" };
@@ -933,7 +951,9 @@ async function handle(request, env) {
     const parsed = validateTaskInput(body);
     if (!parsed.ok) return response({ error: parsed.error }, 400, allowedOrigin);
     const id = crypto.randomUUID();
-    const idempotencyKey = (request.headers.get("X-Idempotency-Key") || "").slice(0, 128) || null;
+    const idempotency = validateIdempotencyKey(request.headers.get("X-Idempotency-Key"));
+    if (!idempotency.ok) return response({ error: idempotency.error }, 400, allowedOrigin);
+    const idempotencyKey = idempotency.value;
     try {
       await env.ADMIN_DB.prepare(`
         INSERT INTO admin_tasks (id, workspace_id, created_by, title, description, priority, idempotency_key)
@@ -943,9 +963,12 @@ async function handle(request, env) {
     } catch (error) {
       if (idempotencyKey) {
         const existing = await env.ADMIN_DB.prepare(
-          "SELECT id, title, status, checkpoint_version FROM admin_tasks WHERE workspace_id = ? AND idempotency_key = ?"
+          "SELECT id, title, description, priority, status, checkpoint_version FROM admin_tasks WHERE workspace_id = ? AND idempotency_key = ?"
         ).bind(workspace, idempotencyKey).first();
         if (existing) {
+          if (!idempotentTaskMatches(existing, parsed.value)) {
+            return response({ error: "idempotency_key_reused" }, 409, allowedOrigin);
+          }
           let dispatched = false;
           if (existing.status === "queued" && env.ADMIN_TASK_QUEUE && env.ADMIN_AI) {
             await env.ADMIN_TASK_QUEUE.send({ taskId: existing.id, workspaceId: workspace });
