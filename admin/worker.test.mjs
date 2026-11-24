@@ -1,6 +1,28 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, validateAdminAccessClaims, processAdminDeadLetterMessage, renewAdminTaskLease } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, validateAdminAccessClaims, processAdminDeadLetterMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches } from "./worker.js";
+
+test("idempotency keys are bounded and cannot be silently truncated", () => {
+  assert.deepEqual(validateIdempotencyKey(null), { ok: true, value: null });
+  assert.deepEqual(validateIdempotencyKey("1700000000000-12345"), {
+    ok: true, value: "1700000000000-12345"
+  });
+  assert.equal(validateIdempotencyKey("short").error, "invalid_idempotency_key");
+  assert.equal(validateIdempotencyKey("x".repeat(129)).error, "invalid_idempotency_key");
+  assert.equal(validateIdempotencyKey("bad key 123").error, "invalid_idempotency_key");
+  assert.equal(validateIdempotencyKey("bad\\nkey123").error, "invalid_idempotency_key");
+});
+
+test("idempotency keys cannot be reused for a different task payload", () => {
+  const existing = { title: "Build BARQ", description: "Phase 2", priority: "high" };
+  assert.equal(idempotentTaskMatches(existing, existing), true);
+  assert.equal(idempotentTaskMatches(existing, {
+    title: "Build BARQ", description: "Different payload", priority: "high"
+  }), false);
+  assert.equal(idempotentTaskMatches(existing, {
+    title: "Build BARQ", description: "Phase 2", priority: "urgent"
+  }), false);
+});
 
 test("task input is normalized and bounded", () => {
   assert.deepEqual(validateTaskInput({ title: "  Prepare global launch  ", priority: "high" }), {
