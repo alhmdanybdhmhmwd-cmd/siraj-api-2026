@@ -12,6 +12,8 @@ test("repository ingestion allowlists project files and excludes secrets/build o
   assert.equal(shouldIndexPath("admin/mobile/web/styles.css"), true);
   assert.equal(shouldIndexPath("admin/mobile/package.json"), true);
   assert.equal(shouldIndexPath("admin/mobile/tsconfig.json"), true);
+  assert.equal(shouldIndexPath("admin/mobile/android/app/src/main/kotlin/MainActivity.kt"), true);
+  assert.equal(shouldIndexPath("admin/mobile/android/app/src/main/java/Bridge.java"), true);
   assert.equal(shouldIndexPath("admin/mobile/android/local.properties"), false);
   assert.equal(shouldIndexPath("admin/mobile/android/key.properties"), false);
   assert.equal(shouldIndexPath("infra/production.tfvars"), false);
