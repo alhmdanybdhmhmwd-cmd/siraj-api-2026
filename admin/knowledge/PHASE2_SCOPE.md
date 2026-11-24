@@ -94,3 +94,11 @@ This is a source/documentation and prompt improvement only. It does NOT prove th
 The owner also directed continued preparation of a smaller Admin APK for the Galaxy S7. The current controlled build is ARM64-only; its final size and successful artifact upload must be confirmed from workflow evidence. Physical installation, Google sign-in, and live Admin API use remain untested on the S7.
 
 The owner's desired "continue" experience is the product target. Durable server-side background execution, repository editing, test/build orchestration and autonomous resume must be reported as unavailable until each is implemented and tested end-to-end. Never imply that a prompt or knowledge document alone grants those capabilities.
+
+## Verified implementation progress — 2026-11-25
+
+- The guarded indexer now retries transient GitHub API reads as well as Admin knowledge API writes, with bounded retry/backoff behavior.
+- Each ingestion result now includes a repository coverage report grouped by product domain and file extension, with explicit excluded-path reasons and oversized-file counts. The GitHub Actions summary publishes these breakdowns for each batch.
+- Regression tests cover coverage classification and transient GitHub API retries.
+- The latest observed Admin Quality run before these coverage changes passed its Admin Worker/unit/schema/workspace checks; mobile quality was still compiling Android Kotlin. The coverage change itself must pass its new CI run before it is treated as verified.
+- Still not complete: live Preview ingestion and retrieval, multi-batch completion against the actual isolated D1 store, source freshness reconciliation for deleted/renamed files, and representative live answer/citation acceptance tests. Do not claim Phase 2 complete until these are evidenced.
