@@ -1,6 +1,5 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:barq/main.dart' as barq;
 
@@ -29,6 +28,9 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     Future<void> capture(String name, Widget screen) async {
+      // Visible in GitHub Actions logs: identifies the exact page if capture stalls.
+      // ignore: avoid_print
+      print('BARQ_SCREEN_START:$name');
       await tester.pumpWidget(barq.SirajApp(homeOverride: screen));
       if (!surfaceConverted) {
         await binding.convertFlutterSurfaceToImage();
@@ -37,6 +39,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 900));
       await binding.takeScreenshot(name);
+      // ignore: avoid_print
+      print('BARQ_SCREEN_DONE:$name');
     }
 
     await capture('01-login', const barq.LoginPage());
