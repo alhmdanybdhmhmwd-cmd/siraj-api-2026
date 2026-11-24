@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - "barq-admin-foundation-2026-11-23"
+      - "barq-admin-s7-optimized-2026-11-24"
     paths:
       - "admin/**"
       - ".github/workflows/barq-admin-quality.yml"
@@ -26,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: barq-admin-foundation-2026-11-23
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
