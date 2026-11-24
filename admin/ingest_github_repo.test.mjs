@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl, summarizeIndexCoverage, selectIndexBatch, normalizeAllowedRepositories, ingestRepository } from "./ingest_github_repo.mjs";
+import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl, summarizeIndexCoverage, selectIndexBatch, normalizeAllowedRepositories, selectIndexBatchWithSkips, ingestRepository } from "./ingest_github_repo.mjs";
 
 test("repository ingestion allowlists project files and excludes secrets/build output", () => {
   assert.equal(shouldIndexPath("docs/BARQ_PRODUCT.md"), true);
@@ -89,4 +89,28 @@ test("repository ingestion rejects repositories outside the approved scope", asy
     ownerToken: "short-lived-test-token",
     allowedRepositories: ["alhmdanybdhmhmwd-cmd/siraj-api-2026"]
   }), /repository_not_owner_approved/);
+});
+
+test("knowledge indexing counts oversized files as skipped and resumes without losing coverage", () => {
+  const entries = [
+    { type: "blob", path: "a.md", size: 100 },
+    { type: "blob", path: "b.md", size: 130000 },
+    { type: "blob", path: "c.md", size: 100 },
+    { type: "blob", path: "d.md", size: 150000 },
+    { type: "blob", path: "node_modules/pkg/index.js", size: 20 }
+  ];
+  const first = selectIndexBatchWithSkips(entries, "", 1, 120000);
+  assert.deepEqual(first.selected.map(item => item.path), ["a.md"]);
+  assert.equal(first.eligibleFiles, 4);
+  assert.equal(first.eligibleFilesAfterCursor, 4);
+  assert.equal(first.processedFiles, 1);
+  assert.equal(first.skippedOversizeFiles, 0);
+  assert.equal(first.remaining, 1);
+
+  const second = selectIndexBatchWithSkips(entries, first.nextStartAfter, 1, 120000);
+  assert.deepEqual(second.selected.map(item => item.path), ["c.md"]);
+  assert.equal(second.processedFiles, 3);
+  assert.equal(second.skippedOversizeFiles, 2);
+  assert.equal(second.remaining, 0);
+  assert.equal(second.eligibleFilesAfterCursor, 3);
 });
