@@ -102,3 +102,11 @@ The owner's desired "continue" experience is the product target. Durable server-
 - Regression tests cover coverage classification and transient GitHub API retries.
 - The latest observed Admin Quality run before these coverage changes passed its Admin Worker/unit/schema/workspace checks; mobile quality was still compiling Android Kotlin. The coverage change itself must pass its new CI run before it is treated as verified.
 - Still not complete: live Preview ingestion and retrieval, multi-batch completion against the actual isolated D1 store, source freshness reconciliation for deleted/renamed files, and representative live answer/citation acceptance tests. Do not claim Phase 2 complete until these are evidenced.
+
+## Freshness reconciliation implementation — 2026-11-25
+
+- Added Admin-only migration `0008_knowledge_freshness.sql` with `last_seen_revision` and `is_stale`; historical rows are retained.
+- Each successfully indexed chunk records the latest commit revision it was seen in and is reactivated as fresh.
+- The indexer calls `POST /v1/knowledge/reconcile` only when the current immutable revision has no remaining eligible batches. The endpoint marks repository-prefixed rows not seen in that revision as stale; it does not delete historical evidence.
+- Brain retrieval prefers fresh sources and explicitly labels stale evidence as historical/verification-required in the model context.
+- Added tests for complete-revision validation, workspace-authenticated reconciliation, no-history-deletion behavior, and final-batch-only reconciliation. CI must pass before this is considered verified; live Preview migration/ingestion is still required.
