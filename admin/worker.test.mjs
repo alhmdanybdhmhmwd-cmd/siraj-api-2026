@@ -112,7 +112,7 @@ test("BARQ Brain prompts include current workspace context and no execution auth
     [{ title: "Old design", source_path: "repo/docs/design.md", source_revision: "old-commit",
       content: "Historical design evidence", is_stale: 1 }]
   );
-  assert.match(staleMessages[0].content, /STALE SOURCE — historical evidence; verify before treating as current/);
+  assert.match(staleMessages[1].content, /STALE SOURCE — historical evidence; verify before treating as current/);
   assert.match(messages[0].content, /no authority to publish/);
   assert.match(messages[0].content, /Never claim an action was performed/);
   assert.match(messages[0].content, /explicitly authorized PHASE 2/);
