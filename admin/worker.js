@@ -207,8 +207,9 @@ export function validateApprovalDecision(value) {
 export function buildAssistantMessages(task, workspace, knowledge = []) {
   const context = knowledge.map((item, index) => {
     const sourcePath = String(item.source_path || "unknown");
+    const freshness = item.is_stale ? " [STALE SOURCE — historical evidence; verify before treating as current]" : "";
     const reference = sourcePath +
-      (item.source_revision ? " @ " + item.source_revision : "");
+      (item.source_revision ? " @ " + item.source_revision : "") + freshness;
     const contextLimit = sourcePath.includes("BARQ_OWNER_CONTEXT.md") ? 16000
       : sourcePath.includes("BARQ_BRAIN_MASTER_INDEX_AR.md") ? 8000
       : sourcePath.includes("PHASE2_SCOPE.md") ? 7000
@@ -505,14 +506,14 @@ async function retrieveKnowledgeForTask(env, workspaceId, query) {
       const pattern = "%" + token + "%";
       bindings.push(pattern, pattern, pattern);
     }
-    const sql = "SELECT source_type, source_path, source_revision, title, content, updated_at " +
+    const sql = "SELECT source_type, source_path, source_revision, title, content, is_stale, updated_at " +
       "FROM admin_project_knowledge WHERE workspace_id = ? AND (" +
-      clauses.join(" OR ") + ") ORDER BY updated_at DESC LIMIT 500";
+      clauses.join(" OR ") + ") ORDER BY is_stale ASC, updated_at DESC LIMIT 500";
     statement = env.ADMIN_DB.prepare(sql).bind(...bindings);
   } else {
     statement = env.ADMIN_DB.prepare(
       "SELECT source_type, source_path, source_revision, title, content, updated_at " +
-      "FROM admin_project_knowledge WHERE workspace_id = ? ORDER BY updated_at DESC LIMIT 100"
+      "FROM admin_project_knowledge WHERE workspace_id = ? ORDER BY is_stale ASC, updated_at DESC LIMIT 100"
     ).bind(workspaceId);
   }
   const rows = await statement.all();
@@ -523,7 +524,7 @@ async function retrieveKnowledgeForTask(env, workspaceId, query) {
   // short user command does not contain the document's title words.
   const [ownerContext, masterIndex] = await Promise.all([
     env.ADMIN_DB.prepare(
-      "SELECT source_type, source_path, source_revision, title, content, updated_at " +
+      "SELECT source_type, source_path, source_revision, title, content, is_stale, updated_at " +
       "FROM admin_project_knowledge WHERE workspace_id = ? AND source_path LIKE ? " +
       "ORDER BY source_path ASC LIMIT 1"
     ).bind(workspaceId, "%BARQ_OWNER_CONTEXT.md%").all(),
@@ -1243,7 +1244,7 @@ async function handle(request, env) {
   const knowledgeMatch = url.pathname.match(/^\/v1\/knowledge\/([0-9a-f-]{36})$/i);
   if (request.method === "GET" && knowledgeMatch) {
     const source = await env.ADMIN_DB.prepare(`
-      SELECT id, source_type, source_path, source_revision, title, content, updated_at
+      SELECT id, source_type, source_path, source_revision, title, content, last_seen_revision, is_stale, updated_at
       FROM admin_project_knowledge WHERE id = ? AND workspace_id = ?
     `).bind(knowledgeMatch[1], workspace).first();
     return source ? response({ source }, 200, allowedOrigin)
