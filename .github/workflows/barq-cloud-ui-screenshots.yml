@@ -8,6 +8,7 @@ on:
       - "android/lib/main.dart"
       - "android/pubspec.yaml"
       - "android/test/**"
+      - "android/integration_test/**"
       - ".github/workflows/barq-cloud-ui-screenshots.yml"
 
 permissions:
