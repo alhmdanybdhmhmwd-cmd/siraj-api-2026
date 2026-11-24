@@ -211,3 +211,16 @@ Say exactly what is complete, what has only passed CI, what is blocked, and what
 - Brain retrieval sorts fresh sources ahead of stale ones and marks stale evidence explicitly in its prompt context.
 - Regression tests cover invalid/incomplete revision rejection, authenticated reconciliation, SQL path scoping, non-destructive history retention, and final-batch-only invocation.
 - This is implemented in the isolated branch; CI and live Preview D1 execution still need verification.
+
+## Latest Phase 2 implementation checkpoint — 2026-11-25
+
+- Repository ingestion now reports eligible coverage by BARQ consumer Android, consumer backend, BARQ Admin, CI/config, documentation and other domains, plus file-extension counts, excluded-path reasons and oversized files.
+- GitHub commit/tree/blob reads and Admin API writes use bounded retries for transient network/408/425/429/5xx failures.
+- Migration `0008_knowledge_freshness.sql` adds `last_seen_revision` and `is_stale` without deleting historical knowledge rows.
+- Each indexed source chunk is marked seen at its immutable commit. The final completed batch invokes the owner-authenticated reconciliation route; it marks repository sources absent from the completed revision stale. Partial batches cannot trigger reconciliation.
+- Retrieval orders fresh sources first and labels stale evidence as historical/verification-required in the model context. Knowledge list/detail APIs expose freshness metadata.
+- Added regression coverage for coverage reporting, GitHub retries, multi-batch reconciliation, stale revision validation, authenticated route scoping, historical-row retention, stale prompt labels and fresh-first ranking.
+- Latest relevant commits: indexer coverage/retries `7e94c43891beca64c396cc595589bd41fe6c0fe5`; final-batch reconciliation/indexer `a527b2d2193f278deb1378e1df8dd585689c3337`; freshness schema `018d4af7f67d5a0f93d3507eb890969bd27dee32`; Worker freshness API `ccc79c335ff07f311744ed695a6df167106c8579`; latest test correction `988e3d9da56f72cd9bcb3164ecd6fac8cf0871f1`; latest Worker ordering `ccc505ec4bd0966898e1fa75c1b43fe9eb8f9a09`.
+- CI status: backend tests passed at earlier revisions before the latest freshness/reconciliation changes; the latest Admin quality/backend runs for the newest revisions are queued. Do not infer success from queued or older runs.
+- Preview deployment is still blocked because GitHub Environment `barq-admin-preview` lacks: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `ADMIN_D1_DATABASE_ID`, `BARQ_GOOGLE_OIDC_CLIENT_ID`, `BARQ_ADMIN_OWNER_EMAIL`, and `BARQ_ADMIN_ALLOWED_ORIGIN`. Knowledge ingestion additionally requires `BARQ_ADMIN_PREVIEW_API_URL` and `BARQ_ADMIN_PREVIEW_OWNER_TOKEN`.
+- Phase 2 remains IN PROGRESS until latest CI is green, the isolated Preview D1 migrations are applied, all repository batches are ingested at an immutable commit, the coverage/freshness report is reviewed, and live retrieval/citation/cross-project/conflict/prompt-injection acceptance tests pass.
