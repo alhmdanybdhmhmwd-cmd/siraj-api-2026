@@ -16,7 +16,7 @@ permissions:
 
 concurrency:
   group: barq-cloud-ui-screenshots-api30
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   screenshots:
