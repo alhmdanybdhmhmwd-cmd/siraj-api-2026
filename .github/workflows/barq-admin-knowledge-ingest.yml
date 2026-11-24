@@ -91,6 +91,20 @@ jobs:
             "- Complete: **" + result.complete + "**",
             "- Next cursor: `" + (result.nextStartAfter || "(none)") + "`",
             "",
+            "### Repository coverage by project domain",
+            "```json",
+            JSON.stringify(result.coverage.eligibleByDomain, null, 2),
+            "```",
+            "### Repository coverage by file type",
+            "```json",
+            JSON.stringify(result.coverage.eligibleByExtension, null, 2),
+            "```",
+            "### Excluded and oversized sources",
+            "- Oversized eligible files: **" + result.coverage.oversizedFiles + "**",
+            "```json",
+            JSON.stringify(result.coverage.excludedByReason, null, 2),
+            "```",
+            "",
             "For the next batch, dispatch this workflow again and paste the exact next cursor into `start_after`."
           ];
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
