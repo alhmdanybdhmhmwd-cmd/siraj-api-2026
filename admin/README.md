@@ -33,7 +33,7 @@ A non-production configuration template is provided at `wrangler.toml.example`. 
 1. Create the isolated D1 database: `npx wrangler d1 create barq-admin-preview`. Copy the returned database ID into the template's `database_id`.
 2. Create both queues: `npx wrangler queues create barq-admin-preview-tasks` and `npx wrangler queues create barq-admin-preview-dlq`.
 3. Copy `wrangler.toml.example` to `wrangler.toml` and replace every placeholder, including the exact allowed client origin, Google client ID, verified owner email, and D1 ID. Never use a BARQ consumer-production resource ID.
-4. Add the server-only JWT secret interactively: `npx wrangler secret put BARQ_ADMIN_JWT_SECRET`. Do not put this value in TOML, GitHub, or the APK.
+4. Store the JWT secret only as a protected GitHub Actions Environment secret named `BARQ_ADMIN_JWT_SECRET` when using the guarded Preview workflow; the workflow transfers it directly to Cloudflare with `wrangler secret put`. Never commit it, place it in TOML or ordinary repository variables, print it in logs, or embed it in the APK. For manual deployment, enter it interactively with `npx wrangler secret put BARQ_ADMIN_JWT_SECRET`.
 5. Apply only the Admin migrations to the dedicated database: `npx wrangler d1 migrations apply barq-admin-preview --remote`.
 6. Review the final bindings and resource IDs, then deploy the Preview Worker with `npx wrangler deploy`. Verify `/health` and confirm the auth exchange is unavailable until owner configuration is correct.
 
