@@ -110,3 +110,9 @@ The owner's desired "continue" experience is the product target. Durable server-
 - The indexer calls `POST /v1/knowledge/reconcile` only when the current immutable revision has no remaining eligible batches. The endpoint marks repository-prefixed rows not seen in that revision as stale; it does not delete historical evidence.
 - Brain retrieval prefers fresh sources and explicitly labels stale evidence as historical/verification-required in the model context.
 - Added tests for complete-revision validation, workspace-authenticated reconciliation, no-history-deletion behavior, and final-batch-only reconciliation. CI must pass before this is considered verified; live Preview migration/ingestion is still required.
+
+## Current release gate — 2026-11-25
+
+The indexer now produces source-domain/file-type coverage and performs bounded retries. Non-destructive freshness reconciliation is implemented: a completed immutable-revision ingestion marks absent prior repository sources stale, while preserving historical rows; fresh knowledge is ranked ahead of stale evidence, which is explicitly labelled. Automated tests cover the new behavior.
+
+This does not complete Phase 2. Latest CI for the newest changes must pass; dedicated Preview configuration is missing; the repository has not yet been ingested into Admin Preview D1; and live retrieval/citation acceptance remains untested. Exact missing Preview deployment values and ingestion secrets are recorded in `BARQ_BRAIN_CURRENT_CHECKPOINT.md`.
