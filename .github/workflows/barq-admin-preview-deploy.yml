@@ -117,7 +117,11 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-        run: printf '%s' "$BARQ_ADMIN_JWT_SECRET" | npx --yes wrangler@4 secret put BARQ_ADMIN_JWT_SECRET --name barq-admin-preview
+        run: |
+          set -euo pipefail
+          jwt_secret="$(openssl rand -hex 32)"
+          printf '%s' "$jwt_secret" | npx --yes wrangler@4 secret put BARQ_ADMIN_JWT_SECRET --name barq-admin-preview
+          unset jwt_secret
 
       - name: Deploy BARQ Admin Preview Worker
         working-directory: admin
