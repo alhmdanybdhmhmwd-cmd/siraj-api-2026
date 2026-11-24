@@ -293,7 +293,7 @@ test("private chat tools are available in a collapsible toolbar, not only profil
 test("voice messages show animated Barq waveforms during recording and playback", () => {
   assert.ok(flutterApp.includes("class _BarqWaveform extends StatelessWidget"));
   assert.ok(flutterApp.includes("AnimatedContainer("));
-  assert.ok(flutterApp.includes("Timer.periodic(const Duration(milliseconds: 120)"));
+  assert.ok(flutterApp.includes("Timer.periodic(const Duration(milliseconds: 250)"));
   assert.ok(flutterApp.includes("_BarqWaveform(phase: _wavePhase"));
   assert.ok(flutterApp.includes("phase: _audioPosition.inMilliseconds / 135"));
   assert.ok(flutterApp.includes("Icons.bolt_rounded"));
