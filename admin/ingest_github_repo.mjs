@@ -153,9 +153,9 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
       !githubToken || !adminApiUrl || !ownerToken) {
     throw new Error("missing_ingestion_configuration");
   }
-  const allowed = Array.isArray(allowedRepositories)
-    ? allowedRepositories
-    : normalizeAllowedRepositories(process.env.BARQ_ADMIN_GITHUB_ALLOWED_REPOSITORIES);
+  const allowed = normalizeAllowedRepositories(Array.isArray(allowedRepositories)
+    ? allowedRepositories.join(";")
+    : process.env.BARQ_ADMIN_GITHUB_ALLOWED_REPOSITORIES);
   if (!allowed.includes(repository)) throw new Error("repository_not_owner_approved");
   const apiBase = normalizeAdminApiUrl(adminApiUrl);
   const commit = await githubJson(
