@@ -14,6 +14,19 @@ const SECRET_CONTENT = [
   /(?:api[_-]?key|access[_-]?token|client[_-]?secret)\s*[:=]\s*["'][^"']{12,}["']/i
 ];
 
+export function normalizeAllowedRepositories(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new TypeError("explicit_repository_allowlist_required");
+  }
+  const repositories = [...new Set(value.split(";").map(item => item.trim()).filter(Boolean))];
+  if (!repositories.length || repositories.some(item =>
+    !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(item)
+  )) {
+    throw new TypeError("invalid_repository_allowlist");
+  }
+  return repositories;
+}
+
 export function selectIndexBatch(entries, startAfter = "", limit = MAX_FILES_PER_RUN) {
   if (typeof startAfter !== "string" || startAfter.length > 160 ||
       startAfter.startsWith("/") || startAfter.split("/").some(part => part === "..") ||
@@ -135,11 +148,15 @@ async function githubJson(url, token) {
   return response.json();
 }
 
-export async function ingestRepository({ repository, ref = "HEAD", startAfter = "", githubToken, adminApiUrl, ownerToken }) {
+export async function ingestRepository({ repository, ref = "HEAD", startAfter = "", githubToken, adminApiUrl, ownerToken, allowedRepositories }) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository || "") ||
       !githubToken || !adminApiUrl || !ownerToken) {
     throw new Error("missing_ingestion_configuration");
   }
+  const allowed = Array.isArray(allowedRepositories)
+    ? allowedRepositories
+    : normalizeAllowedRepositories(process.env.BARQ_ADMIN_GITHUB_ALLOWED_REPOSITORIES);
+  if (!allowed.includes(repository)) throw new Error("repository_not_owner_approved");
   const apiBase = normalizeAdminApiUrl(adminApiUrl);
   const commit = await githubJson(
     "https://api.github.com/repos/" + repository + "/commits/" + encodeURIComponent(ref),
@@ -212,7 +229,8 @@ async function main() {
     startAfter: process.env.BARQ_ADMIN_GITHUB_START_AFTER || "",
     githubToken: process.env.BARQ_ADMIN_GITHUB_TOKEN,
     adminApiUrl: process.env.BARQ_ADMIN_API_URL,
-    ownerToken: process.env.BARQ_ADMIN_OWNER_TOKEN
+    ownerToken: process.env.BARQ_ADMIN_OWNER_TOKEN,
+    allowedRepositories: normalizeAllowedRepositories(process.env.BARQ_ADMIN_GITHUB_ALLOWED_REPOSITORIES)
   });
   process.stdout.write(JSON.stringify(result) + "\n");
 }
