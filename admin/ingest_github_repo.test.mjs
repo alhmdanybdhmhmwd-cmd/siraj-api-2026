@@ -1,6 +1,54 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl, summarizeIndexCoverage, selectIndexBatch, normalizeAllowedRepositories, selectIndexBatchWithSkips, containsLikelySecret, ingestRepository, fetchWithRetry } from "./ingest_github_repo.mjs";
+import { shouldIndexPath, classifyIndexPath, buildRepositoryCoverageReport, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl, summarizeIndexCoverage, selectIndexBatch, normalizeAllowedRepositories, selectIndexBatchWithSkips, containsLikelySecret, ingestRepository, fetchWithRetry, githubJson } from "./ingest_github_repo.mjs";
+
+
+test("repository coverage reports eligible domains, file types, and explicit exclusion reasons", () => {
+  const report = buildRepositoryCoverageReport([
+    { type: "blob", path: "android/lib/main.dart", size: 1000 },
+    { type: "blob", path: "src/worker.js", size: 2000 },
+    { type: "blob", path: "admin/mobile/lib/main.dart", size: 3000 },
+    { type: "blob", path: ".github/workflows/check.yml", size: 400 },
+    { type: "blob", path: "docs/guide.md", size: 500 },
+    { type: "blob", path: "android/app/google-services.json", size: 800 },
+    { type: "blob", path: "android/build/output.apk", size: 200000 },
+    { type: "blob", path: "assets/logo.svg", size: 100 }
+  ]);
+  assert.equal(report.treeBlobs, 8);
+  assert.equal(report.eligibleFiles, 5);
+  assert.equal(report.oversizedFiles, 1);
+  assert.equal(report.excludedByReason.credential_filename, 1);
+  assert.equal(report.excludedByReason.unsupported_file_type, 1);
+  assert.equal(report.eligibleByDomain["barq-consumer-android"], 1);
+  assert.equal(report.eligibleByDomain["barq-consumer-backend"], 1);
+  assert.equal(report.eligibleByDomain["barq-admin"], 1);
+  assert.equal(report.eligibleByDomain["ci-and-config"], 1);
+  assert.equal(report.eligibleByDomain["product-docs"], 1);
+  assert.equal(report.eligibleByExtension[".dart"], 2);
+  assert.equal(classifyIndexPath("../secret.md"), "unsafe_path");
+  assert.throws(() => buildRepositoryCoverageReport([], 0), /invalid_max_file_size/);
+});
+
+test("GitHub API ingestion reads retry transient responses before parsing JSON", async () => {
+  const statuses = [503, 200];
+  const delays = [];
+  let calls = 0;
+  const result = await githubJson("https://api.github.com/repos/owner/repo", "read-only-token", {
+    fetchImpl: async (_url, options) => {
+      calls++;
+      assert.equal(options.headers.Authorization, "Bearer read-only-token");
+      return new Response(JSON.stringify({ ok: true }), {
+        status: statuses[calls - 1],
+        headers: { "content-type": "application/json" }
+      });
+    },
+    sleep: async milliseconds => { delays.push(milliseconds); },
+    maxAttempts: 3
+  });
+  assert.deepEqual(result, { ok: true });
+  assert.equal(calls, 2);
+  assert.deepEqual(delays, [250]);
+});
 
 test("repository ingestion allowlists project files and excludes secrets/build output", () => {
   assert.equal(shouldIndexPath("docs/BARQ_PRODUCT.md"), true);
