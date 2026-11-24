@@ -172,3 +172,14 @@ Say exactly what is complete, what has only passed CI, what is blocked, and what
 - Every update must include measurable smoothness/performance goals and regression evidence. Do not accept a candidate without credible performance evidence or when it exceeds documented regression tolerance. Preserve features; optimize resource use rather than deleting functionality.
 - BARQ Brain system instructions and regression tests were updated to enforce this contract. This is policy enforcement in assistant instructions/tests, not yet a complete in-app updater or release pipeline.
 - Permanent release signing remains a prerequisite for reliable in-place Android updates and is still awaiting the owner's explicit approval; no signing key was created or committed.
+
+
+## Global BARQ + BARQ Admin change/update governance — 2026-11-25
+
+- Owner explicitly extended the update-consent and mandatory smoothness requirements from BARQ Admin to BOTH products: consumer BARQ Messenger and BARQ Admin.
+- Before each approved development/update batch: propose exact scope, reasons, affected areas, benefits, risks and validation; invite owner additions; wait for explicit scope approval.
+- Work and tests run cloud-side while the phone/app is closed/offline. If fully powered off, cloud work continues; device delivery waits for power/connectivity.
+- Before any candidate update is made available for device download: show exact product/version, change list, commit/release, tests/build, APK size, performance measurements, risks and recovery plan; obtain separate explicit owner approval. Android may require OS install confirmation.
+- Every update must pass a measurable smoothness/performance gate (startup, frame/jank where measurable, responsiveness, memory/CPU/network) with baseline comparison. Hold on material regression or missing evidence. Preserve features; optimize implementation instead.
+- Product codebases, versions, signing and release channels remain separate. This shared governance does not imply implementation is complete; each product needs its own updater/approval UI/performance instrumentation and acceptance tests.
+- Owner context update commit: 3185a71962807395ac9eba7dac6ce9fe96337388.
