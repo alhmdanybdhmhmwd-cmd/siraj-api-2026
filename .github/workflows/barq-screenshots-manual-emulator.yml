@@ -1,0 +1,86 @@
+name: BARQ Screenshots Manual Emulator Boot
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["barq/**"]
+    paths:
+      - ".github/workflows/barq-screenshots-manual-emulator.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: barq-screenshots-manual-boot
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Install emulator image and create AVD
+        run: |
+          set -euxo pipefail
+          sdkmanager --install "platform-tools" "emulator" "platforms;android-30" "system-images;android-30;default;x86_64"
+          yes | sdkmanager --licenses
+          echo "no" | avdmanager create avd --force --name barq_api30 --device pixel_2 --package "system-images;android-30;default;x86_64"
+          emulator -version
+      - name: Boot emulator with explicit diagnostics
+        timeout-minutes: 18
+        run: |
+          set -euxo pipefail
+          nohup emulator -avd barq_api30 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel auto > /tmp/barq-emulator.log 2>&1 &
+          adb start-server
+          adb wait-for-device
+          for i in $(seq 1 180); do
+            state="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+            echo "BOOT_WAIT=$i STATE=$state"
+            if [ "$state" = "1" ]; then
+              adb shell input keyevent 82 || true
+              adb shell settings put global window_animation_scale 0
+              adb shell settings put global transition_animation_scale 0
+              adb shell settings put global animator_duration_scale 0
+              adb devices -l
+              exit 0
+            fi
+            sleep 5
+          done
+          cat /tmp/barq-emulator.log
+          adb devices -l
+          exit 1
+      - name: Install Flutter dependencies and capture 11 BARQ screens
+        working-directory: android
+        run: |
+          set -euxo pipefail
+          flutter pub get
+          mkdir -p ../artifacts
+          flutter test integration_test/barq_screenshots_test.dart -d emulator-5554 --reporter expanded
+          cd ..
+          find artifacts -type f -name '*.png' -printf '%p %s bytes\n' | sort
+          count="$(find artifacts -type f -iname '*.png' | wc -l)"
+          echo "PNG_COUNT=$count"
+          test "$count" -eq 11
+          zip -qr artifacts/barq-ui-screenshots.zip artifacts
+      - name: Upload screenshots and emulator diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: barq-ui-screenshots-manual-${{ github.run_number }}
+          path: |
+            artifacts/
+            /tmp/barq-emulator.log
+          if-no-files-found: warn
+          retention-days: 30
