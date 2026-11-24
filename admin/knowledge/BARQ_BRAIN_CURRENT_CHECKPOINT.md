@@ -183,3 +183,13 @@ Say exactly what is complete, what has only passed CI, what is blocked, and what
 - Every update must pass a measurable smoothness/performance gate (startup, frame/jank where measurable, responsiveness, memory/CPU/network) with baseline comparison. Hold on material regression or missing evidence. Preserve features; optimize implementation instead.
 - Product codebases, versions, signing and release channels remain separate. This shared governance does not imply implementation is complete; each product needs its own updater/approval UI/performance instrumentation and acceptance tests.
 - Owner context update commit: 3185a71962807395ac9eba7dac6ce9fe96337388.
+
+## Proactive BARQ consumer-update consent gate — 2026-11-25
+
+- New owner requirement: whenever BARQ Brain discovers a verified defect or improvement that needs a new consumer BARQ app update, it must present the evidence, reason an app update is necessary, affected areas, proposed fix, benefits, urgency, risks, test/performance plan and release impact, then ask permission before starting that update.
+- Until approval: no consumer-app code edits, update branch/PR, or update build for that finding. Safe investigation and unrelated already-approved work may continue.
+- Clearly distinguish server-only fixes from changes requiring a consumer app update.
+- Starting implementation approval is separate from the later explicit approval to make the candidate available for download; installation may also require Android confirmation.
+- BARQ Admin Worker instructions and regression tests now encode this gate. This is not yet an end-to-end in-app approval workflow; verify the exact CI run before treating the instruction/test change as green.
+- Worker instruction commit: `6ec15f10db6ef22f92e16e1ba34d4cb893e4905f`.
+- Regression test commit: `807277063d8a1173f99bb3a1eab8ca375a0ce1df`.
