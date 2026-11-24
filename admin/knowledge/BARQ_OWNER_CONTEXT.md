@@ -92,3 +92,22 @@ Status: Owner-approved project context for BARQ Brain indexing. This document is
 5. Add repository, branch, commit SHA, observed time, and indexing status to knowledge records where available.
 6. Never index secrets, signing keys, tokens, private credentials, or unnecessary personal data.
 7. Report incomplete coverage explicitly. Never say BARQ Brain knows everything until the relevant repositories and historical decision sources have been indexed and measured.
+
+## 9. Owner requirement: BARQ Admin must help develop BARQ and itself
+
+The owner explicitly requires BARQ Admin to become a practical development workspace, not merely a monitoring dashboard or chatbot. BARQ Brain must ultimately help the owner continue building both:
+
+- **BARQ consumer app**: understand, plan, implement, debug, test, and improve the messaging product and its backend.
+- **BARQ Admin itself**: understand its own Flutter client, Worker/API, database schema, AI prompts, security model, CI, and deployment configuration; help improve and test these components without losing the ability to manage the workspace.
+
+This requirement is accepted as a product direction. Phase 2 must prepare the project knowledge foundation and accurately document the separate codebases, repository scopes, architecture, dependencies, and constraints. Actual repository editing and automated repair are later development capabilities and must not be falsely represented as available in the current chat-only foundation.
+
+The later development workspace should provide:
+- Explicit project selection and isolated project context for BARQ consumer and BARQ Admin; never mix their source trees, credentials, environments, APIs, databases, or release channels.
+- Read-only repository exploration first, followed by proposed diffs in isolated working branches or sandboxes; show changed files and explain the intended impact before execution.
+- A controlled edit/build/test loop for Flutter/Dart, backend Workers, SQL migrations, Android configuration, and CI workflows, with focused tests followed by regression checks.
+- Durable task/checkpoint history so work can resume after the owner's phone disconnects; show exact branch, commit, test run, and remaining work.
+- Self-development safeguards: BARQ Brain may improve BARQ Admin's own code only in an isolated branch/preview, must preserve owner access and recovery paths, and must never disable its own authentication, audit, approval gates, or safety controls.
+- Human approval before merging, production deployment, destructive data changes, secret/permission changes, paid actions, or external communications. Failed or uncertain repairs must stop with evidence rather than guess.
+
+Phase 2 acceptance should prepare accurate, revision-aware knowledge for both projects and report repository coverage. Phase 3 (when authorized) should add controlled repository read/edit/test capabilities. Later durable-operation phases should make accepted work continue server-side while the phone is offline. The owner does not want an APK until the agreed programming work is complete; physical-phone acceptance remains a later dedicated testing stage.
