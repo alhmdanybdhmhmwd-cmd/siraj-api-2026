@@ -6,6 +6,9 @@ import 'package:integration_test/integration_test_driver.dart';
 Future<void> main() async {
   await integrationDriver(
     responseDataCallback: (data) async {
+      if (data == null) {
+        throw StateError('Integration test returned no response data.');
+      }
       final raw = data['screenshots'];
       if (raw is! List) {
         throw StateError('Integration test returned no screenshot collection.');
