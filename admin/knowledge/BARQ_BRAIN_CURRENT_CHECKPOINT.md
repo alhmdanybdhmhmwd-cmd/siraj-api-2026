@@ -160,3 +160,15 @@ Say exactly what is complete, what has only passed CI, what is blocked, and what
 - Preview deploy run `45411505641` failed safely at Preview-only configuration validation. Required GitHub Environment values remain unavailable; no deploy or production changes occurred.
 - Live repository ingestion into Admin Preview D1 is still blocked by the missing dedicated Preview configuration/owner credentials. No claim of complete repository knowledge is permitted.
 - Continue next: confirm the mobile-quality job result; keep all tests cloud-side; do not ask the owner to use the Galaxy S7 yet. Resolve Preview configuration only with owner-provided/authorized isolated resources; then run the resumable indexer to `complete=true` and validate retrieval across both products. Autonomous GitHub edit/test/build execution and phone-to-server continuation remain unimplemented until the secure runner and end-to-end acceptance tests pass.
+
+
+## Owner update-consent and smoothness contract — 2026-11-25
+
+- The owner requires a two-stage explicit consent flow for every BARQ Admin app update:
+  1. Before implementation begins, BARQ Brain must present the proposed changes, reasons, affected areas, risks and expected benefits, invite owner additions/changes, and wait for scope approval.
+  2. After implementation and cloud-side verification, before the update APK is downloaded to the phone, BARQ Brain must present the exact version, change summary, test/build and performance evidence, APK size and known risks, then obtain a separate explicit download approval.
+- Android's own install confirmation remains required where the OS requests it; no silent-install claim.
+- Cloud work must continue independently while the app is closed and must not depend on the Galaxy S7 remaining awake. If the phone is powered completely off, server-side work can continue but device download/install waits until it is powered on and connected.
+- Every update must include measurable smoothness/performance goals and regression evidence. Do not accept a candidate without credible performance evidence or when it exceeds documented regression tolerance. Preserve features; optimize resource use rather than deleting functionality.
+- BARQ Brain system instructions and regression tests were updated to enforce this contract. This is policy enforcement in assistant instructions/tests, not yet a complete in-app updater or release pipeline.
+- Permanent release signing remains a prerequisite for reliable in-place Android updates and is still awaiting the owner's explicit approval; no signing key was created or committed.
