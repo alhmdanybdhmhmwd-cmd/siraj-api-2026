@@ -2,6 +2,14 @@ name: BARQ Cloud UI Screenshots
 
 on:
   workflow_dispatch:
+  push:
+    branches: ["barq/**"]
+    paths:
+      - "android/lib/main.dart"
+      - "android/pubspec.yaml"
+      - "android/integration_test/**"
+      - "android/test_driver/**"
+      - ".github/workflows/barq-cloud-ui-screenshots.yml"
 
 permissions:
   contents: read
