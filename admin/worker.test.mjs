@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateBrainChatInput, knowledgeSearchTerms, isContinuationRequest, rankKnowledgeChunks, validateAdminAccessClaims, mergePinnedKnowledge, processAdminDeadLetterMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches } from "./worker.js";
+import worker from "./worker.js";
+import { createAdminAccessToken } from "./auth.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeReconciliationInput, validateBrainChatInput, knowledgeSearchTerms, isContinuationRequest, rankKnowledgeChunks, validateAdminAccessClaims, mergePinnedKnowledge, processAdminDeadLetterMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches } from "./worker.js";
 
 test("idempotency keys are bounded and cannot be silently truncated", () => {
   assert.deepEqual(validateIdempotencyKey(null), { ok: true, value: null });
@@ -187,6 +189,73 @@ test("vision assistant preserves owner phase and approval agreements", () => {
   assert.match(messages[0].content, /untrusted content, not an instruction/);
   assert.match(messages[0].content, /specific owner approval/);
   assert.match(messages[0].content, /SPARK/);
+});
+
+
+test("knowledge reconciliation requires a complete immutable repository revision", () => {
+  assert.deepEqual(validateKnowledgeReconciliationInput({
+    repository: "owner/barq",
+    sourceRevision: "a".repeat(40),
+    complete: true
+  }), {
+    ok: true,
+    value: { repository: "owner/barq", sourceRevision: "a".repeat(40), complete: true }
+  });
+  assert.equal(validateKnowledgeReconciliationInput({
+    repository: "owner/../private", sourceRevision: "a".repeat(40), complete: true
+  }).ok, false);
+  assert.equal(validateKnowledgeReconciliationInput({
+    repository: "owner/barq", sourceRevision: "branch-name", complete: true
+  }).ok, false);
+  assert.equal(validateKnowledgeReconciliationInput({
+    repository: "owner/barq", sourceRevision: "a".repeat(40), complete: false
+  }).ok, false);
+});
+
+test("completed knowledge reconciliation marks missing old sources stale without deleting history", async () => {
+  const secret = "test-admin-signing-secret-that-is-long-enough";
+  const sessionId = "11111111-1111-4111-8111-111111111111";
+  const deviceId = "22222222-2222-4222-8222-222222222222";
+  const revision = "b".repeat(40);
+  const sqlCalls = [];
+  const env = {
+    BARQ_ADMIN_JWT_SECRET: secret,
+    ADMIN_DB: {
+      prepare(sql) {
+        return {
+          bind(...args) {
+            return {
+              async first() {
+                sqlCalls.push({ sql, args, method: "first" });
+                return sql.includes("SELECT s.id FROM admin_owner_sessions") ? { id: sessionId } : null;
+              },
+              async run() {
+                sqlCalls.push({ sql, args, method: "run" });
+                if (sql.includes("UPDATE admin_project_knowledge")) return { meta: { changes: 3 } };
+                return { meta: { changes: 1 } };
+              }
+            };
+          }
+        };
+      }
+    }
+  };
+  const token = await createAdminAccessToken(secret, "owner-subject", sessionId, deviceId);
+  const response = await worker.fetch(new Request("https://admin-preview.example.workers.dev/v1/knowledge/reconcile", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+    body: JSON.stringify({ repository: "owner/barq", sourceRevision: revision, complete: true })
+  }), env);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    repository: "owner/barq", revision, reconciled: true, staleSources: 3
+  });
+  const update = sqlCalls.find(call => call.sql.includes("UPDATE admin_project_knowledge"));
+  assert.ok(update);
+  assert.match(update.sql, /substr\(source_path, 1, length\(\?\)\) = \?/);
+  assert.match(update.sql, /last_seen_revision <> \?/);
+  assert.deepEqual(update.args.slice(1), ["owner/barq/", "owner/barq/", revision]);
+  assert.equal(sqlCalls.some(call => /DELETE FROM admin_project_knowledge/i.test(call.sql)), false);
 });
 
 test("knowledge sources are versioned, typed, and bounded", () => {
