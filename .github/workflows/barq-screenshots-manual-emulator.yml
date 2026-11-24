@@ -26,7 +26,6 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -34,15 +33,18 @@ jobs:
       - name: Install emulator image and create AVD
         run: |
           set -euxo pipefail
-          sdkmanager --install "platform-tools" "emulator" "platforms;android-30" "system-images;android-30;default;x86_64"
-          yes | sdkmanager --licenses
-          echo "no" | avdmanager create avd --force --name barq_api30 --device pixel_2 --package "system-images;android-30;default;x86_64"
-          emulator -version
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort | tail -n 1)"
+          AVDMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name avdmanager | sort | tail -n 1)"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses
+          "$SDKMANAGER" --install "platform-tools" "emulator" "platforms;android-30" "system-images;android-30;default;x86_64"
+          echo "no" | "$AVDMANAGER" create avd --force --name barq_api30 --device pixel_2 --package "system-images;android-30;default;x86_64"
+          "$ANDROID_HOME/emulator/emulator" -version
       - name: Boot emulator with explicit diagnostics
         timeout-minutes: 18
         run: |
           set -euxo pipefail
-          nohup emulator -avd barq_api30 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel auto > /tmp/barq-emulator.log 2>&1 &
+          nohup "$ANDROID_HOME/emulator/emulator" -avd barq_api30 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel auto > /tmp/barq-emulator.log 2>&1 &
           adb start-server
           adb wait-for-device
           for i in $(seq 1 180); do
