@@ -1186,7 +1186,7 @@ async function handle(request, env) {
     const rows = await env.ADMIN_DB.prepare(`
       SELECT id, source_type, source_path, source_revision, title, last_seen_revision, is_stale, updated_at
       FROM admin_project_knowledge WHERE workspace_id = ?
-      ORDER BY updated_at DESC LIMIT 100
+      ORDER BY is_stale ASC, updated_at DESC LIMIT 100
     `).bind(workspace).all();
     return response({ sources: rows.results || [] }, 200, allowedOrigin);
   }
