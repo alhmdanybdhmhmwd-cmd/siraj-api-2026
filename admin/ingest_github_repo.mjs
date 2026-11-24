@@ -264,7 +264,7 @@ export async function githubJson(url, token, dependencies = {}) {
   return response.json();
 }
 
-export async function ingestRepository({ repository, ref = "HEAD", startAfter = "", githubToken, adminApiUrl, ownerToken, allowedRepositories }) {
+export async function ingestRepository({ repository, ref = "HEAD", startAfter = "", githubToken, adminApiUrl, ownerToken, allowedRepositories }, dependencies = {}) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository || "") ||
       !githubToken || !adminApiUrl || !ownerToken) {
     throw new Error("missing_ingestion_configuration");
@@ -276,18 +276,20 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
   const apiBase = normalizeAdminApiUrl(adminApiUrl);
   const commit = await githubJson(
     "https://api.github.com/repos/" + repository + "/commits/" + encodeURIComponent(ref),
-    githubToken
+    githubToken,
+    dependencies
   );
   const revision = commit.sha;
   const tree = await githubJson(
     "https://api.github.com/repos/" + repository + "/git/trees/" + revision + "?recursive=1",
-    githubToken
+    githubToken,
+    dependencies
   );
   if (tree.truncated) throw new Error("repository_tree_truncated_refusing_partial_index");
   let indexed = 0;
   let skipped = 0;
   const coverage = buildRepositoryCoverageReport(tree.tree || []);
-  const batch = selectIndexBatchWithSkips(tree.tree || [], startAfter, MAX_FILES_PER_RUN);
+  const batch = selectIndexBatchWithSkips(tree.tree || [], startAfter, dependencies.maxFilesPerRun || MAX_FILES_PER_RUN);
   const selectedEntries = batch.selected;
   skipped = batch.skippedOversizeFiles;
   for (const entry of selectedEntries) {
@@ -297,7 +299,8 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
     }
     const blob = await githubJson(
       "https://api.github.com/repos/" + repository + "/git/blobs/" + entry.sha,
-      githubToken
+      githubToken,
+      dependencies
     );
     if (blob.encoding !== "base64" || typeof blob.content !== "string") {
       skipped++;
@@ -323,7 +326,7 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
           title: entry.path + (chunks.length > 1 ? " (part " + (index + 1) + ")" : ""),
           content: chunks[index]
         })
-      });
+            }, dependencies);
       if (!response.ok) throw new Error("admin_knowledge_api_" + response.status + "_at_" + entry.path);
       indexed++;
     }
@@ -338,7 +341,7 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
         "Content-Type": "application/json"
       },
       body: JSON.stringify({ repository, sourceRevision: revision, complete: true })
-    });
+    }, dependencies);
     if (!response.ok) throw new Error("admin_knowledge_reconciliation_" + response.status);
     reconciliation = await response.json();
   }
