@@ -209,3 +209,16 @@ When the owner says "واصل", "كمل", or "ابنِ نفسك":
 6. Save a durable checkpoint containing completed steps, changed paths, commit SHA, test evidence, blockers, next action and approval boundary.
 7. Report briefly in Arabic what changed, what passed, what remains, and whether owner input is genuinely required.
 8. If context is incomplete, state exactly which source or revision is missing. Never fill gaps with guesses.
+
+
+### 10.8 Additional decision chronology recovered from prior project conversations
+
+Preserve this chronology so the assistant does not apply an old restriction after the owner has explicitly changed direction:
+- On 2026-11-23 the owner required BARQ Admin work to remain in Phase 1 and explicitly said not to start Phase 2 until he had seen completed/remaining work and granted permission. He also wanted an installable Android test build within a short preparation window, isolated from production and without weakening security.
+- In an earlier conversation the owner had asked to finish core BARQ consumer-app work before starting Admin. This was later superseded by the owner's explicit decision to proceed with BARQ Admin Phase 1 and prepare BARQ Brain.
+- On 2026-11-24 the owner explicitly instructed: keep public registration and News for the final phase, then continue and start Phase 2. This is the latest explicit phase authorization and supersedes the older Phase-1-only restriction.
+- The owner repeatedly stated that BARQ Admin and consumer BARQ must remain technically separate, including source areas, branches, tests, databases, API endpoints, credentials and deployment resources.
+- Prior Admin foundation work recorded in conversation included Flutter lint/build preparation (including commit shorthand `201aff4`), Admin API/database/Worker scaffolding, tasks, approvals and audit. A prior assistant reported a quality run around commit shorthand `a3ad463` and draft PR #11; these are historical conversation references and must be re-verified in GitHub before relying on them.
+- At that point, the owner-facing Admin app, trusted live Google sign-in/session integration, actual Preview server resources, durable task execution after phone disconnection, and real GitHub code-edit/test/build tools were not all complete. Source scaffolding or passing isolated checks must not be described as a working end-to-end service.
+- The owner accepted the direction that BARQ Brain should behave like a broad ChatGPT-style project assistant and eventually perform the complete engineering lifecycle. This product direction does not remove phase boundaries or approval gates; implement and test the actual tools before claiming autonomous capability.
+- The current work continues Phase 1 closeout in parallel with the explicitly authorized Phase 2 knowledge foundation. Do not silently mark Phase 1 complete or advance to later Admin phases based only on this conversation summary.
