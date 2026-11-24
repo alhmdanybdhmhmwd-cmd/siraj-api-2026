@@ -421,6 +421,23 @@ export function validateKnowledgeInput(value) {
     return { ok: false, error: "invalid_knowledge_source" };
   }
   return { ok: true, value: { sourceType, sourcePath, sourceRevision, title, content } };
+} 
+
+export function validateKnowledgeReconciliationInput(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) ||
+      typeof value.repository !== "string" ||
+      !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value.repository) ||
+      value.repository.split("/").some(part => part === "." || part === "..") ||
+      typeof value.sourceRevision !== "string" ||
+      !/^[0-9a-f]{40,64}$/i.test(value.sourceRevision) ||
+      value.complete !== true) {
+    return { ok: false, error: "invalid_knowledge_reconciliation" };
+  }
+  return { ok: true, value: {
+    repository: value.repository,
+    sourceRevision: value.sourceRevision.toLowerCase(),
+    complete: true
+  } };
 }
 
 export function isContinuationRequest(query) {
@@ -1165,7 +1182,7 @@ async function handle(request, env) {
 
   if (request.method === "GET" && url.pathname === "/v1/knowledge") {
     const rows = await env.ADMIN_DB.prepare(`
-      SELECT id, source_type, source_path, source_revision, title, updated_at
+      SELECT id, source_type, source_path, source_revision, title, last_seen_revision, is_stale, updated_at
       FROM admin_project_knowledge WHERE workspace_id = ?
       ORDER BY updated_at DESC LIMIT 100
     `).bind(workspace).all();
@@ -1179,17 +1196,21 @@ async function handle(request, env) {
     const candidateId = crypto.randomUUID();
     await env.ADMIN_DB.prepare(`
       INSERT INTO admin_project_knowledge
-        (id, workspace_id, source_type, source_path, source_revision, title, content, content_hash, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, workspace_id, source_type, source_path, source_revision, title, content, content_hash, created_by,
+          last_seen_revision, is_stale)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
       ON CONFLICT(workspace_id, source_path, source_revision) DO UPDATE SET
         source_type = excluded.source_type,
         title = excluded.title,
         content = excluded.content,
         content_hash = excluded.content_hash,
         created_by = excluded.created_by,
+        last_seen_revision = excluded.last_seen_revision,
+        is_stale = 0,
         updated_at = CURRENT_TIMESTAMP
     `).bind(candidateId, workspace, parsed.value.sourceType, parsed.value.sourcePath,
-      parsed.value.sourceRevision, parsed.value.title, parsed.value.content, contentHash, actor.subject).run();
+      parsed.value.sourceRevision, parsed.value.title, parsed.value.content, contentHash, actor.subject,
+      parsed.value.sourceRevision).run();
     const source = await env.ADMIN_DB.prepare(`
       SELECT id, source_type, source_path, source_revision, title, content_hash, updated_at
       FROM admin_project_knowledge WHERE workspace_id = ? AND source_path = ? AND source_revision = ?
@@ -1197,6 +1218,26 @@ async function handle(request, env) {
     await audit(env, workspace, actor, "knowledge.source.indexed", "knowledge", source.id,
       { sourceType: parsed.value.sourceType, sourcePath: parsed.value.sourcePath, revision: parsed.value.sourceRevision });
     return response({ source, duplicate: source.id !== candidateId }, 201, allowedOrigin);
+  }
+
+  if (request.method === "POST" && url.pathname === "/v1/knowledge/reconcile") {
+    const parsed = validateKnowledgeReconciliationInput(await readJson(request));
+    if (!parsed.ok) return response({ error: parsed.error }, 400, allowedOrigin);
+    const prefix = parsed.value.repository + "/";
+    const updated = await env.ADMIN_DB.prepare(`
+      UPDATE admin_project_knowledge
+      SET is_stale = 1, updated_at = CURRENT_TIMESTAMP
+      WHERE workspace_id = ? AND substr(source_path, 1, length(?)) = ?
+        AND last_seen_revision <> ?
+    `).bind(workspace, prefix, prefix, parsed.value.sourceRevision).run();
+    await audit(env, workspace, actor, "knowledge.sources.reconciled", "repository",
+      parsed.value.repository, { revision: parsed.value.sourceRevision, staleSources: updated?.meta?.changes || 0 });
+    return response({
+      repository: parsed.value.repository,
+      revision: parsed.value.sourceRevision,
+      reconciled: true,
+      staleSources: updated?.meta?.changes || 0
+    }, 200, allowedOrigin);
   }
 
   const knowledgeMatch = url.pathname.match(/^\/v1\/knowledge\/([0-9a-f-]{36})$/i);
