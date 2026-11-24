@@ -64,3 +64,18 @@ Say exactly what is complete, what has only passed CI, what is blocked, and what
 - Preview deploy run `45308924658` failed safely before any deployment. Its log confirms all expected GitHub Environment inputs were empty: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `ADMIN_D1_DATABASE_ID`, `BARQ_GOOGLE_OIDC_CLIENT_ID`, `BARQ_ADMIN_OWNER_EMAIL`, and `BARQ_ADMIN_ALLOWED_ORIGIN`. The two SentinelX Cloudflare integrations named `barq-admin-runtime` and `barq-cloudflare-preview` both returned zero visible DNS zones. Do not assume these are correctly scoped to the intended account or have Workers/D1 permissions. No credentials were printed.
 - The exact Cloudflare Preview environment and dedicated D1/Queue resources are therefore the external blocker. Do not try production identifiers or repurpose the consumer database.
 - Owner context, master index and checkpoint are present in GitHub source, but still not ingested into live D1. BARQ Brain cannot yet be described as fully informed or able to autonomously edit/build projects.
+
+
+## Work continuation update — 2026-11-24 (latest branch activity)
+
+- Admin mobile quality run `45308948107` has now completed successfully. Flutter dependency resolution, formatting, analysis, Flutter tests, Android AppAuth manifest wiring validation, and Android debug Kotlin compilation all passed. This is CI evidence only; it is not a physical Galaxy S7 install/sign-in test.
+- The Admin quality job in the same run passed Worker syntax, Admin unit tests, isolated schema/audit checks, Phase 2 workspace/task/checkpoint checks, and Preview template validation.
+- Backend run `45308956051` passed.
+- Additional Phase 2 ingestion safety hardening was committed on this branch:
+  - `admin/ingest_github_repo.mjs` now detects additional high-confidence provider credential formats (GitHub fine-grained tokens, AWS access-key IDs, Slack tokens, Stripe live secret keys, Google OAuth client secrets, npm/PyPI tokens, SendGrid API keys) before indexing repository content.
+  - `admin/ingest_github_repo.test.mjs` adds positive secret-detection samples and negative ordinary-documentation checks.
+  - The secret-pattern checks were exercised against eight synthetic credential samples in the current work session; all eight were detected and both ordinary documentation samples were not flagged. This is a focused runtime check, not a replacement for the repository's full Node test suite.
+  - GitHub secret scanning rejected the first attempt to commit literal synthetic credential strings in test fixtures. The fixtures were rewritten as concatenated fragments; no real credentials were used or exposed.
+- Latest known branch commit after this work: `e72837859407dd462660cce9d99263d607363bfd`. The secret scanner and test additions need a fresh Admin Quality run against this exact revision before being called CI-verified.
+- Optimized ARM64 Release APK workflow `45308936229` still has no visible jobs or artifacts in the latest check. Do not claim the optimized APK is ready or provide the older debug build as a substitute.
+- Preview deployment remains safely blocked because the required GitHub Environment values are not visible to the workflow. No deployment or production changes were made.
