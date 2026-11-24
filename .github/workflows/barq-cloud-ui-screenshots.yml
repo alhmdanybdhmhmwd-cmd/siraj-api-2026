@@ -21,7 +21,7 @@ concurrency:
 jobs:
   screenshots:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,9 +44,21 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           script: |
+            set -euxo pipefail
+            adb wait-for-device
+            for i in $(seq 1 60); do
+              state="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\\r' || true)"
+              if [ "$state" = "1" ]; then break; fi
+              sleep 5
+            done
+            adb shell getprop sys.boot_completed
+            adb shell wm size
+            adb shell wm density
             cd android
-            flutter drive --driver=test_driver/integration_test.dart --target=integration_test/barq_screenshots_test.dart
+            timeout 20m flutter drive --driver=test_driver/integration_test.dart --target=integration_test/barq_screenshots_test.dart
+
       - name: Package screenshots
         if: always()
         run: |
