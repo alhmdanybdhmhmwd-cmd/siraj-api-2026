@@ -20,7 +20,7 @@ concurrency:
 jobs:
   screenshots:
     runs-on: ubuntu-22.04
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,56 +36,26 @@ jobs:
       - name: Install Flutter dependencies
         working-directory: android
         run: flutter pub get
-      - name: Capture BARQ UI in isolated headless tests
-        working-directory: android
-        run: |
-          set -uo pipefail
-          rm -rf ../artifacts/barq-ui-screenshots
-          tests=(
-            "01 capture login"
-            "02 capture password recovery"
-            "03 capture home chats"
-            "04 capture home SPARK"
-            "05 capture contacts"
-            "06 capture account"
-            "07 capture private chat"
-            "08 capture group chat"
-            "09 capture public profile"
-            "10 capture nearby devices"
-            "11 capture SPARK viewer"
-          )
-          failures=0
-          for test_name in "${tests[@]}"; do
-            echo "::group::BARQ capture: $test_name"
-            if timeout 65s flutter test --reporter expanded --plain-name "$test_name" test/barq_screenshots_test.dart; then
-              echo "CAPTURE_TEST_OK: $test_name"
-            else
-              code=$?
-              echo "CAPTURE_TEST_FAILED: $test_name (exit $code)"
-              failures=$((failures + 1))
-            fi
-            echo "::endgroup::"
-          done
-          echo "CAPTURE_TEST_FAILURES=$failures"
-          exit 0
-      - name: Package screenshots
-        if: always()
-        run: |
-          mkdir -p artifacts
-          if [ -d artifacts/barq-ui-screenshots ]; then
+      - name: Capture real BARQ screens on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            cd android
+            mkdir -p ../artifacts
+            flutter test integration_test/barq_screenshots_test.dart -d emulator-5554 --reporter expanded
+            cd ..
             count="$(find artifacts/barq-ui-screenshots -type f -iname '*.png' | wc -l)"
-            echo "Captured PNG files: $count"
-            if [ "$count" -lt 8 ]; then
-              echo "Insufficient real screenshots: expected at least 8, found $count." > artifacts/SCREENSHOT_CAPTURE_FAILED.txt
-              exit 1
-            fi
-            cd artifacts
-            zip -qr barq-ui-screenshots.zip barq-ui-screenshots
-            unzip -l barq-ui-screenshots.zip
-          else
-            echo "Screenshot test did not produce an output directory." > artifacts/SCREENSHOT_CAPTURE_FAILED.txt
-            exit 1
-          fi
+            echo "Captured real emulator PNG files: $count"
+            test "$count" -ge 8
+            zip -qr artifacts/barq-ui-screenshots.zip artifacts/barq-ui-screenshots
+            unzip -l artifacts/barq-ui-screenshots.zip
       - name: Upload screenshot bundle
         if: always()
         uses: actions/upload-artifact@v4
