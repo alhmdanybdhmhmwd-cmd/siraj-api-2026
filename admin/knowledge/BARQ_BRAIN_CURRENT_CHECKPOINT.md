@@ -99,3 +99,15 @@ Say exactly what is complete, what has only passed CI, what is blocked, and what
 - Fix committed as `660bbdb7d616499a3ffb04d456e43b3b6f8fc1cd`.
 - The failing test was isolated to the new synthetic JSON private-key sample (341/342 tests passed); no production backend behavior was implicated by the failure.
 - CI for this repair is awaiting confirmation; do not report the fix as passed until a fresh run completes.
+
+
+## Verified optimized Galaxy S7 preview APK (2026-11-24)
+
+- Android preview workflow run: `45308936229`; job `138161984879` completed successfully, including Flutter format/analyze/tests, ARM64 release build, APK existence/size verification, and artifact upload.
+- Artifact: `barq-admin-galaxy-s7-arm64-optimized`, artifact ID `14882831920`, expires 2026-12-08.
+- The artifact was downloaded and inspected. APK path inside archive: `app/outputs/flutter-apk/app-arm64-v8a-release.apk`; APK size: 17,626,993 bytes (about 17.63 MB decimal); archive size: 9,481,907 bytes.
+- APK SHA-256: `b58edb6f1668bb6343e0333d84406dc9f370e15cdd090453913a8ca2de9e7c38`.
+- Build configuration confirms application ID `com.barq.admin`, ARM64 native libraries are present, and the build is release-mode with Dart obfuscation and split debug symbols.
+- Important: the Android release build currently uses the Gradle debug signing configuration for preview installs. It is not a production/release signing setup. Physical installation, Android 8 compatibility, Google OIDC sign-in, and live Admin API access on the Galaxy S7 remain untested.
+- The artifact was built from workflow run head SHA `b2771509c87d0700f5870d9758e55cadfb30c5e5`; it predates the latest indexer regression repair/checkpoint commit `0002d57a0f36df46d42cdc4b78d6c1f3c939895a`. Do not represent this APK as built from the latest branch head.
+- Admin Quality run `45310249447` remains pending with no jobs exposed yet. Backend tests on the checkpoint revision passed in run `45310249463`.
