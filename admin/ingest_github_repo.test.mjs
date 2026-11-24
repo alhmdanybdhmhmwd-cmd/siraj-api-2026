@@ -193,6 +193,61 @@ test("knowledge ingestion rejects common provider credential formats and keeps o
   assert.equal(containsLikelySecret('{"refresh_token":"synthetic-refresh-token-value"}'), true);
 });
 
+
+test("repository ingestion reconciles stale sources only after the final resumed batch", async () => {
+  const files = [
+    { type: "blob", path: "docs/a.md", size: 10, sha: "blob-a" },
+    { type: "blob", path: "docs/b.md", size: 10, sha: "blob-b" }
+  ];
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    const value = String(url);
+    calls.push({ url: value, method: options.method || "GET" });
+    if (value.includes("/commits/")) {
+      return new Response(JSON.stringify({ sha: "c".repeat(40) }), { status: 200 });
+    }
+    if (value.includes("/git/trees/")) {
+      return new Response(JSON.stringify({ truncated: false, tree: files }), { status: 200 });
+    }
+    if (value.includes("/git/blobs/")) {
+      const name = value.endsWith("blob-a") ? "A" : "B";
+      return new Response(JSON.stringify({
+        encoding: "base64",
+        content: Buffer.from("BARQ source " + name).toString("base64")
+      }), { status: 200 });
+    }
+    if (value.endsWith("/v1/knowledge/reconcile")) {
+      return new Response(JSON.stringify({ reconciled: true, staleSources: 2 }), { status: 200 });
+    }
+    if (value.endsWith("/v1/knowledge")) {
+      return new Response(JSON.stringify({ source: { id: "source-id" } }), { status: 201 });
+    }
+    throw new Error("unexpected_test_url");
+  };
+  const base = {
+    repository: "owner/barq",
+    ref: "main",
+    githubToken: "read-only-token",
+    adminApiUrl: "https://barq-admin-preview.example.workers.dev",
+    ownerToken: "short-lived-owner-token",
+    allowedRepositories: ["owner/barq"]
+  };
+  const dependencies = { fetchImpl, sleep: async () => {}, maxFilesPerRun: 1 };
+  const first = await ingestRepository(base, dependencies);
+  assert.equal(first.complete, false);
+  assert.equal(first.nextStartAfter, "docs/a.md");
+  assert.equal(first.reconciliation, null);
+  assert.equal(calls.some(call => call.url.endsWith("/v1/knowledge/reconcile")), false);
+
+  const second = await ingestRepository({
+    ...base,
+    startAfter: first.nextStartAfter
+  }, dependencies);
+  assert.equal(second.complete, true);
+  assert.deepEqual(second.reconciliation, { reconciled: true, staleSources: 2 });
+  assert.equal(calls.filter(call => call.url.endsWith("/v1/knowledge/reconcile")).length, 1);
+});
+
 test("knowledge ingestion retries transient rate limits and server errors", async () => {
   const statuses = [503, 429, 201];
   const delays = [];
