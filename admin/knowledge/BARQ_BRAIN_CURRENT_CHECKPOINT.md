@@ -136,3 +136,14 @@ Say exactly what is complete, what has only passed CI, what is blocked, and what
 - The owner-authorization and capability-truthfulness changes are committed on branch `barq-admin-s7-optimized-2026-11-24`; latest commit at checkpoint writing: `8ce0204686393cfe8fa724237e36a2f34cc4039c`.
 - Admin Worker/unit/schema quality job passed in run `45310543568`; the same run's Android mobile-quality job was still executing AppAuth manifest validation when last checked. Backend tests passed in run `45310876434`.
 - Do not tell the owner the app is ready for autonomous self-development until the secure GitHub integration, real source-edit/test/build runner, durable resume, and full phone-to-PR-to-CI-to-resume acceptance test are complete.
+
+
+## CI continuation update (2026-11-24 02:24 UTC)
+
+- Current branch head: `84cd4b6f2dcc16cabe8bfa6ea1a400aef7ec7f22`.
+- Admin Worker syntax, all Admin unit tests, isolated schema/audit checks, task/checkpoint concurrency checks, Preview template validation, and Preview knowledge-ingestion workflow safety checks passed on run `45311985105` (admin-quality job: success).
+- Android mobile-quality in the same run is still running; Flutter setup is in progress. Do not mark the mobile/Android checks green until the job finishes.
+- Earlier Admin Quality failures were due to brittle workflow-text assertions. The current safety assertion is now limited to the durable environment variable contract and passed in the latest run.
+- The Android AppAuth Gradle step was also corrected so it retries transient failures and checks the merged manifest after Gradle succeeds; latest mobile job must verify it.
+- Backend tests on the immediately preceding revision `d7ed2624c1fc8b64954f960a924a31a3a22acab2` passed (run `45311856812`). A fresh backend check for `84cd4b6f2dcc16cabe8bfa6ea1a400aef7ec7f22` is not yet confirmed.
+- Autonomous GitHub source editing, test/build execution by BARQ Brain, automatic PR creation, and phone-to-server resume are still NOT implemented or acceptance-tested. The current queue still produces AI drafts/checkpoints only.
