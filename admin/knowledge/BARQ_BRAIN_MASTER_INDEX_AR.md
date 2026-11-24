@@ -16,6 +16,7 @@ Purpose: navigation map for the project-aware engineering assistant. This file i
 ## 2. Read these sources first
 
 1. `admin/knowledge/BARQ_OWNER_CONTEXT.md` — owner decisions, product identity, accepted/rejected/postponed requirements, technical history, latest continuation directive.
+2. `admin/knowledge/BARQ_BRAIN_CURRENT_CHECKPOINT.md` — exact continuation point, latest branch/commit, CI evidence, blockers and next actions.
 2. `admin/knowledge/PHASE2_SCOPE.md` — knowledge phase scope, project boundaries, acceptance requirements and blockers.
 3. `admin/knowledge/INDEXING_RUNBOOK.md` — safe, exact-repository, revision-aware and resumable GitHub indexing procedure.
 4. `android/README_AR.md` — consumer Flutter source map, current documented endpoints, dependencies and known incomplete release work.
