@@ -20,7 +20,8 @@ export function normalizeAllowedRepositories(value) {
   }
   const repositories = [...new Set(value.split(";").map(item => item.trim()).filter(Boolean))];
   if (!repositories.length || repositories.some(item =>
-    !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(item)
+    !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(item) ||
+    item.split("/").some(part => part === "." || part === "..")
   )) {
     throw new TypeError("invalid_repository_allowlist");
   }
