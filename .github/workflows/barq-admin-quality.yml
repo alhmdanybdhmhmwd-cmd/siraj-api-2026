@@ -312,7 +312,7 @@ jobs:
         run: |
           for attempt in 1 2 3; do
             if sdkmanager --install "ndk;28.2.13676358"; then
-              break
+              exit 0
             fi
             rm -rf "${ANDROID_HOME}/ndk/28.2.13676358"
             if [ "$attempt" -lt 3 ]; then
@@ -338,7 +338,8 @@ jobs:
           gradle_ok=0
           for attempt in 1 2 3; do
             if bash gradlew :app:processDebugManifest --no-daemon --console=plain --stacktrace --info; then
-              exit 0
+              gradle_ok=1
+              break
             fi
             if [ "$attempt" -lt 3 ]; then
               echo "Gradle repository rate limit or transient dependency failure; retrying (attempt $((attempt + 1))/3)."
