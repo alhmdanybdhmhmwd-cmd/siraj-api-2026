@@ -63,6 +63,31 @@ export function summarizeIndexCoverage(eligibleFiles, processedFiles) {
   };
 }
 
+export function selectIndexBatchWithSkips(entries, startAfter = "", limit = MAX_FILES_PER_RUN, maxFileBytes = 120000) {
+  if (!Number.isSafeInteger(maxFileBytes) || maxFileBytes < 1) {
+    throw new TypeError("invalid_max_file_size");
+  }
+  const candidates = (entries || []).filter(entry =>
+    entry && entry.type === "blob" && shouldIndexPath(entry.path)
+  );
+  const eligible = candidates.filter(entry => entry.size <= maxFileBytes);
+  const batch = selectIndexBatch(eligible, startAfter, limit);
+  const lastSelectedPath = batch.selected.length
+    ? batch.selected[batch.selected.length - 1].path
+    : null;
+  const skippedOversizeFiles = candidates.filter(entry =>
+    entry.size > maxFileBytes && entry.path > startAfter &&
+    (!lastSelectedPath || entry.path <= lastSelectedPath || batch.remaining === 0)
+  ).length;
+  return {
+    ...batch,
+    eligibleFiles: candidates.length,
+    eligibleFilesAfterCursor: candidates.filter(entry => entry.path > startAfter).length,
+    processedFiles: batch.selected.length + skippedOversizeFiles,
+    skippedOversizeFiles
+  };
+}
+
 export function normalizeAdminApiUrl(input) {
   let parsed;
   try {
@@ -171,20 +196,9 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
   if (tree.truncated) throw new Error("repository_tree_truncated_refusing_partial_index");
   let indexed = 0;
   let skipped = 0;
-  const candidateEntries = (tree.tree || []).filter(item =>
-    item.type === "blob" && shouldIndexPath(item.path)
-  );
-  const eligibleEntries = candidateEntries.filter(item => item.size <= 120000);
-  const batch = selectIndexBatch(eligibleEntries, startAfter, MAX_FILES_PER_RUN);
+  const batch = selectIndexBatchWithSkips(tree.tree || [], startAfter, MAX_FILES_PER_RUN);
   const selectedEntries = batch.selected;
-  const lastSelectedPath = selectedEntries.length
-    ? selectedEntries[selectedEntries.length - 1].path
-    : null;
-  const skippedOversize = candidateEntries.filter(entry =>
-    entry.size > 120000 && entry.path > startAfter &&
-    (!lastSelectedPath || entry.path <= lastSelectedPath || batch.remaining === 0)
-  ).length;
-  skipped = skippedOversize;
+  skipped = batch.skippedOversizeFiles;
   for (const entry of selectedEntries) {
     if (entry.type !== "blob" || !shouldIndexPath(entry.path) || entry.size > 120000) {
       skipped++;
@@ -228,9 +242,9 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
     revision,
     indexed,
     skipped,
-    eligibleFiles: candidateEntries.length,
-    eligibleFilesAfterCursor: candidateEntries.filter(entry => entry.path > startAfter).length,
-    processedFiles: selectedEntries.length + skippedOversize,
+    eligibleFiles: batch.eligibleFiles,
+    eligibleFilesAfterCursor: batch.eligibleFilesAfterCursor,
+    processedFiles: batch.processedFiles,
     remainingFiles: batch.remaining,
     complete: batch.remaining === 0,
     nextStartAfter: batch.nextStartAfter
