@@ -319,3 +319,7 @@ jobs:
           manifest="$(find ../build/app/intermediates -path '*merged_manifest*' -name AndroidManifest.xml -print -quit)"
           test -n "$manifest"
           grep -Fq 'com.googleusercontent.apps.1234567890' "$manifest"
+
+      - name: Compile Android debug Kotlin sources without packaging an APK
+        working-directory: admin/mobile/android
+        run: bash gradlew :app:compileDebugKotlin --no-daemon --console=plain
