@@ -89,6 +89,8 @@ jobs:
             "- Processed through cursor: **" + result.processedFiles + "**",
             "- Remaining eligible files after cursor: **" + result.remainingFiles + "**",
             "- Complete: **" + result.complete + "**",
+            "- Stale-source reconciliation: **" + (result.reconciliation?.reconciled ? "completed" : "not run; more batches remain") + "**",
+            "- Previously indexed sources marked stale: **" + (result.reconciliation?.staleSources ?? 0) + "**",
             "- Next cursor: `" + (result.nextStartAfter || "(none)") + "`",
             "",
             "### Repository coverage by project domain",
