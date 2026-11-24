@@ -454,6 +454,25 @@ test("BARQ Brain preserves long canonical owner context instead of truncating it
   assert.ok(messages[1].content.includes(marker));
 });
 
+test("BARQ Brain scopes indexed evidence to the selected product and keeps owner context shared", () => {
+  const adminSource = { source_path: "owner/repo/admin/worker.js" };
+  const barqSource = { source_path: "owner/repo/android/lib/main.dart" };
+  const backendSource = { source_path: "owner/repo/src/index.js" };
+  const ownerContext = { source_path: "owner/repo/admin/knowledge/BARQ_OWNER_CONTEXT.md" };
+  const masterIndex = { source_path: "owner/repo/admin/knowledge/BARQ_BRAIN_MASTER_INDEX_AR.md" };
+  const sharedCi = { source_path: "owner/repo/.github/workflows/checks.yml" };
+
+  assert.equal(knowledgeMatchesProject(adminSource, "BARQ"), false);
+  assert.equal(knowledgeMatchesProject(barqSource, "BARQ"), true);
+  assert.equal(knowledgeMatchesProject(backendSource, "BARQ"), true);
+  assert.equal(knowledgeMatchesProject(adminSource, "BARQ Admin"), true);
+  assert.equal(knowledgeMatchesProject(barqSource, "BARQ Admin"), false);
+  assert.equal(knowledgeMatchesProject(ownerContext, "BARQ"), true);
+  assert.equal(knowledgeMatchesProject(masterIndex, "BARQ Admin"), true);
+  assert.equal(knowledgeMatchesProject(sharedCi, "BARQ"), true);
+  assert.equal(knowledgeMatchesProject(sharedCi, "BARQ Admin"), true);
+});
+
 test("knowledge ranking puts fresh evidence ahead of stronger stale historical matches", () => {
   const ranked = rankKnowledgeChunks([
     { title: "BARQ messaging architecture", source_path: "docs/old.md", content: "messages delivery", is_stale: 1 },
