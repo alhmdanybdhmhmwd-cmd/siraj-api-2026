@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl, summarizeIndexCoverage, selectIndexBatch, normalizeAllowedRepositories, selectIndexBatchWithSkips, ingestRepository } from "./ingest_github_repo.mjs";
+import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl, summarizeIndexCoverage, selectIndexBatch, normalizeAllowedRepositories, selectIndexBatchWithSkips, containsLikelySecret, ingestRepository } from "./ingest_github_repo.mjs";
 
 test("repository ingestion allowlists project files and excludes secrets/build output", () => {
   assert.equal(shouldIndexPath("docs/BARQ_PRODUCT.md"), true);
@@ -113,4 +113,22 @@ test("knowledge indexing counts oversized files as skipped and resumes without l
   assert.equal(second.skippedOversizeFiles, 2);
   assert.equal(second.remaining, 0);
   assert.equal(second.eligibleFilesAfterCursor, 3);
+});
+
+
+test("knowledge ingestion rejects common provider credential formats and keeps ordinary documentation", () => {
+  const repeated = "abcdefghijklmnopqrstuvwxyz1234567890";
+  const secretSamples = [
+    ["ghp", "_", repeated].join(""),
+    ["github_pat", "_", repeated].join(""),
+    ["AKIA", "1234567890ABCDEF"].join(""),
+    ["xoxb", "-", "123456789012", "-", "123456789012", "-", "abcdefghijklmnopqrst"].join(""),
+    ["sk", "_live_", "1234567890abcdefghijklmnop"].join(""),
+    ["GOCSPX-", "abcdefghijklmnopqrstuvwx"].join(""),
+    ["npm_", "abcdefghijklmnopqrstuvwxyz12345678901234567890"].join(""),
+    ["pypi-", "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"].join("")
+  ];
+  for (const sample of secretSamples) assert.equal(containsLikelySecret(sample), true);
+  assert.equal(containsLikelySecret("BARQ uses Firebase Cloud Messaging for push notifications."), false);
+  assert.equal(containsLikelySecret("Example: set the API key in your local secret manager."), false);
 });
