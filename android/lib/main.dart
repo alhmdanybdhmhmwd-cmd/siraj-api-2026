@@ -7521,7 +7521,7 @@ class _BarqVoiceRecordButtonState extends State<BarqVoiceRecordButton> {
       _stopwatch = Stopwatch()..start();
       _elapsed = Duration.zero;
       _ticker?.cancel();
-      _ticker = Timer.periodic(const Duration(milliseconds: 120), (_) {
+      _ticker = Timer.periodic(const Duration(milliseconds: 250), (_) {
         if (mounted && _stopwatch != null) {
           setState(() { _elapsed = _stopwatch!.elapsed; _wavePhase += .42; });
         }
@@ -9204,7 +9204,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
 
   void _startRefreshTimer() {
     refreshTimer?.cancel();
-    refreshTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+    refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (mounted && !sending && !refreshing) loadMessages(silent: true);
     });
   }
@@ -10651,7 +10651,7 @@ class _GroupChatPageState extends State<GroupChatPage> with WidgetsBindingObserv
 
   void _startRefreshTimer() {
     refreshTimer?.cancel();
-    refreshTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+    refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (mounted && !sending && !refreshing) loadMessages(silent: true);
     });
   }
