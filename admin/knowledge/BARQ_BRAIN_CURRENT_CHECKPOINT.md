@@ -202,3 +202,12 @@ Say exactly what is complete, what has only passed CI, what is blocked, and what
 - The live Preview D1/Queue/AI configuration is still unavailable/unverified from the current environment. Consequently no actual full repository ingestion or live Brain retrieval has been demonstrated.
 - Remaining Phase 2 acceptance work: verify latest CI including Android Kotlin compile; run all ingestion batches against the dedicated Admin Preview D1 pinned to an immutable commit; persist a complete coverage/freshness record; implement deleted/renamed-source reconciliation without destroying historical evidence; test cross-project separation, conflicting/superseded owner decisions, stale evidence and prompt injection; run representative live Brain questions with exact source citations.
 - Keep production untouched and do not use the BARQ consumer database for Admin knowledge.
+
+## Source freshness reconciliation — 2026-11-25
+
+- Added migration `0008_knowledge_freshness.sql`: each knowledge row records `last_seen_revision` and `is_stale`; old revisions remain stored.
+- Knowledge ingestion updates the last-seen revision on every indexed chunk. Only the final complete batch posts the reconciliation request.
+- Authenticated Admin Worker route `POST /v1/knowledge/reconcile` marks rows under the exact repository path prefix stale when they were not seen in the completed immutable commit. It never deletes knowledge history.
+- Brain retrieval sorts fresh sources ahead of stale ones and marks stale evidence explicitly in its prompt context.
+- Regression tests cover invalid/incomplete revision rejection, authenticated reconciliation, SQL path scoping, non-destructive history retention, and final-batch-only invocation.
+- This is implemented in the isolated branch; CI and live Preview D1 execution still need verification.
