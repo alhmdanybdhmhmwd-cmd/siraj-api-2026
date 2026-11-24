@@ -81,3 +81,38 @@ Curated owner decisions are seeded in `admin/knowledge/BARQ_OWNER_CONTEXT.md`. T
 - Autonomous repository edits, repairs, merges, or deployments: later authorized phase.
 - Production data/resource changes, paid resource creation, and production deployment: approval-gated.
 - APK packaging and physical phone acceptance: later release/testing gates.
+
+
+## Owner directive update — 2026-11-24
+
+The owner has now explicitly asked BARQ Brain to carry forward the full project understanding accumulated with the prior assistant, and to let the owner resume work with a short instruction such as "واصل، اشتغل، ابنِ نفسك". The knowledge foundation must therefore include not only current code but also the owner-approved decisions, rejected/postponed ideas, roadmap, historical bugs and fixes, CI evidence, unresolved blockers, and working preferences recorded in `BARQ_OWNER_CONTEXT.md`.
+
+A navigation source was added at `admin/knowledge/BARQ_BRAIN_MASTER_INDEX_AR.md`. The owner context was expanded with the current repository map and a continuation protocol. The Brain system prompt now points to these canonical documents and instructs it to recover the latest checkpoint, verify branch/commit/CI, avoid repeated work, cite evidence, and report missing knowledge coverage.
+
+This is a source/documentation and prompt improvement only. It does NOT prove that the documents have been ingested into Admin D1 or that live Brain retrieval can access them. The indexer supports Markdown and should include these documents in a future complete, revision-pinned ingestion run.
+
+The owner also directed continued preparation of a smaller Admin APK for the Galaxy S7. The current controlled build is ARM64-only; its final size and successful artifact upload must be confirmed from workflow evidence. Physical installation, Google sign-in, and live Admin API use remain untested on the S7.
+
+The owner's desired "continue" experience is the product target. Durable server-side background execution, repository editing, test/build orchestration and autonomous resume must be reported as unavailable until each is implemented and tested end-to-end. Never imply that a prompt or knowledge document alone grants those capabilities.
+
+## Verified implementation progress — 2026-11-25
+
+- The guarded indexer now retries transient GitHub API reads as well as Admin knowledge API writes, with bounded retry/backoff behavior.
+- Each ingestion result now includes a repository coverage report grouped by product domain and file extension, with explicit excluded-path reasons and oversized-file counts. The GitHub Actions summary publishes these breakdowns for each batch.
+- Regression tests cover coverage classification and transient GitHub API retries.
+- The latest observed Admin Quality run before these coverage changes passed its Admin Worker/unit/schema/workspace checks; mobile quality was still compiling Android Kotlin. The coverage change itself must pass its new CI run before it is treated as verified.
+- Still not complete: live Preview ingestion and retrieval, multi-batch completion against the actual isolated D1 store, source freshness reconciliation for deleted/renamed files, and representative live answer/citation acceptance tests. Do not claim Phase 2 complete until these are evidenced.
+
+## Freshness reconciliation implementation — 2026-11-25
+
+- Added Admin-only migration `0008_knowledge_freshness.sql` with `last_seen_revision` and `is_stale`; historical rows are retained.
+- Each successfully indexed chunk records the latest commit revision it was seen in and is reactivated as fresh.
+- The indexer calls `POST /v1/knowledge/reconcile` only when the current immutable revision has no remaining eligible batches. The endpoint marks repository-prefixed rows not seen in that revision as stale; it does not delete historical evidence.
+- Brain retrieval prefers fresh sources and explicitly labels stale evidence as historical/verification-required in the model context.
+- Added tests for complete-revision validation, workspace-authenticated reconciliation, no-history-deletion behavior, and final-batch-only reconciliation. CI must pass before this is considered verified; live Preview migration/ingestion is still required.
+
+## Current release gate — 2026-11-25
+
+The indexer now produces source-domain/file-type coverage and performs bounded retries. Non-destructive freshness reconciliation is implemented: a completed immutable-revision ingestion marks absent prior repository sources stale, while preserving historical rows; fresh knowledge is ranked ahead of stale evidence, which is explicitly labelled. Automated tests cover the new behavior.
+
+This does not complete Phase 2. Latest CI for the newest changes must pass; dedicated Preview configuration is missing; the repository has not yet been ingested into Admin Preview D1; and live retrieval/citation acceptance remains untested. Exact missing Preview deployment values and ingestion secrets are recorded in `BARQ_BRAIN_CURRENT_CHECKPOINT.md`.

@@ -5,9 +5,11 @@ on:
     paths:
       - "admin/**"
       - ".github/workflows/barq-admin-quality.yml"
+      - ".github/workflows/barq-admin-knowledge-ingest.yml"
   push:
     branches:
       - "barq-admin-foundation-2026-11-23"
+      - "barq-admin-s7-optimized-2026-11-24"
     paths:
       - "admin/**"
       - ".github/workflows/barq-admin-quality.yml"
@@ -17,7 +19,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: barq-admin-quality-${{ github.event.pull_request.head.ref || github.ref_name }}
+  group: barq-admin-quality-${{ github.event.pull_request.head.ref || github.ref_name }}-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: false
 
 jobs:
@@ -26,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: barq-admin-foundation-2026-11-23
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -49,6 +51,7 @@ jobs:
           db.executescript(Path("admin/migrations/0005_owner_identity_sessions.sql").read_text())
           db.executescript(Path("admin/migrations/0006_remove_image_usage_caps.sql").read_text())
           db.executescript(Path("admin/migrations/0007_brain_conversations.sql").read_text())
+          db.executescript(Path("admin/migrations/0008_knowledge_freshness.sql").read_text())
           names = {row[0] for row in db.execute(
               "SELECT name FROM sqlite_master WHERE type IN ('table','trigger')"
           )}
@@ -61,6 +64,10 @@ jobs:
           }
           missing = required - names
           assert not missing, f"Missing schema objects: {sorted(missing)}"
+          knowledge_columns = {row[1] for row in db.execute("PRAGMA table_info(admin_project_knowledge)")}
+          assert {"last_seen_revision", "is_stale"} <= knowledge_columns, (
+              "Knowledge freshness tracking columns are missing"
+          )
           forbidden_quota_tables = {"admin_ai_usage_limits", "admin_image_generation_limits"}
           assert not (forbidden_quota_tables & names), (
               "Image request-count quota tables must remain absent"
@@ -256,6 +263,23 @@ jobs:
           assert "siraj-production" not in serialized
           print("Admin Preview Wrangler template is valid TOML and isolated from production identifiers.")
           PY
+      - name: Validate Preview knowledge-ingestion workflow safety
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          workflow = Path(".github/workflows/barq-admin-knowledge-ingest.yml").read_text()
+          assert "workflow_dispatch:" in workflow
+          assert "pull_request:" not in workflow
+          assert "permissions:" in workflow and "contents: read" in workflow
+          assert "BARQ_ADMIN_PREVIEW_API_URL" in workflow
+          assert "BARQ_ADMIN_PREVIEW_OWNER_TOKEN" in workflow
+          assert "barq-admin-preview" in workflow and "workers" in workflow and ".dev" in workflow
+          assert "alhmdanybdhmhmwd-cmd/siraj-api-2026" in workflow
+          assert "BARQ_ADMIN_GITHUB_REF" in workflow
+          assert "wrangler deploy" not in workflow.lower()
+          assert "contents: write" not in workflow
+          print("Knowledge ingestion is manual-only, read-only on GitHub, allowlisted to this repository, and guarded to the isolated Preview host.")
+          PY
 
   admin-mobile-quality:
     runs-on: ubuntu-latest
@@ -265,7 +289,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: barq-admin-foundation-2026-11-23
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.50.1"
@@ -315,7 +339,18 @@ jobs:
           printf "flutter.sdk=%s\nsdk.dir=%s\n" "$FLUTTER_ROOT" "$sdk_path" > android/local.properties
           cd android
           export BARQ_GOOGLE_OIDC_CLIENT_ID="1234567890-test.apps.googleusercontent.com"
-          bash gradlew :app:processDebugManifest --no-daemon --console=plain --stacktrace --info
+          gradle_ok=0
+          for attempt in 1 2 3; do
+            if bash gradlew :app:processDebugManifest --no-daemon --console=plain --stacktrace --info; then
+              gradle_ok=1
+              break
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Gradle repository rate limit or transient dependency failure; retrying (attempt $((attempt + 1))/3)."
+              sleep 20
+            fi
+          done
+          test "$gradle_ok" -eq 1 || { echo "AppAuth manifest validation failed after 3 attempts." >&2; exit 1; }
           manifest="$(find ../build/app/intermediates -path '*merged_manifest*' -name AndroidManifest.xml -print -quit)"
           test -n "$manifest"
           grep -Fq 'com.googleusercontent.apps.1234567890' "$manifest"

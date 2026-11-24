@@ -2,6 +2,12 @@ name: BARQ Admin Preview Deploy
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - "barq-admin-s7-optimized-2026-11-24"
+    paths:
+      - "admin/**"
+      - ".github/workflows/barq-admin-preview-deploy.yml"
 
 permissions:
   contents: read
@@ -12,13 +18,13 @@ concurrency:
 
 jobs:
   preview:
-    if: github.ref == 'refs/heads/barq-admin-foundation-2026-11-23'
+    if: github.ref == 'refs/heads/barq-admin-foundation-2026-11-23' || github.ref == 'refs/heads/barq-admin-s7-optimized-2026-11-24'
     runs-on: ubuntu-latest
     environment: barq-admin-preview
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: barq-admin-foundation-2026-11-23
+          ref: ${{ github.sha }}
 
       - uses: actions/setup-node@v4
         with:

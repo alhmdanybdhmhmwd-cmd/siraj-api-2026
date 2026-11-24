@@ -29,3 +29,11 @@ String googleOidcRedirectUri(String clientId) {
   }
   return 'com.googleusercontent.apps.$clientPrefix:/oauth2redirect';
 }
+
+/// Prevents repeated foreground transitions from triggering frequent network syncs.
+bool shouldSyncOnResume(DateTime? lastSyncAt, DateTime now,
+    {Duration minimumInterval = const Duration(seconds: 45)}) {
+  if (lastSyncAt == null) return true;
+  final elapsed = now.difference(lastSyncAt);
+  return !elapsed.isNegative && elapsed >= minimumInterval;
+}

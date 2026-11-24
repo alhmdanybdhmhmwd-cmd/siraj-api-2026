@@ -37,3 +37,20 @@ The command prints a JSON summary with the resolved repository revision, indexed
 Record repository, resolved commit SHA, batch count, indexed chunks, skipped files, final `complete=true`, run time, and any provider/API errors. Do not claim full BARQ project coverage until every required repository and approved owner-context source is indexed and a separate coverage/freshness report verifies it.
 
 The indexer requires an explicit exact repository allowlist, excludes configured sensitive paths and likely secret patterns, and records the resolved commit SHA. These controls are defense in depth, not a guarantee that arbitrary repository content is safe. Review repository scope and keep credentials, signing keys, tokens, and private user data out of the index.
+
+
+## BARQ Brain full-project scope update — 2026-11-24
+
+The owner requires Brain to resume with the full known project context, not only the latest code. The approved monorepo contains the consumer app/backend and the separate Admin app/backend. Keep these areas distinct while indexing the single approved repository:
+- Consumer BARQ client: `android/`
+- Consumer backend: `src/` and relevant root configuration/workflows
+- BARQ Admin client and server: `admin/mobile/`, `admin/worker.js`, `admin/auth.js`, `admin/migrations/`
+- Owner decisions and history: `admin/knowledge/BARQ_OWNER_CONTEXT.md`
+- Knowledge navigation: `admin/knowledge/BARQ_BRAIN_MASTER_INDEX_AR.md`
+- Phase scope and indexing instructions: `admin/knowledge/PHASE2_SCOPE.md`, this runbook
+- Historical progress and verification records: `android/BARQ_SIX_FEATURES_STATUS.md`, `android/BARQ_REPAIR_PROGRESS_AR.md`, and other indexed Markdown records
+- CI/build/deploy configuration: `.github/workflows/`
+
+Markdown is an eligible index format. The current indexer limits each batch to 300 files, each file to 120,000 bytes, and chunks content at 18,000 characters. It excludes known build/dependency/secret paths and likely secret content. Report skipped paths/counts; do not call the index complete if any eligible batch remains or the GitHub tree is truncated.
+
+The new owner-context and master-index documents have been committed to branch `barq-admin-s7-optimized-2026-11-24`. They are not yet proven ingested into the live Admin D1 store. Before declaring Brain fully informed, run the indexer against the exact immutable commit SHA with the explicit allowlist, resume every batch to `complete=true`, and generate a coverage/freshness report. Then run retrieval tests against representative questions from each domain and confirm the returned source paths/revisions.

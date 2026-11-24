@@ -4,15 +4,57 @@ const MAX_CHUNK_CHARS = 18000;
 const MAX_FILES_PER_RUN = 300;
 const ALLOWED_EXTENSIONS = new Set([
   ".md", ".mdx", ".txt", ".dart", ".js", ".mjs", ".ts", ".tsx",
-  ".jsx", ".sql", ".yaml", ".yml", ".toml", ".xml", ".gradle", ".kts", ".properties", ".py", ".sh"
+  ".jsx", ".html", ".css", ".json", ".java", ".kt", ".h", ".c", ".cpp", ".swift", ".plist", ".xcconfig", ".sql", ".yaml", ".yml", ".toml", ".xml", ".gradle", ".kts", ".properties", ".py", ".sh"
 ]);
-const SENSITIVE_PATH = /(^|\/)(\.git|\.next|\.dart_tool|build|dist|node_modules|vendor|coverage|secrets?|credentials?)(\/|$)|(^|\/)(\.env[^/]*|.*\.(pem|key|p12|pfx|keystore|jks|apk|aab|ipa|sqlite|db|lock))$/i;
+const SENSITIVE_PATH = /(^|\/)(\.git|\.next|\.dart_tool|\.firebase|\.gradle|build|dist|node_modules|vendor|coverage|secrets?|credentials?)(\/|$)|(^|\/)(\.env[^/]*|local\.properties|key\.properties|.*\.(pem|key|p12|pfx|keystore|jks|apk|aab|ipa|sqlite|db|lock|tfvars))$/i;
 const SECRET_CONTENT = [
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
   /AIza[0-9A-Za-z_-]{30,}/,
   /gh[pousr]_[A-Za-z0-9_]{30,}/,
-  /(?:api[_-]?key|access[_-]?token|client[_-]?secret)\s*[:=]\s*["'][^"']{12,}["']/i
+  /github_pat_[A-Za-z0-9_]{30,}/,
+  /AKIA[0-9A-Z]{16}/,
+  /xox[baprs]-[A-Za-z0-9-]{20,}/,
+  /(?:sk|rk)_live_[A-Za-z0-9]{16,}/,
+  /GOCSPX-[A-Za-z0-9_-]{20,}/,
+  /npm_[A-Za-z0-9]{30,}/,
+  /pypi-[A-Za-z0-9_-]{50,}/,
+  /SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}/,
+  /(?:api[_-]?key|private[_-]?key|signing[_-]?key|secret|access[_-]?token|refresh[_-]?token|client[_-]?secret|auth[_-]?token|password)["']?\s*[:=]\s*["'][^"']{12,}["']/i
 ];
+
+export async function fetchWithRetry(url, options = {}, dependencies = {}) {
+  const fetchImpl = dependencies.fetchImpl || fetch;
+  const sleep = dependencies.sleep || (milliseconds =>
+    new Promise(resolve => setTimeout(resolve, milliseconds)));
+  const maxAttempts = Number.isSafeInteger(dependencies.maxAttempts)
+    ? Math.max(1, Math.min(dependencies.maxAttempts, 5))
+    : 3;
+  let lastError;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const response = await fetchImpl(url, {
+        ...options,
+        signal: options.signal || AbortSignal.timeout(30000)
+      });
+      const retryable = response.status === 408 || response.status === 425 ||
+        response.status === 429 || response.status >= 500;
+      if (!retryable || attempt === maxAttempts) return response;
+      const retryAfterHeader = response.headers?.get?.("retry-after");
+      const retryAfter = retryAfterHeader == null || retryAfterHeader.trim() === ""
+        ? Number.NaN
+        : Number(retryAfterHeader);
+      const delay = Number.isFinite(retryAfter) && retryAfter >= 0
+        ? Math.min(retryAfter * 1000, 5000)
+        : Math.min(250 * (2 ** (attempt - 1)), 2000);
+      await sleep(delay);
+    } catch (error) {
+      lastError = error;
+      if (attempt === maxAttempts) throw error;
+      await sleep(Math.min(250 * (2 ** (attempt - 1)), 2000));
+    }
+  }
+  throw lastError || new Error("request_retry_exhausted");
+}
 
 export function normalizeAllowedRepositories(value) {
   if (typeof value !== "string" || !value.trim()) {
@@ -102,18 +144,66 @@ export function normalizeAdminApiUrl(input) {
   return parsed.toString().replace(/\/+$/, "");
 }
 
-export function shouldIndexPath(input) {
-  if (typeof input !== "string" || !input || input.length > 160) return false;
+export function classifyIndexPath(input) {
+  if (typeof input !== "string" || !input || input.length > 160) return "invalid_path";
   const path = input.replace(/\\/g, "/");
-  if (path.startsWith("/") || path.split("/").some(part => part === ".." || part === ".")) return false;
-  if (SENSITIVE_PATH.test(path)) return false;
+  if (path.startsWith("/") || path.split("/").some(part => part === ".." || part === ".")) return "unsafe_path";
+  if (SENSITIVE_PATH.test(path)) return "sensitive_path";
   const name = path.split("/").pop() || "";
-  if (!name || name.startsWith(".")) return false;
+  if (!name || name.startsWith(".")) return "hidden_file";
+  if (/google-services|firebase-admin|service-account|credentials|secrets?/i.test(name)) return "credential_filename";
   const dot = name.lastIndexOf(".");
   const extension = dot >= 0 ? name.slice(dot).toLowerCase() : "";
-  if (!ALLOWED_EXTENSIONS.has(extension)) return false;
-  if (/google-services|firebase-admin|service-account|credentials|secrets?/i.test(name)) return false;
-  return true;
+  if (!ALLOWED_EXTENSIONS.has(extension)) return "unsupported_file_type";
+  return "eligible";
+}
+
+export function shouldIndexPath(input) {
+  return classifyIndexPath(input) === "eligible";
+}
+
+export function buildRepositoryCoverageReport(entries, maxFileBytes = 120000) {
+  if (!Number.isSafeInteger(maxFileBytes) || maxFileBytes < 1) {
+    throw new TypeError("invalid_max_file_size");
+  }
+  const report = {
+    treeBlobs: 0,
+    eligibleFiles: 0,
+    oversizedFiles: 0,
+    excludedByReason: {},
+    eligibleByExtension: {},
+    eligibleByDomain: {}
+  };
+  for (const entry of entries || []) {
+    if (!entry || entry.type !== "blob" || typeof entry.path !== "string") continue;
+    report.treeBlobs++;
+    const classification = classifyIndexPath(entry.path);
+    if (classification !== "eligible") {
+      report.excludedByReason[classification] = (report.excludedByReason[classification] || 0) + 1;
+      continue;
+    }
+    if (!Number.isSafeInteger(entry.size) || entry.size < 0) {
+      report.excludedByReason.invalid_file_size = (report.excludedByReason.invalid_file_size || 0) + 1;
+      continue;
+    }
+    if (entry.size > maxFileBytes) {
+      report.oversizedFiles++;
+      continue;
+    }
+    report.eligibleFiles++;
+    const name = entry.path.split("/").pop() || "";
+    const dot = name.lastIndexOf(".");
+    const extension = dot >= 0 ? name.slice(dot).toLowerCase() : "(no extension)";
+    report.eligibleByExtension[extension] = (report.eligibleByExtension[extension] || 0) + 1;
+    const first = entry.path.split("/")[0] || "root";
+    const domain = first.startsWith(".") ? "ci-and-config" :
+      first === "android" ? "barq-consumer-android" :
+      first === "src" ? "barq-consumer-backend" :
+      first === "admin" ? "barq-admin" :
+      first === "docs" || first === "documentation" ? "product-docs" : "root-and-other";
+    report.eligibleByDomain[domain] = (report.eligibleByDomain[domain] || 0) + 1;
+  }
+  return report;
 }
 
 export function splitKnowledgeContent(source, maxChars = MAX_CHUNK_CHARS) {
@@ -157,24 +247,24 @@ export function inferSourceType(path) {
   return "repository_file";
 }
 
-function containsLikelySecret(content) {
+export function containsLikelySecret(content) {
   return SECRET_CONTENT.some(pattern => pattern.test(content));
 }
 
-async function githubJson(url, token) {
-  const response = await fetch(url, {
+export async function githubJson(url, token, dependencies = {}) {
+  const response = await fetchWithRetry(url, {
     headers: {
       Accept: "application/vnd.github+json",
       Authorization: "Bearer " + token,
       "X-GitHub-Api-Version": "2022-11-28",
       "User-Agent": "BARQ-Admin-Knowledge-Ingest"
     }
-  });
+  }, dependencies);
   if (!response.ok) throw new Error("github_api_" + response.status);
   return response.json();
 }
 
-export async function ingestRepository({ repository, ref = "HEAD", startAfter = "", githubToken, adminApiUrl, ownerToken, allowedRepositories }) {
+export async function ingestRepository({ repository, ref = "HEAD", startAfter = "", githubToken, adminApiUrl, ownerToken, allowedRepositories }, dependencies = {}) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository || "") ||
       !githubToken || !adminApiUrl || !ownerToken) {
     throw new Error("missing_ingestion_configuration");
@@ -186,17 +276,20 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
   const apiBase = normalizeAdminApiUrl(adminApiUrl);
   const commit = await githubJson(
     "https://api.github.com/repos/" + repository + "/commits/" + encodeURIComponent(ref),
-    githubToken
+    githubToken,
+    dependencies
   );
   const revision = commit.sha;
   const tree = await githubJson(
     "https://api.github.com/repos/" + repository + "/git/trees/" + revision + "?recursive=1",
-    githubToken
+    githubToken,
+    dependencies
   );
   if (tree.truncated) throw new Error("repository_tree_truncated_refusing_partial_index");
   let indexed = 0;
   let skipped = 0;
-  const batch = selectIndexBatchWithSkips(tree.tree || [], startAfter, MAX_FILES_PER_RUN);
+  const coverage = buildRepositoryCoverageReport(tree.tree || []);
+  const batch = selectIndexBatchWithSkips(tree.tree || [], startAfter, dependencies.maxFilesPerRun || MAX_FILES_PER_RUN);
   const selectedEntries = batch.selected;
   skipped = batch.skippedOversizeFiles;
   for (const entry of selectedEntries) {
@@ -206,7 +299,8 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
     }
     const blob = await githubJson(
       "https://api.github.com/repos/" + repository + "/git/blobs/" + entry.sha,
-      githubToken
+      githubToken,
+      dependencies
     );
     if (blob.encoding !== "base64" || typeof blob.content !== "string") {
       skipped++;
@@ -219,7 +313,7 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
     }
     const chunks = splitKnowledgeContent(source);
     for (let index = 0; index < chunks.length; index++) {
-      const response = await fetch(apiBase + "/v1/knowledge", {
+      const response = await fetchWithRetry(apiBase + "/v1/knowledge", {
         method: "POST",
         headers: {
           Authorization: "Bearer " + ownerToken,
@@ -232,21 +326,37 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
           title: entry.path + (chunks.length > 1 ? " (part " + (index + 1) + ")" : ""),
           content: chunks[index]
         })
-      });
+            }, dependencies);
       if (!response.ok) throw new Error("admin_knowledge_api_" + response.status + "_at_" + entry.path);
       indexed++;
     }
   }
+  let reconciliation = null;
+  const complete = batch.remaining === 0;
+  if (complete) {
+    const response = await fetchWithRetry(apiBase + "/v1/knowledge/reconcile", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + ownerToken,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ repository, sourceRevision: revision, complete: true })
+    }, dependencies);
+    if (!response.ok) throw new Error("admin_knowledge_reconciliation_" + response.status);
+    reconciliation = await response.json();
+  }
   return {
     repository,
     revision,
+    coverage,
     indexed,
     skipped,
     eligibleFiles: batch.eligibleFiles,
     eligibleFilesAfterCursor: batch.eligibleFilesAfterCursor,
     processedFiles: batch.processedFiles,
     remainingFiles: batch.remaining,
-    complete: batch.remaining === 0,
+    complete,
+    reconciliation,
     nextStartAfter: batch.nextStartAfter
   };
 }
