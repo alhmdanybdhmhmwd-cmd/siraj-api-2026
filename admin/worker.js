@@ -333,7 +333,8 @@ async function processAdminTaskMessage(message, env) {
     const model = env.BARQ_ADMIN_AI_MODEL || "@cf/meta/llama-3.1-8b-instruct";
     const generated = await env.ADMIN_AI.run(model, {
       messages: buildAssistantMessages(task, workspace,
-        await retrieveKnowledgeForTask(env, payload.workspaceId, task.title + " " + task.description)),
+        await retrieveKnowledgeForTask(env, payload.workspaceId, task.title + " " + task.description,
+          workspace.current_project)),
       max_tokens: 1800
     });
     if (leaseLost) throw new Error("task_lease_lost");
@@ -455,6 +456,19 @@ export function isContinuationRequest(query) {
     .test(String(query || ""));
 }
 
+export function knowledgeMatchesProject(item, currentProject) {
+  const sourcePath = String(item?.source_path || "").replace(/\\\\/g, "/").toLowerCase();
+  const fileName = sourcePath.split("/").pop();
+  // These curated owner/navigation records intentionally describe both products.
+  if (fileName === "barq_owner_context.md" || fileName === "barq_brain_master_index_ar.md") return true;
+  const selectedProject = String(currentProject || "BARQ").toLowerCase().includes("admin")
+    ? "admin" : "barq";
+  if (/(^|\\/)admin\\//.test(sourcePath)) return selectedProject === "admin";
+  if (/(^|\\/)(android|src|api|worker|workers)\\//.test(sourcePath)) return selectedProject === "barq";
+  // Root-level docs and shared CI/configuration remain visible to both projects.
+  return true;
+}
+
 export function knowledgeSearchTerms(query, limit = 12) {
   const safeLimit = Number.isSafeInteger(limit) ? Math.max(1, Math.min(20, limit)) : 12;
   return [...new Set((String(query || "").toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []))]
@@ -504,7 +518,7 @@ export function mergePinnedKnowledge(ranked, pinned, limit = 8) {
   return merged;
 }
 
-async function retrieveKnowledgeForTask(env, workspaceId, query) {
+async function retrieveKnowledgeForTask(env, workspaceId, query, currentProject = "BARQ") {
   const tokens = knowledgeSearchTerms(query);
   let statement;
   if (tokens.length) {
@@ -527,7 +541,8 @@ async function retrieveKnowledgeForTask(env, workspaceId, query) {
     ).bind(workspaceId);
   }
   const rows = await statement.all();
-  const ranked = rankKnowledgeChunks(rows.results || [], query, 8);
+  const scopedRows = (rows.results || []).filter(item => knowledgeMatchesProject(item, currentProject));
+  const ranked = rankKnowledgeChunks(scopedRows, query, 8);
   if (!isContinuationRequest(query)) return ranked.slice(0, 6);
 
   // Always include the compact navigation map when resuming, even if the
@@ -546,7 +561,8 @@ async function retrieveKnowledgeForTask(env, workspaceId, query) {
   ]);
   return mergePinnedKnowledge(
     ranked,
-    [...(ownerContext.results || []), ...(masterIndex.results || [])],
+    [...(ownerContext.results || []), ...(masterIndex.results || [])]
+      .filter(item => knowledgeMatchesProject(item, currentProject)),
     8
   );
 }
@@ -1116,10 +1132,12 @@ async function handle(request, env) {
     `).bind(userMessageId, conversationId, workspace, parsed.value.message).run();
 
     try {
-      const knowledge = await retrieveKnowledgeForTask(env, workspace, parsed.value.message);
       const workspaceInfo = await env.ADMIN_DB.prepare(
         "SELECT current_project, current_phase FROM admin_workspaces WHERE id = ?"
       ).bind(workspace).first();
+      const knowledge = await retrieveKnowledgeForTask(
+        env, workspace, parsed.value.message, workspaceInfo?.current_project
+      );
       const base = buildAssistantMessages(
         { title: "BARQ Brain conversation", description: parsed.value.message },
         workspaceInfo,
