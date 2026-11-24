@@ -29,7 +29,7 @@ jobs:
       - name: Checkout the ingestion code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          ref: ${{ github.ref }}
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -46,7 +46,7 @@ jobs:
           test -n "$BARQ_ADMIN_OWNER_TOKEN" || { echo "Missing secret: BARQ_ADMIN_PREVIEW_OWNER_TOKEN" >&2; exit 1; }
           node --input-type=module - <<'NODE'
           const url = new URL(process.env.BARQ_ADMIN_API_URL);
-          if (url.protocol !== "https:" || !/^barq-admin-preview(?:-[a-z0-9-]+)?\\.[a-z0-9-]+\\.workers\\.dev$/i.test(url.hostname)) {
+          if (url.protocol !== "https:" || !/^barq-admin-preview(?:-[a-z0-9-]+)?\.[a-z0-9-]+\.workers\.dev$/i.test(url.hostname)) {
             throw new Error("Refusing knowledge ingestion: API URL is not the isolated barq-admin-preview workers.dev host");
           }
           if (!process.env.BARQ_ADMIN_GITHUB_REF || process.env.BARQ_ADMIN_GITHUB_REF.length > 160) {
