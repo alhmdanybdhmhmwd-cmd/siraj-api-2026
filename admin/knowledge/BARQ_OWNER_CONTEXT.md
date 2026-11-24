@@ -112,3 +112,100 @@ The later development workspace should provide:
 - Human approval before merging, production deployment, destructive data changes, secret/permission changes, paid actions, or external communications. Failed or uncertain repairs must stop with evidence rather than guess.
 
 Phase 2 acceptance should prepare accurate, revision-aware knowledge for both projects and report repository coverage. Phase 3 (when authorized) should add controlled repository read/edit/test capabilities. Later durable-operation phases should make accepted work continue server-side while the phone is offline. The owner does not want an APK until the agreed programming work is complete; physical-phone acceptance remains a later dedicated testing stage.
+
+
+---
+
+## 10. Newest owner directive and continuation handoff — 2026-11-24
+
+This section is the newest owner instruction and supersedes older statements in this document wherever they conflict.
+
+### 10.1 What the owner expects after installing BARQ Admin
+
+The owner does not want to become the technical operator of the development system. The intended user experience is:
+
+1. Install BARQ Admin on the owner's travel phone (initial target: Samsung Galaxy S7).
+2. Open BARQ Brain and say a short instruction such as: **"واصل، اشتغل، ابنِ نفسك"**.
+3. Brain retrieves this durable project context, the latest task/checkpoint, repository revisions, CI evidence, unresolved defects, and the next authorized action.
+4. Brain continues the development workflow without requiring the owner to restate the project history or manually operate GitHub/Colab/Cloudflare for ordinary approved work.
+5. Brain reports concrete evidence: changed files, branch and commit, test/build run, results, artifact, remaining work, and any owner decision that is genuinely required.
+
+The phrase is a request to resume the current approved work, not permission to publish to production, merge changes, spend money, alter production data, expose secrets, or bypass approval gates.
+
+### 10.2 Knowledge requirement — project-aware like the prior assistant
+
+The owner explicitly requires BARQ Brain to understand the project deeply, including:
+- The original product vision, naming, design direction, and every accepted, rejected, postponed, and superseded decision.
+- The complete 12-stage BARQ plan, progress by phase and work item, what was implemented, what was tested only in CI, what was physically tested, and what remains blocked.
+- The history of bugs, reproductions, attempted fixes, regressions, root-cause confidence, and unresolved network/deployment issues.
+- The consumer Flutter app, backend/Workers, D1 schemas/migrations, APIs, realtime, Firebase, media, notifications, Nearby/offline flows, translation, transcription, temporary messages, and their tests.
+- The separate BARQ Admin Flutter client, Worker/API, D1 schema, owner authentication, AI/chat, indexing, tasks, approvals, audit, security model, CI and build process.
+- The current GitHub repository, exact source paths, branches, commit SHAs, pull requests, workflows, test runs, deployment configuration and known missing resources.
+- The owner's preferred working method: continue from the last checkpoint, avoid repeating completed work, do not lose agreed changes, do not claim success without evidence, and give short, clear progress reports.
+
+Knowledge must be revision-aware and evidence-based. Keep owner decisions separate from source-code facts and CI/device/deployment evidence. A requirement is not proof of implementation. A passing CI run is not a physical-phone test. A generated APK is not proof that it installs or that server sign-in works.
+
+### 10.3 Repository map observed on 2026-11-24
+
+The approved initial GitHub repository is `alhmdanybdhmhmwd-cmd/siraj-api-2026`. It is a combined repository; preserve the project boundaries by path and runtime:
+- `android/`: BARQ consumer Flutter/Android source, including `android/lib/`, Android configuration, tests, Arabic README and progress records.
+- `src/`: consumer/backend source modules, including conversation summaries, media multipart routes, notifications, and runtime adapters.
+- Root `.github/workflows/`: CI and deployment workflows for consumer Android/backend/preview and Admin.
+- `admin/mobile/`: independent BARQ Admin Flutter application, Android package `com.barq.admin`.
+- `admin/worker.js`, `admin/auth.js`, `admin/migrations/`: Admin API, owner authentication and Admin-only D1 schema.
+- `admin/knowledge/`: curated owner decisions, indexing runbook, phase scope and project handoff documents.
+- `admin/ingest_github_repo.mjs`: guarded, resumable source indexer.
+
+Important identifiers:
+- BARQ consumer Android application ID: `com.barq.app`.
+- BARQ consumer Firebase project: `barq-60b76`.
+- Legacy Siraj Android/Firebase identifiers are historical only: `com.siraj.app.siraj` / `siraj-15728`.
+- GitHub repository keeps the historical name `siraj-api-2026`; do not use that as the product name.
+- Consumer API and Admin API, consumer D1 and Admin D1, consumer sessions and Admin owner sessions, and all production/preview resources must remain separate.
+
+### 10.4 Consumer BARQ product decisions to preserve
+
+- Official app name remains **برق — BARQ**; **SPARK — سبارك** is only the stories/status feature.
+- Product is global, including Yemen; do not hard-code Yemen-only signup wording.
+- Phone number is the primary account identifier; username is secondary. Real phone verification was postponed to a future update and must not block current work.
+- No friend-request experience. Users can message unsaved numbers and save them from the profile. Contacts require device permission and appropriate refresh.
+- Core chat expectations: fast direct messaging, push notifications, edit, delete for self/both, quote replies, delete conversation, clear history, block, read-triggered ephemeral messages, Arabic/English translation toggle, voice-to-text, and private saved memories for messages/photos.
+- SPARK: text/image/video stories, replies and interactions in the same viewer, profile ring for unseen stories. The previously discussed mutual-contact visibility rule must be verified as a final decision before treating it as implemented.
+- Explicit exclusions: QR smart-share card, referral/reward program, invitation reward links/counters, "5 friends" invitation, and lightning badge.
+- Four approved visual identities: البرق الأزرق, الفراشة, الظل البنفسجي, الجوهرة السماوية. The app should allow switching among them. Visual direction: "التواصل بنبض الضوء", electric blue/gold/white/black, premium global technology feel. Do not resurrect rejected concepts.
+- Public registration/onboarding and News are postponed to the final project phase. This does not postpone owner-only Google OIDC for BARQ Admin.
+- The owner requires real-device testing as a dedicated final acceptance gate. The current authoritative plan is 12 stages; older 8-stage plans and any older phase numbering in individual notes must be treated as historical until reconciled.
+
+### 10.5 Historical technical context and known risk notes
+
+- Consumer Flutter work previously used Flutter 3.50.0 / Dart 3.14.0 and Java 17 for Gradle; confirm current CI before relying on these versions.
+- The consumer source README observed on 2026-11-24 documents Android minSdk 26, REST API `https://siraj-api-2026.vercel.app`, and realtime URL `wss://siraj-api.alhmdanybdhmhmwd.workers.dev/api/realtime`. These are source-document values, not proof every endpoint is healthy today.
+- The owner previously observed a preview hostname returning DNS_PROBE_FINISHED_NXDOMAIN; later a base health response `{"name":"Siraj API","status":"ready"}` opened without VPN. This alone does not prove every API route, app flow, or mobile carrier path is fixed. Re-test exact endpoints and carriers before closing the network issue.
+- CI records in `android/BARQ_SIX_FEATURES_STATUS.md` describe multiple Phase 7 batches as programmatically complete, while live two-phone/network testing remains outstanding. Use the recorded run IDs and commits as historical evidence; verify latest run status before reusing.
+- The owner asked to defer the real phone-number verification step. Do not reintroduce it as a blocker.
+- Final real-device test coverage must include install/update/reinstall, owner/user auth and session expiry, core screens/actions, network loss/recovery, offline drafts/outbox and duplicate prevention, notifications/deep links/permissions/background behavior, media and AI paths only where configured, Arabic RTL/English layouts, and regression tests.
+
+### 10.6 BARQ Admin and BARQ Brain current build expectation
+
+- BARQ Admin is a separate owner workspace; BARQ Brain is its assistant and intended engineering partner.
+- The owner wants Brain to help develop BOTH the consumer BARQ product and BARQ Admin itself. Self-development must be isolated and must preserve authentication, owner access, audit, approvals, backups and recovery.
+- The owner wants the assistant to resume from the previous ChatGPT/project work rather than ask him to repeat decisions.
+- The current repository indexing seed and code retrieval are only the knowledge foundation. Do not describe repository editing, automated repair, remote execution, durable background work, or full project coverage as live until each capability is implemented and tested end-to-end.
+- The owner has now explicitly directed continued preparation of the comprehensive project knowledge and the smaller Galaxy S7 installation build. This supersedes older blanket wording that said no APK may be created at all; the APK is a controlled Admin preview/install test artifact, not a consumer release.
+- On 2026-11-24 a separate branch `barq-admin-s7-optimized-2026-11-24` was created from `barq-admin-foundation-2026-11-23`. Its workflow `.github/workflows/barq-admin-android-preview.yml` was changed to build an ARM64-only debug APK using `flutter build apk --debug --target-platform android-arm64 --split-per-abi`. Workflow run `45307180610` passed dependency resolution, formatting/analyze/tests and was still building the APK at last check. Do not claim a smaller artifact exists until the build, verification and artifact upload steps complete.
+- Earlier universal debug APK: 162 MB, SHA-256 `c8ee1b7b57f9199da230e404762cb06d0331eb1a56291873ae1f71d86150d7db`. It was not tested on a physical Galaxy S7. Do not use it as proof of device compatibility.
+- Admin mobile source has owner API-base configuration, Google OIDC client flow, secure session storage, workspace/tasks/approvals/audit screens, offline task drafts/outbox, Brain chat, image analysis and image generation UI. The Admin API/Worker currently supports workspace/task/approval/audit/knowledge/chat/auth routes. Preview D1/Queue/Workers AI and Google OIDC configuration must be verified independently before declaring the service live.
+- BARQ Brain's current system prompt and knowledge retrieval are not equivalent to an autonomous coding agent. Actual repository editing, controlled test/build tools, durable execution and resume/checkpoint processing must be implemented and demonstrated, not merely promised in a prompt.
+- The owner prefers that public registration and News stay deferred to the final consumer phase; neither should block BARQ Admin foundation/knowledge work.
+
+### 10.7 Continuation protocol for Brain
+
+When the owner says "واصل", "كمل", or "ابنِ نفسك":
+1. Load the latest owner context, project phase scope, handoff/checkpoint, and relevant indexed sources.
+2. Check the actual repository branch/commit and latest CI/workflow status before deciding what is next.
+3. Continue the highest-priority unfinished task already authorized; do not restart completed work.
+4. Work in a dedicated branch. Preserve existing approved changes. Never silently change the consumer/Admin project boundary.
+5. Run focused tests, then relevant regression checks. Record exact commands/workflow IDs and actual outcomes.
+6. Save a durable checkpoint containing completed steps, changed paths, commit SHA, test evidence, blockers, next action and approval boundary.
+7. Report briefly in Arabic what changed, what passed, what remains, and whether owner input is genuinely required.
+8. If context is incomplete, state exactly which source or revision is missing. Never fill gaps with guesses.
