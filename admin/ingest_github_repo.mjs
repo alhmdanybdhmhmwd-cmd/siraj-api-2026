@@ -328,6 +328,20 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
       indexed++;
     }
   }
+  let reconciliation = null;
+  const complete = batch.remaining === 0;
+  if (complete) {
+    const response = await fetchWithRetry(apiBase + "/v1/knowledge/reconcile", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + ownerToken,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ repository, sourceRevision: revision, complete: true })
+    });
+    if (!response.ok) throw new Error("admin_knowledge_reconciliation_" + response.status);
+    reconciliation = await response.json();
+  }
   return {
     repository,
     revision,
@@ -338,7 +352,8 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
     eligibleFilesAfterCursor: batch.eligibleFilesAfterCursor,
     processedFiles: batch.processedFiles,
     remainingFiles: batch.remaining,
-    complete: batch.remaining === 0,
+    complete,
+    reconciliation,
     nextStartAfter: batch.nextStartAfter
   };
 }
