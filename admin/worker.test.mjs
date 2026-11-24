@@ -390,6 +390,9 @@ test("BARQ Brain recognizes the owner's approved autonomous development-toolchai
   assert.match(system, /Production deployment, merge/);
   assert.match(system, /not an autonomous code editor/);
   assert.match(system, /phone-to-PR-to-CI-to-resume loop passes/);
+  assert.match(system, /PROACTIVE BARQ CONSUMER-UPDATE PROPOSAL GATE/);
+  assert.match(system, /STOP before implementing that BARQ app update/);
+  assert.match(system, /explicit permission to begin that specific BARQ update/);
 });
 
 
