@@ -124,3 +124,15 @@ Say exactly what is complete, what has only passed CI, what is blocked, and what
 - To enable a run, the repository's GitHub Actions secrets must contain `BARQ_ADMIN_PREVIEW_API_URL` (the actual HTTPS Preview Worker URL matching the guarded host) and `BARQ_ADMIN_PREVIEW_OWNER_TOKEN` (an owner token scoped to the isolated Admin Preview workspace). Never put either value in chat or source files.
 - If those secrets or the isolated Preview D1 are not configured, the workflow will stop at preflight; it will not fall back to a production API.
 - Latest workflow changes: ingestion workflow commit `88fe9170b69e825703b17ae2caf3921a7c1256f3`, checkout/host guard correction `ee3559226b60212bde929335b8f354954116e15a`, and safety-test commits `75ac1c2b92d1f32e03dca4a11d98a6393c29d299`, `ef32a00ac31d9ea2df8b953cb27abb1ff261853b`, `f43b7b985e02c13a11a2fc179761102fc803e7f5`.
+
+
+## Owner authorization for autonomous development toolchain (2026-11-24)
+
+- The owner explicitly authorized implementing the development-toolchain phases needed for the desired phone workflow: install BARQ Admin, say "واصل", and have BARQ Brain resume building both BARQ Admin and the consumer BARQ app.
+- Scope now approved for implementation in isolated Preview/review environments: secure GitHub account/app connection, repository inspection, isolated-branch edits/repairs, tests/build orchestration, failure diagnosis, durable server-side continuation independent of the phone, and reviewable PR creation.
+- Production merges/deployments, production data changes, secret exposure/rotation, paid resources, and irreversible external actions remain action-specific approval gates.
+- Updated `admin/worker.js` system instructions to reflect this authorization without overstating current capabilities. Updated `admin/worker.test.mjs` with a regression test that asserts the scope is authorized while code editing remains explicitly unavailable until connected and tested.
+- Current code reality: Admin mobile has owner login/chat/task UI; Worker task queue currently calls the AI model to produce a draft answer and a checkpoint. It does NOT yet edit GitHub files, run repository CI/build workflows, or perform automatic PR creation. A real GitHub App/user installation connection and isolated execution runner are still required.
+- The owner-authorization and capability-truthfulness changes are committed on branch `barq-admin-s7-optimized-2026-11-24`; latest commit at checkpoint writing: `8ce0204686393cfe8fa724237e36a2f34cc4039c`.
+- Admin Worker/unit/schema quality job passed in run `45310543568`; the same run's Android mobile-quality job was still executing AppAuth manifest validation when last checked. Backend tests passed in run `45310876434`.
+- Do not tell the owner the app is ready for autonomous self-development until the secure GitHub integration, real source-edit/test/build runner, durable resume, and full phone-to-PR-to-CI-to-resume acceptance test are complete.
