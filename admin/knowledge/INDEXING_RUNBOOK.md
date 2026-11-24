@@ -7,6 +7,7 @@ This procedure indexes an explicitly selected GitHub repository revision into th
 Supply these values only through a trusted local secret manager or protected CI secrets. Never commit them, paste them into chat, or print them in logs.
 
 - `BARQ_ADMIN_GITHUB_REPOSITORY`: owner/repository, for example the BARQ engineering repository.
+- `BARQ_ADMIN_GITHUB_ALLOWED_REPOSITORIES`: semicolon-separated exact owner/repository allowlist approved for this indexing run. The selected repository must match one entry exactly; wildcards and implicit access to other repositories are not accepted.
 - `BARQ_ADMIN_GITHUB_REF`: immutable commit SHA preferred; a branch or tag is acceptable when the resolved SHA is recorded.
 - `BARQ_ADMIN_GITHUB_TOKEN`: read-only GitHub Contents/Metadata access for the selected repository.
 - `BARQ_ADMIN_API_URL`: HTTPS URL of the dedicated BARQ Admin Preview Worker.
@@ -35,4 +36,4 @@ The command prints a JSON summary with the resolved repository revision, indexed
 
 Record repository, resolved commit SHA, batch count, indexed chunks, skipped files, final `complete=true`, run time, and any provider/API errors. Do not claim full BARQ project coverage until every required repository and approved owner-context source is indexed and a separate coverage/freshness report verifies it.
 
-The indexer excludes configured sensitive paths and likely secret patterns, but this is defense in depth, not a guarantee that arbitrary repository content is safe. Review repository scope and keep credentials, signing keys, tokens, and private user data out of the index.
+The indexer requires an explicit exact repository allowlist, excludes configured sensitive paths and likely secret patterns, and records the resolved commit SHA. These controls are defense in depth, not a guarantee that arbitrary repository content is safe. Review repository scope and keep credentials, signing keys, tokens, and private user data out of the index.
