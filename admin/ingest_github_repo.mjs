@@ -11,7 +11,15 @@ const SECRET_CONTENT = [
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
   /AIza[0-9A-Za-z_-]{30,}/,
   /gh[pousr]_[A-Za-z0-9_]{30,}/,
-  /(?:api[_-]?key|access[_-]?token|client[_-]?secret)\s*[:=]\s*["'][^"']{12,}["']/i
+  /github_pat_[A-Za-z0-9_]{30,}/,
+  /AKIA[0-9A-Z]{16}/,
+  /xox[baprs]-[A-Za-z0-9-]{20,}/,
+  /(?:sk|rk)_live_[A-Za-z0-9]{16,}/,
+  /GOCSPX-[A-Za-z0-9_-]{20,}/,
+  /npm_[A-Za-z0-9]{30,}/,
+  /pypi-[A-Za-z0-9_-]{50,}/,
+  /SG\\.[A-Za-z0-9_-]{16,}\\.[A-Za-z0-9_-]{16,}/,
+  /(?:api[_-]?key|access[_-]?token|client[_-]?secret|auth[_-]?token|password)\\s*[:=]\\s*["'][^"']{12,}["']/i
 ];
 
 export function normalizeAllowedRepositories(value) {
@@ -157,7 +165,7 @@ export function inferSourceType(path) {
   return "repository_file";
 }
 
-function containsLikelySecret(content) {
+export function containsLikelySecret(content) {
   return SECRET_CONTENT.some(pattern => pattern.test(content));
 }
 
