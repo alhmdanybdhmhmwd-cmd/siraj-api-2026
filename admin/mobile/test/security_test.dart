@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:barq_admin/security.dart'
-    show isValidAdminApiBase, createOidcNonce, googleOidcRedirectUri;
+    show isValidAdminApiBase, createOidcNonce, googleOidcRedirectUri, shouldSyncOnResume;
 
 void main() {
   test('accepts HTTPS Admin API URLs with an optional path', () {
@@ -35,4 +35,18 @@ void main() {
       throwsArgumentError,
     );
   });
+  test('throttles rapid foreground resume syncs without blocking later refreshes', () {
+    final first = DateTime.utc(2026, 11, 25, 0, 0);
+    expect(shouldSyncOnResume(null, first), isTrue);
+    expect(shouldSyncOnResume(first, first.add(const Duration(seconds: 20))), isFalse);
+    expect(shouldSyncOnResume(first, first.add(const Duration(seconds: 45))), isTrue);
+    expect(shouldSyncOnResume(first, first.subtract(const Duration(seconds: 1))), isFalse);
+    expect(
+      shouldSyncOnResume(first, first.add(const Duration(seconds: 10)),
+          minimumInterval: Duration.zero),
+      isTrue,
+    );
+  });
+
 }
+
