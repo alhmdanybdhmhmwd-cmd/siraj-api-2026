@@ -16,12 +16,12 @@ permissions:
 
 concurrency:
   group: barq-cloud-ui-screenshots
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   screenshots:
     runs-on: ubuntu-22.04
-    timeout-minutes: 45
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
         with:
@@ -45,7 +45,7 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          emulator-boot-timeout: 600
+          emulator-boot-timeout: 900
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           script: |
             set -euxo pipefail
@@ -64,12 +64,20 @@ jobs:
       - name: Package screenshots
         if: always()
         run: |
+          mkdir -p artifacts
           if [ -d artifacts/barq-ui-screenshots ]; then
+            count="$(find artifacts/barq-ui-screenshots -type f -iname '*.png' | wc -l)"
+            echo "Captured PNG files: $count"
+            if [ "$count" -lt 8 ]; then
+              echo "Insufficient real screenshots: expected at least 8, found $count." > artifacts/SCREENSHOT_CAPTURE_FAILED.txt
+              exit 1
+            fi
             cd artifacts
             zip -qr barq-ui-screenshots.zip barq-ui-screenshots
+            unzip -l barq-ui-screenshots.zip
           else
-            mkdir -p artifacts
             echo "Screenshot driver did not produce an output directory." > artifacts/SCREENSHOT_CAPTURE_FAILED.txt
+            exit 1
           fi
       - name: Upload screenshot bundle
         if: always()
