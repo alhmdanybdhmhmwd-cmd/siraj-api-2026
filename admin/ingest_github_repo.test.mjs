@@ -8,6 +8,14 @@ test("repository ingestion allowlists project files and excludes secrets/build o
   assert.equal(shouldIndexPath("android/app/src/main/AndroidManifest.xml"), true);
   assert.equal(shouldIndexPath("android/app/build.gradle.kts"), true);
   assert.equal(shouldIndexPath("scripts/check_schema.py"), true);
+  assert.equal(shouldIndexPath("admin/mobile/web/index.html"), true);
+  assert.equal(shouldIndexPath("admin/mobile/web/styles.css"), true);
+  assert.equal(shouldIndexPath("admin/mobile/package.json"), true);
+  assert.equal(shouldIndexPath("admin/mobile/tsconfig.json"), true);
+  assert.equal(shouldIndexPath("admin/mobile/android/local.properties"), false);
+  assert.equal(shouldIndexPath("admin/mobile/android/key.properties"), false);
+  assert.equal(shouldIndexPath("infra/production.tfvars"), false);
+  assert.equal(shouldIndexPath("admin/.firebase/project.json"), false);
   assert.equal(shouldIndexPath("secrets/private_notes.md"), false);
   assert.equal(shouldIndexPath("admin/pubspec.lock"), false);
   assert.equal(shouldIndexPath("android/app/google-services.json"), false);
@@ -131,4 +139,6 @@ test("knowledge ingestion rejects common provider credential formats and keeps o
   for (const sample of secretSamples) assert.equal(containsLikelySecret(sample), true);
   assert.equal(containsLikelySecret("BARQ uses Firebase Cloud Messaging for push notifications."), false);
   assert.equal(containsLikelySecret("Example: set the API key in your local secret manager."), false);
+  assert.equal(containsLikelySecret('{"private_key":"synthetic-private-value-long-enough"}'), true);
+  assert.equal(containsLikelySecret('{"refresh_token":"synthetic-refresh-token-value"}'), true);
 });
