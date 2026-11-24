@@ -238,3 +238,12 @@ Preserve this chronology so the assistant does not apply an old restriction afte
 - A Cloudflare Worker named `barq` was previously observed as a Hello World service; do not assume it hosts the current consumer backend or overwrite it without inspecting its current source and bindings.
 - The owner does not want to be asked to paste tokens, passwords, signing keys or private secrets into chat. Use approved secret stores and never print secret values. Do not ask the owner to reinstall SentinelX or repeat a setup step already confirmed unless live evidence shows it is missing.
 - The owner prefers short Arabic progress notes, exact copyable instructions only when needed, direct APK links after verified artifact creation, and no unnecessary rebuilds, long repetitive task lists, or unsupported completion claims.
+
+
+### 10.10 Galaxy S7 and network acceptance constraints recovered from prior conversations
+
+- The owner's target test phone is a **Samsung Galaxy S7 Verizon running Android 8**. A prior BARQ build showed "تعذر الوصول للخادم" without VPN and worked with VPN. This is a known unresolved user-facing connectivity issue until tested and fixed.
+- The owner requires BARQ to work without VPN across **Yemen Net, Yemen Mobile, and Sabafon**, plus another network as part of the final network acceptance. Do not call the no-VPN issue solved merely because a single health URL opens.
+- Earlier size targets discussed for preserving all features were approximately: optimized debug APK 60–100 MB; architecture-specific release APK 20–40 MB; universal release APK 35–60 MB. These are targets, not achieved measurements. Do not delete features to meet them.
+- The 2026-11-24 ARM64-only Admin debug artifact measured 97,638,277 bytes (about 97.6 MB / 93.1 MiB), versus the earlier universal Admin debug APK of about 162 MB. It is an Admin preview artifact, not the consumer BARQ app, and was not installed on the S7. The current workflow was then changed to produce an optimized ARM64 release-mode preview build; its final size must be measured separately.
+- A successful APK build or ARM64 library inspection does not prove Galaxy S7 installation, Android 8 compatibility, Google OIDC callback, API connectivity, or app usability. Those require physical-device evidence.
