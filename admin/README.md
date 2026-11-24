@@ -5,14 +5,14 @@ This directory is a separate Admin service boundary. It is not part of the BARQ 
 ## Current foundation
 
 - Owner-scoped workspace bootstrap.
-- Task creation/listing with idempotency keys.
+- Task creation/listing with validated 8–128 character idempotency keys; reusing a key with a different title, description, or priority is rejected instead of silently returning the earlier task.
 - Durable task states, server Queue consumer, lease-based task claiming, bounded retries, server-side BARQ Brain draft generation, and optimistic checkpoint versions. The Preview Queue is configured for one message per delivery. A dedicated dead-letter consumer marks exhausted queued/running tasks as failed, clears their lease, and writes an audit event for owner review.
 - Append-only audit events enforced by SQLite triggers.
 - Explicit approval records in the schema.
 - Google OpenID Connect identity exchange using Authorization Code + PKCE in the native client; the Worker verifies Google RS256 signatures, issuer, audience, verified email, exact owner subject, expiry, and one-time nonce use.
 - Short-lived Admin access JWTs bound to a server-side device session; opaque refresh tokens are stored only as SHA-256 hashes and rotated on every use; a hash history distinguishes a genuine replay from an arbitrary invalid token, so random bad tokens cannot revoke an owner session.
 - Owner device inventory, per-device revocation, global session revocation, refresh replay detection, and append-only security audit events.
-- Versioned project knowledge ingestion API and guarded GitHub repository indexing for Markdown, source code, Android manifests/Gradle files, SQL migrations, CI workflows, and project scripts. Phase 2 is explicitly owner-authorized; the assistant is instructed to distinguish accepted/rejected/postponed decisions, cite exact source paths/revisions, report missing coverage, and treat indexed content as untrusted reference data.
+- Versioned project knowledge ingestion API and guarded GitHub repository indexing for Markdown, source code, Android manifests/Gradle files, SQL migrations, CI workflows, and project scripts. Indexing now requires an explicit exact owner-approved repository allowlist; each run records a resolved commit SHA and supports resumable batches. Phase 2 is explicitly owner-authorized; the assistant is instructed to distinguish accepted/rejected/postponed decisions, cite exact source paths/revisions, report missing coverage, and treat indexed content as untrusted reference data.
 - Unit tests and isolated SQLite schema checks.
 
 ## Required runtime bindings
