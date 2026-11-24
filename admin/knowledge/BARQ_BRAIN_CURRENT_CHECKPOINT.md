@@ -79,3 +79,15 @@ Say exactly what is complete, what has only passed CI, what is blocked, and what
 - Latest known branch commit after this work: `e72837859407dd462660cce9d99263d607363bfd`. The secret scanner and test additions need a fresh Admin Quality run against this exact revision before being called CI-verified.
 - Optimized ARM64 Release APK workflow `45308936229` still has no visible jobs or artifacts in the latest check. Do not claim the optimized APK is ready or provide the older debug build as a substitute.
 - Preview deployment remains safely blocked because the required GitHub Environment values are not visible to the workflow. No deployment or production changes were made.
+
+## Continuation work — indexing coverage and latest CI check (2026-11-24)
+
+- Reviewed the repository indexer's extension allowlist and found that important project sources were being omitted: Admin web HTML/CSS, JSON manifests/configuration, and native Android Java/Kotlin sources.
+- Expanded the allowlist to include `.html`, `.css`, `.json`, `.java`, `.kt`, `.h`, `.c`, `.cpp`, `.swift`, `.plist`, and `.xcconfig`, while preserving text-only indexing and per-file secret scanning.
+- Strengthened sensitive-path exclusions for `.firebase`, `.gradle`, `local.properties`, `key.properties`, and Terraform `.tfvars`; expanded content patterns for private/signing keys, generic secrets, and refresh tokens.
+- Added regression tests for HTML/CSS/JSON, Android Kotlin/Java sources, local/signing property files, Firebase metadata, Terraform variable files, and synthetic private/refresh-token values.
+- Commits for this focused change: `543c47fe6f0f66613a45a46f15f1a247e14f2217`, `e342b50d697115e37a9ea28f85f204b50c255e7f`, `f54ca24dcc34184315538ed2d4cf384a04a94267`, and latest `cbb1b5dd10676ee5330b9b5ff4f46283969967f7`.
+- These latest indexer/test changes have NOT yet been confirmed by a new Admin Quality CI run. Do not report them as CI-passed until a run for the latest revision completes.
+- The optimized ARM64 release build run `45308936229` remains in progress at the APK build step at the last poll; no APK artifact or final size is available yet.
+- The previous full Admin quality run `45308948107` passed, including AppAuth wiring and Kotlin compilation, but it predates the latest indexer/test changes.
+- No live D1 ingestion or complete repo-coverage proof exists yet; the expanded filters improve what can be indexed but do not themselves ingest anything.
