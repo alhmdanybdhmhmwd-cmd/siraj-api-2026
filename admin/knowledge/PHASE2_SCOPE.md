@@ -81,3 +81,16 @@ Curated owner decisions are seeded in `admin/knowledge/BARQ_OWNER_CONTEXT.md`. T
 - Autonomous repository edits, repairs, merges, or deployments: later authorized phase.
 - Production data/resource changes, paid resource creation, and production deployment: approval-gated.
 - APK packaging and physical phone acceptance: later release/testing gates.
+
+
+## Owner directive update — 2026-11-24
+
+The owner has now explicitly asked BARQ Brain to carry forward the full project understanding accumulated with the prior assistant, and to let the owner resume work with a short instruction such as "واصل، اشتغل، ابنِ نفسك". The knowledge foundation must therefore include not only current code but also the owner-approved decisions, rejected/postponed ideas, roadmap, historical bugs and fixes, CI evidence, unresolved blockers, and working preferences recorded in `BARQ_OWNER_CONTEXT.md`.
+
+A navigation source was added at `admin/knowledge/BARQ_BRAIN_MASTER_INDEX_AR.md`. The owner context was expanded with the current repository map and a continuation protocol. The Brain system prompt now points to these canonical documents and instructs it to recover the latest checkpoint, verify branch/commit/CI, avoid repeated work, cite evidence, and report missing knowledge coverage.
+
+This is a source/documentation and prompt improvement only. It does NOT prove that the documents have been ingested into Admin D1 or that live Brain retrieval can access them. The indexer supports Markdown and should include these documents in a future complete, revision-pinned ingestion run.
+
+The owner also directed continued preparation of a smaller Admin APK for the Galaxy S7. The current controlled build is ARM64-only; its final size and successful artifact upload must be confirmed from workflow evidence. Physical installation, Google sign-in, and live Admin API use remain untested on the S7.
+
+The owner's desired "continue" experience is the product target. Durable server-side background execution, repository editing, test/build orchestration and autonomous resume must be reported as unavailable until each is implemented and tested end-to-end. Never imply that a prompt or knowledge document alone grants those capabilities.
