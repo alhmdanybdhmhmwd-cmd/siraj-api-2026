@@ -170,12 +170,20 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
   );
   if (tree.truncated) throw new Error("repository_tree_truncated_refusing_partial_index");
   let indexed = 0;
-  let skipped = 0;
-  const eligibleEntries = (tree.tree || []).filter(item =>
-    item.type === "blob" && shouldIndexPath(item.path) && item.size <= 120000
+  let skipped = skippedOversize;
+  const candidateEntries = (tree.tree || []).filter(item =>
+    item.type === "blob" && shouldIndexPath(item.path)
   );
+  const eligibleEntries = candidateEntries.filter(item => item.size <= 120000);
   const batch = selectIndexBatch(eligibleEntries, startAfter, MAX_FILES_PER_RUN);
   const selectedEntries = batch.selected;
+  const lastSelectedPath = selectedEntries.length
+    ? selectedEntries[selectedEntries.length - 1].path
+    : null;
+  const skippedOversize = candidateEntries.filter(entry =>
+    entry.size > 120000 && entry.path > startAfter &&
+    (!lastSelectedPath || entry.path <= lastSelectedPath || batch.remaining === 0)
+  ).length;
   for (const entry of selectedEntries) {
     if (entry.type !== "blob" || !shouldIndexPath(entry.path) || entry.size > 120000) {
       skipped++;
@@ -215,8 +223,13 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
     }
   }
   return {
-    repository, revision, indexed, skipped,
-    ...summarizeIndexCoverage(batch.eligibleAfterCursor, selectedEntries.length),
+    repository,
+    revision,
+    indexed,
+    skipped,
+    eligibleFiles: candidateEntries.length,
+    eligibleFilesAfterCursor: candidateEntries.filter(entry => entry.path > startAfter).length,
+    processedFiles: selectedEntries.length + skippedOversize,
     remainingFiles: batch.remaining,
     complete: batch.remaining === 0,
     nextStartAfter: batch.nextStartAfter
