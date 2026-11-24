@@ -143,6 +143,83 @@ jobs:
           assert blocked_auth is None, "Auth rate limit allowed a sixth request"
           print("Admin schema, immutable audit, owner sessions, OIDC nonce, refresh history and auth throttling checks passed.")
           PY
+      - name: Verify Phase 2 workspace, task idempotency and checkpoint concurrency
+        run: |
+          python3 - <<'PY'
+          import sqlite3
+          from pathlib import Path
+          db = sqlite3.connect(":memory:")
+          db.executescript(Path("admin/migrations/0001_admin_workspace.sql").read_text())
+          db.executescript(Path("admin/migrations/0002_project_knowledge.sql").read_text())
+          db.execute("INSERT INTO admin_workspaces(id, owner_subject) VALUES ('owner:a', 'owner-a')")
+          db.execute("INSERT INTO admin_workspaces(id, owner_subject) VALUES ('owner:b', 'owner-b')")
+          first = db.execute("""
+              UPDATE admin_workspaces SET current_project='BARQ', current_phase='phase-2',
+                version=version+1 WHERE id='owner:a' AND version=1
+          """)
+          assert first.rowcount == 1
+          stale = db.execute("""
+              UPDATE admin_workspaces SET current_project='stale', version=version+1
+              WHERE id='owner:a' AND version=1
+          """)
+          assert stale.rowcount == 0, "Stale workspace writer overwrote newer state"
+          assert db.execute("SELECT version, current_phase FROM admin_workspaces WHERE id='owner:a'").fetchone() == (2, 'phase-2')
+          db.execute("""
+              INSERT INTO admin_tasks(id, workspace_id, created_by, title, description, priority, idempotency_key)
+              VALUES ('task-a', 'owner:a', 'owner-a', 'Build BARQ', 'Phase 2', 'high', 'request-key-123')
+          """)
+          try:
+              db.execute("""
+                  INSERT INTO admin_tasks(id, workspace_id, created_by, title, description, priority, idempotency_key)
+                  VALUES ('task-duplicate', 'owner:a', 'owner-a', 'Build BARQ', 'Phase 2', 'high', 'request-key-123')
+              """)
+              raise AssertionError("Duplicate idempotency key unexpectedly created a task")
+          except sqlite3.IntegrityError:
+              pass
+          assert db.execute("""
+              SELECT COUNT(*) FROM admin_tasks WHERE workspace_id='owner:a' AND idempotency_key='request-key-123'
+          """).fetchone()[0] == 1
+          assert db.execute("""
+              SELECT id FROM admin_tasks WHERE id='task-a' AND workspace_id='owner:b'
+          """).fetchone() is None, "Workspace B read a task owned by workspace A"
+          db.execute("""
+              UPDATE admin_tasks SET checkpoint_version=1, last_checkpoint_id='cp-1'
+              WHERE id='task-a' AND workspace_id='owner:a' AND checkpoint_version=0
+          """)
+          inserted = db.execute("""
+              INSERT INTO admin_task_checkpoints
+                (id, task_id, sequence, input_json, output_json, completed_step, next_action, created_by)
+              SELECT 'cp-1', 'task-a', 1, '{}', '{"ok":true}', 'created', 'review', 'owner-a'
+              WHERE EXISTS (SELECT 1 FROM admin_tasks
+                WHERE id='task-a' AND last_checkpoint_id='cp-1' AND checkpoint_version=1)
+          """)
+          assert inserted.rowcount == 1
+          stale = db.execute("""
+              UPDATE admin_tasks SET checkpoint_version=2, last_checkpoint_id='cp-stale'
+              WHERE id='task-a' AND workspace_id='owner:a' AND checkpoint_version=0
+          """)
+          assert stale.rowcount == 0, "Stale checkpoint writer advanced the task"
+          assert db.execute("SELECT COUNT(*) FROM admin_task_checkpoints WHERE task_id='task-a'").fetchone()[0] == 1
+          db.execute("""
+              INSERT INTO admin_project_knowledge
+                (id, workspace_id, source_type, source_path, source_revision, title, content, content_hash, created_by)
+              VALUES ('knowledge-a', 'owner:a', 'repository_file', 'repo/docs/guide.md', 'commit-1',
+                'Guide', 'Original', 'hash-1', 'owner-a')
+          """)
+          db.execute("""
+              INSERT INTO admin_project_knowledge
+                (id, workspace_id, source_type, source_path, source_revision, title, content, content_hash, created_by)
+              VALUES ('knowledge-update', 'owner:a', 'repository_file', 'repo/docs/guide.md', 'commit-1',
+                'Guide updated', 'Updated', 'hash-2', 'owner-a')
+              ON CONFLICT(workspace_id, source_path, source_revision) DO UPDATE SET
+                title=excluded.title, content=excluded.content, content_hash=excluded.content_hash
+          """)
+          assert db.execute("""
+              SELECT COUNT(*), MAX(content) FROM admin_project_knowledge
+              WHERE workspace_id='owner:a' AND source_path='repo/docs/guide.md' AND source_revision='commit-1'
+          """).fetchone() == (1, 'Updated')
+          print("Phase 2 workspace concurrency, task idempotency, checkpoint versioning, workspace isolation and knowledge upsert checks passed.")
+          PY
       - name: Validate isolated Cloudflare Preview template
         run: |
           python3 - <<'PY'
