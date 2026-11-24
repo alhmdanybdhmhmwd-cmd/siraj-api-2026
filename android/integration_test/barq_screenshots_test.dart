@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:barq/main.dart' as barq;
@@ -52,7 +53,7 @@ void main() {
 
     await capture(
       '07-private-chat',
-      barq.ChatPage(
+      const barq.ChatPage(
         friend: demoFriend,
         currentUserId: 'demo-owner',
         screenshotMode: true,
