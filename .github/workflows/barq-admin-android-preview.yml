@@ -1,0 +1,73 @@
+name: BARQ Admin Android Preview APK
+
+on:
+  push:
+    branches:
+      - "barq-admin-foundation-2026-11-23"
+    paths:
+      - "admin/mobile/**"
+      - ".github/workflows/barq-admin-android-preview.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: barq-admin-android-preview
+  cancel-in-progress: false
+
+jobs:
+  build-android-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Admin source
+        uses: actions/checkout@v4
+        with:
+          ref: barq-admin-foundation-2026-11-23
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.50.0"
+          channel: stable
+          cache: true
+
+      - name: Resolve Flutter packages
+        working-directory: admin/mobile
+        run: flutter pub get
+
+      - name: Analyze Admin app
+        working-directory: admin/mobile
+        run: flutter analyze
+
+      - name: Run Admin app tests
+        working-directory: admin/mobile
+        run: flutter test
+
+      - name: Build installable debug APK
+        working-directory: admin/mobile
+        run: flutter build apk --debug
+
+      - name: Verify APK exists and report size
+        id: apk
+        shell: bash
+        run: |
+          test -s admin/mobile/build/app/outputs/flutter-apk/app-debug.apk
+          APK_SIZE="$(stat -c '%s' admin/mobile/build/app/outputs/flutter-apk/app-debug.apk)"
+          echo "size_bytes=$APK_SIZE" >> "$GITHUB_OUTPUT"
+          echo "APK size: $APK_SIZE bytes"
+
+      - name: Upload BARQ Admin APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: barq-admin-s7-debug-apk
+          path: admin/mobile/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
