@@ -471,9 +471,10 @@ export function rankKnowledgeChunks(chunks, query, limit = 6) {
       if (inTitle || inPath || inContent) matched++;
     }
     const coverage = tokens.length ? matched / tokens.length : 0;
-    return { ...chunk, relevance_score: score + coverage - (chunk.is_stale ? 1000 : 0), matched_terms: matched };
+    return { ...chunk, relevance_score: score + coverage, freshness_rank: chunk.is_stale ? 1 : 0, matched_terms: matched };
   }).filter(chunk => chunk.relevance_score > 0)
-    .sort((a, b) => b.relevance_score - a.relevance_score ||
+    .sort((a, b) => a.freshness_rank - b.freshness_rank ||
+      b.relevance_score - a.relevance_score ||
       String(b.updated_at || "").localeCompare(String(a.updated_at || "")))
     .slice(0, safeLimit);
 }
