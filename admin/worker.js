@@ -222,7 +222,7 @@ export function buildAssistantMessages(task, workspace, knowledge = []) {
       source: reference,
       content: String(item.content || "").slice(0, contextLimit)
     };
-  }));
+  })).replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
   return [
     {
       role: "system",
