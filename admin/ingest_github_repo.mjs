@@ -22,6 +22,37 @@ const SECRET_CONTENT = [
   /(?:api[_-]?key|private[_-]?key|signing[_-]?key|secret|access[_-]?token|refresh[_-]?token|client[_-]?secret|auth[_-]?token|password)["']?\s*[:=]\s*["'][^"']{12,}["']/i
 ];
 
+export async function fetchWithRetry(url, options = {}, dependencies = {}) {
+  const fetchImpl = dependencies.fetchImpl || fetch;
+  const sleep = dependencies.sleep || (milliseconds =>
+    new Promise(resolve => setTimeout(resolve, milliseconds)));
+  const maxAttempts = Number.isSafeInteger(dependencies.maxAttempts)
+    ? Math.max(1, Math.min(dependencies.maxAttempts, 5))
+    : 3;
+  let lastError;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const response = await fetchImpl(url, {
+        ...options,
+        signal: options.signal || AbortSignal.timeout(30000)
+      });
+      const retryable = response.status === 408 || response.status === 425 ||
+        response.status === 429 || response.status >= 500;
+      if (!retryable || attempt === maxAttempts) return response;
+      const retryAfter = Number(response.headers?.get?.("retry-after"));
+      const delay = Number.isFinite(retryAfter) && retryAfter >= 0
+        ? Math.min(retryAfter * 1000, 5000)
+        : Math.min(250 * (2 ** (attempt - 1)), 2000);
+      await sleep(delay);
+    } catch (error) {
+      lastError = error;
+      if (attempt === maxAttempts) throw error;
+      await sleep(Math.min(250 * (2 ** (attempt - 1)), 2000));
+    }
+  }
+  throw lastError || new Error("request_retry_exhausted");
+}
+
 export function normalizeAllowedRepositories(value) {
   if (typeof value !== "string" || !value.trim()) {
     throw new TypeError("explicit_repository_allowlist_required");
@@ -227,7 +258,7 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
     }
     const chunks = splitKnowledgeContent(source);
     for (let index = 0; index < chunks.length; index++) {
-      const response = await fetch(apiBase + "/v1/knowledge", {
+      const response = await fetchWithRetry(apiBase + "/v1/knowledge", {
         method: "POST",
         headers: {
           Authorization: "Bearer " + ownerToken,
