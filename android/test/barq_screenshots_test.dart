@@ -20,85 +20,112 @@ const demoFriend = <String, dynamic>{
   'phone': '+967770000001',
 };
 
+final Directory screenshotOutput =
+    Directory('../artifacts/barq-ui-screenshots');
+
+Future<void> captureScreen(
+  WidgetTester tester,
+  String name,
+  Widget screen, {
+  Future<void> Function(WidgetTester tester)? afterPump,
+}) async {
+  tester.view.physicalSize = const Size(432, 960);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+
+  await screenshotOutput.create(recursive: true);
+  final boundaryKey = GlobalKey();
+  print('BARQ_SCREENSHOT_BEGIN: $name');
+  await tester.pumpWidget(
+    RepaintBoundary(
+      key: boundaryKey,
+      child: barq.SirajApp(homeOverride: screen),
+    ),
+  );
+  await tester.pump(const Duration(milliseconds: 900));
+  if (afterPump != null) await afterPump(tester);
+  await tester.pump(const Duration(milliseconds: 300));
+
+  final boundary = boundaryKey.currentContext!.findRenderObject()
+      as RenderRepaintBoundary;
+  if (boundary.debugNeedsPaint) {
+    await tester.pump();
+  }
+  final image = await boundary.toImage(pixelRatio: 1);
+  try {
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    if (bytes == null) throw StateError('PNG encoding failed for $name');
+    await File('${screenshotOutput.path}/$name.png')
+        .writeAsBytes(bytes.buffer.asUint8List(), flush: true);
+    print('BARQ_SCREENSHOT_SAVED: $name');
+  } finally {
+    image.dispose();
+  }
+}
+
 void main() {
-  testWidgets(
-    'capture BARQ actual UI screens without Android emulator',
-    (tester) async {
-    tester.view.physicalSize = const Size(432, 960);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+  testWidgets('01 capture login', (tester) async {
+    await captureScreen(tester, '01-login', const barq.LoginPage());
+  }, timeout: const Timeout(Duration(seconds: 45)));
 
-    final output = Directory('../artifacts/barq-ui-screenshots');
-    print('BARQ_SCREENSHOT_TEST_STARTED');
-    await output.create(recursive: true);
-    final boundaryKey = GlobalKey();
+  testWidgets('02 capture password recovery', (tester) async {
+    await captureScreen(
+      tester, '02-password-recovery', const barq.PasswordRecoveryPage());
+  }, timeout: const Timeout(Duration(seconds: 45)));
 
-    Future<void> saveCurrent(String name) async {
-      print('BARQ_SCREENSHOT_BEGIN: $name');
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 900));
-      final boundary = boundaryKey.currentContext!.findRenderObject()
-          as RenderRepaintBoundary;
-      await tester.runAsync(() async {
-        final image = await boundary.toImage(pixelRatio: 1);
-        try {
-          final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-          if (bytes == null) throw StateError('PNG encoding failed for $name');
-          await File('${output.path}/$name.png')
-              .writeAsBytes(bytes.buffer.asUint8List(), flush: true);
-          print('BARQ_SCREENSHOT_SAVED: $name');
-        } finally {
-          image.dispose();
-        }
-      });
-    }
+  testWidgets('03 capture home chats', (tester) async {
+    await captureScreen(
+      tester, '03-home-chats',
+      const barq.HomePage(user: demoUser, screenshotMode: true));
+  }, timeout: const Timeout(Duration(seconds: 45)));
 
-    Future<void> capture(String name, Widget screen) async {
-      await tester.pumpWidget(
-        RepaintBoundary(
-          key: boundaryKey,
-          child: barq.SirajApp(homeOverride: screen),
-        ),
-      );
-      await saveCurrent(name);
-    }
-
-    print('BARQ_SCREEN_STEP: login');
-    await capture('01-login', const barq.LoginPage());
-    print('BARQ_SCREEN_STEP: recovery');
-    await capture('02-password-recovery', const barq.PasswordRecoveryPage());
-
-    print('BARQ_SCREEN_STEP: home');
-    await capture(
-      '03-home-chats',
+  testWidgets('04 capture home SPARK', (tester) async {
+    await captureScreen(
+      tester, '04-home-spark',
       const barq.HomePage(user: demoUser, screenshotMode: true),
+      afterPump: (tester) async {
+        await tester.tap(find.text('SPARK').last);
+        await tester.pump(const Duration(milliseconds: 300));
+      },
     );
-    print('BARQ_SCREEN_STEP: spark-tab');
-    await tester.tap(find.text('SPARK').last);
-    await saveCurrent('04-home-spark');
+  }, timeout: const Timeout(Duration(seconds: 45)));
 
-    print('BARQ_SCREEN_STEP: contacts-tab');
-    await tester.tap(find.text('جهات الاتصال').last);
-    await saveCurrent('05-home-contacts');
+  testWidgets('05 capture contacts', (tester) async {
+    await captureScreen(
+      tester, '05-home-contacts',
+      const barq.HomePage(user: demoUser, screenshotMode: true),
+      afterPump: (tester) async {
+        await tester.tap(find.text('جهات الاتصال').last);
+        await tester.pump(const Duration(milliseconds: 300));
+      },
+    );
+  }, timeout: const Timeout(Duration(seconds: 45)));
 
-    print('BARQ_SCREEN_STEP: account-tab');
-    await tester.tap(find.text('حسابي').last);
-    await saveCurrent('06-home-account');
+  testWidgets('06 capture account', (tester) async {
+    await captureScreen(
+      tester, '06-home-account',
+      const barq.HomePage(user: demoUser, screenshotMode: true),
+      afterPump: (tester) async {
+        await tester.tap(find.text('حسابي').last);
+        await tester.pump(const Duration(milliseconds: 300));
+      },
+    );
+  }, timeout: const Timeout(Duration(seconds: 45)));
 
-    print('BARQ_SCREEN_STEP: private-chat');
-    await capture(
-      '07-private-chat',
+  testWidgets('07 capture private chat', (tester) async {
+    await captureScreen(
+      tester, '07-private-chat',
       const barq.ChatPage(
         friend: demoFriend,
         currentUserId: 'demo-owner',
         screenshotMode: true,
-      ),
-    );
+      ));
+  }, timeout: const Timeout(Duration(seconds: 45)));
 
-    print('BARQ_SCREEN_STEP: group-chat');
-    await capture(
-      '08-group-chat',
+  testWidgets('08 capture group chat', (tester) async {
+    await captureScreen(
+      tester, '08-group-chat',
       barq.GroupChatPage(
         group: const {
           'id': 'demo-group-1',
@@ -110,32 +137,32 @@ void main() {
         onAddMember: () {},
         onShareInvite: () {},
         onGroupChanged: () async {},
-      ),
-    );
+      ));
+  }, timeout: const Timeout(Duration(seconds: 45)));
 
-    print('BARQ_SCREEN_STEP: public-profile');
-    await capture(
-      '09-public-profile',
+  testWidgets('09 capture public profile', (tester) async {
+    await captureScreen(
+      tester, '09-public-profile',
       const barq.PublicProfilePage(
         person: demoFriend,
         currentUserId: 'demo-owner',
         canMessage: true,
-      ),
-    );
+      ));
+  }, timeout: const Timeout(Duration(seconds: 45)));
 
-    print('BARQ_SCREEN_STEP: nearby-devices');
-    await capture(
-      '10-nearby-devices',
+  testWidgets('10 capture nearby devices', (tester) async {
+    await captureScreen(
+      tester, '10-nearby-devices',
       const barq.NearbyDevicesPage(
         user: demoUser,
         friends: [demoFriend],
         screenshotMode: true,
-      ),
-    );
+      ));
+  }, timeout: const Timeout(Duration(seconds: 45)));
 
-    print('BARQ_SCREEN_STEP: spark-viewer');
-    await capture(
-      '11-spark-viewer',
+  testWidgets('11 capture SPARK viewer', (tester) async {
+    await captureScreen(
+      tester, '11-spark-viewer',
       const barq.SparkMediaViewer(
         statusId: 'demo-spark-1',
         authorId: 'demo-friend-1',
@@ -143,17 +170,6 @@ void main() {
         media: [],
         author: 'سارة أحمد',
         caption: 'لحظات جميلة تستحق المشاركة ✨',
-      ),
-    );
-
-    final pngs = output
-        .listSync()
-        .whereType<File>()
-        .where((file) => file.path.toLowerCase().endsWith('.png'))
-        .length;
-    print('BARQ_SCREENSHOT_TOTAL: $pngs');
-    expect(pngs, greaterThanOrEqualTo(8));
-    },
-    timeout: const Timeout(Duration(minutes: 3)),
-  );
+      ));
+  }, timeout: const Timeout(Duration(seconds: 45)));
 }
