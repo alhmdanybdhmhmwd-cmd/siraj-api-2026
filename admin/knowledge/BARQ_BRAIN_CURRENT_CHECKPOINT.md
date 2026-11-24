@@ -193,3 +193,12 @@ Say exactly what is complete, what has only passed CI, what is blocked, and what
 - BARQ Admin Worker instructions and regression tests now encode this gate. This is not yet an end-to-end in-app approval workflow; verify the exact CI run before treating the instruction/test change as green.
 - Worker instruction commit: `6ec15f10db6ef22f92e16e1ba34d4cb893e4905f`.
 - Regression test commit: `807277063d8a1173f99bb3a1eab8ca375a0ce1df`.
+
+## Phase 2 continuation checkpoint — 2026-11-25
+
+- Added bounded retries for GitHub API tree/commit/blob reads, not only writes to the Admin knowledge API.
+- Added pure repository coverage reporting by source domain and extension, including excluded-path reasons and oversized eligible files; the ingestion workflow summary now renders these reports.
+- New code/test/workflow revisions are being validated by GitHub Actions. One first-pass fixture incorrectly used a build-output path (correctly excluded as sensitive) as an oversized-file example; the fixture was corrected to use an eligible Markdown path over the byte limit.
+- The live Preview D1/Queue/AI configuration is still unavailable/unverified from the current environment. Consequently no actual full repository ingestion or live Brain retrieval has been demonstrated.
+- Remaining Phase 2 acceptance work: verify latest CI including Android Kotlin compile; run all ingestion batches against the dedicated Admin Preview D1 pinned to an immutable commit; persist a complete coverage/freshness record; implement deleted/renamed-source reconciliation without destroying historical evidence; test cross-project separation, conflicting/superseded owner decisions, stale evidence and prompt injection; run representative live Brain questions with exact source citations.
+- Keep production untouched and do not use the BARQ consumer database for Admin knowledge.
