@@ -21,17 +21,21 @@ const demoFriend = <String, dynamic>{
 };
 
 void main() {
-  testWidgets('capture BARQ actual UI screens without Android emulator', (tester) async {
+  testWidgets(
+    'capture BARQ actual UI screens without Android emulator',
+    (tester) async {
     tester.view.physicalSize = const Size(432, 960);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
     final output = Directory('../artifacts/barq-ui-screenshots');
+    print('BARQ_SCREENSHOT_TEST_STARTED');
     await output.create(recursive: true);
     final boundaryKey = GlobalKey();
 
     Future<void> saveCurrent(String name) async {
+      print('BARQ_SCREENSHOT_BEGIN: $name');
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 900));
       final boundary = boundaryKey.currentContext!.findRenderObject()
@@ -42,6 +46,7 @@ void main() {
         if (bytes == null) throw StateError('PNG encoding failed for $name');
         await File('${output.path}/$name.png')
             .writeAsBytes(bytes.buffer.asUint8List(), flush: true);
+        print('BARQ_SCREENSHOT_SAVED: $name');
       } finally {
         image.dispose();
       }
@@ -57,22 +62,29 @@ void main() {
       await saveCurrent(name);
     }
 
+    print('BARQ_SCREEN_STEP: login');
     await capture('01-login', const barq.LoginPage());
+    print('BARQ_SCREEN_STEP: recovery');
     await capture('02-password-recovery', const barq.PasswordRecoveryPage());
 
+    print('BARQ_SCREEN_STEP: home');
     await capture(
       '03-home-chats',
       const barq.HomePage(user: demoUser, screenshotMode: true),
     );
+    print('BARQ_SCREEN_STEP: spark-tab');
     await tester.tap(find.text('SPARK').last);
     await saveCurrent('04-home-spark');
 
+    print('BARQ_SCREEN_STEP: contacts-tab');
     await tester.tap(find.text('جهات الاتصال').last);
     await saveCurrent('05-home-contacts');
 
+    print('BARQ_SCREEN_STEP: account-tab');
     await tester.tap(find.text('حسابي').last);
     await saveCurrent('06-home-account');
 
+    print('BARQ_SCREEN_STEP: private-chat');
     await capture(
       '07-private-chat',
       const barq.ChatPage(
@@ -82,6 +94,7 @@ void main() {
       ),
     );
 
+    print('BARQ_SCREEN_STEP: group-chat');
     await capture(
       '08-group-chat',
       barq.GroupChatPage(
@@ -98,6 +111,7 @@ void main() {
       ),
     );
 
+    print('BARQ_SCREEN_STEP: public-profile');
     await capture(
       '09-public-profile',
       const barq.PublicProfilePage(
@@ -107,6 +121,7 @@ void main() {
       ),
     );
 
+    print('BARQ_SCREEN_STEP: nearby-devices');
     await capture(
       '10-nearby-devices',
       const barq.NearbyDevicesPage(
@@ -116,6 +131,7 @@ void main() {
       ),
     );
 
+    print('BARQ_SCREEN_STEP: spark-viewer');
     await capture(
       '11-spark-viewer',
       const barq.SparkMediaViewer(
@@ -133,6 +149,9 @@ void main() {
         .whereType<File>()
         .where((file) => file.path.toLowerCase().endsWith('.png'))
         .length;
+    print('BARQ_SCREENSHOT_TOTAL: $pngs');
     expect(pngs, greaterThanOrEqualTo(8));
-  });
+    },
+    timeout: const Timeout(Duration(minutes: 3)),
+  );
 }
