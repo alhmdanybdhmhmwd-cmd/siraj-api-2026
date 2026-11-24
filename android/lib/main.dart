@@ -4945,7 +4945,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             setState(() => selectedTab = value);
             // Refresh phone matches automatically whenever the contacts tab is opened.
             // Permission is requested by the plugin only when the user first enters this tab.
-            if (value == 2) matchPhoneContacts();
+            if (value == 2 && !widget.screenshotMode) matchPhoneContacts();
           },
           destinations: const [
             NavigationDestination(
