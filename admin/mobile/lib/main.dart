@@ -109,9 +109,15 @@ class _AdminHomePageState extends State<AdminHomePage>
     super.dispose();
   }
 
+  DateTime? _lastResumeSyncAt;
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _load();
+    if (state != AppLifecycleState.resumed) return;
+    final now = DateTime.now();
+    if (!shouldSyncOnResume(_lastResumeSyncAt, now)) return;
+    _lastResumeSyncAt = now;
+    _load();
   }
 
   String get _base => _apiBase.replaceFirst(RegExp(r'/+$'), '');
