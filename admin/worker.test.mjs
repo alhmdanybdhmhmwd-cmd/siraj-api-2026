@@ -120,7 +120,7 @@ test("BARQ Brain prompts include current workspace context and no execution auth
   assert.match(messages[0].content, /owner explicitly approved Google OIDC with Authorization Code \+ PKCE/);
   assert.match(messages[0].content, /BARQ_OWNER_CONTEXT.md/);
   assert.match(messages[0].content, /BARQ_BRAIN_MASTER_INDEX_AR.md/);
-  assert.match(messages[0].content, /latest durable task\\/checkpoint/);
+  assert.ok(messages[0].content.includes("latest durable task/checkpoint"));
   assert.match(messages[0].content, /highest-priority unfinished authorized task/);
   assert.match(messages[0].content, /complete project knowledge/);
 });
