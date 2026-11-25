@@ -82,11 +82,8 @@ class FakeDB {
           if (db.readinessProbeThrows) throw new Error("simulated D1 outage");
           return db.readinessProbeResult === undefined ? { ok: 1 } : db.readinessProbeResult;
         }
-        if (sql.includes("SELECT s.session_version")) {
-          return {
-            session_version: db.sessionVersion,
-            is_suspended: db.isSuspended ? 1 : 0
-          };
+        if (sql.includes("SELECT session_version FROM account_security")) {
+          return { session_version: db.sessionVersion };
         }
         if (sql.includes("SELECT 1 FROM revoked_sessions")) {
           db.lastRevocationQuery = sql;
