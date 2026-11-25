@@ -48,6 +48,7 @@ jobs:
           PY
           )"
 
+          echo "EXPECTED_D1_ID=$expected_id" >> "$GITHUB_ENV"
           api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
           curl --fail --silent --show-error \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
@@ -74,5 +75,3 @@ jobs:
           print("Read-only preflight passed: token, account, shared siraj-db, and siraj-api Worker are visible.")
           PY
         shell: bash
-        env:
-          EXPECTED_D1_ID: 0db93afd-4bf5-4423-9e25-7a2f4f4bdbe0
