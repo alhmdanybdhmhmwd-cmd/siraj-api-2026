@@ -52,14 +52,14 @@ Curated owner decisions are seeded in `admin/knowledge/BARQ_OWNER_CONTEXT.md`. T
 - A guarded, resumable repository indexer and unit tests exist.
 - Persistent owner-scoped Brain conversations and a mobile chat surface exist in source.
 - CI has previously passed source/unit/schema/mobile checks; re-check the latest run after every change.
-- Dedicated Admin Preview D1/Queue/AI bindings are not yet configured and verified. Therefore live indexing into the Admin knowledge store, live AI retrieval, and complete coverage are still blocked.
+- The shared-runtime adapter is implemented in source and maps BARQ's existing `DB` and `AI` bindings to the Admin handler under `/admin/*`; route, binding, and CORS unit tests pass. The additive Admin migrations are not yet applied to live `siraj-db`, and Admin owner secrets/origin are not yet verified. Therefore live indexing, live AI retrieval, and complete coverage remain blocked. A dedicated Admin Queue is optional and is not required for direct Brain chat or repository indexing.
 - No physical Android acceptance test or live Google OIDC test is claimed.
 
 ## Phase 2 work sequence
 
 1. Preserve and validate the owner decision seed; identify conflicting or time-sensitive statements.
 2. Validate indexer safety, exact allowlist enforcement, chunk identity, retry behavior, batch completeness, and source revision tracking.
-3. Index the approved repository into the dedicated Admin Preview knowledge store once that isolated environment is available.
+3. After explicit approval for the production schema change, apply the additive `admin_*` migrations to the existing BARQ D1 database, configure separate Admin owner secrets/origin, and index the approved repository through the shared Worker at `/admin/v1/knowledge`. Do not perform this live change as part of offline code work.
 4. Produce a coverage report by source domain and file type, with skipped reasons and unresolved sources.
 5. Add incremental refresh and stale/renamed/deleted-source reconciliation.
 6. Test retrieval relevance, cross-project separation, contradictory decisions, stale evidence, and prompt-injection resistance.
@@ -69,6 +69,7 @@ Curated owner decisions are seeded in `admin/knowledge/BARQ_OWNER_CONTEXT.md`. T
 ## Acceptance evidence
 
 - Exact repository/ref/commit and ingestion run records.
+- Shared `/admin/*` route, DB/AI binding, and CORS isolation tests, plus a reviewed additive migration plan for the existing BARQ D1 schema.
 - Full batch completion, skipped-file explanations, and coverage/freshness report.
 - Source citations that identify exact path and revision.
 - Tests for cross-project isolation, conflicting decisions, stale sources, and untrusted indexed content.
