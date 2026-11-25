@@ -1049,12 +1049,11 @@ async function handle(request, env) {
         knowledge
       );
       const messages = [
-        {
-          role: "system",
-          content: base[0].content + "\n\nCURRENT WORKSPACE AND VERIFIED RETRIEVED SOURCES:\n" + base[1].content
-        },
+        { role: "system", content: base[0].content },
         ...history.map(item => ({ role: item.role, content: String(item.content || '').slice(-1800) })),
-        { role: "user", content: parsed.value.message }
+        // Repository and owner-context chunks are untrusted reference data.
+        // Keep them in a user message; never elevate indexed text into system authority.
+        { role: "user", content: base[1].content }
       ];
       const model = env.BARQ_ADMIN_AI_MODEL || "@cf/meta/llama-3.1-8b-instruct";
       const generated = await env.ADMIN_AI.run(model, { messages, max_tokens: 2400 });
