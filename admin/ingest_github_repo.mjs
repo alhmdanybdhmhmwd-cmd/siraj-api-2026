@@ -139,17 +139,7 @@ export function normalizeAdminApiUrl(input) {
 }
 
 export function shouldIndexPath(input) {
-  if (typeof input !== "string" || !input || input.length > 160) return false;
-  const path = input.replace(/\\/g, "/");
-  if (path.startsWith("/") || path.split("/").some(part => part === ".." || part === ".")) return false;
-  if (SENSITIVE_PATH.test(path)) return false;
-  const name = path.split("/").pop() || "";
-  if (!name || name.startsWith(".")) return false;
-  const dot = name.lastIndexOf(".");
-  const extension = dot >= 0 ? name.slice(dot).toLowerCase() : "";
-  if (!ALLOWED_EXTENSIONS.has(extension)) return false;
-  if (/google-services|firebase-admin|service-account|credentials|secrets?/i.test(name)) return false;
-  return true;
+  return classifyIndexPath(input) === null;
 }
 
 export function splitKnowledgeContent(source, maxChars = MAX_CHUNK_CHARS) {
