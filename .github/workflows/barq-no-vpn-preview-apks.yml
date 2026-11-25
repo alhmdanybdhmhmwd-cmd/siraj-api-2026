@@ -83,7 +83,7 @@ jobs:
       - name: Test Admin
         working-directory: admin/mobile
         run: flutter test --no-pub
-      - name: Build ARM64 debug APK
+      - name: Build ARM64 release APK
         working-directory: admin/mobile
         run: flutter build apk --release --target-platform android-arm64 --dart-define=BARQ_API_BASE=https://siraj-api-2026.vercel.app
       - name: Report APK size
