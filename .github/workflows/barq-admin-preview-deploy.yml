@@ -77,7 +77,7 @@ jobs:
           for old, value in replacements.items():
               escaped = value.replace("\\\\", "\\\\\\\\").replace('"', '\\"')
               source = source.replace(old, escaped)
-          source = 'account_id = "' + os.environ["CLOUDFLARE_ACCOUNT_ID"] + '"\\n' + source
+          source = 'account_id = "' + os.environ["CLOUDFLARE_ACCOUNT_ID"] + '"\n' + source
           if "REPLACE_WITH" in source or "barq-production" in source or "siraj-production" in source:
               raise SystemExit("Unsafe or incomplete Preview configuration.")
           Path("wrangler.toml").write_text(source)
