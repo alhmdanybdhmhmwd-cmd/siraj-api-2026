@@ -365,9 +365,9 @@ test("indexed knowledge stays outside system authority and remains explicitly un
 test("task and checkpoint writes always retain workspace ownership in SQL predicates", () => {
   const source = readFileSync(new URL("./worker.js", import.meta.url), "utf8");
   assert.match(source,
-    /SELECT id, title, description, status, priority, checkpoint_version, next_action, created_at FROM admin_tasks WHERE id = \\? AND workspace_id = \\?/);
+    /SELECT id, title, description, status, priority, checkpoint_version, next_action, created_at FROM admin_tasks WHERE id = \? AND workspace_id = \?/);
   assert.match(source,
-    /SELECT 1 FROM admin_tasks WHERE id = \\? AND workspace_id = \\? AND last_checkpoint_id = \\?/);
+    /SELECT 1 FROM admin_tasks WHERE id = \? AND workspace_id = \? AND last_checkpoint_id = \?/);
   assert.match(source,
-    /SELECT 1 FROM admin_tasks WHERE id = \\? AND workspace_id = \\? AND last_checkpoint_id = \\? AND checkpoint_version = \\?/);
+    /SELECT 1 FROM admin_tasks WHERE id = \? AND workspace_id = \? AND last_checkpoint_id = \? AND checkpoint_version = \?/);
 });
