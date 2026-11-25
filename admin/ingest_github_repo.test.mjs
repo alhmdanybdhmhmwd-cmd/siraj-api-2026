@@ -73,6 +73,23 @@ test("repository indexing can continue in ordered batches without skipping files
   assert.throws(() => selectIndexBatch(entries, "../unsafe", 2), /invalid_index_batch/);
 });
 
+test("repository indexing uses one consistent lexical order across mixed-case resume cursors", () => {
+  const entries = ["docs/z.md", "Docs/A.md", "admin/z.md", "Admin/A.md", "docs/A.md"]
+    .map(path => ({ path }));
+  const seen = [];
+  let cursor = "";
+  while (true) {
+    const batch = selectIndexBatch(entries, cursor, 2);
+    seen.push(...batch.selected.map(item => item.path));
+    if (!batch.nextStartAfter) break;
+    cursor = batch.nextStartAfter;
+  }
+  assert.deepEqual(seen, [
+    "Admin/A.md", "Docs/A.md", "admin/z.md", "docs/A.md", "docs/z.md"
+  ]);
+  assert.equal(new Set(seen).size, entries.length);
+});
+
 test("repository indexing requires an explicit exact allowlist", () => {
   assert.deepEqual(normalizeAllowedRepositories("owner/barq; owner/admin;owner/barq"), [
     "owner/barq", "owner/admin"
