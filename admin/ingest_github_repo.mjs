@@ -195,6 +195,53 @@ export function createKnowledgeChunkRecords(repository, path, revision, source, 
   }));
 }
 
+export function planKnowledgeReconciliation(repository, currentRevision, currentPaths, indexedSources) {
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository || "") ||
+      !/^[a-f0-9]{40}$/i.test(currentRevision || "") ||
+      !Array.isArray(currentPaths) || !Array.isArray(indexedSources)) {
+    throw new TypeError("invalid_knowledge_reconciliation_input");
+  }
+  const normalizeSourcePath = value => String(value || "").replace(/#chunk-\d+$/, "");
+  const current = new Set(currentPaths.filter(path =>
+    typeof path === "string" && shouldIndexPath(path)
+  ));
+  const scoped = indexedSources.filter(source =>
+    source && typeof source.sourcePath === "string" &&
+    source.sourcePath.startsWith(repository + "/")
+  );
+  const currentRevisionPaths = new Set();
+  const staleRevisions = [];
+  const missingFromRepository = [];
+  for (const source of scoped) {
+    const relativePath = normalizeSourcePath(source.sourcePath.slice(repository.length + 1));
+    if (!current.has(relativePath)) {
+      missingFromRepository.push({
+        sourcePath: source.sourcePath,
+        sourceRevision: source.sourceRevision || null,
+        relativePath
+      });
+    } else if (source.sourceRevision === currentRevision) {
+      currentRevisionPaths.add(relativePath);
+    } else {
+      staleRevisions.push({
+        sourcePath: source.sourcePath,
+        sourceRevision: source.sourceRevision || null,
+        currentRevision
+      });
+    }
+  }
+  const notYetIndexed = [...current].filter(path => !currentRevisionPaths.has(path));
+  return {
+    repository,
+    currentRevision,
+    currentPathCount: current.size,
+    staleRevisions,
+    missingFromRepository,
+    notYetIndexed,
+    destructiveChangesApplied: false
+  };
+}
+
 export function inferSourceType(path) {
   const value = String(path || "").toLowerCase();
   if (/product|requirement|specification|prd/.test(value)) return "product_requirement";
