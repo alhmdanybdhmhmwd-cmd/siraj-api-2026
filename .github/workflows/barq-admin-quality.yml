@@ -143,6 +143,67 @@ jobs:
           assert blocked_auth is None, "Auth rate limit allowed a sixth request"
           print("Admin schema, immutable audit, owner sessions, OIDC nonce, refresh history and auth throttling checks passed.")
           PY
+      - name: Verify Admin schema can coexist with BARQ D1 schema (offline only)
+        run: |
+          python3 - <<'PY'
+          import sqlite3
+          from pathlib import Path
+
+          db = sqlite3.connect(":memory:")
+          db.execute("PRAGMA foreign_keys = ON")
+          # Minimal BARQ-owned base tables required by the checked-in production migrations.
+          db.executescript("""
+            CREATE TABLE users (id TEXT PRIMARY KEY);
+            CREATE TABLE groups (
+              id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+              created_by TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE messages (id TEXT PRIMARY KEY);
+            CREATE TABLE group_members (
+              group_id TEXT NOT NULL, user_id TEXT NOT NULL, PRIMARY KEY (group_id, user_id)
+            );
+            CREATE TABLE group_messages (id TEXT PRIMARY KEY);
+          """)
+
+          for migration in sorted(Path("migrations/production").glob("*.sql")):
+              db.executescript(migration.read_text())
+
+          barq_objects_before = {
+              row[0] for row in db.execute(
+                  "SELECT name FROM sqlite_master WHERE type IN ('table','view')"
+              )
+          }
+          assert {"users", "groups", "messages", "group_members", "group_messages", "chat_groups"} <= barq_objects_before
+
+          for migration in sorted(Path("admin/migrations").glob("*.sql")):
+              db.executescript(migration.read_text())
+
+          all_objects = {
+              row[0] for row in db.execute(
+                  "SELECT name FROM sqlite_master WHERE type IN ('table','view')"
+              )
+          }
+          admin_tables = {
+              row[0] for row in db.execute(
+                  "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+              ) if row[0].startswith("admin_")
+          }
+          assert admin_tables, "No Admin tables were created"
+          assert all(name.startswith("admin_") for name in admin_tables)
+          assert barq_objects_before <= all_objects, "Admin migrations removed or replaced a BARQ table/view"
+          assert {"users", "groups", "messages", "group_members", "group_messages", "chat_groups"} <= all_objects
+          assert not (barq_objects_before & admin_tables), "Admin schema collided with BARQ-owned objects"
+
+          # Admin foreign keys must remain within the Admin namespace.
+          for table in sorted(admin_tables):
+              for row in db.execute(f'PRAGMA foreign_key_list("{table}")'):
+                  target = row[2]
+                  assert target.startswith("admin_"), (
+                      f"{table} unexpectedly references non-Admin table {target}"
+                  )
+
+          print("Offline shared-D1 compatibility passed: BARQ objects remained intact and Admin tables/foreign keys stayed namespaced.")
+          PY
       - name: Verify Phase 2 workspace, task idempotency and checkpoint concurrency
         run: |
           python3 - <<'PY'
