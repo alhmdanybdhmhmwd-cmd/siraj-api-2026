@@ -31,7 +31,7 @@ test("the shared Worker exposes Admin health under /admin/health", async () => {
   const request = new Request("https://barq.example/admin/health");
   const response = await handleSharedAdminRequest(request, {});
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { ok: true, service: "barq-admin-preview" });
+  assert.deepEqual(await response.json(), { ok: true, service: "barq-admin" });
 });
 
 test("Admin preflight is handled before the consumer API's generic CORS path", async () => {
