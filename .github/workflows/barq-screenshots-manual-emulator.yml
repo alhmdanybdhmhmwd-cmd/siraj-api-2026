@@ -38,6 +38,7 @@ jobs:
       - name: Install emulator image and create AVD
         run: |
           set -euxo pipefail
+          export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort | tail -n 1)"
           AVDMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name avdmanager | sort | tail -n 1)"
           test -x "$SDKMANAGER"
@@ -51,6 +52,9 @@ jobs:
         timeout-minutes: 18
         run: |
           set -euxo pipefail
+          export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+          command -v adb
+          adb version
           nohup "$ANDROID_HOME/emulator/emulator" -avd barq_api30 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel auto > /tmp/barq-emulator.log 2>&1 &
           adb start-server
           adb wait-for-device
@@ -74,6 +78,7 @@ jobs:
         working-directory: android
         run: |
           set -euxo pipefail
+          export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
           flutter pub get
           mkdir -p ../artifacts
           flutter drive --driver=test_driver/integration_test.dart --target=integration_test/barq_screenshots_test.dart -d emulator-5554
