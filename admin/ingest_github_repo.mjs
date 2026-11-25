@@ -187,8 +187,32 @@ export function containsLikelySecret(content) {
   return SECRET_CONTENT.some(pattern => pattern.test(content));
 }
 
+const retryDelay = milliseconds =>
+  new Promise(resolve => setTimeout(resolve, milliseconds));
+
+export async function fetchWithRetry(input, init, { attempts = 3, retryDelayMs = 250 } = {}) {
+  if (!Number.isSafeInteger(attempts) || attempts < 1 || attempts > 5 ||
+      !Number.isSafeInteger(retryDelayMs) || retryDelayMs < 0 || retryDelayMs > 5000) {
+    throw new TypeError("invalid_fetch_retry_policy");
+  }
+  let lastError;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      const response = await fetch(input, init);
+      if (response.ok || (response.status !== 429 && response.status < 500)) return response;
+      lastError = new Error("retryable_http_" + response.status);
+    } catch (error) {
+      lastError = error;
+    }
+    if (attempt + 1 < attempts) {
+      await retryDelay(retryDelayMs * (attempt + 1));
+    }
+  }
+  throw lastError || new Error("fetch_retry_exhausted");
+}
+
 async function githubJson(url, token) {
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     headers: {
       Accept: "application/vnd.github+json",
       Authorization: "Bearer " + token,
@@ -260,7 +284,7 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
     }
     const chunks = splitKnowledgeContent(source);
     for (let index = 0; index < chunks.length; index++) {
-      const response = await fetch(apiBase + "/v1/knowledge", {
+      const response = await fetchWithRetry(apiBase + "/v1/knowledge", {
         method: "POST",
         headers: {
           Authorization: "Bearer " + ownerToken,
@@ -274,7 +298,10 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
           content: chunks[index]
         })
       });
-      if (!response.ok) throw new Error("admin_knowledge_api_" + response.status + "_at_" + entry.path);
+      if (!response.ok) {
+        throw new Error("admin_knowledge_api_" + response.status + "_at_" + entry.path +
+          "_revision_" + revision + "_cursor_" + (startAfter || "START"));
+      }
       indexed++;
     }
   }
