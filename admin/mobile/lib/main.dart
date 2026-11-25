@@ -2545,7 +2545,7 @@ class _AdminHomePageState extends State<AdminHomePage>
                         children: [
                           Chip(
                               avatar: const Icon(Icons.block, size: 16),
-                              label: Text('حظره $blocks')),
+                              label: Text('حظروه $blocks')),
                           Chip(
                               avatar: const Icon(Icons.flag_outlined, size: 16),
                               label: Text('البلاغات $reports')),
