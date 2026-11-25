@@ -27,6 +27,9 @@ test("knowledge chunking preserves content and stays within configured bounds", 
   assert.ok(chunks.length > 1);
   assert.ok(chunks.every(chunk => chunk.length <= 1000));
   assert.equal(chunks.join("\n").replace(/\n+/g, "\n").length > 0, true);
+  const whitespaceSource = "  leading indentation\\n\\ntrailing spaces  \\n";
+  assert.equal(splitKnowledgeContent(whitespaceSource, 100).join(""), whitespaceSource);
+  assert.equal(splitKnowledgeContent("  \\r\\n  ", 100).join(""), "  \\n  ");
 });
 
 test("repository source type follows the project documentation category", () => {
