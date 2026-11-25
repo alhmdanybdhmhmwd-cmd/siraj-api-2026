@@ -332,8 +332,8 @@ test("knowledge reconciliation detects stale, deleted and not-yet-indexed source
   assert.deepEqual(report.missingFromRepository.map(item => item.relativePath), ["docs/old.md"]);
   assert.deepEqual(report.notYetIndexed, ["docs/new.md"]);
   assert.equal(report.currentPathCount, 2);
-  assert.equal(report.coverageGranularity, "chunk_verified");
-  assert.equal(report.chunkCompletenessVerified, true);
+  assert.equal(report.coverageGranularity, "partial_chunk_coverage");
+  assert.equal(report.chunkCompletenessVerified, false);
   assert.deepEqual(report.incompleteChunks, []);
   assert.deepEqual(report.unknownChunkMetadata, []);
   assert.equal(report.destructiveChangesApplied, false);
@@ -374,4 +374,23 @@ test("legacy chunk records without an expected chunk count remain explicitly unv
   );
   assert.deepEqual(report.unknownChunkMetadata, ["docs/legacy.md"]);
   assert.equal(report.chunkCompletenessVerified, false);
+});
+
+
+test("knowledge reconciliation verifies coverage only when every current file has all chunks", () => {
+  const revision = "f".repeat(40);
+  const report = planKnowledgeReconciliation(
+    "owner/repo",
+    revision,
+    ["docs/short.md", "docs/long.md"],
+    [
+      { sourcePath: "owner/repo/docs/short.md", sourceRevision: revision, title: "docs/short.md" },
+      { sourcePath: "owner/repo/docs/long.md#chunk-1", sourceRevision: revision, title: "docs/long.md [part 1 of 2]" },
+      { sourcePath: "owner/repo/docs/long.md#chunk-2", sourceRevision: revision, title: "docs/long.md [part 2 of 2]" }
+    ]
+  );
+  assert.deepEqual(report.notYetIndexed, []);
+  assert.deepEqual(report.incompleteChunks, []);
+  assert.equal(report.coverageGranularity, "chunk_verified");
+  assert.equal(report.chunkCompletenessVerified, true);
 });
