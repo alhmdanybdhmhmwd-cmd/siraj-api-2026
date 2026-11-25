@@ -157,7 +157,7 @@ export function inferSourceType(path) {
   return "repository_file";
 }
 
-function containsLikelySecret(content) {
+export function containsLikelySecret(content) {
   return SECRET_CONTENT.some(pattern => pattern.test(content));
 }
 
@@ -183,12 +183,18 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
     ? allowedRepositories.join(";")
     : process.env.BARQ_ADMIN_GITHUB_ALLOWED_REPOSITORIES);
   if (!allowed.includes(repository)) throw new Error("repository_not_owner_approved");
+  if (startAfter && !/^[a-f0-9]{40}$/i.test(ref)) {
+    throw new Error("resume_requires_immutable_commit_sha");
+  }
   const apiBase = normalizeAdminApiUrl(adminApiUrl);
   const commit = await githubJson(
     "https://api.github.com/repos/" + repository + "/commits/" + encodeURIComponent(ref),
     githubToken
   );
   const revision = commit.sha;
+  if (startAfter && revision.toLowerCase() !== ref.toLowerCase()) {
+    throw new Error("resume_commit_sha_mismatch");
+  }
   const tree = await githubJson(
     "https://api.github.com/repos/" + repository + "/git/trees/" + revision + "?recursive=1",
     githubToken
@@ -240,6 +246,7 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
   return {
     repository,
     revision,
+    resumeRef: revision,
     indexed,
     skipped,
     eligibleFiles: batch.eligibleFiles,
