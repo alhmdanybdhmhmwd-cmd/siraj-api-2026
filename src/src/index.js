@@ -1159,7 +1159,7 @@ export default {
         }
 
         const suspension = await env.DB.prepare(
-          `SELECT 1 FROM admin_user_suspensions
+          `SELECT 1 FROM barq_user_suspensions
            WHERE user_id = ? AND lifted_at IS NULL
              AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)`
         ).bind(user.id).first();
