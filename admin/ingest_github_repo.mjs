@@ -241,9 +241,14 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
   const batch = selectIndexBatchWithSkips(tree.tree || [], startAfter, MAX_FILES_PER_RUN);
   const selectedEntries = batch.selected;
   skipped = batch.skippedOversizeFiles;
+  const skippedByReason = { ...batch.skippedByReason };
+  const recordSkip = reason => {
+    skipped++;
+    skippedByReason[reason] = (skippedByReason[reason] || 0) + 1;
+  };
   for (const entry of selectedEntries) {
     if (entry.type !== "blob" || !shouldIndexPath(entry.path) || entry.size > 120000) {
-      skipped++;
+      recordSkip("invalid_selected_entry");
       continue;
     }
     const blob = await githubJson(
@@ -251,12 +256,16 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
       githubToken
     );
     if (blob.encoding !== "base64" || typeof blob.content !== "string") {
-      skipped++;
+      recordSkip("unreadable_blob");
       continue;
     }
     const source = Buffer.from(blob.content.replace(/\n/g, ""), "base64").toString("utf8");
-    if (!source.trim() || source.includes("\u0000") || containsLikelySecret(source)) {
-      skipped++;
+    if (!source.trim() || source.includes("\u0000")) {
+      recordSkip("empty_or_binary_content");
+      continue;
+    }
+    if (containsLikelySecret(source)) {
+      recordSkip("secret_pattern_detected");
       continue;
     }
     const chunks = splitKnowledgeContent(source);
@@ -285,6 +294,7 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
     resumeRef: revision,
     indexed,
     skipped,
+    skippedByReason,
     eligibleFiles: batch.eligibleFiles,
     eligibleFilesAfterCursor: batch.eligibleFilesAfterCursor,
     processedFiles: batch.processedFiles,
