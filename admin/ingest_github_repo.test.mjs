@@ -67,6 +67,45 @@ test("index coverage reports remaining files and rejects impossible counts", () 
 });
 
 
+test("repository ingestion refuses truncated GitHub trees before indexing partial knowledge", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const revision = "c".repeat(40);
+  try {
+    globalThis.fetch = async input => {
+      const url = String(input);
+      calls.push(url);
+      if (url.includes("/commits/")) {
+        return new Response(JSON.stringify({ sha: revision }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+      if (url.includes("/git/trees/")) {
+        return new Response(JSON.stringify({ truncated: true, tree: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+      throw new Error("unexpected_fetch_url");
+    };
+
+    await assert.rejects(ingestRepository({
+      repository: "owner/repo",
+      ref: "HEAD",
+      githubToken: "read-only-test-token",
+      adminApiUrl: "https://admin-preview.example.workers.dev",
+      ownerToken: "short-lived-test-token",
+      allowedRepositories: ["owner/repo"]
+    }), /repository_tree_truncated_refusing_partial_index/);
+
+    assert.equal(calls.length, 2);
+    assert.equal(calls.some(url => url.endsWith("/v1/knowledge")), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("repository indexing can continue in ordered batches without skipping files", () => {
   const entries = ["z.md", "a.md", "d.md", "b.md", "c.md"].map(path => ({ path }));
   const first = selectIndexBatch(entries, "", 2);
@@ -280,7 +319,8 @@ test("knowledge reconciliation detects stale, deleted and not-yet-indexed source
     revision,
     ["docs/current.md", "docs/new.md"],
     [
-      { sourcePath: "owner/repo/docs/current.md#chunk-1", sourceRevision: revision },
+      { sourcePath: "owner/repo/docs/current.md#chunk-1", sourceRevision: revision, title: "docs/current.md [part 1 of 2]" },
+      { sourcePath: "owner/repo/docs/current.md#chunk-2", sourceRevision: revision, title: "docs/current.md [part 2 of 2]" },
       { sourcePath: "owner/repo/docs/old.md", sourceRevision: oldRevision },
       { sourcePath: "owner/repo/docs/current.md#chunk-2", sourceRevision: oldRevision },
       { sourcePath: "other/repo/docs/private.md", sourceRevision: oldRevision }
@@ -292,10 +332,65 @@ test("knowledge reconciliation detects stale, deleted and not-yet-indexed source
   assert.deepEqual(report.missingFromRepository.map(item => item.relativePath), ["docs/old.md"]);
   assert.deepEqual(report.notYetIndexed, ["docs/new.md"]);
   assert.equal(report.currentPathCount, 2);
-  assert.equal(report.coverageGranularity, "file_presence_only");
+  assert.equal(report.coverageGranularity, "partial_chunk_coverage");
   assert.equal(report.chunkCompletenessVerified, false);
+  assert.deepEqual(report.incompleteChunks, []);
+  assert.deepEqual(report.unknownChunkMetadata, []);
   assert.equal(report.destructiveChangesApplied, false);
   assert.throws(() => planKnowledgeReconciliation(
     "owner/repo", "branch-name", [], []
   ), /invalid_knowledge_reconciliation_input/);
+});
+
+
+test("knowledge reconciliation refuses to mark a partially indexed chunked file complete", () => {
+  const revision = "d".repeat(40);
+  const report = planKnowledgeReconciliation(
+    "owner/repo",
+    revision,
+    ["docs/large.md"],
+    [
+      { sourcePath: "owner/repo/docs/large.md#chunk-1", sourceRevision: revision, title: "docs/large.md [part 1 of 3]" },
+      { sourcePath: "owner/repo/docs/large.md#chunk-3", sourceRevision: revision, title: "docs/large.md [part 3 of 3]" }
+    ]
+  );
+  assert.deepEqual(report.notYetIndexed, ["docs/large.md"]);
+  assert.deepEqual(report.incompleteChunks, [{
+    relativePath: "docs/large.md",
+    expectedChunks: 3,
+    indexedChunks: 2,
+    missingChunkIndexes: [2]
+  }]);
+  assert.equal(report.chunkCompletenessVerified, false);
+});
+
+test("legacy chunk records without an expected chunk count remain explicitly unverified", () => {
+  const revision = "e".repeat(40);
+  const report = planKnowledgeReconciliation(
+    "owner/repo",
+    revision,
+    ["docs/legacy.md"],
+    [{ sourcePath: "owner/repo/docs/legacy.md#chunk-1", sourceRevision: revision, title: "docs/legacy.md (part 1)" }]
+  );
+  assert.deepEqual(report.unknownChunkMetadata, ["docs/legacy.md"]);
+  assert.equal(report.chunkCompletenessVerified, false);
+});
+
+
+test("knowledge reconciliation verifies coverage only when every current file has all chunks", () => {
+  const revision = "f".repeat(40);
+  const report = planKnowledgeReconciliation(
+    "owner/repo",
+    revision,
+    ["docs/short.md", "docs/long.md"],
+    [
+      { sourcePath: "owner/repo/docs/short.md", sourceRevision: revision, title: "docs/short.md" },
+      { sourcePath: "owner/repo/docs/long.md#chunk-1", sourceRevision: revision, title: "docs/long.md [part 1 of 2]" },
+      { sourcePath: "owner/repo/docs/long.md#chunk-2", sourceRevision: revision, title: "docs/long.md [part 2 of 2]" }
+    ]
+  );
+  assert.deepEqual(report.notYetIndexed, []);
+  assert.deepEqual(report.incompleteChunks, []);
+  assert.equal(report.coverageGranularity, "chunk_verified");
+  assert.equal(report.chunkCompletenessVerified, true);
 });
