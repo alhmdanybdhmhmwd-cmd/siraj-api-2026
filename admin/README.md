@@ -38,9 +38,11 @@ The Admin quality workflow now applies the checked-in BARQ production migration 
 
 Until the shared-handler integration has its own route/auth/queue tests and the owner explicitly authorizes a live change, do not bind the Admin Preview Worker to the production D1 or deploy it to the production BARQ Worker. The isolated Preview template below remains a non-production test harness, not the final shared-runtime architecture.
 
-## Required runtime bindings
+## Isolated Preview harness bindings (not the shared target)
 
-The future dedicated Admin Preview Worker requires:
+The following bindings apply only when running the standalone Admin Preview Worker as a sandbox. The selected shared-runtime target instead imports the Admin handler into the existing BARQ Worker and maps its existing `DB` and `AI` bindings to `ADMIN_DB` and `ADMIN_AI`; it does not require a second Worker or D1 database. The shared Worker still requires its own Admin owner-authentication secrets/variables and an exact Admin origin. A dedicated Admin Queue remains optional until durable background task execution is enabled.
+
+The standalone Preview Worker requires:
 
 - `ADMIN_DB`: a dedicated Admin Preview D1 database (never the BARQ production D1).
 - `ADMIN_TASK_QUEUE`: a dedicated Cloudflare Queue for durable background tasks.
