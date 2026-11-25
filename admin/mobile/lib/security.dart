@@ -14,7 +14,7 @@ String _resolveAdminGatewayOrigin() {
   if (uri == null ||
       uri.scheme != 'https' ||
       uri.host.isEmpty ||
-      uri.host.toLowerCase().endsWith('.workers.dev') ||
+      (uri.host.toLowerCase() == 'workers.dev' || uri.host.toLowerCase().endsWith('.workers.dev')) ||
       uri.userInfo.isNotEmpty ||
       uri.hasQuery ||
       uri.hasFragment) {
