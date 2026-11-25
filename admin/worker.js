@@ -1030,9 +1030,12 @@ async function handle(request, env) {
       const rows = await env.ADMIN_DB.prepare(`
         SELECT r.id, r.reporter_id, r.reported_user_id, r.category, r.details,
           r.status, r.created_at, u.username AS reported_username,
-          u.display_name AS reported_display_name
+          u.display_name AS reported_display_name,
+          reporter.username AS reporter_username,
+          reporter.display_name AS reporter_display_name
         FROM user_reports r
         JOIN users u ON u.id = r.reported_user_id
+        JOIN users reporter ON reporter.id = r.reporter_id
         WHERE r.status = 'pending'
         ORDER BY r.created_at ASC LIMIT 100
       `).all();
