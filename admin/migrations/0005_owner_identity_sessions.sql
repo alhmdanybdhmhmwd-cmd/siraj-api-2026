@@ -1,5 +1,5 @@
 -- Google OIDC owner identity and revocable Admin device sessions.
--- Apply only to a dedicated BARQ Admin Preview D1 database.
+-- Shared runtime: apply to BARQ D1 only after explicit owner approval. Standalone Preview may use its isolated Admin D1.
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS admin_owner_devices (
