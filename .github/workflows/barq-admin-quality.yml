@@ -48,6 +48,8 @@ jobs:
           db.executescript(Path("admin/migrations/0004_image_generation_limits.sql").read_text())
           db.executescript(Path("admin/migrations/0005_owner_identity_sessions.sql").read_text())
           db.execute("INSERT INTO admin_workspaces(id, owner_subject) VALUES ('preserve-check', 'preserve-check')")
+          db.execute("INSERT INTO admin_ai_usage_limits(workspace_id, window_start, request_count) VALUES ('preserve-check', 1, 2)")
+          db.execute("INSERT INTO admin_image_generation_limits(workspace_id, window_start, request_count) VALUES ('preserve-check', 1, 1)")
           db.executescript(Path("admin/migrations/0006_remove_image_usage_caps.sql").read_text())
           db.executescript(Path("admin/migrations/0007_brain_conversations.sql").read_text())
           names = {row[0] for row in db.execute(
@@ -66,8 +68,8 @@ jobs:
           assert retained_history_tables <= names, (
               "Historical usage tables must remain intact; request-count caps are disabled in application code"
           )
-          assert db.execute("SELECT COUNT(*) FROM admin_ai_usage_limits").fetchone()[0] == 0
-          assert db.execute("SELECT COUNT(*) FROM admin_image_generation_limits").fetchone()[0] == 0
+          assert db.execute("SELECT request_count FROM admin_ai_usage_limits WHERE workspace_id='preserve-check'").fetchone()[0] == 2
+          assert db.execute("SELECT request_count FROM admin_image_generation_limits WHERE workspace_id='preserve-check'").fetchone()[0] == 1
           worker_source = Path("admin/worker.js").read_text()
           assert "admin_ai_usage_limits" not in worker_source
           assert "admin_image_generation_limits" not in worker_source
