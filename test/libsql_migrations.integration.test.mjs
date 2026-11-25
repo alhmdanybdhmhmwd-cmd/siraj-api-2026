@@ -60,7 +60,7 @@ test("real libSQL applies every isolated Preview migration and supports BARQ dat
     ).bind("u1", "u2").run();
     await db.prepare(
       "INSERT INTO user_reports (id, reporter_id, reported_user_id, category, details) VALUES (?, ?, ?, ?, ?)"
-    ).bind("report-u2-1", "u1", "u2", "spam", "Repeated unsolicited messages");
+    ).bind("report-u2-1", "u1", "u2", "spam", "Repeated unsolicited messages").run();
     const moderationCounts = await db.prepare(`
       SELECT
         (SELECT COUNT(DISTINCT blocker_id) FROM blocked_users WHERE blocked_id = 'u2') AS blocks,
