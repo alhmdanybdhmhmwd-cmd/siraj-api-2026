@@ -246,10 +246,19 @@ async function authenticate(request, env) {
   if (!payload || !Number.isSafeInteger(payload.sv) || payload.sv < 0) return null;
   try {
     const row = await env.DB.prepare(
-      "SELECT session_version FROM account_security WHERE user_id = ?"
+      `SELECT s.session_version,
+              CASE WHEN m.user_id IS NOT NULL
+                    AND m.lifted_at IS NULL
+                    AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP)
+                   THEN 1 ELSE 0 END AS is_suspended
+       FROM account_security s
+       LEFT JOIN admin_user_suspensions m ON m.user_id = s.user_id
+       WHERE s.user_id = ?`
     ).bind(payload.sub).first();
     // A valid session must carry an explicit, non-negative integer version.
-    if (!row || !Number.isSafeInteger(Number(row.session_version)) ||
+    // Active moderation suspensions revoke access even when an old JWT is still valid.
+    if (!row || Number(row.is_suspended) === 1 ||
+        !Number.isSafeInteger(Number(row.session_version)) ||
         payload.sv !== Number(row.session_version)) {
       return null;
     }
@@ -1176,6 +1185,35 @@ export default {
 
       if (!currentUser) {
         return json({ error: "Unauthorized" }, 401);
+      }
+
+      // User reports are private, authenticated, and limited to one pending report per reporter/target pair.
+      if (method === "POST" && path === "/api/reports") {
+        const body = await readJsonRequestLimited(request);
+        const targetId = String(body?.userId || "").trim();
+        const category = String(body?.category || "").trim();
+        const details = String(body?.details || "").trim();
+        const allowedCategories = new Set(["spam", "harassment", "impersonation", "inappropriate_content", "fraud", "other"]);
+        if (!targetId || targetId.length > 128 || targetId === currentUser.sub ||
+            !allowedCategories.has(category) || details.length > 1200) {
+          return json({ error: "Invalid report details" }, 400);
+        }
+        const target = await env.DB.prepare("SELECT id FROM users WHERE id = ?").bind(targetId).first();
+        if (!target) return json({ error: "User not found" }, 404);
+        const reportId = crypto.randomUUID();
+        try {
+          await env.DB.prepare(
+            "INSERT INTO user_reports (id, reporter_id, reported_user_id, category, details) VALUES (?, ?, ?, ?, ?)"
+          ).bind(reportId, currentUser.sub, targetId, category, details).run();
+        } catch (error) {
+          const message = String(error?.message || error || "");
+          if (/idx_user_reports_one_pending_per_pair|UNIQUE constraint/i.test(message)) {
+            return json({ error: "A pending report for this user already exists" }, 409);
+          }
+          if (/no such table/i.test(message)) return json({ error: "Moderation migration required" }, 503);
+          throw error;
+        }
+        return json({ report: { id: reportId, status: "pending" } }, 201);
       }
 
       // Optional visual identity packages are small, versioned JSON bundles.
