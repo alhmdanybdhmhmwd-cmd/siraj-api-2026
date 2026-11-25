@@ -97,6 +97,15 @@ The checkpoint API stores step input/output references, completed step, next act
 
 No production data or services are changed by this foundation. On PR head `1de03ec7439d3b9781f4bbb25b087300c4d92e20`, Backend tests (`45720245906`) and BARQ Admin Quality (`45720245873`) completed successfully. The BARQ Admin mobile quality run (`45720245873` associated mobile job `139578164849`) passed dependency resolution, formatting, analysis, Flutter tests, Android SDK/NDK setup, AppAuth wiring, and Kotlin debug compilation; it did not package an APK. The separate Vercel check reported a build-rate-limit failure (`upgradeToPro=build-rate-limit`), which is a hosting quota limitation rather than a passing deployment. These CI results do not prove live Google sign-in, production D1 migration, live indexing/retrieval, or real-device acceptance.
 
+### Latest build diagnostics — commit `7c706ea4b3991de3f666effab969da294f91782a`
+
+- Backend authentication and migration-compatibility workflow (`45724353848`) completed successfully.
+- The isolated Wrangler bundle diagnostic (`45724344536`) completed successfully using Wrangler 4.168.0. `deploy --dry-run` produced a 381.84 KiB Worker bundle (71.20 KiB gzip) and resolved the configured `siraj-db`, Workers AI, and `TIGRIS_BUCKET` bindings. This validates source bundling only; it does not deploy or verify live Cloudflare resources.
+- Cloudflare Workers Builds still reports failure for build `efd7d14b-76f1-4342-aa38-3bf1c8e0c3ef`. Its GitHub check contains only the build ID and no failure annotations/log output, so the underlying Cloudflare failure is not yet diagnosed. Do not treat the dry-run as a repair of this separate Cloudflare check.
+- Vercel reports `Deployment rate limited — retry in 24 hours` for this revision. This is a hosting quota restriction, not a source-build result.
+- The PR-triggered BARQ Admin Quality run is still queued/pending and has not exposed a job result yet. No current-revision Admin Quality or physical-device success is claimed from that run.
+- No Worker deployment, production D1 migration, PR merge, or production data change was performed.
+
 ## Flutter owner app (initial client shell)
 
 The Flutter sources are formatted with the repository formatter; CI enforces `dart format --output=none --set-exit-if-changed` before analysis and tests. The temporary formatter workflow has been removed after dependency-aware formatting.
