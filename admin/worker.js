@@ -914,6 +914,152 @@ async function handle(request, env) {
     }
   }
 
+  if (request.method === "GET" && url.pathname === "/v1/users") {
+    const query = String(url.searchParams.get("q") || "").trim().slice(0, 80);
+    const pattern = "%" + query.replace(/[\\%_]/g, "\\  if (request.method === "GET" && url.pathname === "/v1/workspace") {") + "%";
+    try {
+      const [summary, rows] = await Promise.all([
+        env.ADMIN_DB.prepare(`
+          SELECT
+            (SELECT COUNT(*) FROM users) AS total_users,
+            (SELECT COUNT(*) FROM admin_user_suspensions
+              WHERE lifted_at IS NULL AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)) AS suspended_users,
+            (SELECT COUNT(*) FROM user_reports WHERE status = 'pending') AS pending_reports
+        `).first(),
+        env.ADMIN_DB.prepare(`
+          SELECT u.id, u.username, u.display_name, u.phone,
+            (SELECT COUNT(DISTINCT b.blocker_id) FROM blocked_users b WHERE b.blocked_id = u.id) AS block_count,
+            (SELECT COUNT(*) FROM user_reports r WHERE r.reported_user_id = u.id) AS report_count,
+            (SELECT COUNT(*) FROM user_reports r WHERE r.reported_user_id = u.id AND r.status = 'pending') AS pending_report_count,
+            CASE WHEN m.user_id IS NOT NULL AND m.lifted_at IS NULL
+              AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP)
+              THEN 1 ELSE 0 END AS is_suspended,
+            m.reason AS suspension_reason, m.suspended_at, m.expires_at
+          FROM users u
+          LEFT JOIN admin_user_suspensions m ON m.user_id = u.id
+          WHERE (? = '' OR u.username LIKE ? ESCAPE '\\'
+             OR u.display_name LIKE ? ESCAPE '\\' OR COALESCE(u.phone, '') LIKE ? ESCAPE '\\'
+             OR u.id LIKE ? ESCAPE '\\')
+          ORDER BY (CASE WHEN m.user_id IS NOT NULL AND m.lifted_at IS NULL
+            AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP) THEN 1 ELSE 0 END) DESC,
+            report_count DESC, block_count DESC, u.username COLLATE NOCASE ASC
+          LIMIT 100
+        `).bind(query, pattern, pattern, pattern, pattern).all()
+      ]);
+      return response({
+        summary: {
+          totalUsers: Number(summary?.total_users || 0),
+          suspendedUsers: Number(summary?.suspended_users || 0),
+          pendingReports: Number(summary?.pending_reports || 0)
+        },
+        users: rows.results || [],
+        query
+      }, 200, allowedOrigin);
+    } catch (error) {
+      if (/no such table/i.test(String(error?.message || error))) {
+        return response({ error: "user_moderation_migration_required" }, 503, allowedOrigin);
+      }
+      throw error;
+    }
+  }
+
+  const moderationUserMatch = url.pathname.match(/^\\/v1\\/users\\/([0-9a-f-]{36})\\/suspension$/i);
+  if (request.method === "PATCH" && moderationUserMatch) {
+    const userId = moderationUserMatch[1];
+    const body = await readJson(request);
+    const action = String(body?.action || "");
+    const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
+    if (!["suspend", "unsuspend"].includes(action) || reason.length < 8 || reason.length > 1000) {
+      return response({ error: "invalid_moderation_action" }, 400, allowedOrigin);
+    }
+    const user = await env.ADMIN_DB.prepare("SELECT id FROM users WHERE id = ?").bind(userId).first();
+    if (!user) return response({ error: "user_not_found" }, 404, allowedOrigin);
+    if (action === "suspend") {
+      const durationHours = body.durationHours == null ? null : Number(body.durationHours);
+      if (durationHours !== null && ![24, 72, 168, 720].includes(durationHours)) {
+        return response({ error: "invalid_suspension_duration" }, 400, allowedOrigin);
+      }
+      const expiresAt = durationHours === null ? null : new Date(Date.now() + durationHours * 3600000).toISOString();
+      await env.ADMIN_DB.batch([
+        env.ADMIN_DB.prepare(`
+          INSERT INTO admin_user_suspensions
+            (user_id, reason, suspended_by, suspended_at, expires_at, lifted_by, lifted_at)
+          VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?, NULL, NULL)
+          ON CONFLICT(user_id) DO UPDATE SET
+            reason = excluded.reason, suspended_by = excluded.suspended_by,
+            suspended_at = CURRENT_TIMESTAMP, expires_at = excluded.expires_at,
+            lifted_by = NULL, lifted_at = NULL
+        `).bind(userId, reason, actor.subject, expiresAt),
+        env.ADMIN_DB.prepare(
+          "INSERT OR IGNORE INTO account_security (user_id, session_version) VALUES (?, 0)"
+        ).bind(userId),
+        env.ADMIN_DB.prepare(
+          "UPDATE account_security SET session_version = session_version + 1, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?"
+        ).bind(userId),
+        env.ADMIN_DB.prepare(
+          "INSERT INTO admin_user_moderation_actions (id, user_id, action, reason, actor_subject) VALUES (?, ?, 'suspend', ?, ?)"
+        ).bind(crypto.randomUUID(), userId, reason, actor.subject)
+      ]);
+    } else {
+      await env.ADMIN_DB.batch([
+        env.ADMIN_DB.prepare(`
+          UPDATE admin_user_suspensions SET lifted_by = ?, lifted_at = CURRENT_TIMESTAMP
+          WHERE user_id = ? AND lifted_at IS NULL
+        `).bind(actor.subject, userId),
+        env.ADMIN_DB.prepare(
+          "INSERT OR IGNORE INTO account_security (user_id, session_version) VALUES (?, 0)"
+        ).bind(userId),
+        env.ADMIN_DB.prepare(
+          "UPDATE account_security SET session_version = session_version + 1, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?"
+        ).bind(userId),
+        env.ADMIN_DB.prepare(
+          "INSERT INTO admin_user_moderation_actions (id, user_id, action, reason, actor_subject) VALUES (?, ?, 'unsuspend', ?, ?)"
+        ).bind(crypto.randomUUID(), userId, reason, actor.subject)
+      ]);
+    }
+    await audit(env, workspace, actor, "user." + action, "user", userId,
+      { reason, durationHours: action === "suspend" ? (body.durationHours ?? null) : null });
+    return response({ ok: true, userId, action }, 200, allowedOrigin);
+  }
+
+  if (request.method === "GET" && url.pathname === "/v1/reports") {
+    try {
+      const rows = await env.ADMIN_DB.prepare(`
+        SELECT r.id, r.reporter_id, r.reported_user_id, r.category, r.details,
+          r.status, r.created_at, u.username AS reported_username,
+          u.display_name AS reported_display_name
+        FROM user_reports r
+        JOIN users u ON u.id = r.reported_user_id
+        WHERE r.status = 'pending'
+        ORDER BY r.created_at ASC LIMIT 100
+      `).all();
+      return response({ reports: rows.results || [] }, 200, allowedOrigin);
+    } catch (error) {
+      if (/no such table/i.test(String(error?.message || error))) {
+        return response({ error: "user_moderation_migration_required" }, 503, allowedOrigin);
+      }
+      throw error;
+    }
+  }
+
+  const reportReviewMatch = url.pathname.match(/^\\/v1\\/reports\\/([0-9a-f-]{36})$/i);
+  if (request.method === "PATCH" && reportReviewMatch) {
+    const reportId = reportReviewMatch[1];
+    const body = await readJson(request);
+    const status = String(body?.status || "");
+    const note = typeof body?.note === "string" ? body.note.trim() : "";
+    if (!["reviewed", "dismissed"].includes(status) || note.length < 4 || note.length > 1000) {
+      return response({ error: "invalid_report_decision" }, 400, allowedOrigin);
+    }
+    const updated = await env.ADMIN_DB.prepare(`
+      UPDATE user_reports SET status = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND status = 'pending'
+    `).bind(status, actor.subject, reportId).run();
+    if (!updated?.meta?.changes) return response({ error: "report_not_pending_or_not_found" }, 409, allowedOrigin);
+    await audit(env, workspace, actor, "report." + status, "report", reportId, { note });
+    return response({ ok: true, reportId, status }, 200, allowedOrigin);
+  }
+
   if (request.method === "GET" && url.pathname === "/v1/workspace") {
     const row = await env.ADMIN_DB.prepare(
       "SELECT id, display_name, current_project, current_phase, version, updated_at FROM admin_workspaces WHERE id = ?"
