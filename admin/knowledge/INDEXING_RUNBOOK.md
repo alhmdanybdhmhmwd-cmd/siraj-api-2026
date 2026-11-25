@@ -1,6 +1,6 @@
 # BARQ Brain repository indexing runbook
 
-This procedure indexes an explicitly selected GitHub repository revision into the dedicated BARQ Admin Preview knowledge store. It does not target the BARQ consumer database.
+This procedure indexes an explicitly selected GitHub repository revision into BARQ Brain's `admin_project_knowledge` tables. The selected architecture uses the existing BARQ Worker and D1 database through the isolated `/admin/*` route; it does not read or index consumer user, message, or SPARK records.
 
 ## Required runtime configuration
 
@@ -10,11 +10,11 @@ Supply these values only through a trusted local secret manager or protected CI 
 - `BARQ_ADMIN_GITHUB_ALLOWED_REPOSITORIES`: semicolon-separated exact owner/repository allowlist approved for this indexing run. The selected repository must match one entry exactly; wildcards and implicit access to other repositories are not accepted.
 - `BARQ_ADMIN_GITHUB_REF`: immutable commit SHA preferred; a branch or tag is acceptable when the resolved SHA is recorded.
 - `BARQ_ADMIN_GITHUB_TOKEN`: read-only GitHub Contents/Metadata access for the selected repository.
-- `BARQ_ADMIN_API_URL`: HTTPS URL of the dedicated BARQ Admin Preview Worker.
-- `BARQ_ADMIN_OWNER_TOKEN`: short-lived owner access token accepted by the Preview Worker.
+- `BARQ_ADMIN_API_URL`: HTTPS base URL of the existing BARQ Worker with the `/admin` prefix, for example `https://<existing-worker-host>/admin` (do not use the root URL or invent a host).
+- `BARQ_ADMIN_OWNER_TOKEN`: short-lived owner access token accepted by the shared Admin route.
 - `BARQ_ADMIN_GITHUB_START_AFTER`: optional path cursor, initially empty.
 
-The Preview Worker must have its dedicated Preview D1 binding and owner authentication configured. The indexer requires the owner-scoped `POST /v1/knowledge` API.
+The shared BARQ Worker must have the additive Admin migrations applied to its existing D1 database, plus the separate Admin JWT secret, Google owner allowlist, and exact Admin origin configured. The indexer appends `/v1/knowledge` to `BARQ_ADMIN_API_URL`, producing the shared endpoint `/admin/v1/knowledge`. Do not apply migrations or deploy the shared Worker until the owner explicitly approves that live production change.
 
 ## Run and resume
 
