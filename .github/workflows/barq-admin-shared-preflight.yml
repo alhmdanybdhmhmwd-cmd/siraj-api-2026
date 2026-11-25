@@ -1,0 +1,78 @@
+name: BARQ Admin Shared Runtime Preflight
+
+on:
+  push:
+    branches:
+      - barq-admin-foundation-2026-11-23
+    paths:
+      - ".github/workflows/barq-admin-shared-preflight.yml"
+      - "wrangler.toml"
+      - "admin/shared_runtime.js"
+      - "admin/migrations/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: barq-admin-shared-preflight
+  cancel-in-progress: false
+
+jobs:
+  verify-shared-resources:
+    runs-on: ubuntu-latest
+    environment: barq-admin-preview
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: barq-admin-foundation-2026-11-23
+
+      - name: Verify Cloudflare credentials and shared BARQ resources (read-only)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_API_TOKEN:-}" || { echo "::error::CLOUDFLARE_API_TOKEN is missing from GitHub Environment barq-admin-preview."; exit 1; }
+          test -n "${CLOUDFLARE_ACCOUNT_ID:-}" || { echo "::error::CLOUDFLARE_ACCOUNT_ID is missing from GitHub Environment barq-admin-preview."; exit 1; }
+
+          expected_id="$(python3 - <<'PY'
+          import re
+          from pathlib import Path
+          config = Path("wrangler.toml").read_text()
+          name = re.search(r'database_name\s*=\s*"([^"]+)"', config)
+          ident = re.search(r'database_id\s*=\s*"([^"]+)"', config)
+          if not name or not ident or name.group(1) != "siraj-db":
+              raise SystemExit("Root Worker config does not identify the expected shared siraj-db.")
+          print(ident.group(1))
+          PY
+          )"
+
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "$api/d1/database?per_page=100" > /tmp/barq-d1.json
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "$api/workers/scripts" > /tmp/barq-workers.json
+
+          python3 - <<'PY'
+          import json, os
+          d1 = json.load(open("/tmp/barq-d1.json"))
+          workers = json.load(open("/tmp/barq-workers.json"))
+          if not d1.get("success"):
+              raise SystemExit("Cloudflare D1 read check failed.")
+          if not workers.get("success"):
+              raise SystemExit("Cloudflare Workers Scripts read check failed.")
+          target_id = os.environ["EXPECTED_D1_ID"]
+          matches = [item for item in d1.get("result", []) if item.get("uuid") == target_id]
+          if len(matches) != 1 or matches[0].get("name") != "siraj-db":
+              raise SystemExit("Configured siraj-db ID does not match the D1 database visible to this token.")
+          scripts = workers.get("result", [])
+          if not any(item.get("id") == "siraj-api" or item.get("script_name") == "siraj-api" for item in scripts):
+              raise SystemExit("The existing siraj-api Worker is not visible to this token.")
+          print("Read-only preflight passed: token, account, shared siraj-db, and siraj-api Worker are visible.")
+          PY
+        shell: bash
+        env:
+          EXPECTED_D1_ID: 0db93afd-4bf5-4423-9e25-7a2f4f4bdbe0
