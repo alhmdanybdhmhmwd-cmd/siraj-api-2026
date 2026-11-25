@@ -8,10 +8,16 @@ const ALLOWED_EXTENSIONS = new Set([
 ]);
 const SENSITIVE_PATH = /(^|\/)(\.git|\.next|\.dart_tool|build|dist|node_modules|vendor|coverage|secrets?|credentials?)(\/|$)|(^|\/)(\.env[^/]*|.*\.(pem|key|p12|pfx|keystore|jks|apk|aab|ipa|sqlite|db|lock))$/i;
 const SECRET_CONTENT = [
-  /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
+  /-----BEGIN (?:(?:RSA|EC|OPENSSH|DSA) )?PRIVATE KEY-----/,
   /AIza[0-9A-Za-z_-]{30,}/,
   /gh[pousr]_[A-Za-z0-9_]{30,}/,
-  /(?:api[_-]?key|access[_-]?token|client[_-]?secret)\s*[:=]\s*["'][^"']{12,}["']/i
+  /github_pat_[A-Za-z0-9_]{30,}/,
+  /AKIA[0-9A-Z]{16}/,
+  /xox[baprs]-[A-Za-z0-9-]{20,}/,
+  /\bsk_live_[A-Za-z0-9]{16,}\b/,
+  /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/,
+  /(?:api[_-]?key|access[_-]?token|client[_-]?secret|password)\s*[:=]\s*["'][^"']{12,}["']/i,
+  /(?:api[_-]?key|access[_-]?token|client[_-]?secret|password)\s*[:=]\s*[^\s"'#]{16,}/i
 ];
 
 export function normalizeAllowedRepositories(value) {
