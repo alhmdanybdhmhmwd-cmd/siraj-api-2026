@@ -1,4 +1,5 @@
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl, summarizeIndexCoverage, selectIndexBatch, normalizeAllowedRepositories, selectIndexBatchWithSkips, ingestRepository } from "./ingest_github_repo.mjs";
 
@@ -130,4 +131,17 @@ test("knowledge indexing counts oversized files as skipped and resumes without l
   assert.equal(second.skippedOversizeFiles, 2);
   assert.equal(second.remaining, 0);
   assert.equal(second.eligibleFilesAfterCursor, 3);
+});
+
+
+test("owner knowledge seed preserves product boundaries and flags time-sensitive decisions", () => {
+  const seed = readFileSync(new URL("./knowledge/BARQ_OWNER_CONTEXT.md", import.meta.url), "utf8");
+  assert.match(seed, /\*\*برق — BARQ\*\* is the main global messaging application/);
+  assert.match(seed, /\*\*SPARK — سبارك\*\* is only the stories\/status feature/);
+  assert.match(seed, /\*\*BARQ Admin\*\* is a separate management application/);
+  assert.match(seed, /\*\*BARQ Brain\*\* is the AI assistant inside BARQ Admin/);
+  assert.match(seed, /needs_owner_confirmation/);
+  assert.match(seed, /No direct contradiction was found among the stable product-identity decisions/);
+  assert.match(seed, /Feature requirements .* are not proof that the corresponding code is complete/);
+  assert.match(seed, /The 12-stage BARQ roadmap supersedes the older 8-stage plan/);
 });
