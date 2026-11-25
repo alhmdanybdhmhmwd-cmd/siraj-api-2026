@@ -16,8 +16,9 @@ const SECRET_CONTENT = [
   /xox[baprs]-[A-Za-z0-9-]{20,}/,
   /\bsk_live_[A-Za-z0-9]{16,}\b/,
   /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/,
-  /(?:api[_-]?key|access[_-]?token|client[_-]?secret|password)\s*[:=]\s*["'][^"']{12,}["']/i,
-  /(?:api[_-]?key|access[_-]?token|client[_-]?secret|password)\s*[:=]\s*[^\s"'#]{16,}/i
+  /\bbearer\s+[A-Za-z0-9._~-]{24,}\b/i,
+  /(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret[_-]?key|aws[_-]?secret[_-]?access[_-]?key|password)\s*[:=]\s*["'][^"']{12,}["']/i,
+  /(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret[_-]?key|aws[_-]?secret[_-]?access[_-]?key|password)\s*[:=]\s*[^\s"'#]{16,}/i
 ];
 
 export function normalizeAllowedRepositories(value) {
