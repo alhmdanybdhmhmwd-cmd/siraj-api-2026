@@ -92,36 +92,44 @@ export function selectIndexBatchWithSkips(entries, startAfter = "", limit = MAX_
   if (!Number.isSafeInteger(maxFileBytes) || maxFileBytes < 1) {
     throw new TypeError("invalid_max_file_size");
   }
-  const skippedByReason = {};
-  const candidates = [];
-  for (const entry of entries || []) {
-    if (!entry || entry.type !== "blob") continue;
-    const pathReason = classifyIndexPath(entry.path);
-    if (pathReason) {
-      skippedByReason[pathReason] = (skippedByReason[pathReason] || 0) + 1;
-      continue;
-    }
-    if (!Number.isSafeInteger(entry.size) || entry.size < 0) {
-      skippedByReason.invalid_size = (skippedByReason.invalid_size || 0) + 1;
-      continue;
-    }
-    candidates.push(entry);
+  const blobs = (entries || []).filter(entry =>
+    entry && entry.type === "blob" && typeof entry.path === "string" && entry.path > startAfter
+  );
+  const eligible = [];
+  for (const entry of blobs) {
+    if (classifyIndexPath(entry.path) !== null) continue;
+    if (!Number.isSafeInteger(entry.size) || entry.size < 0 || entry.size > maxFileBytes) continue;
+    eligible.push(entry);
   }
-  const eligible = candidates.filter(entry => entry.size <= maxFileBytes);
-  const skippedOversizeFiles = candidates.filter(entry => entry.size > maxFileBytes).length;
-  if (skippedOversizeFiles) skippedByReason.oversized_file = skippedOversizeFiles;
   const batch = selectIndexBatch(eligible, startAfter, limit);
-  const skippedOversizeFilesAfterCursor = candidates.filter(entry =>
-    entry.size > maxFileBytes && entry.path > startAfter &&
-    (!batch.selected.length || entry.path <= batch.selected[batch.selected.length - 1].path || batch.remaining === 0)
-  ).length;
+  const boundary = batch.remaining > 0 && batch.selected.length
+    ? batch.selected[batch.selected.length - 1].path
+    : null;
+  const scanned = blobs.filter(entry => boundary === null || entry.path <= boundary);
+  const skippedByReason = {};
+  for (const entry of scanned) {
+    const reason = classifyIndexPath(entry.path) ||
+      (!Number.isSafeInteger(entry.size) || entry.size < 0
+        ? "invalid_size"
+        : entry.size > maxFileBytes ? "oversized_file" : null);
+    if (reason) skippedByReason[reason] = (skippedByReason[reason] || 0) + 1;
+  }
+  const skipped = Object.values(skippedByReason).reduce((total, count) => total + count, 0);
   return {
     ...batch,
-    eligibleFiles: candidates.length,
-    eligibleFilesAfterCursor: candidates.filter(entry => entry.path > startAfter).length,
-    processedFiles: batch.selected.length + skippedOversizeFilesAfterCursor,
+    eligibleFiles: eligible.length + blobs.filter(entry => {
+      const reason = classifyIndexPath(entry.path);
+      return reason === null && Number.isSafeInteger(entry.size) && entry.size >= 0 &&
+        entry.size > maxFileBytes;
+    }).length,
+    eligibleFilesAfterCursor: eligible.length + blobs.filter(entry => {
+      const reason = classifyIndexPath(entry.path);
+      return reason === null && Number.isSafeInteger(entry.size) && entry.size >= 0 &&
+        entry.size > maxFileBytes;
+    }).length,
+    processedFiles: batch.selected.length + skipped,
     remaining: batch.remaining,
-    skippedOversizeFiles: skippedOversizeFilesAfterCursor,
+    skippedOversizeFiles: skippedByReason.oversized_file || 0,
     skippedByReason
   };
 }
