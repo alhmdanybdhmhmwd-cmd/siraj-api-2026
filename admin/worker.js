@@ -963,9 +963,12 @@ async function handle(request, env) {
     }
   }
 
-  const moderationUserMatch = url.pathname.match(/^\\/v1\\/users\\/([0-9a-f-]{36})\\/suspension$/i);
-  if (request.method === "PATCH" && moderationUserMatch) {
-    const userId = moderationUserMatch[1];
+  const moderationUserPrefix = "/v1/users/";
+  const moderationUserPath = url.pathname.startsWith(moderationUserPrefix)
+    ? url.pathname.slice(moderationUserPrefix.length) : "";
+  const userId = moderationUserPath.endsWith("/suspension")
+    ? moderationUserPath.slice(0, -"/suspension".length) : "";
+  if (request.method === "PATCH" && /^[0-9a-f-]{36}$/i.test(userId)) {
     const body = await readJson(request);
     const action = String(body?.action || "");
     const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
@@ -1042,9 +1045,10 @@ async function handle(request, env) {
     }
   }
 
-  const reportReviewMatch = url.pathname.match(/^\\/v1\\/reports\\/([0-9a-f-]{36})$/i);
-  if (request.method === "PATCH" && reportReviewMatch) {
-    const reportId = reportReviewMatch[1];
+  const reportPrefix = "/v1/reports/";
+  const reportId = url.pathname.startsWith(reportPrefix)
+    ? url.pathname.slice(reportPrefix.length) : "";
+  if (request.method === "PATCH" && /^[0-9a-f-]{36}$/i.test(reportId)) {
     const body = await readJson(request);
     const status = String(body?.status || "");
     const note = typeof body?.note === "string" ? body.note.trim() : "";
