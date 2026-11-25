@@ -112,3 +112,32 @@ The later development workspace should provide:
 - Human approval before merging, production deployment, destructive data changes, secret/permission changes, paid actions, or external communications. Failed or uncertain repairs must stop with evidence rather than guess.
 
 Phase 2 acceptance should prepare accurate, revision-aware knowledge for both projects and report repository coverage. Phase 3 (when authorized) should add controlled repository read/edit/test capabilities. Later durable-operation phases should make accepted work continue server-side while the phone is offline. The owner does not want an APK until the agreed programming work is complete; physical-phone acceptance remains a later dedicated testing stage.
+
+## 10. Phase 2 seed validation — 2026-11-25
+
+This review preserves the owner's decisions and records how BARQ Brain must interpret time-sensitive or not-yet-final statements. It does not convert historical notes into current implementation claims.
+
+### Stable decisions — retain unless the owner changes them
+
+- Product names and boundaries in section 1 are authoritative: BARQ is the messaging app; SPARK is its stories/status feature; BARQ Admin is separate; BARQ Brain is the Admin assistant.
+- The four approved visual identities, international phone-number support, messaging requirements, excluded QR/referral concepts, and postponed real phone verification remain product requirements.
+- The 12-stage BARQ roadmap supersedes the older 8-stage plan. Physical-device acceptance remains a distinct release gate.
+- Public registration/onboarding and News are deferred to the final BARQ roadmap phase; this does not defer owner-only Google OIDC for BARQ Admin.
+- Phase 2 is authorized for knowledge and project understanding. Phase 3 repository editing/repair, later durable background operation, deployment, and production changes are not implicitly authorized by that decision.
+
+### Qualified or time-sensitive statements — never present as settled implementation
+
+- SPARK visibility to mutual contacts who saved the user is a previously discussed privacy model, explicitly not confirmed as the final implementation. Keep it tagged needs_owner_confirmation.
+- Flutter/Dart, Java, and Android SDK versions in section 4 describe a prior build environment only. Re-read current CI/workflow configuration before reporting active toolchain versions.
+- The preview hostname/DNS failure and VPN-related login observation are historical and unresolved. Do not state that the issue is fixed or currently reproducible without fresh evidence.
+- Feature requirements (including reactions, pinning, translation, transcription, ephemeral messages, image capabilities, and the four identities) are not proof that the corresponding code is complete, connected, deployed, or device-tested.
+- Branch names, PR numbers, commit references, and phase status are snapshots. Resolve them against GitHub before every current-status answer.
+- A successful CI run proves only the checks and exact commit included in that run. It does not prove live Preview bindings, provider calls, Google sign-in, or physical-device acceptance.
+
+### Conflict review outcome
+
+No direct contradiction was found among the stable product-identity decisions in this seed. The apparent older Siraj naming is explicitly historical; SPARK is explicitly a feature name; and the BARQ/Admin boundaries are consistently stated. The qualified items above are uncertainties or historical snapshots, not competing owner decisions. If a future owner-approved decision conflicts with this seed, preserve both dated records and ask the owner only when the conflict blocks the requested work.
+
+### Knowledge-record handling
+
+Keep owner intent separate from implementation evidence. For every indexed owner decision, retain this document path, its source revision, review date, and decision status (approved, rejected, postponed, superseded, or needs_owner_confirmation). For implementation claims, require separate code/test/deployment evidence with its own exact revision and observation time. Never infer a decision's effective date from the file's last-updated date alone.
