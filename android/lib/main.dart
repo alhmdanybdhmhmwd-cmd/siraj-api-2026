@@ -29,22 +29,16 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:crypto/crypto.dart' as crypto;
 import 'barq_identity.dart';
+import 'barq_api_config.dart';
 
 const Color gold = Color(0xFFD6AD55);
-// Production remains the safe default. Select isolated preview origins at build time
-// without editing source: --dart-define=BARQ_API_BASE=https://<preview-api>.example
-const String apiBase = String.fromEnvironment(
-  'BARQ_API_BASE',
-  defaultValue: 'https://siraj-api-2026.vercel.app',
-);
-// Route media through the same public API origin by default. Resumable 1 MiB
-// chunks keep each request below the Vercel Function body limit and avoid a
-// second workers.dev hostname on restricted mobile networks. A separate media
-// origin is opt-in only for isolated diagnostics via BARQ_MEDIA_BASE.
-const String mediaWorkerBase = String.fromEnvironment(
-  'BARQ_MEDIA_BASE',
-  defaultValue: apiBase,
-);
+// Both API and media traffic must use public HTTPS gateways. Any workers.dev
+// override is rejected at runtime so a build flag cannot reintroduce VPN use.
+const String _configuredApiBase = String.fromEnvironment('BARQ_API_BASE');
+final String apiBase = resolveBarqApiBase(_configuredApiBase);
+const String _configuredMediaBase = String.fromEnvironment('BARQ_MEDIA_BASE');
+final String mediaWorkerBase =
+    resolveBarqApiBase(_configuredMediaBase, fallback: apiBase);
 const String barqPlayStoreUrl = 'https://play.google.com/store/apps/details?id=com.barq.app';
 
 String get barqInviteMessage =>
