@@ -22,13 +22,13 @@ Arabic RTL Flutter client for the independent BARQ Admin owner workspace.
    flutter build apk --dart-define=BARQ_GOOGLE_OIDC_CLIENT_ID="$BARQ_GOOGLE_OIDC_CLIENT_ID"
    ```
    Do not omit the `export`: without it, Gradle falls back to `com.barq.admin.auth` while the Dart client expects the Google-derived callback scheme, and Google sign-in will not return to the app.
-4. Configure the dedicated Admin Preview Worker variables/secrets:
+4. Configure these variables/secrets on the shared BARQ Worker environment:
    - `BARQ_GOOGLE_OIDC_CLIENT_ID`: the same public Google client ID.
    - `BARQ_ADMIN_OWNER_EMAIL`: the exact Google account email permitted to own this Admin workspace. Google must mark it verified.
    - `BARQ_ADMIN_JWT_SECRET`: a random server-only secret of at least 32 characters.
    - `BARQ_ADMIN_ALLOWED_ORIGIN`: the exact app/web origin where applicable.
    - Optional `BARQ_ADMIN_OWNER_SUBJECT`: pin the verified Google `sub` after first controlled enrollment.
-5. Provision the dedicated Admin Preview D1 database and both queues (`barq-admin-preview-tasks` and `barq-admin-preview-dlq`) using the instructions in `admin/README.md` and `admin/wrangler.toml.example`. From the `admin/` directory, apply all pending Admin migrations in order with `npx wrangler d1 migrations apply barq-admin-preview --remote`; do not manually apply only migration 0005, and never target BARQ consumer production data.
+5. For the selected shared-runtime design, set the app's Admin API base URL to the existing BARQ Worker URL with the `/admin` suffix (for example, `https://<barq-worker-host>/admin`). The shared Worker maps its existing `DB` and `AI` bindings to the Admin handler; all Admin tables remain in the `admin_` namespace. Applying Admin migrations to the live BARQ D1 is a separate production schema change and remains blocked until explicitly approved. The dedicated Admin Preview D1/Queue setup below is only an isolated sandbox alternative.
 
 The Worker validates Google RS256 signatures using Google's published signing keys and checks issuer, audience, expiry, verified email, owner allowlist, and one-time OIDC nonce. The Worker then issues its own session tokens. Google access tokens are not used as Admin API bearer tokens. The opaque refresh token is stored server-side only as a SHA-256 hash and rotated on every refresh; reuse revokes that session. Each API request checks that its session and device are still active. No signing secret belongs in the APK.
 
@@ -55,7 +55,7 @@ The dashboard includes a separate image-generation action. The owner writes a pr
 
 The Android app can choose a photo from the gallery or capture one with the camera, then send it over the authenticated HTTPS Admin API to `POST /v1/brain/vision`. The Worker validates JPEG/PNG/WebP data URLs, limits each image payload to 4 MiB, and calls Cloudflare Workers AI model `@cf/meta/llama-3.2-11b-vision-instruct`. The application imposes no daily, per-minute, or lifetime request-count quota on image analysis; requests remain subject to provider availability and account-level service limits. The image is processed for the request and is not written to Admin D1 or the audit log; the audit entry stores only MIME type, byte count, model, and a generated event ID. Text inside images is treated as untrusted input.
 
-The dedicated Admin Preview D1, Queue, and AI bindings must be configured and verified separately. The current BARQ Brain worker creates server-side assistant drafts; it does not autonomously edit BARQ source code or deploy. Do not connect this app to the BARQ consumer database or reuse consumer-user sessions.
+The shared-runtime handler reuses BARQ's existing Worker and D1 binding while keeping owner authentication and all Admin-owned tables separate. The Admin Queue is still optional and must be provisioned separately if durable background task execution is enabled; without it, accepted tasks remain persisted but wait for queue execution. Never reuse consumer-user sessions. The current BARQ Brain worker creates server-side assistant drafts; it does not autonomously edit BARQ source code or deploy.
 
 ## Owner operating agreement
 
