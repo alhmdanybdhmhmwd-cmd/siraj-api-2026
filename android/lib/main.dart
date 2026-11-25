@@ -39,6 +39,9 @@ final String apiBase = resolveBarqApiBase(_configuredApiBase);
 const String _configuredMediaBase = String.fromEnvironment('BARQ_MEDIA_BASE');
 final String mediaWorkerBase =
     resolveBarqApiBase(_configuredMediaBase, fallback: apiBase);
+final String barqRealtimeUrl = resolveBarqRealtimeUrl(
+  const String.fromEnvironment('BARQ_REALTIME_URL'),
+);
 const String barqPlayStoreUrl = 'https://play.google.com/store/apps/details?id=com.barq.app';
 
 String get barqInviteMessage =>
@@ -1005,10 +1008,7 @@ bool barqRealtimeMessageMatchesConversation(
 class SirajRealtime {
   SirajRealtime._();
   static final SirajRealtime instance = SirajRealtime._();
-  static const String socketUrl = String.fromEnvironment(
-    'BARQ_REALTIME_URL',
-    defaultValue: '',
-  );
+  static final String socketUrl = barqRealtimeUrl;
 
   final StreamController<Map<String, dynamic>> _events =
       StreamController<Map<String, dynamic>>.broadcast();
