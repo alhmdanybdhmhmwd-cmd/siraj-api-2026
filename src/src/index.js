@@ -246,19 +246,10 @@ async function authenticate(request, env) {
   if (!payload || !Number.isSafeInteger(payload.sv) || payload.sv < 0) return null;
   try {
     const row = await env.DB.prepare(
-      `SELECT s.session_version,
-              CASE WHEN m.user_id IS NOT NULL
-                    AND m.lifted_at IS NULL
-                    AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP)
-                   THEN 1 ELSE 0 END AS is_suspended
-       FROM account_security s
-       LEFT JOIN admin_user_suspensions m ON m.user_id = s.user_id
-       WHERE s.user_id = ?`
+      "SELECT session_version FROM account_security WHERE user_id = ?"
     ).bind(payload.sub).first();
     // A valid session must carry an explicit, non-negative integer version.
-    // Active moderation suspensions revoke access even when an old JWT is still valid.
-    if (!row || Number(row.is_suspended) === 1 ||
-        !Number.isSafeInteger(Number(row.session_version)) ||
+    if (!row || !Number.isSafeInteger(Number(row.session_version)) ||
         payload.sv !== Number(row.session_version)) {
       return null;
     }
@@ -1165,6 +1156,15 @@ export default {
           return json({
             error: "Incorrect username or password"
           }, 401);
+        }
+
+        const suspension = await env.DB.prepare(
+          `SELECT 1 FROM admin_user_suspensions
+           WHERE user_id = ? AND lifted_at IS NULL
+             AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)`
+        ).bind(user.id).first();
+        if (suspension) {
+          return json({ error: "Account is suspended. Contact BARQ support for review." }, 403);
         }
 
         const sessionVersion = await getSessionVersion(env, user.id);
