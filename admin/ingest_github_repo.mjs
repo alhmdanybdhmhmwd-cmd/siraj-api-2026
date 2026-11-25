@@ -127,7 +127,7 @@ export function selectIndexBatchWithSkips(entries, startAfter = "", limit = MAX_
       return reason === null && Number.isSafeInteger(entry.size) && entry.size >= 0 &&
         entry.size > maxFileBytes;
     }).length,
-    processedFiles: batch.selected.length + skipped,
+    processedFiles: batch.selected.length + (skippedByReason.oversized_file || 0),
     remaining: batch.remaining,
     skippedOversizeFiles: skippedByReason.oversized_file || 0,
     skippedByReason
@@ -279,8 +279,8 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
   let skipped = 0;
   const batch = selectIndexBatchWithSkips(tree.tree || [], startAfter, MAX_FILES_PER_RUN);
   const selectedEntries = batch.selected;
-  skipped = batch.skippedOversizeFiles;
   const skippedByReason = { ...batch.skippedByReason };
+  skipped = Object.values(skippedByReason).reduce((total, count) => total + count, 0);
   const recordSkip = reason => {
     skipped++;
     skippedByReason[reason] = (skippedByReason[reason] || 0) + 1;
