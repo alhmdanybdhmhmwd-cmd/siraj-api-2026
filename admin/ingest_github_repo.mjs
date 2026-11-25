@@ -155,32 +155,30 @@ export function splitKnowledgeContent(source, maxChars = MAX_CHUNK_CHARS) {
   if (typeof source !== "string" || !Number.isSafeInteger(maxChars) || maxChars < 100) {
     throw new TypeError("invalid_chunk_input");
   }
-  const normalized = source.replace(/\r\n?/g, "\n").trim();
+  const normalized = source.replace(/\r\n?/g, "\n");
   if (!normalized) return [];
   const chunks = [];
   let current = "";
-  for (const line of normalized.split("\n")) {
-    let remaining = line;
-    while (remaining.length > maxChars) {
+  const parts = normalized.match(/[^\n]*\n|[^\n]+$/g) || [];
+  for (let part of parts) {
+    while (part.length > maxChars) {
       if (current) {
         chunks.push(current);
         current = "";
       }
-      chunks.push(remaining.slice(0, maxChars));
-      remaining = remaining.slice(maxChars);
+      chunks.push(part.slice(0, maxChars));
+      part = part.slice(maxChars);
     }
-    const candidate = current ? current + "\n" + remaining : remaining;
-    if (candidate.length > maxChars) {
+    if (current.length + part.length > maxChars) {
       if (current) chunks.push(current);
-      current = remaining;
+      current = part;
     } else {
-      current = candidate;
+      current += part;
     }
   }
   if (current) chunks.push(current);
   return chunks;
 }
-
 export function createKnowledgeChunkRecords(repository, path, revision, source, maxChars = MAX_CHUNK_CHARS) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository || "") ||
       !shouldIndexPath(path) || !/^[a-f0-9]{40}$/i.test(revision || "") ||
