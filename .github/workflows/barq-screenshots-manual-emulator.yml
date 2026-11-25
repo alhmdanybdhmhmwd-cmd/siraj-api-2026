@@ -36,7 +36,9 @@ jobs:
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort | tail -n 1)"
           AVDMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name avdmanager | sort | tail -n 1)"
           test -x "$SDKMANAGER"
-          yes | "$SDKMANAGER" --licenses
+          set +o pipefail
+          yes | "$SDKMANAGER" --licenses || true
+          set -o pipefail
           "$SDKMANAGER" --install "platform-tools" "emulator" "platforms;android-30" "system-images;android-30;default;x86_64"
           echo "no" | "$AVDMANAGER" create avd --force --name barq_api30 --device pixel_2 --package "system-images;android-30;default;x86_64"
           "$ANDROID_HOME/emulator/emulator" -version
@@ -69,7 +71,7 @@ jobs:
           set -euxo pipefail
           flutter pub get
           mkdir -p ../artifacts
-          flutter test integration_test/barq_screenshots_test.dart -d emulator-5554 --reporter expanded
+          flutter drive --driver=test_driver/integration_test.dart --target=integration_test/barq_screenshots_test.dart -d emulator-5554
           cd ..
           find artifacts -type f -name '*.png' -printf '%p %s bytes\n' | sort
           count="$(find artifacts -type f -iname '*.png' | wc -l)"
