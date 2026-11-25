@@ -172,6 +172,22 @@ export function splitKnowledgeContent(source, maxChars = MAX_CHUNK_CHARS) {
   return chunks;
 }
 
+export function createKnowledgeChunkRecords(repository, path, revision, source, maxChars = MAX_CHUNK_CHARS) {
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository || "") ||
+      !shouldIndexPath(path) || !/^[a-f0-9]{40}$/i.test(revision || "") ||
+      typeof source !== "string") {
+    throw new TypeError("invalid_knowledge_chunk_identity");
+  }
+  const chunks = splitKnowledgeContent(source, maxChars);
+  return chunks.map((content, index) => ({
+    sourceType: inferSourceType(path),
+    sourcePath: repository + "/" + (chunks.length === 1 ? path : path + "#chunk-" + (index + 1)),
+    sourceRevision: revision,
+    title: path + (chunks.length > 1 ? " (part " + (index + 1) + ")" : ""),
+    content
+  }));
+}
+
 export function inferSourceType(path) {
   const value = String(path || "").toLowerCase();
   if (/product|requirement|specification|prd/.test(value)) return "product_requirement";
@@ -282,21 +298,15 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
       recordSkip("secret_pattern_detected");
       continue;
     }
-    const chunks = splitKnowledgeContent(source);
-    for (let index = 0; index < chunks.length; index++) {
+    const records = createKnowledgeChunkRecords(repository, entry.path, revision, source);
+    for (const record of records) {
       const response = await fetchWithRetry(apiBase + "/v1/knowledge", {
         method: "POST",
         headers: {
           Authorization: "Bearer " + ownerToken,
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({
-          sourceType: inferSourceType(entry.path),
-          sourcePath: repository + "/" + (chunks.length === 1 ? entry.path : entry.path + "#chunk-" + (index + 1)),
-          sourceRevision: revision,
-          title: entry.path + (chunks.length > 1 ? " (part " + (index + 1) + ")" : ""),
-          content: chunks[index]
-        })
+        body: JSON.stringify(record)
       });
       if (!response.ok) {
         throw new Error("admin_knowledge_api_" + response.status + "_at_" + entry.path +
