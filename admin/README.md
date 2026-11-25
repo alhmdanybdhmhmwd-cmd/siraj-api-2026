@@ -17,6 +17,11 @@ This directory is a separate Admin service boundary. It is not part of the BARQ 
 - Owner roadmap decision: defer consumer registration and news features to the final roadmap phase; they are excluded from current Phase 1 closeout and Phase 2 knowledge work. Admin owner authentication remains separate.
 - Unit tests and isolated SQLite schema checks.
 
+## Development roadmap
+
+- Phase 2 knowledge and project understanding: still in progress; live Preview indexing and retrieval acceptance remain blocked until isolated Preview bindings are configured and verified. See `knowledge/PHASE2_SCOPE.md`.
+- Phase 3 safe development tools: architecture and safety contract started. Heavy repository work and builds are designed to run server-side/CI, not on the owner's phone. No GitHub write runner or autonomous repository-edit capability is claimed live yet. See `knowledge/PHASE3_SCOPE.md`.
+
 ## Required runtime bindings
 
 The future dedicated Admin Preview Worker requires:
