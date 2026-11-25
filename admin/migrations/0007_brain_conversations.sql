@@ -1,4 +1,4 @@
--- Persistent BARQ Brain conversations. Apply only to dedicated Admin Preview D1.
+-- Persistent BARQ Brain conversations. Shared runtime: apply to BARQ D1 only after explicit owner approval; standalone Preview may use its isolated Admin D1.
 CREATE TABLE IF NOT EXISTS admin_brain_conversations (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL,
