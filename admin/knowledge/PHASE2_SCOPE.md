@@ -78,6 +78,7 @@ Curated owner decisions are seeded in `admin/knowledge/BARQ_OWNER_CONTEXT.md`. T
 
 ## Out of scope
 
+- BARQ consumer-platform user administration, user/block/report dashboards, moderation decisions, and account suspensions: assigned to BARQ Admin Phase 7. Any preliminary moderation code already present is tracked as Phase 7 groundwork and is not a Phase 2 knowledge acceptance item.
 - Public user registration/onboarding and News: final project phase.
 - Autonomous repository edits, repairs, merges, or deployments: later authorized phase.
 - Production data/resource changes, paid resource creation, and production deployment: approval-gated.
