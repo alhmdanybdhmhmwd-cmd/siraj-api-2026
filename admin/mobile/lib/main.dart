@@ -1641,7 +1641,10 @@ class _AdminHomePageState extends State<AdminHomePage>
                   selectedIcon: Icon(Icons.dashboard),
                   label: 'الرئيسية',
                 ),
-                NavigationDestination(icon: Icon(Icons.task_alt), label: 'المهام'),
+                NavigationDestination(
+                  icon: Icon(Icons.task_alt),
+                  label: 'المهام',
+                ),
                 NavigationDestination(
                   icon: Icon(Icons.verified_user_outlined),
                   label: 'الموافقات',
