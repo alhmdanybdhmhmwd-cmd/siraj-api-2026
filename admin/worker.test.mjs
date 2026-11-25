@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, validateAdminAccessClaims, processAdminDeadLetterMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches } from "./worker.js";
 
 test("idempotency keys are bounded and cannot be silently truncated", () => {
@@ -358,4 +359,15 @@ test("indexed knowledge stays outside system authority and remains explicitly un
   assert.doesNotMatch(messages[0].content, new RegExp(injected));
   assert.match(messages[1].content, new RegExp(injected));
   assert.match(messages[1].content, /docs\/untrusted\.md @ abc123/);
+});
+
+
+test("task and checkpoint writes always retain workspace ownership in SQL predicates", () => {
+  const source = readFileSync(new URL("./worker.js", import.meta.url), "utf8");
+  assert.match(source,
+    /SELECT id, title, description, status, priority, checkpoint_version, next_action, created_at FROM admin_tasks WHERE id = \\? AND workspace_id = \\?/);
+  assert.match(source,
+    /SELECT 1 FROM admin_tasks WHERE id = \\? AND workspace_id = \\? AND last_checkpoint_id = \\?/);
+  assert.match(source,
+    /SELECT 1 FROM admin_tasks WHERE id = \\? AND workspace_id = \\? AND last_checkpoint_id = \\? AND checkpoint_version = \\?/);
 });
