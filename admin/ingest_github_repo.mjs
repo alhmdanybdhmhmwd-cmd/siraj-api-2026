@@ -279,9 +279,13 @@ export function planKnowledgeReconciliation(repository, currentRevision, current
     notYetIndexed,
     incompleteChunks,
     unknownChunkMetadata,
-    coverageGranularity: unknownChunkMetadata.length ? "file_presence_with_legacy_unknown_chunks" : "chunk_verified",
+    coverageGranularity: unknownChunkMetadata.length
+      ? "legacy_chunk_metadata_incomplete"
+      : incompleteChunks.length || notYetIndexed.length
+        ? "partial_chunk_coverage"
+        : "chunk_verified",
     chunkCompletenessVerified: unknownChunkMetadata.length === 0 &&
-      incompleteChunks.length === 0,
+      incompleteChunks.length === 0 && notYetIndexed.length === 0,
     destructiveChangesApplied: false
   };
 }
