@@ -19,6 +19,26 @@ void main() {
     expect(resolveBarqApiBase('http://api.example.com'), defaultBarqApiBase);
   });
 
+  test('rejects direct workers.dev WebSocket endpoints', () {
+    expect(
+      resolveBarqRealtimeUrl('wss://siraj-api.alhmdanybdhmhmwd.workers.dev'),
+      isEmpty,
+    );
+    expect(
+      resolveBarqRealtimeUrl('wss://preview.workers.dev/socket'),
+      isEmpty,
+    );
+    expect(resolveBarqRealtimeUrl('https://api.example.com/socket'), isEmpty);
+    expect(resolveBarqRealtimeUrl(''), isEmpty);
+  });
+
+  test('accepts only secure public WebSocket gateways', () {
+    expect(
+      resolveBarqRealtimeUrl('wss://realtime.example.com/socket'),
+      'wss://realtime.example.com/socket',
+    );
+  });
+
   test('accepts a separate public HTTPS gateway for isolated environments', () {
     expect(
       resolveBarqApiBase('https://preview-api.example.com'),
