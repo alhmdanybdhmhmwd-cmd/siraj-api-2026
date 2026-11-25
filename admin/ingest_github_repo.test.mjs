@@ -1,7 +1,7 @@
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
-import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl, summarizeIndexCoverage, selectIndexBatch, normalizeAllowedRepositories, selectIndexBatchWithSkips, ingestRepository, containsLikelySecret, classifyIndexPath, fetchWithRetry } from "./ingest_github_repo.mjs";
+import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl, summarizeIndexCoverage, selectIndexBatch, normalizeAllowedRepositories, selectIndexBatchWithSkips, ingestRepository, containsLikelySecret, classifyIndexPath, fetchWithRetry, createKnowledgeChunkRecords } from "./ingest_github_repo.mjs";
 
 test("repository ingestion allowlists project files and excludes secrets/build output", () => {
   assert.equal(shouldIndexPath("docs/BARQ_PRODUCT.md"), true);
@@ -241,4 +241,23 @@ test("repository and knowledge API fetches retry transient failures but not perm
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+
+test("knowledge chunk identities are stable across retries and pinned to one source revision", () => {
+  const source = "x".repeat(250);
+  const revision = "a".repeat(40);
+  const first = createKnowledgeChunkRecords("owner/repo", "docs/guide.md", revision, source, 100);
+  const retry = createKnowledgeChunkRecords("owner/repo", "docs/guide.md", revision, source, 100);
+  assert.deepEqual(retry, first);
+  assert.deepEqual(first.map(record => record.sourcePath), [
+    "owner/repo/docs/guide.md#chunk-1",
+    "owner/repo/docs/guide.md#chunk-2",
+    "owner/repo/docs/guide.md#chunk-3"
+  ]);
+  assert.ok(first.every(record => record.sourceRevision === revision));
+  assert.equal(first.map(record => record.content).join(""), source);
+  assert.throws(() => createKnowledgeChunkRecords(
+    "owner/repo", "docs/guide.md", "moving-branch", source, 100
+  ), /invalid_knowledge_chunk_identity/);
 });
