@@ -22,6 +22,22 @@ This directory is a separate Admin service boundary. It is not part of the BARQ 
 - Phase 2 knowledge and project understanding: still in progress; live Preview indexing and retrieval acceptance remain blocked until isolated Preview bindings are configured and verified. See `knowledge/PHASE2_SCOPE.md`.
 - Phase 3 safe development tools: architecture and safety contract started. Heavy repository work and builds are designed to run server-side/CI, not on the owner's phone. No GitHub write runner or autonomous repository-edit capability is claimed live yet. See `knowledge/PHASE3_SCOPE.md`.
 
+## Owner-selected shared BARQ runtime target (implementation pending)
+
+The owner has selected the existing BARQ backend as the target runtime for BARQ Admin: the same Cloudflare Worker and the existing BARQ D1 database. This is an architecture decision, not a live connection or deployment.
+
+The safe integration shape is:
+
+- Mount the Admin handler inside the existing BARQ Worker under a dedicated `/admin/v1/*` route prefix. Do not expose the Admin API on the consumer app's existing routes.
+- Pass the existing Worker D1 binding to the Admin handler as its database adapter (`DB` to `ADMIN_DB`) and reuse the existing Workers AI binding through an explicit Admin adapter. Do not add a second database binding to a different production Worker.
+- Keep all Admin-owned tables, indexes, and triggers namespaced with `admin_`. Admin migrations must be additive and must never alter, rename, or delete BARQ consumer tables.
+- Preserve the separate Google OIDC owner allowlist, device/session revocation, audit trail, and exact Admin-origin CORS checks. Sharing infrastructure does not share user permissions.
+- If durable background execution is enabled, provision a dedicated Admin Queue producer/consumer for Admin tasks; it does not require a second Worker or D1 database.
+
+The Admin quality workflow now applies the checked-in BARQ production migration set and Admin migrations together in an in-memory SQLite compatibility test. This proves only that the current migration objects coexist in the test schema; it does not inspect or modify the live `siraj-db`, prove runtime route integration, or authorize production deployment.
+
+Until the shared-handler integration has its own route/auth/queue tests and the owner explicitly authorizes a live change, do not bind the Admin Preview Worker to the production D1 or deploy it to the production BARQ Worker. The isolated Preview template below remains a non-production test harness, not the final shared-runtime architecture.
+
 ## Required runtime bindings
 
 The future dedicated Admin Preview Worker requires:
