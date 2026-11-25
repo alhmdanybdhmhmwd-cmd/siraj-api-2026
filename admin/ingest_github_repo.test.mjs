@@ -319,7 +319,8 @@ test("knowledge reconciliation detects stale, deleted and not-yet-indexed source
     revision,
     ["docs/current.md", "docs/new.md"],
     [
-      { sourcePath: "owner/repo/docs/current.md#chunk-1", sourceRevision: revision },
+      { sourcePath: "owner/repo/docs/current.md#chunk-1", sourceRevision: revision, title: "docs/current.md [part 1 of 2]" },
+      { sourcePath: "owner/repo/docs/current.md#chunk-2", sourceRevision: revision, title: "docs/current.md [part 2 of 2]" },
       { sourcePath: "owner/repo/docs/old.md", sourceRevision: oldRevision },
       { sourcePath: "owner/repo/docs/current.md#chunk-2", sourceRevision: oldRevision },
       { sourcePath: "other/repo/docs/private.md", sourceRevision: oldRevision }
@@ -331,10 +332,46 @@ test("knowledge reconciliation detects stale, deleted and not-yet-indexed source
   assert.deepEqual(report.missingFromRepository.map(item => item.relativePath), ["docs/old.md"]);
   assert.deepEqual(report.notYetIndexed, ["docs/new.md"]);
   assert.equal(report.currentPathCount, 2);
-  assert.equal(report.coverageGranularity, "file_presence_only");
-  assert.equal(report.chunkCompletenessVerified, false);
+  assert.equal(report.coverageGranularity, "chunk_verified");
+  assert.equal(report.chunkCompletenessVerified, true);
+  assert.deepEqual(report.incompleteChunks, []);
+  assert.deepEqual(report.unknownChunkMetadata, []);
   assert.equal(report.destructiveChangesApplied, false);
   assert.throws(() => planKnowledgeReconciliation(
     "owner/repo", "branch-name", [], []
   ), /invalid_knowledge_reconciliation_input/);
+});
+
+
+test("knowledge reconciliation refuses to mark a partially indexed chunked file complete", () => {
+  const revision = "d".repeat(40);
+  const report = planKnowledgeReconciliation(
+    "owner/repo",
+    revision,
+    ["docs/large.md"],
+    [
+      { sourcePath: "owner/repo/docs/large.md#chunk-1", sourceRevision: revision, title: "docs/large.md [part 1 of 3]" },
+      { sourcePath: "owner/repo/docs/large.md#chunk-3", sourceRevision: revision, title: "docs/large.md [part 3 of 3]" }
+    ]
+  );
+  assert.deepEqual(report.notYetIndexed, ["docs/large.md"]);
+  assert.deepEqual(report.incompleteChunks, [{
+    relativePath: "docs/large.md",
+    expectedChunks: 3,
+    indexedChunks: 2,
+    missingChunkIndexes: [2]
+  }]);
+  assert.equal(report.chunkCompletenessVerified, false);
+});
+
+test("legacy chunk records without an expected chunk count remain explicitly unverified", () => {
+  const revision = "e".repeat(40);
+  const report = planKnowledgeReconciliation(
+    "owner/repo",
+    revision,
+    ["docs/legacy.md"],
+    [{ sourcePath: "owner/repo/docs/legacy.md#chunk-1", sourceRevision: revision, title: "docs/legacy.md (part 1)" }]
+  );
+  assert.deepEqual(report.unknownChunkMetadata, ["docs/legacy.md"]);
+  assert.equal(report.chunkCompletenessVerified, false);
 });
