@@ -28,6 +28,8 @@ The owner selected the existing BARQ backend as the runtime for BARQ Admin: the 
 
 The safe integration shape is:
 
+A separate GitHub Actions diagnostic (`.github/workflows/barq-worker-bundle-diagnostics.yml`) runs Wrangler's `deploy --dry-run` against the root Worker configuration. It checks bundling without Cloudflare credentials and never publishes a Worker. This is a local/CI build diagnostic, not proof of a live Cloudflare deployment.
+
 - Mount the Admin handler inside the existing BARQ Worker under a dedicated `/admin/v1/*` route prefix. Do not expose the Admin API on the consumer app's existing routes.
 - Pass the existing Worker D1 binding to the Admin handler as its database adapter (`DB` to `ADMIN_DB`) and reuse the existing Workers AI binding through an explicit Admin adapter. Do not add a second database binding to a different production Worker.
 - Keep all Admin-owned tables, indexes, and triggers namespaced with `admin_`. Admin migrations must be additive and must never alter, rename, or delete BARQ consumer tables.
