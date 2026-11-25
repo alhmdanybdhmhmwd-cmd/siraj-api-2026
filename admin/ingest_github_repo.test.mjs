@@ -128,6 +128,7 @@ test("knowledge indexing counts oversized files as skipped and resumes without l
   assert.equal(first.processedFiles, 1);
   assert.equal(first.skippedOversizeFiles, 0);
   assert.equal(first.remaining, 1);
+  assert.equal(first.skippedByReason.sensitive_path, undefined);
 
   const second = selectIndexBatchWithSkips(entries, first.nextStartAfter, 1, 120000);
   assert.deepEqual(second.selected.map(item => item.path), ["c.md"]);
