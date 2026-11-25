@@ -355,7 +355,7 @@ class _AdminHomePageState extends State<AdminHomePage>
               const SizedBox(height: 12),
               if (action == 'suspend')
                 DropdownButtonFormField<String>(
-                  value: duration,
+                  initialValue: duration,
                   decoration: const InputDecoration(labelText: 'مدة الحظر'),
                   items: const [
                     DropdownMenuItem(value: '24', child: Text('24 ساعة')),
