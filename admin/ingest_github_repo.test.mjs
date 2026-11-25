@@ -1,7 +1,7 @@
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
-import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl, summarizeIndexCoverage, selectIndexBatch, normalizeAllowedRepositories, selectIndexBatchWithSkips, ingestRepository, containsLikelySecret, classifyIndexPath, fetchWithRetry, createKnowledgeChunkRecords } from "./ingest_github_repo.mjs";
+import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl, summarizeIndexCoverage, selectIndexBatch, normalizeAllowedRepositories, selectIndexBatchWithSkips, ingestRepository, containsLikelySecret, classifyIndexPath, fetchWithRetry, createKnowledgeChunkRecords, planKnowledgeReconciliation } from "./ingest_github_repo.mjs";
 
 test("repository ingestion allowlists project files and excludes secrets/build output", () => {
   assert.equal(shouldIndexPath("docs/BARQ_PRODUCT.md"), true);
@@ -269,4 +269,31 @@ test("knowledge chunk identities are stable across retries and pinned to one sou
   assert.throws(() => createKnowledgeChunkRecords(
     "owner/repo", "docs/guide.md", "moving-branch", source, 100
   ), /invalid_knowledge_chunk_identity/);
+});
+
+
+test("knowledge reconciliation detects stale, deleted and not-yet-indexed sources without cross-repo changes", () => {
+  const revision = "b".repeat(40);
+  const oldRevision = "a".repeat(40);
+  const report = planKnowledgeReconciliation(
+    "owner/repo",
+    revision,
+    ["docs/current.md", "docs/new.md"],
+    [
+      { sourcePath: "owner/repo/docs/current.md#chunk-1", sourceRevision: revision },
+      { sourcePath: "owner/repo/docs/old.md", sourceRevision: oldRevision },
+      { sourcePath: "owner/repo/docs/current.md#chunk-2", sourceRevision: oldRevision },
+      { sourcePath: "other/repo/docs/private.md", sourceRevision: oldRevision }
+    ]
+  );
+  assert.deepEqual(report.staleRevisions.map(item => item.sourcePath), [
+    "owner/repo/docs/current.md#chunk-2"
+  ]);
+  assert.deepEqual(report.missingFromRepository.map(item => item.relativePath), ["docs/old.md"]);
+  assert.deepEqual(report.notYetIndexed, ["docs/new.md"]);
+  assert.equal(report.currentPathCount, 2);
+  assert.equal(report.destructiveChangesApplied, false);
+  assert.throws(() => planKnowledgeReconciliation(
+    "owner/repo", "branch-name", [], []
+  ), /invalid_knowledge_reconciliation_input/);
 });
