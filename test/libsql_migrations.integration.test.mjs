@@ -33,7 +33,7 @@ test("real libSQL applies every isolated Preview migration and supports BARQ dat
     );
     const tableNames = new Set(tables.rows.map(row => row.name));
     for (const name of [
-      "users", "friendships", "messages", "group_messages", "blocked_users", "user_reports", "admin_user_suspensions", "admin_user_moderation_actions",
+      "users", "friendships", "messages", "group_messages", "blocked_users", "user_reports", "barq_user_suspensions", "barq_user_moderation_actions",
       "message_reactions", "pinned_messages", "ephemeral_messages",
       "media_upload_sessions", "media_upload_parts", "media_upload_chunks",
       "hidden_private_messages", "private_conversation_state"
@@ -72,10 +72,10 @@ test("real libSQL applies every isolated Preview migration and supports BARQ dat
       "the admin dashboard must be able to count distinct blockers and pending reports"
     );
     await db.prepare(
-      "INSERT INTO admin_user_suspensions (user_id, reason, suspended_by) VALUES (?, ?, ?)"
+      "INSERT INTO barq_user_suspensions (user_id, reason, suspended_by) VALUES (?, ?, ?)"
     ).bind("u2", "Confirmed policy violation", "owner@example.com").run();
     const activeSuspension = await db.prepare(
-      "SELECT user_id FROM admin_user_suspensions WHERE user_id = ? AND lifted_at IS NULL"
+      "SELECT user_id FROM barq_user_suspensions WHERE user_id = ? AND lifted_at IS NULL"
     ).bind("u2").first();
     assert.equal(activeSuspension.user_id, "u2");
     await assert.rejects(
