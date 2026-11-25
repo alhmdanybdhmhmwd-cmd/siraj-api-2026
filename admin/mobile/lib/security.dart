@@ -1,11 +1,31 @@
 import 'dart:convert';
 import 'dart:math';
 
+const String _barqApiGatewayOrigin = String.fromEnvironment(
+  'BARQ_API_BASE',
+  defaultValue: 'https://siraj-api-2026.vercel.app',
+);
+
+const String defaultAdminApiBase = '$_barqApiGatewayOrigin/api/admin';
+
+String resolveAdminApiBase(String? configured) {
+  final value = configured?.trim() ?? '';
+  final uri = Uri.tryParse(value);
+  // Older builds stored the Cloudflare workers.dev URL directly. Migrate
+  // those installations to the same public Vercel gateway used by BARQ.
+  if (value.isEmpty ||
+      (uri?.host.toLowerCase().endsWith('.workers.dev') ?? false)) {
+    return defaultAdminApiBase;
+  }
+  return value;
+}
+
 bool isValidAdminApiBase(String value) {
   final uri = Uri.tryParse(value.trim());
   return uri != null &&
       uri.scheme == 'https' &&
       uri.host.isNotEmpty &&
+      !uri.host.toLowerCase().endsWith('.workers.dev') &&
       uri.userInfo.isEmpty &&
       !uri.hasQuery &&
       !uri.hasFragment;
