@@ -22,9 +22,9 @@ This directory is a separate Admin service boundary. It is not part of the BARQ 
 - Phase 2 knowledge and project understanding: still in progress; live Preview indexing and retrieval acceptance remain blocked until isolated Preview bindings are configured and verified. See `knowledge/PHASE2_SCOPE.md`.
 - Phase 3 safe development tools: architecture and safety contract started. Heavy repository work and builds are designed to run server-side/CI, not on the owner's phone. No GitHub write runner or autonomous repository-edit capability is claimed live yet. See `knowledge/PHASE3_SCOPE.md`.
 
-## Owner-selected shared BARQ runtime target (implementation pending)
+## Shared BARQ runtime integration (implemented in source; not deployed)
 
-The owner has selected the existing BARQ backend as the target runtime for BARQ Admin: the same Cloudflare Worker and the existing BARQ D1 database. This is an architecture decision, not a live connection or deployment.
+The owner selected the existing BARQ backend as the runtime for BARQ Admin: the same Cloudflare Worker and existing BARQ D1 database. The integration is now wired in source: `src/src/index.js` delegates `/admin/*` requests to `admin/shared_runtime.js`, which maps the existing `DB` and `AI` bindings to the Admin handler. The adapter deliberately does not fall back to a separate `ADMIN_DB`. This is not a live deployment or proof that Admin migrations and owner credentials are configured.
 
 The safe integration shape is:
 
@@ -34,13 +34,11 @@ The safe integration shape is:
 - Preserve the separate Google OIDC owner allowlist, device/session revocation, audit trail, and exact Admin-origin CORS checks. Sharing infrastructure does not share user permissions.
 - If durable background execution is enabled, provision a dedicated Admin Queue producer/consumer for Admin tasks; it does not require a second Worker or D1 database.
 
-The Admin quality workflow now applies the checked-in BARQ production migration set and Admin migrations together in an in-memory SQLite compatibility test. This proves only that the current migration objects coexist in the test schema; it does not inspect or modify the live `siraj-db`, prove runtime route integration, or authorize production deployment.
-
-Until the shared-handler integration has its own route/auth/queue tests and the owner explicitly authorizes a live change, do not bind the Admin Preview Worker to the production D1 or deploy it to the production BARQ Worker. The isolated Preview template below remains a non-production test harness, not the final shared-runtime architecture.
+The Admin quality workflow applies the checked-in BARQ production migration set and Admin migrations together in an in-memory SQLite compatibility test. Shared-runtime unit tests verify DB/AI binding mapping, route-prefix isolation, health routing, and Admin preflight handling. These checks prove source-level compatibility only; they do not inspect or modify live `siraj-db`, validate real Google OIDC, or prove live indexing/retrieval. Applying Admin migrations to production and deploying the updated BARQ Worker remain separate approval-gated actions. The isolated Preview template below is an optional non-production harness, not the selected runtime target.
 
 ## Isolated Preview harness bindings (not the shared target)
 
-The following bindings apply only when running the standalone Admin Preview Worker as a sandbox. The selected shared-runtime target instead imports the Admin handler into the existing BARQ Worker and maps its existing `DB` and `AI` bindings to `ADMIN_DB` and `ADMIN_AI`; it does not require a second Worker or D1 database. The shared Worker still requires its own Admin owner-authentication secrets/variables and an exact Admin origin. A dedicated Admin Queue remains optional until durable background task execution is enabled.
+The following bindings apply only when running the standalone Admin Preview Worker as an optional sandbox. The selected shared-runtime target instead imports the Admin handler into the existing BARQ Worker and maps its existing `DB` and `AI` bindings to `ADMIN_DB` and `ADMIN_AI`; it does not require a second Worker or D1 database. The shared Worker still requires separate Admin owner-authentication secrets/variables and an exact Admin origin. A dedicated Admin Queue remains optional until durable background task execution is enabled.
 
 The standalone Preview Worker requires:
 
@@ -90,7 +88,7 @@ The checkpoint API stores step input/output references, completed step, next act
 
 ## Still incomplete
 
-- The Google OIDC exchange, Admin session issuance, refresh rotation, logout, device listing, and revocation routes are implemented in the isolated Worker code and covered by unit/schema checks. They have **not** yet been exercised against a configured Google OAuth client and dedicated Admin Preview resources or on a physical Android device.
+- The Google OIDC exchange, Admin session issuance, refresh rotation, logout, device listing, and revocation routes are implemented and covered by unit/schema checks. They have **not** yet been exercised against the shared BARQ Worker with configured Admin owner secrets and an authorized Admin origin, or on a physical Android device. The Admin migrations have not been applied to live `siraj-db`.
 - The mobile client includes Google OIDC login, secure token storage, refresh handling, logout, and a device-management dialog. Android callback behavior still needs a real signed build/device acceptance test.
 - Dedicated Admin Preview D1, Queue, and AI bindings are not configured or verified. The Queue consumer now processes one task per delivery and a dedicated dead-letter consumer marks exhausted tasks failed and records an audit event. Lease renewal during long AI calls now runs every four minutes with ownership fencing before completion. Explicit recovery/requeue after abrupt worker termination remains incomplete; queue-depth/age alerting and a dead-letter monitoring dashboard are also not implemented.
 - BARQ Brain supports persistent owner-scoped chat history and source-referenced replies in addition to durable task drafts/checkpoints. It does not autonomously modify repositories or deploy services. Chat requires the dedicated Preview `ADMIN_AI` binding and the new `0007_brain_conversations.sql` migration. Push notifications, signing-key rotation procedures, concurrency-focused refresh tests, and the growth workspace remain follow-on work.
