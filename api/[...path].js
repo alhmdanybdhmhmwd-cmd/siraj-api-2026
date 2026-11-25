@@ -58,9 +58,14 @@ module.exports = async (req, res) => {
     // transport prefix while preserving the Admin namespace and query string.
     const isAdminGatewayRequest = requestPath === "/api/admin" ||
       requestPath.startsWith("/api/admin/");
+    // Public health probes live under /api on Vercel, while the Worker
+    // exposes them at /health/* without the API prefix.
+    const isHealthGatewayRequest = requestPath === "/api/health" ||
+      requestPath.startsWith("/api/health/");
     const upstreamRequestUrl =
-      (isAdminGatewayRequest ? requestPath.slice("/api".length) : requestPath) +
-      parsedRequestUrl.search;
+      (isAdminGatewayRequest || isHealthGatewayRequest
+        ? requestPath.slice("/api".length)
+        : requestPath) + parsedRequestUrl.search;
     const isAdminVisionUpload = req.method === "POST" &&
       requestPath === "/api/admin/v1/brain/vision";
     const isMediaUpload = req.method === "POST" && requestPath === "/api/media";
