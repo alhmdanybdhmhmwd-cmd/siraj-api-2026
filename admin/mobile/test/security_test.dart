@@ -34,16 +34,16 @@ void main() {
   test(
     'migrates empty and direct workers.dev settings to the public gateway',
     () {
-    expect(resolveAdminApiBase(null), defaultAdminApiBase);
-    expect(resolveAdminApiBase(''), defaultAdminApiBase);
-    expect(
-      resolveAdminApiBase('https://siraj-api.alhmdanybdhmhmwd.workers.dev'),
-      defaultAdminApiBase,
-    );
-    expect(
-      resolveAdminApiBase('https://admin.example.com/custom'),
-      'https://admin.example.com/custom',
-    );
+      expect(resolveAdminApiBase(null), defaultAdminApiBase);
+      expect(resolveAdminApiBase(''), defaultAdminApiBase);
+      expect(
+        resolveAdminApiBase('https://siraj-api.alhmdanybdhmhmwd.workers.dev'),
+        defaultAdminApiBase,
+      );
+      expect(
+        resolveAdminApiBase('https://admin.example.com/custom'),
+        'https://admin.example.com/custom',
+      );
     },
   );
 
