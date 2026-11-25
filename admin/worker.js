@@ -346,10 +346,10 @@ async function processAdminTaskMessage(message, env) {
         SELECT ?, ?, ?, '{}', ?, 'BARQ Brain generated a server-side result',
           'Review the assistant result', 'barq-brain-worker'
         WHERE EXISTS (
-          SELECT 1 FROM admin_tasks WHERE id = ? AND last_checkpoint_id = ?
+          SELECT 1 FROM admin_tasks WHERE id = ? AND workspace_id = ? AND last_checkpoint_id = ?
             AND checkpoint_version = ? AND status = 'completed'
         )
-      `).bind(checkpointId, task.id, nextVersion, output, task.id, checkpointId, nextVersion)
+      `).bind(checkpointId, task.id, nextVersion, output, task.id, payload.workspaceId, checkpointId, nextVersion)
     ]);
     if (!results?.[0]?.meta?.changes || !results?.[1]?.meta?.changes) {
       throw new Error("task_lease_or_checkpoint_conflict");
@@ -986,8 +986,8 @@ async function handle(request, env) {
     await audit(env, workspace, actor, "task.created", "task", id,
       { priority: parsed.value.priority });
     const task = await env.ADMIN_DB.prepare(
-      "SELECT id, title, description, status, priority, checkpoint_version, next_action, created_at FROM admin_tasks WHERE id = ?"
-    ).bind(id).first();
+      "SELECT id, title, description, status, priority, checkpoint_version, next_action, created_at FROM admin_tasks WHERE id = ? AND workspace_id = ?"
+    ).bind(id, workspace).first();
     let dispatched = false;
     if (env.ADMIN_TASK_QUEUE && env.ADMIN_AI) {
       await env.ADMIN_TASK_QUEUE.send({ taskId: id, workspaceId: workspace });
@@ -1249,10 +1249,10 @@ async function handle(request, env) {
           (id, task_id, sequence, input_json, output_json, completed_step, next_action, created_by)
         SELECT ?, ?, ?, ?, ?, ?, ?, ?
         WHERE EXISTS (
-          SELECT 1 FROM admin_tasks WHERE id = ? AND last_checkpoint_id = ? AND checkpoint_version = ?
+          SELECT 1 FROM admin_tasks WHERE id = ? AND workspace_id = ? AND last_checkpoint_id = ? AND checkpoint_version = ?
         )
       `).bind(checkpointId, taskId, nextVersion, parsed.value.inputJson, parsed.value.outputJson,
-        parsed.value.completedStep, parsed.value.nextAction, actor.subject, taskId, checkpointId, nextVersion)
+        parsed.value.completedStep, parsed.value.nextAction, actor.subject, taskId, workspace, checkpointId, nextVersion)
     ]);
     if (!results?.[0]?.meta?.changes || !results?.[1]?.meta?.changes) {
       return response({ error: "checkpoint_version_conflict" }, 409, allowedOrigin);
