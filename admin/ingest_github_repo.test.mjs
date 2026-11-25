@@ -292,6 +292,8 @@ test("knowledge reconciliation detects stale, deleted and not-yet-indexed source
   assert.deepEqual(report.missingFromRepository.map(item => item.relativePath), ["docs/old.md"]);
   assert.deepEqual(report.notYetIndexed, ["docs/new.md"]);
   assert.equal(report.currentPathCount, 2);
+  assert.equal(report.coverageGranularity, "file_presence_only");
+  assert.equal(report.chunkCompletenessVerified, false);
   assert.equal(report.destructiveChangesApplied, false);
   assert.throws(() => planKnowledgeReconciliation(
     "owner/repo", "branch-name", [], []
