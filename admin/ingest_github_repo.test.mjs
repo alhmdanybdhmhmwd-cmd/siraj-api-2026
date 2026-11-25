@@ -1,7 +1,7 @@
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
-import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl, summarizeIndexCoverage, selectIndexBatch, normalizeAllowedRepositories, selectIndexBatchWithSkips, ingestRepository, containsLikelySecret } from "./ingest_github_repo.mjs";
+import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl, summarizeIndexCoverage, selectIndexBatch, normalizeAllowedRepositories, selectIndexBatchWithSkips, ingestRepository, containsLikelySecret, classifyIndexPath } from "./ingest_github_repo.mjs";
 
 test("repository ingestion allowlists project files and excludes secrets/build output", () => {
   assert.equal(shouldIndexPath("docs/BARQ_PRODUCT.md"), true);
@@ -15,6 +15,10 @@ test("repository ingestion allowlists project files and excludes secrets/build o
   assert.equal(shouldIndexPath(".env.production"), false);
   assert.equal(shouldIndexPath("android/build/app.apk"), false);
   assert.equal(shouldIndexPath("../../secret.txt"), false);
+  assert.equal(classifyIndexPath("secrets/private_notes.md"), "sensitive_path");
+  assert.equal(classifyIndexPath("README.rst"), "unsupported_extension");
+  assert.equal(classifyIndexPath(".env.local"), "sensitive_path");
+  assert.equal(classifyIndexPath("docs/guide.md"), null);
 });
 
 test("knowledge chunking preserves content and stays within configured bounds", () => {
@@ -131,6 +135,8 @@ test("knowledge indexing counts oversized files as skipped and resumes without l
   assert.equal(second.skippedOversizeFiles, 2);
   assert.equal(second.remaining, 0);
   assert.equal(second.eligibleFilesAfterCursor, 3);
+  assert.equal(second.skippedByReason.oversized_file, 2);
+  assert.equal(second.skippedByReason.sensitive_path, 1);
 });
 
 
@@ -170,4 +176,24 @@ test("secret-content screening catches common provider tokens and private-key fo
   ];
   for (const sample of samples) assert.equal(containsLikelySecret(sample), true, sample);
   assert.equal(containsLikelySecret("BARQ product requirements and architecture overview"), false);
+});
+
+
+test("index coverage reports why repository files were excluded", () => {
+  const report = selectIndexBatchWithSkips([
+    { type: "blob", path: "docs/guide.md", size: 100 },
+    { type: "blob", path: "secrets/private.md", size: 80 },
+    { type: "blob", path: "README.rst", size: 60 },
+    { type: "blob", path: "android/app/large.md", size: 140000 },
+    { type: "blob", path: "docs/no-size.md" },
+    { type: "tree", path: "docs", size: 0 }
+  ], "", 10, 120000);
+  assert.deepEqual(report.skippedByReason, {
+    sensitive_path: 1,
+    unsupported_extension: 1,
+    invalid_size: 1,
+    oversized_file: 1
+  });
+  assert.equal(report.eligibleFiles, 2);
+  assert.equal(report.selected.length, 1);
 });
