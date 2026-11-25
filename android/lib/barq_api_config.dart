@@ -7,10 +7,12 @@ String resolveBarqApiBase(
   final value = configured.trim();
   if (value.isEmpty) return fallback;
   final uri = Uri.tryParse(value);
+  final host = uri?.host.toLowerCase() ?? '';
   if (uri == null ||
       uri.scheme != 'https' ||
-      uri.host.isEmpty ||
-      (uri.host.toLowerCase() == 'workers.dev' || uri.host.toLowerCase().endsWith('.workers.dev')) ||
+      host.isEmpty ||
+      host == 'workers.dev' ||
+      host.endsWith('.workers.dev') ||
       uri.userInfo.isNotEmpty ||
       uri.hasQuery ||
       uri.hasFragment) {
@@ -23,11 +25,12 @@ String resolveBarqRealtimeUrl(String configured) {
   final value = configured.trim();
   if (value.isEmpty) return '';
   final uri = Uri.tryParse(value);
+  final host = uri?.host.toLowerCase() ?? '';
   if (uri == null ||
       uri.scheme != 'wss' ||
-      uri.host.isEmpty ||
-      uri.host.toLowerCase() == 'workers.dev' ||
-      uri.host.toLowerCase().endsWith('.workers.dev') ||
+      host.isEmpty ||
+      host == 'workers.dev' ||
+      host.endsWith('.workers.dev') ||
       uri.userInfo.isNotEmpty ||
       uri.hasQuery ||
       uri.hasFragment) {
