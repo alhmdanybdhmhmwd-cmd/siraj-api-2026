@@ -36,7 +36,7 @@ export function selectIndexBatch(entries, startAfter = "", limit = MAX_FILES_PER
   }
   const ordered = (entries || [])
     .filter(entry => entry && typeof entry.path === "string" && entry.path > startAfter)
-    .sort((a, b) => a.path.localeCompare(b.path));
+    .sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
   const selected = ordered.slice(0, limit);
   const remaining = ordered.length - selected.length;
   return {
