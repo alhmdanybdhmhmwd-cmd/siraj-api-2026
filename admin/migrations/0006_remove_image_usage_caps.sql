@@ -1,2 +1,3 @@
-DROP TABLE IF EXISTS admin_ai_usage_limits;
-DROP TABLE IF EXISTS admin_image_generation_limits;
+-- Keep historical usage rows intact when the application stops enforcing request-count caps.
+-- The Admin Worker no longer reads these tables, so they are inert compatibility data.
+-- Do not DROP or truncate them: this migration may run against a shared BARQ D1 database.
