@@ -916,7 +916,7 @@ async function handle(request, env) {
 
   if (request.method === "GET" && url.pathname === "/v1/users") {
     const query = String(url.searchParams.get("q") || "").trim().slice(0, 80);
-    const pattern = "%" + query.replace(/[\\%_]/g, "\\  if (request.method === "GET" && url.pathname === "/v1/workspace") {") + "%";
+    const pattern = "%" + query.replace(/[%_]/g, "") + "%";
     try {
       const [summary, rows] = await Promise.all([
         env.ADMIN_DB.prepare(`
@@ -937,9 +937,9 @@ async function handle(request, env) {
             m.reason AS suspension_reason, m.suspended_at, m.expires_at
           FROM users u
           LEFT JOIN admin_user_suspensions m ON m.user_id = u.id
-          WHERE (? = '' OR u.username LIKE ? ESCAPE '\\'
-             OR u.display_name LIKE ? ESCAPE '\\' OR COALESCE(u.phone, '') LIKE ? ESCAPE '\\'
-             OR u.id LIKE ? ESCAPE '\\')
+          WHERE (? = '' OR u.username LIKE ?
+             OR u.display_name LIKE ? OR COALESCE(u.phone, '') LIKE ?
+             OR u.id LIKE ?)
           ORDER BY (CASE WHEN m.user_id IS NOT NULL AND m.lifted_at IS NULL
             AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP) THEN 1 ELSE 0 END) DESC,
             report_count DESC, block_count DESC, u.username COLLATE NOCASE ASC
