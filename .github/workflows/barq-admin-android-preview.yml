@@ -1,12 +1,6 @@
 name: BARQ Admin Android Preview APK
 
 on:
-  push:
-    branches:
-      - "barq-admin-foundation-2026-11-23"
-    paths:
-      - "admin/mobile/**"
-      - ".github/workflows/barq-admin-android-preview.yml"
   workflow_dispatch:
 
 permissions:
