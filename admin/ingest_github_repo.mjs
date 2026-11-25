@@ -69,31 +69,61 @@ export function summarizeIndexCoverage(eligibleFiles, processedFiles) {
   };
 }
 
+export function classifyIndexPath(input) {
+  if (typeof input !== "string" || !input || input.length > 160) return "invalid_path";
+  const path = input.replace(/\\/g, "/");
+  if (path.startsWith("/") || path.split("/").some(part => part === ".." || part === ".")) {
+    return "unsafe_path";
+  }
+  if (SENSITIVE_PATH.test(path)) return "sensitive_path";
+  const name = path.split("/").pop() || "";
+  if (!name || name.startsWith(".")) return "hidden_file";
+  const dot = name.lastIndexOf(".");
+  const extension = dot >= 0 ? name.slice(dot).toLowerCase() : "";
+  if (!ALLOWED_EXTENSIONS.has(extension)) return "unsupported_extension";
+  if (/google-services|firebase-admin|service-account|credentials|secrets?/i.test(name)) {
+    return "sensitive_filename";
+  }
+  return null;
+}
+
 export function selectIndexBatchWithSkips(entries, startAfter = "", limit = MAX_FILES_PER_RUN, maxFileBytes = 120000) {
   if (!Number.isSafeInteger(maxFileBytes) || maxFileBytes < 1) {
     throw new TypeError("invalid_max_file_size");
   }
-  const candidates = (entries || []).filter(entry =>
-    entry && entry.type === "blob" && shouldIndexPath(entry.path)
-  );
+  const skippedByReason = {};
+  const candidates = [];
+  for (const entry of entries || []) {
+    if (!entry || entry.type !== "blob") continue;
+    const pathReason = classifyIndexPath(entry.path);
+    if (pathReason) {
+      skippedByReason[pathReason] = (skippedByReason[pathReason] || 0) + 1;
+      continue;
+    }
+    if (!Number.isSafeInteger(entry.size) || entry.size < 0) {
+      skippedByReason.invalid_size = (skippedByReason.invalid_size || 0) + 1;
+      continue;
+    }
+    candidates.push(entry);
+  }
   const eligible = candidates.filter(entry => entry.size <= maxFileBytes);
+  const skippedOversizeFiles = candidates.filter(entry => entry.size > maxFileBytes).length;
+  if (skippedOversizeFiles) skippedByReason.oversized_file = skippedOversizeFiles;
   const batch = selectIndexBatch(eligible, startAfter, limit);
-  const lastSelectedPath = batch.selected.length
-    ? batch.selected[batch.selected.length - 1].path
-    : null;
-  const skippedOversizeFiles = candidates.filter(entry =>
+  const skippedOversizeFilesAfterCursor = candidates.filter(entry =>
     entry.size > maxFileBytes && entry.path > startAfter &&
-    (!lastSelectedPath || entry.path <= lastSelectedPath || batch.remaining === 0)
+    (!batch.selected.length || entry.path <= batch.selected[batch.selected.length - 1].path || batch.remaining === 0)
   ).length;
   return {
     ...batch,
     eligibleFiles: candidates.length,
     eligibleFilesAfterCursor: candidates.filter(entry => entry.path > startAfter).length,
-    processedFiles: batch.selected.length + skippedOversizeFiles,
-    skippedOversizeFiles
+    processedFiles: batch.selected.length + skippedOversizeFilesAfterCursor,
+    remaining: batch.remaining,
+    skippedOversizeFiles: skippedOversizeFilesAfterCursor,
+    skippedByReason
   };
 }
-
 export function normalizeAdminApiUrl(input) {
   let parsed;
   try {
