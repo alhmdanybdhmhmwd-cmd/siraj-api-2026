@@ -1,7 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:barq_admin/security.dart'
-    show isValidAdminApiBase, resolveAdminApiBase, defaultAdminApiBase,
-        createOidcNonce, googleOidcRedirectUri;
+    show
+        isValidAdminApiBase,
+        resolveAdminApiBase,
+        defaultAdminApiBase,
+        createOidcNonce,
+        googleOidcRedirectUri;
 
 void main() {
   test('accepts HTTPS Admin API URLs with an optional path', () {
@@ -27,7 +31,9 @@ void main() {
     expect(isValidAdminApiBase(''), isFalse);
   });
 
-  test('migrates empty and direct workers.dev settings to the public gateway', () {
+  test(
+    'migrates empty and direct workers.dev settings to the public gateway',
+    () {
     expect(resolveAdminApiBase(null), defaultAdminApiBase);
     expect(resolveAdminApiBase(''), defaultAdminApiBase);
     expect(
@@ -38,7 +44,8 @@ void main() {
       resolveAdminApiBase('https://admin.example.com/custom'),
       'https://admin.example.com/custom',
     );
-  });
+    },
+  );
 
   test('creates a strong nonce and canonical Google native redirect URI', () {
     final first = createOidcNonce();
