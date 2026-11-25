@@ -922,7 +922,7 @@ async function handle(request, env) {
         env.ADMIN_DB.prepare(`
           SELECT
             (SELECT COUNT(*) FROM users) AS total_users,
-            (SELECT COUNT(*) FROM admin_user_suspensions
+            (SELECT COUNT(*) FROM barq_user_suspensions
               WHERE lifted_at IS NULL AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)) AS suspended_users,
             (SELECT COUNT(*) FROM user_reports WHERE status = 'pending') AS pending_reports
         `).first(),
@@ -936,7 +936,7 @@ async function handle(request, env) {
               THEN 1 ELSE 0 END AS is_suspended,
             m.reason AS suspension_reason, m.suspended_at, m.expires_at
           FROM users u
-          LEFT JOIN admin_user_suspensions m ON m.user_id = u.id
+          LEFT JOIN barq_user_suspensions m ON m.user_id = u.id
           WHERE (? = '' OR u.username LIKE ?
              OR u.display_name LIKE ? OR COALESCE(u.phone, '') LIKE ?
              OR u.id LIKE ?)
@@ -985,7 +985,7 @@ async function handle(request, env) {
       const expiresAt = durationHours === null ? null : new Date(Date.now() + durationHours * 3600000).toISOString();
       await env.ADMIN_DB.batch([
         env.ADMIN_DB.prepare(`
-          INSERT INTO admin_user_suspensions
+          INSERT INTO barq_user_suspensions
             (user_id, reason, suspended_by, suspended_at, expires_at, lifted_by, lifted_at)
           VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?, NULL, NULL)
           ON CONFLICT(user_id) DO UPDATE SET
@@ -1000,13 +1000,13 @@ async function handle(request, env) {
           "UPDATE account_security SET session_version = session_version + 1, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?"
         ).bind(userId),
         env.ADMIN_DB.prepare(
-          "INSERT INTO admin_user_moderation_actions (id, user_id, action, reason, actor_subject) VALUES (?, ?, 'suspend', ?, ?)"
+          "INSERT INTO barq_user_moderation_actions (id, user_id, action, reason, actor_subject) VALUES (?, ?, 'suspend', ?, ?)"
         ).bind(crypto.randomUUID(), userId, reason, actor.subject)
       ]);
     } else {
       await env.ADMIN_DB.batch([
         env.ADMIN_DB.prepare(`
-          UPDATE admin_user_suspensions SET lifted_by = ?, lifted_at = CURRENT_TIMESTAMP
+          UPDATE barq_user_suspensions SET lifted_by = ?, lifted_at = CURRENT_TIMESTAMP
           WHERE user_id = ? AND lifted_at IS NULL
         `).bind(actor.subject, userId),
         env.ADMIN_DB.prepare(
@@ -1016,7 +1016,7 @@ async function handle(request, env) {
           "UPDATE account_security SET session_version = session_version + 1, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?"
         ).bind(userId),
         env.ADMIN_DB.prepare(
-          "INSERT INTO admin_user_moderation_actions (id, user_id, action, reason, actor_subject) VALUES (?, ?, 'unsuspend', ?, ?)"
+          "INSERT INTO barq_user_moderation_actions (id, user_id, action, reason, actor_subject) VALUES (?, ?, 'unsuspend', ?, ?)"
         ).bind(crypto.randomUUID(), userId, reason, actor.subject)
       ]);
     }
