@@ -172,7 +172,10 @@ test("secret-content screening catches common provider tokens and private-key fo
     ["xox", "b-", "123456789012-", "abcdefghijklmnop"].join(""),
     ["sk_live_", "1234567890abcdefghijkl"].join(""),
     ["-----BEGIN DSA PRIVATE KEY-----"],
-    ["client_secret: ", "abcdefghijklmnopqrstuvwxyz123456"].join("")
+    ["client_secret: ", "abcdefghijklmnopqrstuvwxyz123456"].join(""),
+    ["refresh_token: ", "abcdefghijklmnopqrstuvwxyz123456"].join(""),
+    ["aws_secret_access_key=", "abcdefghijklmnopqrstuvwxyz123456"].join(""),
+    ["Bearer ", "abcdefghijklmnopqrstuvwxyz123456"].join("")
   ];
   for (const sample of samples) assert.equal(containsLikelySecret(sample), true, sample);
   assert.equal(containsLikelySecret("BARQ product requirements and architecture overview"), false);
