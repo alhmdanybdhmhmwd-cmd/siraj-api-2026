@@ -32,7 +32,10 @@ String resolveAdminApiBase(String? configured) {
   final uri = Uri.tryParse(value);
   final host = uri?.host.toLowerCase() ?? '';
   // Migrate old direct Cloudflare endpoints to the public Vercel gateway.
-  if (value.isEmpty || host == 'workers.dev' || host.endsWith('.workers.dev')) {
+  if (value.isEmpty ||
+      host == 'workers.dev' ||
+      host.endsWith('.workers.dev') ||
+      !isValidAdminApiBase(value)) {
     return defaultAdminApiBase;
   }
   return value;
