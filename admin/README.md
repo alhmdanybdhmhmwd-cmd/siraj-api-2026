@@ -19,7 +19,7 @@ This directory is a separate Admin service boundary. It is not part of the BARQ 
 
 ## Development roadmap
 
-- Phase 2 knowledge and project understanding: still in progress; live Preview indexing and retrieval acceptance remain blocked until isolated Preview bindings are configured and verified. See `knowledge/PHASE2_SCOPE.md`.
+- Phase 2 knowledge and project understanding: still in progress; the selected target is the existing BARQ Worker and D1 database through `/admin/*`. Live indexing and retrieval remain blocked until the owner separately approves the additive production migrations and the Admin owner-authentication configuration is safely provisioned and verified. The isolated Preview harness is optional, not a prerequisite for the selected shared-runtime path. See `knowledge/PHASE2_SCOPE.md`.
 - Phase 3 safe development tools: architecture and safety contract started. Heavy repository work and builds are designed to run server-side/CI, not on the owner's phone. No GitHub write runner or autonomous repository-edit capability is claimed live yet. See `knowledge/PHASE3_SCOPE.md`.
 
 ## Shared BARQ runtime integration (implemented in source; not deployed)
