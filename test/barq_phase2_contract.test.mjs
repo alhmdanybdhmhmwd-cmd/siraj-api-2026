@@ -264,7 +264,7 @@ test("Android API and media origins cannot bypass the public gateway through wor
   assert.ok(flutterApp.includes("'BARQ_REALTIME_URL'"));
   assert.ok(flutterApp.includes("resolveBarqApiBase(_configuredApiBase)"));
   assert.ok(flutterApp.includes("resolveBarqApiBase(_configuredMediaBase, fallback: apiBase)"));
-  assert.ok(flutterApp.includes("defaultValue: '',"));
+  assert.ok(flutterApp.includes("const String.fromEnvironment('BARQ_REALTIME_URL')"));
   assert.ok(flutterApiConfig.includes("https://siraj-api-2026.vercel.app"));
   assert.ok(flutterApiConfig.includes(".workers.dev"));
   assert.ok(flutterApiConfig.includes("uri.scheme != 'https'"));
