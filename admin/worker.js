@@ -617,7 +617,7 @@ async function handle(request, env) {
       "Vary": "Origin"
     }});
   }
-  if (url.pathname === "/health") return response({ ok: true, service: "barq-admin-preview" });
+  if (url.pathname === "/health") return response({ ok: true, service: env.BARQ_ADMIN_RUNTIME_MODE === "shared" ? "barq-admin" : "barq-admin-preview" });
   if (!env.ADMIN_DB) return response({ error: "admin_database_unavailable" }, 503, allowedOrigin);
 
   if (request.method === "POST" && url.pathname === "/v1/auth/exchange") {
