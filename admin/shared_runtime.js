@@ -9,7 +9,8 @@ export function createSharedAdminEnvironment(env) {
     // Never fall back to a second Admin database in this integration path.
     ADMIN_DB: env?.DB ?? null,
     ADMIN_AI: env?.AI ?? null,
-    ADMIN_TASK_QUEUE: env?.ADMIN_TASK_QUEUE ?? null
+    ADMIN_TASK_QUEUE: env?.ADMIN_TASK_QUEUE ?? null,
+    BARQ_ADMIN_RUNTIME_MODE: "shared"
   };
 }
 
