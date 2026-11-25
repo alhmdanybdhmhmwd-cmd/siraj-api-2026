@@ -1200,9 +1200,17 @@ export default {
         }
         const target = await env.DB.prepare("SELECT id FROM users WHERE id = ?").bind(targetId).first();
         if (!target) return json({ error: "User not found" }, 404);
-        const recentReports = await env.DB.prepare(
-          "SELECT COUNT(*) AS count FROM user_reports WHERE reporter_id = ? AND created_at >= datetime('now', '-1 day')"
-        ).bind(currentUser.sub).first();
+        let recentReports;
+        try {
+          recentReports = await env.DB.prepare(
+            "SELECT COUNT(*) AS count FROM user_reports WHERE reporter_id = ? AND created_at >= datetime('now', '-1 day')"
+          ).bind(currentUser.sub).first();
+        } catch (error) {
+          if (/no such table/i.test(String(error?.message || error))) {
+            return json({ error: "Moderation migration required" }, 503);
+          }
+          throw error;
+        }
         if (Number(recentReports?.count || 0) >= 10) {
           return json({ error: "Daily report limit reached" }, 429);
         }
