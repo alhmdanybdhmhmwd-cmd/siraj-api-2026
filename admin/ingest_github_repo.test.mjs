@@ -1,7 +1,7 @@
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
-import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl, summarizeIndexCoverage, selectIndexBatch, normalizeAllowedRepositories, selectIndexBatchWithSkips, ingestRepository } from "./ingest_github_repo.mjs";
+import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl, summarizeIndexCoverage, selectIndexBatch, normalizeAllowedRepositories, selectIndexBatchWithSkips, ingestRepository, containsLikelySecret } from "./ingest_github_repo.mjs";
 
 test("repository ingestion allowlists project files and excludes secrets/build output", () => {
   assert.equal(shouldIndexPath("docs/BARQ_PRODUCT.md"), true);
@@ -144,4 +144,30 @@ test("owner knowledge seed preserves product boundaries and flags time-sensitive
   assert.match(seed, /No direct contradiction was found among the stable product-identity decisions/);
   assert.match(seed, /Feature requirements .* are not proof that the corresponding code is complete/);
   assert.match(seed, /The 12-stage BARQ roadmap supersedes the older 8-stage plan/);
+});
+
+
+test("repository ingestion rejects branch-based resume to prevent mixed-revision batches", async () => {
+  await assert.rejects(ingestRepository({
+    repository: "alhmdanybdhmhmwd-cmd/siraj-api-2026",
+    ref: "main",
+    startAfter: "admin/worker.js",
+    githubToken: "read-only-test-token",
+    adminApiUrl: "https://admin-preview.example.workers.dev",
+    ownerToken: "short-lived-test-token",
+    allowedRepositories: ["alhmdanybdhmhmwd-cmd/siraj-api-2026"]
+  }), /resume_requires_immutable_commit_sha/);
+});
+
+test("secret-content screening catches common provider tokens and private-key formats", () => {
+  const samples = [
+    ["github_pat_", "abcdefghijklmnopqrstuvwxyz1234567890"].join(""),
+    ["AKIA", "1234567890ABCDEF"].join(""),
+    ["xox", "b-", "123456789012-", "abcdefghijklmnop"].join(""),
+    ["sk_live_", "1234567890abcdefghijkl"].join(""),
+    ["-----BEGIN DSA PRIVATE KEY-----"],
+    ["client_secret: ", "abcdefghijklmnopqrstuvwxyz123456"].join("")
+  ];
+  for (const sample of samples) assert.equal(containsLikelySecret(sample), true, sample);
+  assert.equal(containsLikelySecret("BARQ product requirements and architecture overview"), false);
 });
