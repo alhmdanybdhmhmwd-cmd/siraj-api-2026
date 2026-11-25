@@ -1,4 +1,4 @@
--- BARQ Admin foundation schema. Apply only to a dedicated Admin Preview D1 database.
+-- BARQ Admin foundation schema. For shared runtime, apply to BARQ D1 only after explicit owner approval; standalone Preview may use its isolated Admin D1.
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS admin_workspaces (
