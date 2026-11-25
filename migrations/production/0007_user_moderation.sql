@@ -34,7 +34,7 @@ CREATE INDEX IF NOT EXISTS idx_user_reports_target_status_time
 CREATE UNIQUE INDEX IF NOT EXISTS idx_user_reports_one_pending_per_pair
   ON user_reports(reporter_id, reported_user_id) WHERE status = 'pending';
 
-CREATE TABLE IF NOT EXISTS admin_user_suspensions (
+CREATE TABLE IF NOT EXISTS barq_user_suspensions (
   user_id TEXT PRIMARY KEY,
   reason TEXT NOT NULL,
   suspended_by TEXT NOT NULL,
@@ -44,10 +44,10 @@ CREATE TABLE IF NOT EXISTS admin_user_suspensions (
   lifted_at TEXT,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
-CREATE INDEX IF NOT EXISTS idx_admin_user_suspensions_active
-  ON admin_user_suspensions(lifted_at, expires_at);
+CREATE INDEX IF NOT EXISTS idx_barq_user_suspensions_active
+  ON barq_user_suspensions(lifted_at, expires_at);
 
-CREATE TABLE IF NOT EXISTS admin_user_moderation_actions (
+CREATE TABLE IF NOT EXISTS barq_user_moderation_actions (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
   action TEXT NOT NULL CHECK (action IN ('suspend', 'unsuspend')),
@@ -56,5 +56,5 @@ CREATE TABLE IF NOT EXISTS admin_user_moderation_actions (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
-CREATE INDEX IF NOT EXISTS idx_admin_user_moderation_actions_user_time
-  ON admin_user_moderation_actions(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_barq_user_moderation_actions_user_time
+  ON barq_user_moderation_actions(user_id, created_at DESC);
