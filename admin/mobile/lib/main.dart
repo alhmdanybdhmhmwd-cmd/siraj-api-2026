@@ -297,24 +297,26 @@ class _AdminHomePageState extends State<AdminHomePage>
     Map<String, dynamic> body,
   ) async {
     var response = await http
-        .patch(Uri.parse(_base + path), headers: _headers, body: jsonEncode(body))
+        .patch(Uri.parse(_base + path),
+            headers: _headers, body: jsonEncode(body))
         .timeout(const Duration(seconds: 18));
     if (response.statusCode == 401 && await _refreshSession()) {
       response = await http
-          .patch(Uri.parse(_base + path), headers: _headers, body: jsonEncode(body))
+          .patch(Uri.parse(_base + path),
+              headers: _headers, body: jsonEncode(body))
           .timeout(const Duration(seconds: 18));
     }
     if (response.statusCode != 200) {
-      throw Exception('تعذر تنفيذ الإجراء (' + response.statusCode.toString() + ')');
+      throw Exception(
+          'تعذر تنفيذ الإجراء (' + response.statusCode.toString() + ')');
     }
     return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
   }
 
   Future<void> _loadUsers({String? query}) async {
     if (query != null) _userQuery = query.trim();
-    final suffix = _userQuery.isEmpty
-        ? ''
-        : '?q=' + Uri.encodeQueryComponent(_userQuery);
+    final suffix =
+        _userQuery.isEmpty ? '' : '?q=' + Uri.encodeQueryComponent(_userQuery);
     final data = await _getJson('/v1/users' + suffix);
     final reportData = await _getJson('/v1/reports');
     _users = (data['users'] as List? ?? [])
@@ -340,7 +342,8 @@ class _AdminHomePageState extends State<AdminHomePage>
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: Text(action == 'suspend' ? 'مراجعة حظر الحساب' : 'إلغاء حظر الحساب'),
+          title: Text(
+              action == 'suspend' ? 'مراجعة حظر الحساب' : 'إلغاء حظر الحساب'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -359,9 +362,11 @@ class _AdminHomePageState extends State<AdminHomePage>
                     DropdownMenuItem(value: '72', child: Text('3 أيام')),
                     DropdownMenuItem(value: '168', child: Text('7 أيام')),
                     DropdownMenuItem(value: '720', child: Text('30 يومًا')),
-                    DropdownMenuItem(value: 'permanent', child: Text('دون مدة محددة')),
+                    DropdownMenuItem(
+                        value: 'permanent', child: Text('دون مدة محددة')),
                   ],
-                  onChanged: (value) => setDialogState(() => duration = value ?? '72'),
+                  onChanged: (value) =>
+                      setDialogState(() => duration = value ?? '72'),
                 ),
               const SizedBox(height: 12),
               TextField(
@@ -383,7 +388,8 @@ class _AdminHomePageState extends State<AdminHomePage>
             ),
             FilledButton(
               onPressed: () => Navigator.pop(dialogContext, true),
-              child: Text(action == 'suspend' ? 'تأكيد الحظر' : 'تأكيد إلغاء الحظر'),
+              child: Text(
+                  action == 'suspend' ? 'تأكيد الحظر' : 'تأكيد إلغاء الحظر'),
             ),
           ],
         ),
@@ -396,9 +402,10 @@ class _AdminHomePageState extends State<AdminHomePage>
     final reason = reasonController.text.trim();
     reasonController.dispose();
     if (reason.length < 8) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('اكتب سببًا واضحًا لا يقل عن 8 أحرف')),
-      );
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('اكتب سببًا واضحًا لا يقل عن 8 أحرف')),
+        );
       return;
     }
     try {
@@ -408,17 +415,24 @@ class _AdminHomePageState extends State<AdminHomePage>
           'action': action,
           'reason': reason,
           if (action == 'suspend')
-            'durationHours': duration == 'permanent' ? null : int.parse(duration),
+            'durationHours':
+                duration == 'permanent' ? null : int.parse(duration),
         },
       );
       await _loadUsers();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(action == 'suspend' ? 'تم تسجيل قرار الحظر' : 'تم إلغاء الحظر')),
-      );
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(action == 'suspend'
+                  ? 'تم تسجيل قرار الحظر'
+                  : 'تم إلغاء الحظر')),
+        );
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
-      );
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(error.toString().replaceFirst('Exception: ', ''))),
+        );
     }
   }
 
@@ -427,17 +441,23 @@ class _AdminHomePageState extends State<AdminHomePage>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(status == 'reviewed' ? 'تأكيد مراجعة البلاغ' : 'رفض البلاغ'),
+        title:
+            Text(status == 'reviewed' ? 'تأكيد مراجعة البلاغ' : 'رفض البلاغ'),
         content: TextField(
           controller: noteController,
           minLines: 2,
           maxLines: 4,
           maxLength: 1000,
-          decoration: const InputDecoration(labelText: 'ملاحظة المراجعة (إلزامية)'),
+          decoration:
+              const InputDecoration(labelText: 'ملاحظة المراجعة (إلزامية)'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('إلغاء')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('حفظ')),
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('إلغاء')),
+          FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('حفظ')),
         ],
       ),
     );
@@ -445,9 +465,10 @@ class _AdminHomePageState extends State<AdminHomePage>
     noteController.dispose();
     if (confirmed != true) return;
     if (note.length < 4) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('أضف ملاحظة للمراجعة')),
-      );
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('أضف ملاحظة للمراجعة')),
+        );
       return;
     }
     try {
@@ -457,9 +478,11 @@ class _AdminHomePageState extends State<AdminHomePage>
       });
       await _loadUsers();
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
-      );
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(error.toString().replaceFirst('Exception: ', ''))),
+        );
     }
   }
 
@@ -2422,14 +2445,16 @@ class _AdminHomePageState extends State<AdminHomePage>
             ),
           Row(
             children: [
-              Expanded(child: _metricCard(
+              Expanded(
+                  child: _metricCard(
                 'إجمالي المستخدمين',
                 (_userSummary['totalUsers'] ?? 0).toString(),
                 Icons.people_alt_outlined,
                 _blue,
               )),
               const SizedBox(width: 8),
-              Expanded(child: _metricCard(
+              Expanded(
+                  child: _metricCard(
                 'الحسابات المحظورة',
                 (_userSummary['suspendedUsers'] ?? 0).toString(),
                 Icons.gpp_bad_outlined,
@@ -2458,7 +2483,8 @@ class _AdminHomePageState extends State<AdminHomePage>
             ),
           ),
           const SizedBox(height: 8),
-          const Text('قائمة المستخدمين', style: TextStyle(fontWeight: FontWeight.bold)),
+          const Text('قائمة المستخدمين',
+              style: TextStyle(fontWeight: FontWeight.bold)),
           if (_users.isEmpty)
             _emptyState(
               'لا توجد بيانات مستخدمين',
@@ -2466,10 +2492,15 @@ class _AdminHomePageState extends State<AdminHomePage>
             )
           else
             ..._users.map((user) {
-              final blocks = int.tryParse((user['block_count'] ?? 0).toString()) ?? 0;
-              final reports = int.tryParse((user['report_count'] ?? 0).toString()) ?? 0;
-              final pending = int.tryParse((user['pending_report_count'] ?? 0).toString()) ?? 0;
-              final suspended = user['is_suspended'] == 1 || user['is_suspended'] == true;
+              final blocks =
+                  int.tryParse((user['block_count'] ?? 0).toString()) ?? 0;
+              final reports =
+                  int.tryParse((user['report_count'] ?? 0).toString()) ?? 0;
+              final pending = int.tryParse(
+                      (user['pending_report_count'] ?? 0).toString()) ??
+                  0;
+              final suspended =
+                  user['is_suspended'] == 1 || user['is_suspended'] == true;
               return Card(
                 margin: const EdgeInsets.only(bottom: 9),
                 child: Padding(
@@ -2487,11 +2518,13 @@ class _AdminHomePageState extends State<AdminHomePage>
                               children: [
                                 Text(
                                   (user['display_name'] ?? 'مستخدم').toString(),
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold),
                                 ),
                                 Text(
                                   '@${user['username'] ?? '-'}',
-                                  style: const TextStyle(color: Colors.white60, fontSize: 12),
+                                  style: const TextStyle(
+                                      color: Colors.white60, fontSize: 12),
                                 ),
                               ],
                             ),
@@ -2510,9 +2543,16 @@ class _AdminHomePageState extends State<AdminHomePage>
                         spacing: 8,
                         runSpacing: 4,
                         children: [
-                          Chip(avatar: const Icon(Icons.block, size: 16), label: Text('حظره $blocks')),
-                          Chip(avatar: const Icon(Icons.flag_outlined, size: 16), label: Text('البلاغات $reports')),
-                          Chip(avatar: const Icon(Icons.pending_actions, size: 16), label: Text('قيد المراجعة $pending')),
+                          Chip(
+                              avatar: const Icon(Icons.block, size: 16),
+                              label: Text('حظره $blocks')),
+                          Chip(
+                              avatar: const Icon(Icons.flag_outlined, size: 16),
+                              label: Text('البلاغات $reports')),
+                          Chip(
+                              avatar:
+                                  const Icon(Icons.pending_actions, size: 16),
+                              label: Text('قيد المراجعة $pending')),
                         ],
                       ),
                       if (blocks >= 3 || pending >= 3)
@@ -2520,10 +2560,14 @@ class _AdminHomePageState extends State<AdminHomePage>
                           'يستحق مراجعة بشرية — المؤشرات لا تعني حظرًا تلقائيًا',
                           style: TextStyle(color: _gold, fontSize: 12),
                         ),
-                      if (suspended && (user['suspension_reason'] ?? '').toString().isNotEmpty)
+                      if (suspended &&
+                          (user['suspension_reason'] ?? '')
+                              .toString()
+                              .isNotEmpty)
                         Text(
                           'سبب الحظر: ${user['suspension_reason']}',
-                          style: const TextStyle(color: Colors.white60, fontSize: 12),
+                          style: const TextStyle(
+                              color: Colors.white60, fontSize: 12),
                         ),
                       const SizedBox(height: 8),
                       SizedBox(
@@ -2531,7 +2575,9 @@ class _AdminHomePageState extends State<AdminHomePage>
                         child: OutlinedButton.icon(
                           onPressed: () => _moderateUser(user),
                           icon: Icon(suspended ? Icons.lock_open : Icons.gavel),
-                          label: Text(suspended ? 'إلغاء الحظر' : 'مراجعة / حظر الحساب'),
+                          label: Text(suspended
+                              ? 'إلغاء الحظر'
+                              : 'مراجعة / حظر الحساب'),
                         ),
                       ),
                     ],
@@ -2540,50 +2586,58 @@ class _AdminHomePageState extends State<AdminHomePage>
               );
             }),
           const SizedBox(height: 14),
-          const Text('البلاغات الجديدة', style: TextStyle(fontWeight: FontWeight.bold)),
+          const Text('البلاغات الجديدة',
+              style: TextStyle(fontWeight: FontWeight.bold)),
           if (_pendingReports.isEmpty)
-            _emptyState('لا توجد بلاغات معلقة', 'ستظهر البلاغات هنا بعد وصولها من تطبيق برق')
+            _emptyState('لا توجد بلاغات معلقة',
+                'ستظهر البلاغات هنا بعد وصولها من تطبيق برق')
           else
             ..._pendingReports.map((report) => Card(
-              margin: const EdgeInsets.only(bottom: 9),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      (report['reported_display_name'] ?? report['reported_username'] ?? 'مستخدم').toString(),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    Text('نوع البلاغ: ${report['category'] ?? '-'}'),
-                    if ((report['details'] ?? '').toString().isNotEmpty)
-                      Text((report['details'] ?? '').toString()),
-                    Text(
-                      'رقم المبلّغ: ${report['reporter_id'] ?? '-'}',
-                      style: const TextStyle(color: Colors.white54, fontSize: 11),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
+                  margin: const EdgeInsets.only(bottom: 9),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () => _reviewReport(report, 'dismissed'),
-                            child: const Text('رفض البلاغ'),
-                          ),
+                        Text(
+                          (report['reported_display_name'] ??
+                                  report['reported_username'] ??
+                                  'مستخدم')
+                              .toString(),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: FilledButton(
-                            onPressed: () => _reviewReport(report, 'reviewed'),
-                            child: const Text('تمت المراجعة'),
-                          ),
+                        Text('نوع البلاغ: ${report['category'] ?? '-'}'),
+                        if ((report['details'] ?? '').toString().isNotEmpty)
+                          Text((report['details'] ?? '').toString()),
+                        Text(
+                          'رقم المبلّغ: ${report['reporter_id'] ?? '-'}',
+                          style: const TextStyle(
+                              color: Colors.white54, fontSize: 11),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () =>
+                                    _reviewReport(report, 'dismissed'),
+                                child: const Text('رفض البلاغ'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: FilledButton(
+                                onPressed: () =>
+                                    _reviewReport(report, 'reviewed'),
+                                child: const Text('تمت المراجعة'),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-            )),
+                  ),
+                )),
         ],
       );
 
@@ -2681,3 +2735,4 @@ class _AdminHomePageState extends State<AdminHomePage>
         ),
       );
 }
+Formatted 1 file (1 changed) in 0.03 seconds.
