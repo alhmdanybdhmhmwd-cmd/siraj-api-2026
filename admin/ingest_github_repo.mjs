@@ -238,6 +238,8 @@ export function planKnowledgeReconciliation(repository, currentRevision, current
     staleRevisions,
     missingFromRepository,
     notYetIndexed,
+    coverageGranularity: "file_presence_only",
+    chunkCompletenessVerified: false,
     destructiveChangesApplied: false
   };
 }
