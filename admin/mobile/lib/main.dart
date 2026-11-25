@@ -1573,66 +1573,85 @@ class _AdminHomePageState extends State<AdminHomePage>
             onPressed: _showSettings,
             icon: const Icon(Icons.settings_outlined),
           ),
-          IconButton(
-            tooltip: 'الأجهزة',
-            onPressed: _token.isEmpty ? null : _showDevices,
-            icon: const Icon(Icons.devices_outlined),
-          ),
-          IconButton(
-            tooltip: 'إنهاء الجلسة',
-            onPressed: _token.isEmpty ? null : _logout,
-            icon: const Icon(Icons.logout),
-          ),
+          if (_token.isNotEmpty) ...[
+            IconButton(
+              tooltip: 'الأجهزة',
+              onPressed: _showDevices,
+              icon: const Icon(Icons.devices_outlined),
+            ),
+            IconButton(
+              tooltip: 'إنهاء الجلسة',
+              onPressed: _logout,
+              icon: const Icon(Icons.logout),
+            ),
+          ],
           const SizedBox(width: 6),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: _load,
-        child: _loading && _tasks.isEmpty
-            ? const Center(child: CircularProgressIndicator())
-            : IndexedStack(
-                index: _tab,
+        child: _token.isEmpty
+            ? ListView(
+                padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
                 children: [
-                  _dashboard(),
-                  _tasksView(),
-                  _approvalsView(),
-                  _auditView(),
+                  _signInCard(),
+                  const SizedBox(height: 12),
+                  Text(
+                    _connectionMessage,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white60),
+                  ),
                 ],
-              ),
+              )
+            : _loading && _tasks.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : IndexedStack(
+                    index: _tab,
+                    children: [
+                      _dashboard(),
+                      _tasksView(),
+                      _approvalsView(),
+                      _auditView(),
+                    ],
+                  ),
       ),
-      floatingActionButton: _tab == 1
-          ? FloatingActionButton.extended(
-              onPressed: () => _showCreateTask(),
-              icon: const Icon(Icons.add),
-              label: const Text('مهمة جديدة'),
-            )
-          : _tab == 0
+      floatingActionButton: _token.isEmpty
+          ? null
+          : _tab == 1
               ? FloatingActionButton.extended(
-                  onPressed: () => _showCreateTask(assistant: true),
-                  icon: const Icon(Icons.bolt),
-                  label: const Text('اسأل BARQ Brain'),
+                  onPressed: () => _showCreateTask(),
+                  icon: const Icon(Icons.add),
+                  label: const Text('مهمة جديدة'),
                 )
-              : null,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _tab,
-        onDestinationSelected: (value) => setState(() => _tab = value),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
-            label: 'الرئيسية',
-          ),
-          NavigationDestination(icon: Icon(Icons.task_alt), label: 'المهام'),
-          NavigationDestination(
-            icon: Icon(Icons.verified_user_outlined),
-            label: 'الموافقات',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.receipt_long_outlined),
-            label: 'السجل',
-          ),
-        ],
-      ),
+              : _tab == 0
+                  ? FloatingActionButton.extended(
+                      onPressed: () => _showCreateTask(assistant: true),
+                      icon: const Icon(Icons.bolt),
+                      label: const Text('اسأل BARQ Brain'),
+                    )
+                  : null,
+      bottomNavigationBar: _token.isEmpty
+          ? null
+          : NavigationBar(
+              selectedIndex: _tab,
+              onDestinationSelected: (value) => setState(() => _tab = value),
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.dashboard_outlined),
+                  selectedIcon: Icon(Icons.dashboard),
+                  label: 'الرئيسية',
+                ),
+                NavigationDestination(icon: Icon(Icons.task_alt), label: 'المهام'),
+                NavigationDestination(
+                  icon: Icon(Icons.verified_user_outlined),
+                  label: 'الموافقات',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.receipt_long_outlined),
+                  label: 'السجل',
+                ),
+              ],
+            ),
     );
   }
 
@@ -1649,9 +1668,8 @@ class _AdminHomePageState extends State<AdminHomePage>
         )
         .length;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 160),
       children: [
-        if (_token.isEmpty) _signInCard(),
         _workspaceCard(),
         const SizedBox(height: 14),
         Row(
@@ -1793,14 +1811,28 @@ class _AdminHomePageState extends State<AdminHomePage>
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white70, height: 1.4),
               ),
+              if (_googleOidcClientId.isEmpty) ...[
+                const SizedBox(height: 12),
+                const Text(
+                  'تسجيل الدخول غير مهيأ بعد: يلزم ربط معرّف Google OAuth الأصلي بالتطبيق والخادم.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: _gold, height: 1.4),
+                ),
+              ],
               const SizedBox(height: 14),
               FilledButton.icon(
-                onPressed: _apiBase.isEmpty ? _showSettings : _loginWithGoogle,
+                onPressed: _apiBase.isEmpty
+                    ? _showSettings
+                    : _googleOidcClientId.isEmpty
+                        ? null
+                        : _loginWithGoogle,
                 icon: const Icon(Icons.login),
                 label: Text(
                   _apiBase.isEmpty
                       ? 'إعداد عنوان الخادم'
-                      : 'المتابعة باستخدام Google',
+                      : _googleOidcClientId.isEmpty
+                          ? 'تسجيل الدخول غير مهيأ'
+                          : 'المتابعة باستخدام Google',
                 ),
               ),
             ],
