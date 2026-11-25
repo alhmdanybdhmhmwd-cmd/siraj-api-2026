@@ -190,7 +190,7 @@ export function createKnowledgeChunkRecords(repository, path, revision, source, 
     sourceType: inferSourceType(path),
     sourcePath: repository + "/" + (chunks.length === 1 ? path : path + "#chunk-" + (index + 1)),
     sourceRevision: revision,
-    title: path + (chunks.length > 1 ? " (part " + (index + 1) + ")" : ""),
+    title: path + (chunks.length > 1 ? " [part " + (index + 1) + " of " + chunks.length + "]" : ""),
     content
   }));
 }
@@ -201,6 +201,16 @@ export function planKnowledgeReconciliation(repository, currentRevision, current
       !Array.isArray(currentPaths) || !Array.isArray(indexedSources)) {
     throw new TypeError("invalid_knowledge_reconciliation_input");
   }
+  const parseChunk = source => {
+    const match = String(source.sourcePath || "").match(/#chunk-(\d+)$/);
+    if (!match) return { index: 1, count: 1, known: true };
+    const title = String(source.title || "");
+    const countMatch = title.match(/\[part\s+(\d+)\s+of\s+(\d+)\]$/i);
+    if (!countMatch || Number(countMatch[1]) !== Number(match[1])) {
+      return { index: Number(match[1]), count: null, known: false };
+    }
+    return { index: Number(match[1]), count: Number(countMatch[2]), known: true };
+  };
   const normalizeSourcePath = value => String(value || "").replace(/#chunk-\d+$/, "");
   const current = new Set(currentPaths.filter(path =>
     typeof path === "string" && shouldIndexPath(path)
@@ -209,7 +219,7 @@ export function planKnowledgeReconciliation(repository, currentRevision, current
     source && typeof source.sourcePath === "string" &&
     source.sourcePath.startsWith(repository + "/")
   );
-  const currentRevisionPaths = new Set();
+  const currentRevisionGroups = new Map();
   const staleRevisions = [];
   const missingFromRepository = [];
   for (const source of scoped) {
@@ -221,12 +231,41 @@ export function planKnowledgeReconciliation(repository, currentRevision, current
         relativePath
       });
     } else if (source.sourceRevision === currentRevision) {
-      currentRevisionPaths.add(relativePath);
+      const group = currentRevisionGroups.get(relativePath) || [];
+      group.push({ source, chunk: parseChunk(source) });
+      currentRevisionGroups.set(relativePath, group);
     } else {
       staleRevisions.push({
         sourcePath: source.sourcePath,
         sourceRevision: source.sourceRevision || null,
         currentRevision
+      });
+    }
+  }
+  const incompleteChunks = [];
+  const unknownChunkMetadata = [];
+  const currentRevisionPaths = new Set();
+  for (const [relativePath, records] of currentRevisionGroups) {
+    const counts = new Set(records.filter(item => item.chunk.known).map(item => item.chunk.count));
+    const metadataKnown = records.every(item => item.chunk.known) && counts.size === 1;
+    if (!metadataKnown) {
+      unknownChunkMetadata.push(relativePath);
+      incompleteChunks.push({ relativePath, reason: "chunk_metadata_missing_or_inconsistent" });
+      continue;
+    }
+    const expectedCount = [...counts][0];
+    const indexes = new Set(records.map(item => item.chunk.index));
+    const complete = indexes.size === expectedCount &&
+      Array.from({ length: expectedCount }, (_, index) => index + 1).every(index => indexes.has(index));
+    if (complete) {
+      currentRevisionPaths.add(relativePath);
+    } else {
+      incompleteChunks.push({
+        relativePath,
+        expectedChunks: expectedCount,
+        indexedChunks: indexes.size,
+        missingChunkIndexes: Array.from({ length: expectedCount }, (_, index) => index + 1)
+          .filter(index => !indexes.has(index))
       });
     }
   }
@@ -238,8 +277,11 @@ export function planKnowledgeReconciliation(repository, currentRevision, current
     staleRevisions,
     missingFromRepository,
     notYetIndexed,
-    coverageGranularity: "file_presence_only",
-    chunkCompletenessVerified: false,
+    incompleteChunks,
+    unknownChunkMetadata,
+    coverageGranularity: unknownChunkMetadata.length ? "file_presence_with_legacy_unknown_chunks" : "chunk_verified",
+    chunkCompletenessVerified: unknownChunkMetadata.length === 0 &&
+      incompleteChunks.length === 0,
     destructiveChangesApplied: false
   };
 }
