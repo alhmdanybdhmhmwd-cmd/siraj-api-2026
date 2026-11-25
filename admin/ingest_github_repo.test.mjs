@@ -1,7 +1,7 @@
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
-import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl, summarizeIndexCoverage, selectIndexBatch, normalizeAllowedRepositories, selectIndexBatchWithSkips, ingestRepository, containsLikelySecret, classifyIndexPath } from "./ingest_github_repo.mjs";
+import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl, summarizeIndexCoverage, selectIndexBatch, normalizeAllowedRepositories, selectIndexBatchWithSkips, ingestRepository, containsLikelySecret, classifyIndexPath, fetchWithRetry } from "./ingest_github_repo.mjs";
 
 test("repository ingestion allowlists project files and excludes secrets/build output", () => {
   assert.equal(shouldIndexPath("docs/BARQ_PRODUCT.md"), true);
@@ -196,4 +196,49 @@ test("index coverage reports why repository files were excluded", () => {
   });
   assert.equal(report.eligibleFiles, 2);
   assert.equal(report.selected.length, 1);
+});
+
+
+test("repository and knowledge API fetches retry transient failures but not permanent client errors", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls++;
+      return calls === 1
+        ? new Response("temporary", { status: 503 })
+        : new Response("ok", { status: 200 });
+    };
+    const recovered = await fetchWithRetry("https://example.test", {}, {
+      attempts: 3,
+      retryDelayMs: 0
+    });
+    assert.equal(recovered.status, 200);
+    assert.equal(calls, 2);
+
+    calls = 0;
+    globalThis.fetch = async () => {
+      calls++;
+      throw new Error("temporary_network_failure");
+    };
+    await assert.rejects(fetchWithRetry("https://example.test", {}, {
+      attempts: 2,
+      retryDelayMs: 0
+    }), /temporary_network_failure/);
+    assert.equal(calls, 2);
+
+    calls = 0;
+    globalThis.fetch = async () => {
+      calls++;
+      return new Response("invalid", { status: 400 });
+    };
+    const rejected = await fetchWithRetry("https://example.test", {}, {
+      attempts: 3,
+      retryDelayMs: 0
+    });
+    assert.equal(rejected.status, 400);
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
