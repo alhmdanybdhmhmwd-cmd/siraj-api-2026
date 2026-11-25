@@ -1,6 +1,12 @@
 name: BARQ and Admin preview APKs (ARM64)
 
 on:
+  push:
+    branches: [barq/no-vpn-routing-2026-11-25]
+    paths:
+      - 'android/**'
+      - 'admin/mobile/**'
+      - '.github/workflows/barq-no-vpn-preview-apks.yml'
   workflow_dispatch:
 
 permissions:
