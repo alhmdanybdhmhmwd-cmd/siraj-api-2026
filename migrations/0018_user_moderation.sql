@@ -2,6 +2,18 @@
 -- Apply only after reviewing the matching Preview migration and release checklist.
 PRAGMA foreign_keys = ON;
 
+CREATE TABLE IF NOT EXISTS blocked_users (
+  blocker_id TEXT NOT NULL,
+  blocked_id TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (blocker_id, blocked_id),
+  CHECK (blocker_id <> blocked_id),
+  FOREIGN KEY (blocker_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (blocked_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_blocked_users_blocked_id
+  ON blocked_users(blocked_id, blocker_id);
+
 CREATE TABLE IF NOT EXISTS user_reports (
   id TEXT PRIMARY KEY,
   reporter_id TEXT NOT NULL,
