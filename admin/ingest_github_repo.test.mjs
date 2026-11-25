@@ -67,6 +67,45 @@ test("index coverage reports remaining files and rejects impossible counts", () 
 });
 
 
+test("repository ingestion refuses truncated GitHub trees before indexing partial knowledge", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const revision = "c".repeat(40);
+  try {
+    globalThis.fetch = async input => {
+      const url = String(input);
+      calls.push(url);
+      if (url.includes("/commits/")) {
+        return new Response(JSON.stringify({ sha: revision }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+      if (url.includes("/git/trees/")) {
+        return new Response(JSON.stringify({ truncated: true, tree: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+      throw new Error("unexpected_fetch_url");
+    };
+
+    await assert.rejects(ingestRepository({
+      repository: "owner/repo",
+      ref: "HEAD",
+      githubToken: "read-only-test-token",
+      adminApiUrl: "https://admin-preview.example.workers.dev",
+      ownerToken: "short-lived-test-token",
+      allowedRepositories: ["owner/repo"]
+    }), /repository_tree_truncated_refusing_partial_index/);
+
+    assert.equal(calls.length, 2);
+    assert.equal(calls.some(url => url.endsWith("/v1/knowledge")), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("repository indexing can continue in ordered batches without skipping files", () => {
   const entries = ["z.md", "a.md", "d.md", "b.md", "c.md"].map(path => ({ path }));
   const first = selectIndexBatch(entries, "", 2);
