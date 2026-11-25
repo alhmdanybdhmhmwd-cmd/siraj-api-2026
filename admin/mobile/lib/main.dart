@@ -121,7 +121,11 @@ class _AdminHomePageState extends State<AdminHomePage>
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    _apiBase = prefs.getString('barq_admin_api_base') ?? '';
+    final configuredApiBase = prefs.getString('barq_admin_api_base');
+    _apiBase = resolveAdminApiBase(configuredApiBase);
+    if (configuredApiBase != _apiBase) {
+      await prefs.setString('barq_admin_api_base', _apiBase);
+    }
     _token = await _secure.read(key: 'barq_admin_owner_token') ?? '';
     _refreshToken = await _secure.read(key: 'barq_admin_refresh_token') ?? '';
     _sessionId = await _secure.read(key: 'barq_admin_session_id') ?? '';
@@ -679,8 +683,9 @@ class _AdminHomePageState extends State<AdminHomePage>
     if (_apiBase.isEmpty || _token.isEmpty || !isValidAdminApiBase(_apiBase)) {
       throw Exception('أكمل إعداد اتصال HTTPS وجلسة المالك أولًا');
     }
-    if (bytes.isEmpty || bytes.length > 4 * 1024 * 1024) {
-      throw Exception('حجم الصورة يجب ألا يتجاوز 4 ميغابايت');
+    // Keep the base64 JSON request below the public gateway's request ceiling.
+    if (bytes.isEmpty || bytes.length > 3 * 1024 * 1024) {
+      throw Exception('حجم الصورة يجب ألا يتجاوز 3 ميغابايت');
     }
     final response = await http
         .post(
