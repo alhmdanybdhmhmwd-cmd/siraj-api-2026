@@ -36,7 +36,10 @@ void main() {
     () {
       expect(resolveAdminApiBase(null), defaultAdminApiBase);
       expect(resolveAdminApiBase(''), defaultAdminApiBase);
-      expect(resolveAdminApiBase('http://admin.example.com'), defaultAdminApiBase);
+      expect(
+        resolveAdminApiBase('http://admin.example.com'),
+        defaultAdminApiBase,
+      );
       expect(
         resolveAdminApiBase('https://siraj-api.alhmdanybdhmhmwd.workers.dev'),
         defaultAdminApiBase,
