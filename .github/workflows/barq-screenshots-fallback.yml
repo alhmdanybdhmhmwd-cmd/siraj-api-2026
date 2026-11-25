@@ -52,7 +52,7 @@ jobs:
             adb devices -l
             adb shell getprop sys.boot_completed
             echo "=== CAPTURE START ==="
-            flutter test integration_test/barq_screenshots_test.dart -d emulator-5554 --reporter expanded
+            flutter drive --driver=test_driver/integration_test.dart --target=integration_test/barq_screenshots_test.dart -d emulator-5554
             cd ..
             find artifacts/barq-ui-screenshots -maxdepth 1 -type f -name '*.png' -printf '%f %s bytes\\n' | sort
             count="$(find artifacts/barq-ui-screenshots -type f -iname '*.png' | wc -l)"
