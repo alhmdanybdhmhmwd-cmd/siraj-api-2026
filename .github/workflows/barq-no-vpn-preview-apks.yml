@@ -48,12 +48,12 @@ jobs:
         run: flutter build apk --release --target-platform android-arm64 --dart-define=BARQ_API_BASE=https://siraj-api-2026.vercel.app
       - name: Report APK size
         run: |
-          test -s android/build/app/outputs/flutter-apk/app-debug.apk
-          stat -c 'BARQ release APK size: %s bytes' android/build/app/outputs/flutter-apk/app-debug.apk
+          test -s android/build/app/outputs/flutter-apk/app-release.apk
+          stat -c 'BARQ release APK size: %s bytes' android/build/app/outputs/flutter-apk/app-release.apk
       - uses: actions/upload-artifact@v4
         with:
           name: barq-no-vpn-arm64-release
-          path: android/build/app/outputs/flutter-apk/app-debug.apk
+          path: android/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -85,14 +85,14 @@ jobs:
         run: flutter test --no-pub
       - name: Build ARM64 debug APK
         working-directory: admin/mobile
-        run: flutter build apk --debug --target-platform android-arm64 --dart-define=BARQ_API_BASE=https://siraj-api-2026.vercel.app
+        run: flutter build apk --release --target-platform android-arm64 --dart-define=BARQ_API_BASE=https://siraj-api-2026.vercel.app
       - name: Report APK size
         run: |
-          test -s admin/mobile/build/app/outputs/flutter-apk/app-debug.apk
-          stat -c 'BARQ Admin release APK size: %s bytes' admin/mobile/build/app/outputs/flutter-apk/app-debug.apk
+          test -s admin/mobile/build/app/outputs/flutter-apk/app-release.apk
+          stat -c 'BARQ Admin release APK size: %s bytes' admin/mobile/build/app/outputs/flutter-apk/app-release.apk
       - uses: actions/upload-artifact@v4
         with:
           name: barq-admin-no-vpn-arm64-release
-          path: admin/mobile/build/app/outputs/flutter-apk/app-debug.apk
+          path: admin/mobile/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
