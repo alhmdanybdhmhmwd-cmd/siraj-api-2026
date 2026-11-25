@@ -1,4 +1,4 @@
--- Versioned project context index for BARQ Brain. Preview/Admin database only.
+-- Versioned project context index for BARQ Brain. Apply to shared BARQ D1 only after explicit owner approval; standalone Preview may use its isolated Admin D1.
 CREATE TABLE IF NOT EXISTS admin_project_knowledge (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL,
