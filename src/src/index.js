@@ -3,6 +3,7 @@ import { createAiProvider, createDatabaseProvider, createS3ObjectStorageProvider
 import { sendBarqPushNotification } from "./notification_service.js";
 import { prepareConversationSummaryTranscript, buildConversationSummaryMessages, extractConversationSummaryText } from "./conversation_summary.js";
 import { handleResumableMediaUpload, cleanupExpiredUploadSessions } from "./media_multipart_routes.js";
+import { handleSharedAdminRequest } from "../../admin/shared_runtime.js";
 
 
 const corsHeaders = {
@@ -817,6 +818,8 @@ export default {
   },
   async fetch(request, env, ctx) {
     env = { ...env, DB: createDatabaseProvider(env.DB) };
+    const adminResponse = await handleSharedAdminRequest(request, env);
+    if (adminResponse) return adminResponse;
     if (request.method === "OPTIONS") {
       return new Response(null, {
         headers: { ...corsHeaders, "X-Request-Id": crypto.randomUUID() }
