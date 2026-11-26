@@ -500,8 +500,15 @@ async function main() {
     ...config,
     startAfter: process.env.BARQ_ADMIN_GITHUB_START_AFTER || ""
   });
-  if (result.complete) {
+  result.batchComplete = result.complete;
+  result.coverageComplete = false;
+  result.requiresOwnerReview = false;
+  if (result.batchComplete) {
     result.reconciliation = await reconcileRepository({ ...config, ref: result.revision });
+    result.coverageComplete = result.reconciliation.chunkCompletenessVerified &&
+      result.reconciliation.staleRevisions.length === 0 &&
+      result.reconciliation.missingFromRepository.length === 0;
+    result.requiresOwnerReview = !result.coverageComplete;
   }
   process.stdout.write(JSON.stringify(result) + "\n");
 }
