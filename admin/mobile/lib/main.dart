@@ -2268,25 +2268,6 @@ class _AdminHomePageState extends State<AdminHomePage>
         ),
       );
 }
-), '');
-      if (!isValidAdminApiBase(input)) {
-        if (mounted)
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('أدخل عنوان HTTPS صحيحًا لخادم الإدارة'),
-            ),
-          );
-      } else {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(
-          'barq_admin_api_base',
-          normalizeAdminApiBase(input),
-        );
-        await _load();
-      }
-    }
-    baseController.dispose();
-  }
 
   Future<String> _requestImageAnalysis(
     Uint8List bytes,
