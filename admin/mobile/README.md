@@ -7,6 +7,7 @@ Arabic RTL Flutter client for the independent BARQ Admin owner workspace.
 - Dark electric-blue and gold visual system, dashboard, tasks, owner approvals, and read-only audit timeline.
 - Server-issued activation code for trusted devices; the same code can activate multiple phones.
 - A visible, authenticated activation-code panel with copy action for the owner.
+- A per-device 6–12 digit local PIN gate on first activation and whenever the app returns to the foreground; only a salted PBKDF2-HMAC-SHA256 verifier is stored in Android secure storage.
 - A 10-minute Admin access token plus a rotating 30-day refresh token stored in Android secure storage.
 - Automatic access-token refresh, server-side logout, owner device inventory, and device/session revocation.
 - Cached workspace snapshots and a local offline task outbox.
@@ -37,7 +38,7 @@ The workflow decodes the keystore only on the temporary runner and signs the ARM
 
 The mobile app does not contain the activation secret. Configure a high-entropy random value (at least 32 characters) as the Cloudflare Worker secret `BARQ_ADMIN_ACTIVATION_CODE`, and configure `BARQ_ADMIN_JWT_SECRET` as a separate server-only secret of at least 32 characters. Never commit either value, place either in GitHub Variables, print either in logs, or embed either in the APK.
 
-The activation endpoint rate-limits attempts by client IP and a fingerprint of the supplied code. A successful activation creates a distinct revocable device session; the same master code may be used on multiple trusted devices. Once signed in, the app shows the activation code in its **رمز التفعيل** section so the owner can copy it. Anyone with an active owner session on a trusted device can view that code, as explicitly requested by the owner. Rotate the Worker secret to invalidate the old code and issue a new one. Device sessions remain individually revocable from the device-management screen.
+The activation endpoint rate-limits attempts by client IP and a fingerprint of the supplied code. A successful activation creates a distinct revocable device session; the same master code may be used on multiple trusted devices. After activation, each device must create its own local PIN. The app locks again when it returns to the foreground. The PIN is never stored as plain text; a salted PBKDF2-HMAC-SHA256 verifier is stored through Android secure storage. Once unlocked, the app shows the activation code in its **رمز التفعيل** section so the owner can copy it. Anyone with an active owner session on a trusted device can view that code, as explicitly requested by the owner. Rotate the Worker secret to invalidate the old code and issue a new one. Device sessions remain individually revocable from the device-management screen.
 
 The shared BARQ Worker runtime and its existing D1 binding are reused. Activation sessions use the stable owner subject `barq-admin-owner-v1`; all Admin-owned tables retain their `admin_` namespace. No production database migration is required for this activation flow because it reuses the existing device, session, refresh-history, and rate-limit tables. Do not change the BARQ consumer app or its working API configuration.
 
