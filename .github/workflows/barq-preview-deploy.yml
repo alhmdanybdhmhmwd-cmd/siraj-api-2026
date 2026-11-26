@@ -3,6 +3,13 @@ name: BARQ isolated Preview Worker deploy
 on:
   workflow_dispatch:
     inputs:
+      source_ref:
+        description: "Code/config branch to deploy to the isolated Preview Worker"
+        required: true
+        type: choice
+        default: barq/cloudflare-wrangler-path-2026-11-26
+        options:
+          - barq/cloudflare-wrangler-path-2026-11-26
       deploy_preview:
         description: "Explicitly approve deploying the isolated BARQ Preview Worker (never production)"
         required: true
@@ -25,6 +32,8 @@ jobs:
       BARQ_PREVIEW_TIGRIS_SECRET_ACCESS_KEY: ${{ secrets.BARQ_PREVIEW_TIGRIS_SECRET_ACCESS_KEY }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -37,6 +46,9 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
           test -n "$BARQ_PREVIEW_JWT_SECRET"
+          test -f wrangler.test.toml || { echo "Selected source_ref does not contain wrangler.test.toml; refusing to deploy."; exit 1; }
+          test -f wrangler.toml || { echo "Selected source_ref does not contain wrangler.toml; refusing to deploy."; exit 1; }
+          test -f src/src/index.js || { echo "Selected source_ref does not contain the Worker entrypoint; refusing to deploy."; exit 1; }
           python3 - <<'PY'
           import tomllib
           from pathlib import Path
