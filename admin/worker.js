@@ -618,6 +618,13 @@ async function consumeAdminAuthRateLimit(env, bucketKey, maximum) {
   return Boolean(row);
 }
 
+function constantTimeTextEqual(left, right) {
+  if (typeof left !== "string" || typeof right !== "string" || left.length !== right.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < left.length; i++) mismatch |= left.charCodeAt(i) ^ right.charCodeAt(i);
+  return mismatch === 0;
+}
+
 async function handle(request, env) {
   const url = new URL(request.url);
   const configuredOrigin = env.BARQ_ADMIN_ALLOWED_ORIGIN || "";
@@ -634,6 +641,56 @@ async function handle(request, env) {
   }
   if (url.pathname === "/health") return response({ ok: true, service: env.BARQ_ADMIN_RUNTIME_MODE === "shared" ? "barq-admin" : "barq-admin-preview" });
   if (!env.ADMIN_DB) return response({ error: "admin_database_unavailable" }, 503, allowedOrigin);
+
+  if (request.method === "POST" && url.pathname === "/v1/auth/activate") {
+    if (!env.BARQ_ADMIN_JWT_SECRET || env.BARQ_ADMIN_JWT_SECRET.length < 32 ||
+        !env.BARQ_ADMIN_ACTIVATION_CODE || env.BARQ_ADMIN_ACTIVATION_CODE.length < 32) {
+      return response({ error: "activation_not_configured" }, 503, allowedOrigin);
+    }
+    const body = await readJson(request);
+    if (!body || typeof body.code !== "string" || body.code.length > 256) {
+      return response({ error: "invalid_activation_request" }, 400, allowedOrigin);
+    }
+    const clientIp = request.headers.get("CF-Connecting-IP") || "unknown";
+    const ipBucket = "activation-ip:" + await authSha256Hex(clientIp);
+    const codeBucket = "activation-code:" + await authSha256Hex(body.code);
+    if (!await consumeAdminAuthRateLimit(env, ipBucket, 5) ||
+        !await consumeAdminAuthRateLimit(env, codeBucket, 8)) {
+      return response({ error: "auth_rate_limited", retryAfterSeconds: 60 }, 429, allowedOrigin);
+    }
+    const suppliedHash = await authSha256Hex(body.code.trim());
+    const expectedHash = await authSha256Hex(env.BARQ_ADMIN_ACTIVATION_CODE);
+    if (!constantTimeTextEqual(suppliedHash, expectedHash)) {
+      return response({ error: "activation_code_invalid" }, 401, allowedOrigin);
+    }
+    const subject = "barq-admin-owner-v1";
+    const deviceId = crypto.randomUUID();
+    const sessionId = crypto.randomUUID();
+    const refreshToken = createRefreshToken();
+    const refreshHash = await authSha256Hex(refreshToken);
+    const deviceName = typeof body.deviceName === "string" ? body.deviceName.trim().slice(0, 80) : "";
+    const platform = body.platform === "ios" ? "ios" : "android";
+    await env.ADMIN_DB.batch([
+      env.ADMIN_DB.prepare(`
+        INSERT INTO admin_owner_devices (id, owner_subject, device_name, platform)
+        VALUES (?, ?, ?, ?)
+      `).bind(deviceId, subject, deviceName || (platform === "ios" ? "iPhone" : "Android device"), platform),
+      env.ADMIN_DB.prepare(`
+        INSERT INTO admin_owner_sessions
+          (id, owner_subject, device_id, refresh_token_hash, refresh_expires_at)
+        VALUES (?, ?, ?, ?, datetime('now', '+30 days'))
+      `).bind(sessionId, subject, deviceId, refreshHash),
+      env.ADMIN_DB.prepare(`
+        INSERT INTO admin_owner_refresh_token_history (token_hash, session_id)
+        VALUES (?, ?)
+      `).bind(refreshHash, sessionId)
+    ]);
+    const workspace = await ensureWorkspace(env, { subject });
+    await audit(env, workspace, { subject, deviceId }, "auth.owner_session.created", "device", deviceId,
+      { platform, method: "activation_code" });
+    const accessToken = await createAdminAccessToken(env.BARQ_ADMIN_JWT_SECRET, subject, sessionId, deviceId);
+    return response({ accessToken, refreshToken, sessionId, deviceId, expiresIn: 600 }, 200, allowedOrigin);
+  }
 
   if (request.method === "POST" && url.pathname === "/v1/auth/exchange") {
     if (!env.BARQ_ADMIN_JWT_SECRET || env.BARQ_ADMIN_JWT_SECRET.length < 32 ||
@@ -802,6 +859,15 @@ async function handle(request, env) {
   const actor = await verifyOwnerToken(request, env);
   if (!actor) return response({ error: "unauthorized" }, 401, allowedOrigin);
   const workspace = await ensureWorkspace(env, actor);
+
+  if (request.method === "GET" && url.pathname === "/v1/auth/activation-code") {
+    if (actor.subject !== "barq-admin-owner-v1" ||
+        typeof env.BARQ_ADMIN_ACTIVATION_CODE !== "string" ||
+        env.BARQ_ADMIN_ACTIVATION_CODE.length < 32) {
+      return response({ error: "activation_code_unavailable" }, 403, allowedOrigin);
+    }
+    return response({ code: env.BARQ_ADMIN_ACTIVATION_CODE }, 200, allowedOrigin);
+  }
 
   if (request.method === "GET" && url.pathname === "/v1/devices") {
     const result = await env.ADMIN_DB.prepare(`
