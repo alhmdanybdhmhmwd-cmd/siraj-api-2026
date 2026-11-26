@@ -33,7 +33,7 @@ async function activationEncryptionKey(secret) {
   return crypto.subtle.importKey("raw", material, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
 
-async function encryptActivationCode(code, secret) {
+export async function encryptActivationCode(code, secret) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await activationEncryptionKey(secret);
   const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoder.encode(code));
@@ -43,7 +43,7 @@ async function encryptActivationCode(code, secret) {
   return base64url(packed);
 }
 
-async function decryptActivationCode(value, secret) {
+export async function decryptActivationCode(value, secret) {
   const packed = decodeBase64url(value);
   if (packed.length < 29) throw new Error("activation_ciphertext_invalid");
   const iv = packed.slice(0, 12);
