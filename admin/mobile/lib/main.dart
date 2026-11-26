@@ -1,15 +1,14 @@
 import 'dart:convert';
 import 'dart:math';
-import 'dart:io' show Platform;
 import 'dart:typed_data';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/services.dart';
 
 import 'models.dart';
 import 'security.dart';
@@ -18,9 +17,6 @@ const _blue = Color(0xFF2785FF);
 const _gold = Color(0xFFE8B95B);
 const _surface = Color(0xFF151E31);
 const _background = Color(0xFF0A1020);
-const _googleOidcClientId = String.fromEnvironment(
-  'BARQ_GOOGLE_OIDC_CLIENT_ID',
-);
 
 void main() => runApp(const BarqAdminApp());
 
@@ -73,7 +69,6 @@ class AdminHomePage extends StatefulWidget {
 class _AdminHomePageState extends State<AdminHomePage>
     with WidgetsBindingObserver {
   static const _secure = FlutterSecureStorage();
-  static final _appAuth = FlutterAppAuth();
   static const _cacheWorkspace = 'barq_admin_workspace_cache';
   static const _cacheTasks = 'barq_admin_tasks_cache';
   static const _cacheApprovals = 'barq_admin_approvals_cache';
@@ -84,6 +79,7 @@ class _AdminHomePageState extends State<AdminHomePage>
   String _token = '';
   String _refreshToken = '';
   String _sessionId = '';
+  final TextEditingController _activationController = TextEditingController();
   Future<bool>? _refreshFuture;
   String _connectionMessage = 'غير متصل';
   Map<String, dynamic> _workspace = {};
@@ -105,6 +101,7 @@ class _AdminHomePageState extends State<AdminHomePage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _activationController.dispose();
     super.dispose();
   }
 
@@ -134,7 +131,7 @@ class _AdminHomePageState extends State<AdminHomePage>
           _online = false;
           _connectionMessage = _apiBase.isEmpty
               ? 'أدخل عنوان خادم الإدارة'
-              : 'سجّل الدخول بحساب المالك عبر Google';
+              : 'أدخل رمز تفعيل BARQ Admin للمتابعة';
         });
       return;
     }
@@ -163,7 +160,7 @@ class _AdminHomePageState extends State<AdminHomePage>
             .timeout(const Duration(seconds: 18));
       }
       if (workspaceResponse.statusCode == 401) {
-        throw Exception('انتهت جلسة المالك؛ سجّل الدخول مجددًا عبر Google');
+        throw Exception('انتهت جلسة المالك؛ أدخل رمز التفعيل مجددًا');
       }
       if (workspaceResponse.statusCode != 200) {
         throw Exception(
@@ -329,89 +326,101 @@ class _AdminHomePageState extends State<AdminHomePage>
     }
   }
 
-  Future<void> _loginWithGoogle() async {
+  Future<void> _activateWithCode() async {
     if (!isValidAdminApiBase(_apiBase)) {
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'أدخل عنوان خادم BARQ Admin من إعدادات الاتصال أولًا',
-            ),
-          ),
-        );
+      await _showSettings();
       return;
     }
-    if (_googleOidcClientId.isEmpty) {
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'لم يُضبط Google OAuth Client ID في نسخة التطبيق بعد',
-            ),
-          ),
-        );
+    final code = _activationController.text.trim();
+    if (code.length < 32) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('أدخل رمز التفعيل الصحيح')),
+      );
       return;
     }
     try {
-      final nonce = createOidcNonce();
-      final redirectUri = googleOidcRedirectUri(_googleOidcClientId);
-      final result = await _appAuth.authorizeAndExchangeCode(
-        AuthorizationTokenRequest(
-          _googleOidcClientId,
-          redirectUri,
-          issuer: 'https://accounts.google.com',
-          scopes: const ['openid', 'email', 'profile'],
-          nonce: nonce,
-        ),
-      );
-      final idToken = result.idToken;
-      if (idToken == null || idToken.isEmpty) {
-        throw Exception('لم يُرجع Google إثبات هوية صالحًا');
-      }
       final response = await http
           .post(
-            Uri.parse(_base + '/v1/auth/exchange'),
+            Uri.parse(_base + '/v1/auth/activate'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
-              'idToken': idToken,
-              'nonce': nonce,
-              'deviceName': Platform.isIOS
-                  ? 'BARQ Admin — iPhone'
-                  : 'BARQ Admin — Android',
-              'platform': Platform.isIOS ? 'ios' : 'android',
+              'code': code,
+              'deviceName': 'BARQ Admin — Android',
+              'platform': 'android',
             }),
           )
           .timeout(const Duration(seconds: 25));
       final data = Map<String, dynamic>.from(jsonDecode(response.body) as Map);
       if (response.statusCode != 200) {
-        throw Exception(
-          data['error'] == 'identity_verification_failed'
-              ? 'رفض الخادم إثبات Google؛ تحقق من حساب المالك وإعدادات Preview'
-              : 'تعذر إنشاء جلسة الإدارة (' +
-                  response.statusCode.toString() +
-                  ')',
-        );
+        final error = data['error'];
+        throw Exception(error == 'activation_not_configured'
+            ? 'لم يجهّز الخادم رمز التفعيل بعد'
+            : error == 'auth_rate_limited'
+                ? 'محاولات كثيرة؛ انتظر دقيقة ثم حاول'
+                : 'رمز التفعيل غير صحيح أو تعذر إنشاء الجلسة');
       }
       _token = (data['accessToken'] ?? '').toString();
       _refreshToken = (data['refreshToken'] ?? '').toString();
       _sessionId = (data['sessionId'] ?? '').toString();
       if (_token.isEmpty || _refreshToken.isEmpty || _sessionId.isEmpty) {
-        throw Exception('استجابة إنشاء الجلسة غير مكتملة');
+        throw Exception('استجابة التفعيل غير مكتملة');
       }
       await _secure.write(key: 'barq_admin_owner_token', value: _token);
-      await _secure.write(
-        key: 'barq_admin_refresh_token',
-        value: _refreshToken,
-      );
+      await _secure.write(key: 'barq_admin_refresh_token', value: _refreshToken);
       await _secure.write(key: 'barq_admin_session_id', value: _sessionId);
+      _activationController.clear();
       await _load();
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error.toString().replaceFirst('Exception: ', '')),
-          ),
+          SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
         );
+      }
+    }
+  }
+
+  Future<void> _showActivationCode() async {
+    try {
+      final data = await _getJson('/v1/auth/activation-code');
+      final code = (data['code'] ?? '').toString();
+      if (code.isEmpty) throw Exception('رمز التفعيل غير متاح');
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('رمز التفعيل'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('هذا هو الرمز الرئيسي الذي تستخدمه لتفعيل BARQ Admin على أجهزتك الموثوقة.'),
+              const SizedBox(height: 12),
+              SelectableText(code, textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+              const SizedBox(height: 8),
+              const Text('احتفظ به في مكان آمن. يمكن إيقافه أو تغييره من إعداد الخادم.',
+                style: TextStyle(color: Colors.white60, fontSize: 12)),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: code));
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('تم نسخ رمز التفعيل')),
+                );
+              },
+              child: const Text('نسخ الرمز'),
+            ),
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق')),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+      );
     }
   }
 
@@ -634,7 +643,7 @@ class _AdminHomePageState extends State<AdminHomePage>
             ),
             const SizedBox(height: 8),
             const Text(
-              'أدخل عنوان خادم برق الذي يستضيف مسار الإدارة /admin. مثال: https://example.com أو https://example.com/admin. تسجيل الدخول عبر Google فقط.',
+              'أدخل عنوان خادم الإدارة الذي يستضيف مسار /admin. مثال: https://example.com أو https://example.com/admin.',
             ),
             const SizedBox(height: 16),
             TextField(
@@ -1573,6 +1582,11 @@ class _AdminHomePageState extends State<AdminHomePage>
             icon: const Icon(Icons.settings_outlined),
           ),
           IconButton(
+            tooltip: 'رمز التفعيل',
+            onPressed: _token.isEmpty ? null : _showActivationCode,
+            icon: const Icon(Icons.vpn_key_outlined),
+          ),
+          IconButton(
             tooltip: 'الأجهزة',
             onPressed: _token.isEmpty ? null : _showDevices,
             icon: const Icon(Icons.devices_outlined),
@@ -1715,7 +1729,7 @@ class _AdminHomePageState extends State<AdminHomePage>
                     border: Border.all(color: _blue.withValues(alpha: .25)),
                   ),
                   child: const Text(
-                    'إذن المالك الحالي: المرحلة الثانية مصرح بها. يعمل BARQ Brain على فهم BARQ وفهرسة المتطلبات والقرارات والبنية والكود وواجهات API والاختبارات وسجل المشكلات، مع إظهار مصادر المعرفة وما لم تتم تغطيته بعد. BARQ هو المنتج، وSPARK ميزة القصص فقط، وBARQ Admin تطبيق الإدارة المستقل. لا دمج أو نشر أو تغيير إنتاج دون موافقة محددة. اعتمد المالك Google OIDC مع PKCE لتسجيل الدخول؛ يجب أن يتحقق الخادم من الهوية والجلسة قبل السماح بالوصول.',
+                    'إذن المالك الحالي: المرحلة الثانية مصرح بها. يعمل BARQ Brain على فهم BARQ وفهرسة المتطلبات والقرارات والبنية والكود وواجهات API والاختبارات وسجل المشكلات، مع إظهار مصادر المعرفة وما لم تتم تغطيته بعد. BARQ هو المنتج، وSPARK ميزة القصص فقط، وBARQ Admin تطبيق الإدارة المستقل. لا دمج أو نشر أو تغيير إنتاج دون موافقة محددة. يعتمد التطبيق رمز تفعيل سريًا يصدره الخادم، ثم جلسة مستقلة قابلة للإلغاء لكل جهاز.',
                     style: TextStyle(
                       fontSize: 12,
                       height: 1.5,
@@ -1779,29 +1793,31 @@ class _AdminHomePageState extends State<AdminHomePage>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Icon(Icons.verified_user_outlined, color: _gold, size: 34),
+              const Icon(Icons.vpn_key_outlined, color: _gold, size: 34),
               const SizedBox(height: 10),
-              const Text(
-                'تسجيل دخول مالك BARQ Admin',
+              const Text('تفعيل BARQ Admin',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-              ),
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
               const SizedBox(height: 7),
               const Text(
-                'استخدم حساب Google المعتمد للمالك. سيُفتح تسجيل الدخول الآمن عبر المتصفح مع PKCE.',
+                'أدخل رمز التفعيل الرئيسي لفتح الإدارة على هذا الهاتف. يمكنك استخدام الرمز نفسه على أجهزتك الموثوقة الأخرى.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70, height: 1.4),
-              ),
+                style: TextStyle(color: Colors.white70, height: 1.4)),
               const SizedBox(height: 14),
+              TextField(
+                controller: _activationController,
+                obscureText: true,
+                enableSuggestions: false,
+                autocorrect: false,
+                decoration: const InputDecoration(
+                  labelText: 'رمز التفعيل',
+                  hintText: 'ألصق رمز التفعيل هنا',
+                  prefixIcon: Icon(Icons.key))),
+              const SizedBox(height: 12),
               FilledButton.icon(
-                onPressed: _apiBase.isEmpty ? _showSettings : _loginWithGoogle,
-                icon: const Icon(Icons.login),
-                label: Text(
-                  _apiBase.isEmpty
-                      ? 'إعداد عنوان الخادم'
-                      : 'المتابعة باستخدام Google',
-                ),
-              ),
+                onPressed: _apiBase.isEmpty ? _showSettings : _activateWithCode,
+                icon: const Icon(Icons.lock_open),
+                label: Text(_apiBase.isEmpty ? 'إعداد عنوان الخادم' : 'تفعيل هذا الهاتف')),
             ],
           ),
         ),
