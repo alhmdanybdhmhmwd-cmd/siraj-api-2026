@@ -13,6 +13,18 @@ const TRANSITIONS = {
 };
 const MAX_JSON_BYTES = 32 * 1024;
 
+export function normalizeAdminActivationCode(value) {
+  if (typeof value !== "string") return null;
+  const normalized = value.toUpperCase().replace(/[\\s-]/g, "");
+  return /^[A-F0-9]{48}$/.test(normalized) ? normalized : null;
+}
+
+export function createAdminActivationCode() {
+  const bytes = crypto.getRandomValues(new Uint8Array(24));
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("").toUpperCase();
+}
+
+
 function base64url(bytes) {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -799,9 +811,91 @@ async function handle(request, env) {
     return response({ ok: Boolean(ended?.meta?.changes) }, 200, allowedOrigin);
   }
 
+
+  if (request.method === "POST" && url.pathname === "/v1/auth/activate") {
+    const clientIp = request.headers.get("CF-Connecting-IP") || "unknown";
+    const activationBucket = "device-activation:" + await authSha256Hex(clientIp);
+    if (!await consumeAdminAuthRateLimit(env, activationBucket, 5)) {
+      return response({ error: "auth_rate_limited", retryAfterSeconds: 60 }, 429, allowedOrigin);
+    }
+    const body = await readJson(request);
+    const code = normalizeAdminActivationCode(body?.code);
+    if (!code) return response({ error: "invalid_activation_code" }, 400, allowedOrigin);
+    const codeHash = await authSha256Hex(code);
+    const activation = await env.ADMIN_DB.prepare(`
+      SELECT owner_subject FROM admin_owner_activation_codes
+      WHERE code_hash = ? AND revoked_at IS NULL
+    `).bind(codeHash).first();
+    if (!activation) return response({ error: "activation_code_invalid" }, 401, allowedOrigin);
+
+    const deviceId = crypto.randomUUID();
+    const sessionId = crypto.randomUUID();
+    const refreshToken = createRefreshToken();
+    const refreshHash = await authSha256Hex(refreshToken);
+    const deviceName = typeof body.deviceName === "string" ? body.deviceName.trim().slice(0, 80) : "";
+    const platform = body.platform === "ios" ? "ios" : "android";
+    await env.ADMIN_DB.batch([
+      env.ADMIN_DB.prepare(`
+        INSERT INTO admin_owner_devices (id, owner_subject, device_name, platform)
+        VALUES (?, ?, ?, ?)
+      `).bind(deviceId, activation.owner_subject,
+        deviceName || (platform === "ios" ? "iPhone" : "Android device"), platform),
+      env.ADMIN_DB.prepare(`
+        INSERT INTO admin_owner_sessions
+          (id, owner_subject, device_id, refresh_token_hash, refresh_expires_at)
+        VALUES (?, ?, ?, ?, datetime('now', '+30 days'))
+      `).bind(sessionId, activation.owner_subject, deviceId, refreshHash),
+      env.ADMIN_DB.prepare(`
+        INSERT INTO admin_owner_refresh_token_history (token_hash, session_id)
+        VALUES (?, ?)
+      `).bind(refreshHash, sessionId)
+    ]);
+    const workspace = await ensureWorkspace(env, { subject: activation.owner_subject });
+    await audit(env, workspace,
+      { subject: activation.owner_subject, deviceId },
+      "auth.device.activated_by_owner_code", "device", deviceId, { platform });
+    const accessToken = await createAdminAccessToken(
+      env.BARQ_ADMIN_JWT_SECRET, activation.owner_subject, sessionId, deviceId
+    );
+    return response({
+      accessToken, refreshToken, sessionId, deviceId, expiresIn: 600,
+      owner: { subject: activation.owner_subject }
+    }, 200, allowedOrigin);
+  }
+
   const actor = await verifyOwnerToken(request, env);
   if (!actor) return response({ error: "unauthorized" }, 401, allowedOrigin);
   const workspace = await ensureWorkspace(env, actor);
+
+
+  if (request.method === "POST" && url.pathname === "/v1/auth/activation-code/rotate") {
+    const code = createAdminActivationCode();
+    const codeHash = await authSha256Hex(code);
+    await env.ADMIN_DB.prepare(`
+      INSERT INTO admin_owner_activation_codes
+        (owner_subject, code_hash, created_by_device, created_at, revoked_at)
+      VALUES (?, ?, ?, CURRENT_TIMESTAMP, NULL)
+      ON CONFLICT(owner_subject) DO UPDATE SET
+        code_hash = excluded.code_hash,
+        created_by_device = excluded.created_by_device,
+        created_at = CURRENT_TIMESTAMP,
+        revoked_at = NULL
+    `).bind(actor.subject, codeHash, actor.deviceId).run();
+    await audit(env, workspace, actor, "auth.activation_code.rotated",
+      "owner", actor.subject, { codeLength: code.length });
+    return response({ code, reusable: true }, 200, allowedOrigin);
+  }
+
+  if (request.method === "POST" && url.pathname === "/v1/auth/activation-code/revoke") {
+    await env.ADMIN_DB.prepare(`
+      UPDATE admin_owner_activation_codes
+      SET revoked_at = CURRENT_TIMESTAMP
+      WHERE owner_subject = ? AND revoked_at IS NULL
+    `).bind(actor.subject).run();
+    await audit(env, workspace, actor, "auth.activation_code.revoked",
+      "owner", actor.subject, {});
+    return response({ ok: true }, 200, allowedOrigin);
+  }
 
   if (request.method === "GET" && url.pathname === "/v1/devices") {
     const result = await env.ADMIN_DB.prepare(`
