@@ -53,6 +53,15 @@ export async function decryptActivationCode(value, secret) {
   return new TextDecoder().decode(plaintext);
 }
 
+export function validateInitialOwnerCode(value) {
+  if (typeof value !== "string") return { ok: false, error: "invalid_initial_activation_code" };
+  const code = value.trim();
+  if (code.length < 32 || code.length > 128 || !/^[A-Za-z0-9._-]+$/.test(code)) {
+    return { ok: false, error: "invalid_initial_activation_code" };
+  }
+  return { ok: true, value: code };
+}
+
 export function validateIdempotencyKey(value) {
   if (value === null || value === undefined || value === "") {
     return { ok: true, value: null };
@@ -679,10 +688,11 @@ async function handle(request, env) {
       return response({ error: "owner_already_initialized" }, 409, allowedOrigin);
     }
     const body = await readJson(request);
-    const code = typeof body?.code === "string" ? body.code.trim() : "";
-    if (code.length < 32 || code.length > 128 || !/^[A-Za-z0-9._-]+$/.test(code)) {
-      return response({ error: "invalid_initial_activation_code" }, 400, allowedOrigin);
+    const initialCode = validateInitialOwnerCode(body?.code);
+    if (!initialCode.ok) {
+      return response({ error: initialCode.error }, 400, allowedOrigin);
     }
+    const code = initialCode.value;
     const clientIp = request.headers.get("CF-Connecting-IP") || "unknown";
     const ipBucket = "bootstrap-ip:" + await authSha256Hex(clientIp);
     if (!await consumeAdminAuthRateLimit(env, ipBucket, 3)) {
