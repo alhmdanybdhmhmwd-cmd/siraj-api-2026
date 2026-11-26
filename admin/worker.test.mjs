@@ -239,7 +239,7 @@ test("Admin access-token claims require bounded lifetime and valid session bindi
   const valid = {
     iss: "barq-admin-auth",
     aud: "barq-admin",
-    sub: "google-owner-subject-123",
+    sub: "test-owner-subject-123",
     sid: "123e4567-e89b-42d3-a456-426614174000",
     did: "123e4567-e89b-42d3-a456-426614174001",
     jti: "0123456789abcdef01234567",
