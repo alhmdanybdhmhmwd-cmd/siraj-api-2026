@@ -4,18 +4,11 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-
-val barqGoogleOidcClientId = System.getenv("BARQ_GOOGLE_OIDC_CLIENT_ID").orEmpty()
 val barqAdminKeystorePath = System.getenv("BARQ_ADMIN_KEYSTORE_PATH").orEmpty()
 val barqAdminKeystorePassword = System.getenv("BARQ_ADMIN_KEYSTORE_PASSWORD").orEmpty()
 val barqAdminKeyAlias = System.getenv("BARQ_ADMIN_KEY_ALIAS").orEmpty()
 val barqAdminKeyPassword = System.getenv("BARQ_ADMIN_KEY_PASSWORD").orEmpty()
-val barqGoogleOidcRedirectScheme =
-    if (barqGoogleOidcClientId.endsWith(".apps.googleusercontent.com")) {
-        "com.googleusercontent.apps." + barqGoogleOidcClientId.substringBefore(".")
-    } else {
-        "com.barq.admin.auth"
-    }
+
 
 android {
     namespace = "com.barq.admin"
@@ -40,7 +33,6 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        manifestPlaceholders["appAuthRedirectScheme"] = barqGoogleOidcRedirectScheme
     }
 
     signingConfigs {
