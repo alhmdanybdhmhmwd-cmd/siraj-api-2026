@@ -4,6 +4,7 @@ import 'dart:io' show Platform;
 import 'dart:typed_data';
 
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:http/http.dart' as http;
@@ -84,6 +85,7 @@ class _AdminHomePageState extends State<AdminHomePage>
   String _token = '';
   String _refreshToken = '';
   String _sessionId = '';
+  String _activationCode = '';
   Future<bool>? _refreshFuture;
   String _connectionMessage = 'غير متصل';
   Map<String, dynamic> _workspace = {};
@@ -125,6 +127,7 @@ class _AdminHomePageState extends State<AdminHomePage>
     _token = await _secure.read(key: 'barq_admin_owner_token') ?? '';
     _refreshToken = await _secure.read(key: 'barq_admin_refresh_token') ?? '';
     _sessionId = await _secure.read(key: 'barq_admin_session_id') ?? '';
+    _activationCode = await _secure.read(key: 'barq_admin_activation_code') ?? '';
     _readCache(prefs);
     _mergeOutboxDrafts(prefs);
     if (_apiBase.isEmpty || _token.isEmpty) {
@@ -306,6 +309,7 @@ class _AdminHomePageState extends State<AdminHomePage>
         await _secure.delete(key: 'barq_admin_owner_token');
         await _secure.delete(key: 'barq_admin_refresh_token');
         await _secure.delete(key: 'barq_admin_session_id');
+    await _secure.delete(key: 'barq_admin_activation_code');
         _token = '';
         _refreshToken = '';
         _sessionId = '';
@@ -413,6 +417,92 @@ class _AdminHomePageState extends State<AdminHomePage>
           ),
         );
     }
+  }
+
+  Future<void> _rotateActivationCode() async {
+    if (_token.isEmpty || !isValidAdminApiBase(_apiBase)) return;
+    try {
+      final response = await http.post(Uri.parse(_base + '/v1/auth/activation-code/rotate'), headers: _headers).timeout(const Duration(seconds: 20));
+      final data = Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+      if (response.statusCode != 200 || (data['code'] ?? '').toString().isEmpty) throw Exception('تعذر إنشاء رمز التفعيل');
+      _activationCode = data['code'].toString();
+      await _secure.write(key: 'barq_admin_activation_code', value: _activationCode);
+      if (mounted) setState(() {});
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+  }
+
+  Future<void> _revokeActivationCode() async {
+    try {
+      final response = await http.post(Uri.parse(_base + '/v1/auth/activation-code/revoke'), headers: _headers).timeout(const Duration(seconds: 20));
+      if (response.statusCode != 200) throw Exception('تعذر إلغاء رمز التفعيل');
+      _activationCode = '';
+      await _secure.delete(key: 'barq_admin_activation_code');
+      if (mounted) setState(() {});
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+  }
+
+  Future<void> _activateWithCode(String rawCode) async {
+    if (!isValidAdminApiBase(_apiBase)) return;
+    final code = rawCode.toUpperCase().replaceAll(RegExp(r'[\\s-]'), '');
+    if (!RegExp(r'^[A-F0-9]{48}$').hasMatch(code)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('رمز التفعيل غير مكتمل')));
+      return;
+    }
+    try {
+      final response = await http.post(
+        Uri.parse(_base + '/v1/auth/activate'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'code': code, 'deviceName': Platform.isIOS ? 'BARQ Admin — iPhone' : 'BARQ Admin — Android', 'platform': Platform.isIOS ? 'ios' : 'android'}),
+      ).timeout(const Duration(seconds: 25));
+      final data = Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+      if (response.statusCode != 200) throw Exception(response.statusCode == 429 ? 'محاولات كثيرة؛ انتظر دقيقة' : 'رمز التفعيل غير صحيح أو ملغى');
+      _token = (data['accessToken'] ?? '').toString();
+      _refreshToken = (data['refreshToken'] ?? '').toString();
+      _sessionId = (data['sessionId'] ?? '').toString();
+      if (_token.isEmpty || _refreshToken.isEmpty || _sessionId.isEmpty) throw Exception('استجابة التفعيل غير مكتملة');
+      await _secure.write(key: 'barq_admin_owner_token', value: _token);
+      await _secure.write(key: 'barq_admin_refresh_token', value: _refreshToken);
+      await _secure.write(key: 'barq_admin_session_id', value: _sessionId);
+      if (mounted) Navigator.of(context).pop();
+      await _load();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+  }
+
+  Future<void> _showActivationEntry() async {
+    final controller = TextEditingController();
+    await showDialog<void>(context: context, builder: (dialogContext) => AlertDialog(
+      title: const Text('تفعيل BARQ Admin'),
+      content: TextField(controller: controller, textCapitalization: TextCapitalization.characters, autocorrect: false, enableSuggestions: false, decoration: const InputDecoration(labelText: 'رمز التفعيل')),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
+        FilledButton(onPressed: () => _activateWithCode(controller.text), child: const Text('تفعيل')),
+      ],
+    ));
+    controller.dispose();
+  }
+
+  Widget _activationCodeCard() {
+    final grouped = _activationCode.replaceAllMapped(RegExp(r'.{1,6}'), (m) => m.group(0)! + ' ').trim();
+    return Card(child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const Text('رمز تفعيل هاتف آخر', style: TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        const Text('يعمل على أي هاتف تثبّت عليه BARQ Admin حتى تجدده أو تلغيه.', style: TextStyle(color: Colors.white70, fontSize: 12)),
+        const SizedBox(height: 12),
+        if (_activationCode.isEmpty) const Text('لم يتم إنشاء رمز بعد', textAlign: TextAlign.center)
+        else SelectableText(grouped, textAlign: TextAlign.center, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 1)),
+        FilledButton.icon(onPressed: _rotateActivationCode, icon: const Icon(Icons.autorenew), label: Text(_activationCode.isEmpty ? 'إنشاء رمز التفعيل' : 'تجديد الرمز')),
+        if (_activationCode.isNotEmpty) TextButton.icon(onPressed: () async { await Clipboard.setData(ClipboardData(text: _activationCode)); }, icon: const Icon(Icons.copy), label: const Text('نسخ الرمز')),
+        if (_activationCode.isNotEmpty) TextButton(onPressed: _revokeActivationCode, child: const Text('إلغاء الرمز')),
+      ]),
+    ));
   }
 
   Future<void> _syncOutbox(SharedPreferences prefs) async {
@@ -600,6 +690,7 @@ class _AdminHomePageState extends State<AdminHomePage>
       _token = '';
       _refreshToken = '';
       _sessionId = '';
+      _activationCode = '';
       _workspace = {};
       _tasks = [];
       _approvals = [];
@@ -1648,6 +1739,7 @@ class _AdminHomePageState extends State<AdminHomePage>
       children: [
         if (_token.isEmpty) _signInCard(),
         _workspaceCard(),
+        if (_token.isNotEmpty) _activationCodeCard(),
         const SizedBox(height: 14),
         Row(
           children: [
@@ -1798,6 +1890,7 @@ class _AdminHomePageState extends State<AdminHomePage>
                       : 'المتابعة باستخدام Google',
                 ),
               ),
+              TextButton.icon(onPressed: _apiBase.isEmpty ? _showSettings : _showActivationEntry, icon: const Icon(Icons.key_outlined), label: const Text('تفعيل برمز من الهاتف الأساسي')),
             ],
           ),
         ),
