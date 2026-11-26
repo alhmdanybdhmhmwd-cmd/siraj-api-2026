@@ -15,7 +15,7 @@ const MAX_JSON_BYTES = 32 * 1024;
 
 export function normalizeAdminActivationCode(value) {
   if (typeof value !== "string") return null;
-  const normalized = value.toUpperCase().replace(/[\\s-]/g, "");
+  const normalized = value.toUpperCase().replace(/[\s-]/g, "");
   return /^[A-F0-9]{48}$/.test(normalized) ? normalized : null;
 }
 
