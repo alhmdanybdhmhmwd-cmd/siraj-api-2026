@@ -402,38 +402,43 @@ class _AdminHomePageState extends State<AdminHomePage>
     try {
       final data = await _getJson('/v1/auth/activation-code');
       final code = (data['code'] ?? '').toString();
-      if (code.isEmpty) throw Exception('رمز التفعيل غير متاح');
+      final disabled = data['disabled'] == true;
+      if (code.isEmpty && !disabled) throw Exception('رمز التفعيل غير متاح');
       if (!mounted) return;
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('إدارة رمز التفعيل'),
+          title: Text(disabled ? 'رمز التفعيل متوقف' : 'إدارة رمز التفعيل'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
-                'هذا الرمز يفعّل BARQ Admin على أجهزتك الموثوقة. يمكنك نسخه أو تغييره من هنا.',
+                disabled
+                    ? 'التفعيل متوقف حاليًا. أنشئ رمزًا جديدًا أو عيّن رمزك لإعادة السماح بتفعيل الأجهزة.'
+                    : 'هذا الرمز يفعّل BARQ Admin على أجهزتك الموثوقة. يمكنك نسخه أو تغييره من هنا.',
               ),
               const SizedBox(height: 12),
-              SelectableText(
-                code,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.1,
+              if (!disabled)
+                SelectableText(
+                  code,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.1,
+                  ),
                 ),
-              ),
               const SizedBox(height: 8),
-              const Text(
-                'عند تغيير الرمز، يتوقف الرمز السابق عن تفعيل أجهزة جديدة. الجلسات المفتوحة تبقى مستقلة ويمكن إلغاؤها من إدارة الأجهزة.',
-                style: TextStyle(color: Colors.white60, fontSize: 12),
-              ),
+              if (!disabled)
+                const Text(
+                  'عند تغيير الرمز، يتوقف الرمز السابق عن تفعيل أجهزة جديدة. الجلسات المفتوحة تبقى مستقلة ويمكن إلغاؤها من إدارة الأجهزة.',
+                  style: TextStyle(color: Colors.white60, fontSize: 12),
+                ),
             ],
           ),
           actions: [
             TextButton(
-              onPressed: () async {
+              onPressed: disabled ? null : () async {
                 await Clipboard.setData(ClipboardData(text: code));
                 if (dialogContext.mounted) Navigator.pop(dialogContext);
                 if (mounted) {
@@ -449,7 +454,7 @@ class _AdminHomePageState extends State<AdminHomePage>
                 Navigator.pop(dialogContext);
                 _rotateActivationCode();
               },
-              child: const Text('إنشاء رمز جديد'),
+              child: Text(disabled ? 'إنشاء رمز جديد' : 'إنشاء رمز جديد'),
             ),
             TextButton(
               onPressed: () {
