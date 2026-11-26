@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 const worker = await readFile(new URL("../src/src/index.js", import.meta.url), "utf8");
 const multipartRoutes = await readFile(new URL("../src/src/media_multipart_routes.js", import.meta.url), "utf8");
 const flutterApp = await readFile(new URL("../android/lib/main.dart", import.meta.url), "utf8");
+const flutterApiConfig = await readFile(new URL("../android/lib/barq_api_config.dart", import.meta.url), "utf8");
 const identitySource = await readFile(new URL("../android/lib/barq_identity.dart", import.meta.url), "utf8");
 const previewIntegration = await readFile(new URL("./barq_preview_integration.mjs", import.meta.url), "utf8");
 const androidManifest = await readFile(new URL("../android/android/app/src/main/AndroidManifest.xml", import.meta.url), "utf8");
@@ -257,17 +258,16 @@ test("excluded referral and invitation mechanics are absent from BARQ registrati
   assert.ok(!worker.includes("user_invite_codes"));
 });
 
-test("Android API, media, and realtime origins are selectable for isolated preview builds", () => {
+test("Android API and media origins cannot bypass the public gateway through workers.dev", () => {
   assert.ok(flutterApp.includes("'BARQ_API_BASE'"));
   assert.ok(flutterApp.includes("'BARQ_MEDIA_BASE'"));
   assert.ok(flutterApp.includes("'BARQ_REALTIME_URL'"));
-  assert.ok(flutterApp.includes("defaultValue: 'https://siraj-api-2026.vercel.app'"));
-  assert.ok(flutterApp.includes("defaultValue: '',"));
-  assert.ok(flutterApp.includes("const String mediaWorkerBase = String.fromEnvironment"));
-  assert.equal((flutterApp.match(/defaultValue: 'https:\/\/siraj-api-2026\.vercel\.app'/g) || []).length, 1);
-  assert.ok(flutterApp.includes("defaultValue: apiBase"));
-  assert.ok(flutterApp.includes("BARQ_MEDIA_BASE"));
-  assert.ok(flutterApp.includes("BARQ_REALTIME_URL"));
+  assert.ok(flutterApp.includes("resolveBarqApiBase(_configuredApiBase)"));
+  assert.ok(flutterApp.includes("resolveBarqApiBase(_configuredMediaBase, fallback: apiBase)"));
+  assert.ok(flutterApp.includes("const String.fromEnvironment('BARQ_REALTIME_URL')"));
+  assert.ok(flutterApiConfig.includes("https://siraj-api-2026.vercel.app"));
+  assert.ok(flutterApiConfig.includes(".workers.dev"));
+  assert.ok(flutterApiConfig.includes("uri.scheme != 'https'"));
   assert.ok(!flutterApp.includes(".t3.storage.dev"));
   assert.ok(flutterApp.includes("const String? fallbackTranscribeBase = null;"));
 });
