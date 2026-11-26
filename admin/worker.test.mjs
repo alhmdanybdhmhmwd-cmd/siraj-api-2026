@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, validateAdminAccessClaims, processAdminDeadLetterMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, validateAdminAccessClaims, normalizeAdminActivationCode, createAdminActivationCode, processAdminDeadLetterMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches } from "./worker.js";
 
 test("idempotency keys are bounded and cannot be silently truncated", () => {
   assert.deepEqual(validateIdempotencyKey(null), { ok: true, value: null });
@@ -396,4 +396,16 @@ test("task and checkpoint writes always retain workspace ownership in SQL predic
     /SELECT 1 FROM admin_tasks WHERE id = \? AND workspace_id = \? AND last_checkpoint_id = \?/);
   assert.match(source,
     /SELECT 1 FROM admin_tasks WHERE id = \? AND workspace_id = \? AND last_checkpoint_id = \? AND checkpoint_version = \?/);
+});
+
+
+test("owner activation codes are normalized strictly and generated with 192-bit hexadecimal entropy", () => {
+  const code = createAdminActivationCode();
+  assert.match(code, /^[A-F0-9]{48}$/);
+  assert.equal(normalizeAdminActivationCode(code), code);
+  assert.equal(normalizeAdminActivationCode(code.match(/.{1,6}/g).join(" ")), code);
+  assert.equal(normalizeAdminActivationCode(code.toLowerCase()), code);
+  assert.equal(normalizeAdminActivationCode("x".repeat(48)), null);
+  assert.equal(normalizeAdminActivationCode("A".repeat(47)), null);
+  assert.equal(normalizeAdminActivationCode(null), null);
 });
