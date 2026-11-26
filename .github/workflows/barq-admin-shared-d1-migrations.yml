@@ -1,0 +1,119 @@
+name: BARQ Admin shared D1 migrations
+
+on:
+  push:
+    branches:
+      - barq-admin-foundation-2026-11-23
+    paths:
+      - ".github/workflows/barq-admin-shared-d1-migrations.yml"
+      - "admin/migrations/**"
+      - "wrangler.toml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: barq-admin-shared-d1-migrations
+  cancel-in-progress: false
+
+jobs:
+  apply-admin-only-schema:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: barq-admin-preview
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: barq-admin-foundation-2026-11-23
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Verify exact shared D1 and existing Worker before any write
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_API_TOKEN:-}" || { echo "::error::Cloudflare token missing from barq-admin-preview environment."; exit 1; }
+          test -n "${CLOUDFLARE_ACCOUNT_ID:-}" || { echo "::error::Cloudflare account ID missing from barq-admin-preview environment."; exit 1; }
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          config = Path("wrangler.toml").read_text()
+          name = re.search(r'database_name\\s*=\\s*"([^"]+)"', config)
+          ident = re.search(r'database_id\\s*=\\s*"([^"]+)"', config)
+          if not name or name.group(1) != "siraj-db":
+              raise SystemExit("Refusing: root Worker config does not target siraj-db.")
+          if not ident or ident.group(1) != "0db93afd-4bf5-4423-9e25-7a2f4f4bdbe0":
+              raise SystemExit("Refusing: shared D1 ID differs from the reviewed BARQ database.")
+          PY
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
+          curl --fail --silent --show-error -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api/d1/database?per_page=100" > /tmp/barq-d1.json
+          curl --fail --silent --show-error -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api/workers/scripts" > /tmp/barq-workers.json
+          python3 - <<'PY'
+          import json
+          d1 = json.load(open("/tmp/barq-d1.json"))
+          workers = json.load(open("/tmp/barq-workers.json"))
+          if not d1.get("success") or not workers.get("success"):
+              raise SystemExit("Cloudflare read-only identity preflight failed.")
+          matches = [x for x in d1.get("result", []) if x.get("uuid") == "0db93afd-4bf5-4423-9e25-7a2f4f4bdbe0" and x.get("name") == "siraj-db"]
+          scripts = workers.get("result", [])
+          if len(matches) != 1:
+              raise SystemExit("Refusing: exact siraj-db UUID/name pair not visible to this account.")
+          if not any(x.get("id") == "siraj-api" or x.get("script_name") == "siraj-api" for x in scripts):
+              raise SystemExit("Refusing: existing siraj-api Worker not visible to this account.")
+          print("Verified exact existing siraj-db and siraj-api. No write has occurred yet.")
+          PY
+
+      - name: Enforce additive Admin-only SQL allowlist
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          files = sorted(Path("admin/migrations").glob("*.sql"))
+          if len(files) != 7:
+              raise SystemExit(f"Expected 7 reviewed Admin migrations, found {len(files)}.")
+          for path in files:
+              sql = re.sub(r"--[^\\n]*", "", path.read_text())
+              statements = [s.strip() for s in sql.split(";") if s.strip()]
+              for statement in statements:
+                  if not re.match(r"^(CREATE TABLE IF NOT EXISTS|CREATE INDEX IF NOT EXISTS|CREATE TRIGGER IF NOT EXISTS|PRAGMA foreign_keys\\s*=\\s*ON)\\b", statement, re.I):
+                      raise SystemExit(f"Refusing non-additive or unreviewed SQL in {path.name}: {statement[:80]!r}")
+                  if re.search(r"\\b(DROP|ALTER|DELETE|UPDATE|INSERT|REPLACE|VACUUM)\\b", statement, re.I):
+                      raise SystemExit(f"Refusing destructive/data-changing SQL in {path.name}.")
+          print("All Admin migrations contain only reviewed additive CREATE/PRAGMA statements.")
+          PY
+
+      - name: Apply idempotent Admin schema to the verified shared BARQ D1
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in admin/migrations/*.sql; do
+            if grep -Eiq '^[[:space:]]*(CREATE|PRAGMA)' "$file"; then
+              echo "Applying reviewed Admin schema file: $file"
+              npx --yes wrangler@4 d1 execute siraj-db --remote --config wrangler.toml --file "$file"
+            else
+              echo "No SQL statements to apply in $file"
+            fi
+          done
+
+      - name: Verify required Admin tables exist without reading user data
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for table in admin_workspaces admin_tasks admin_task_checkpoints admin_approvals admin_audit_events admin_project_knowledge admin_ai_usage_limits admin_image_generation_limits admin_owner_devices admin_owner_sessions admin_oidc_nonce_uses admin_auth_rate_limits admin_owner_refresh_token_history admin_brain_conversations admin_brain_messages; do
+            npx --yes wrangler@4 d1 execute siraj-db --remote --config wrangler.toml --command "SELECT * FROM $table LIMIT 0;"
+          done
+          echo "All expected BARQ Admin tables are queryable; no BARQ user rows were read."
