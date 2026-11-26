@@ -2,7 +2,8 @@
 
 **Purpose:** This note is the integration and ownership boundary between the independent BARQ Admin project and the original BARQ consumer app. It is written so a separate development conversation can understand what is ready, what is missing, and what must not be mixed.
 
-**Last reviewed Admin workstream:** `dfcc121a6dc7197ed7cbf30cb024d69385cc6cc9` (auth test hardening)\n**Latest roadmap update:** `6984fadc16285aa88c5aa2e94b7f5c0886396c69`  
+**Last reviewed Admin workstream:** `db86c91f87bc1135fd75e7fa8a591e207a66e3cf` (latest verified CI and Preview-status record)  
+**Latest roadmap update:** `6984fadc16285aa88c5aa2e94b7f5c0886396c69`  
 **Admin branch:** `barq-admin-foundation-2026-11-23`  
 **Admin PR:** [#11](https://github.com/alhmdanybdhmhmwd-cmd/siraj-api-2026/pull/11)  
 **Consumer-app branch (separate workstream):** `barq/ux-media-chat-spark-2026-11-23`
@@ -31,12 +32,16 @@
 
 ## 3. Latest quality evidence
 
-At commit `a3ad463`, GitHub Actions reported success for:
-- BARQ Admin server checks, unit tests, and isolated schema/audit-trigger checks.
-- BARQ Admin Flutter format, analyze, and tests.
-- The existing backend auth test workflow.
+At commit `0cff8cfa885c45faf5dfd7605571e8450c9a4c4e`, GitHub Actions reported success for:
+- BARQ Admin server syntax, unit tests, isolated Admin schema, append-only audit triggers, coexistence checks with the BARQ D1 schema, task idempotency, and checkpoint concurrency.
+- BARQ Admin Flutter dependency resolution, formatting, `flutter analyze` (no issues), Flutter tests, Android SDK/NDK setup, AppAuth wiring, and Android debug Kotlin compilation (`BUILD SUCCESSFUL`). The workflow did not package an APK.
+- Backend authentication tests, D1 migration SQL checks, and consumer-backend compatibility checks.
 
-This proves the CI jobs passed for that commit. It does **not** prove that a deployed Admin Preview environment, Queue, D1, AI binding, authentication issuer, or real multi-device synchronization has been configured or exercised. The Vercel status check has separately shown a build-rate-limit failure; that is not the same as a failed GitHub Actions test.
+The documentation-only follow-up commits `ba920f7` and `db86c91` record those results and correct the Vercel status history. Backend tests also passed on `db86c91`; the latest Admin Quality run for that documentation-only revision was queued when this handoff was updated. A separate Wrangler `deploy --dry-run` diagnostic passed on `ba920f7`, producing a 381.84 KiB bundle (71.20 KiB gzip) and resolving the configured bindings.
+
+Vercel reported a Ready Preview deployment for the tested `0cff8cfa` revision at [the Admin branch Preview](https://siraj-api-2026-git-barq-admin-foundation-2026-11-23-siraj-01fc.vercel.app). This does not verify the Cloudflare Worker or live Admin runtime. Cloudflare Workers Builds separately failed for build `c0e84cad-6580-46e3-9b08-16269e3ca4e1`; the available GitHub check exposes no actionable failure log, so its root cause remains unknown.
+
+These results prove only the named CI and Preview evidence for the named revisions. They do **not** prove live Google sign-in, production D1 migration, live indexing/retrieval, Queue delivery, or physical-device acceptance.
 
 ## 4. Critical missing pieces / known risks
 
@@ -49,14 +54,14 @@ This proves the CI jobs passed for that commit. It does **not** prove that a dep
 
 ### Worker reliability and long-running execution
 1. Queue/D1/Workers AI bindings are not configured and verified in a dedicated Admin Preview environment.
-2. The worker lease is currently 10 minutes, with no heartbeat/renewal. A long AI call can outlive the lease and permit another worker to claim the same task. Completion guards prevent a stale worker from overwriting a task after ownership/status changes, but they do not prevent duplicate model work/cost.
+2. The worker uses a 10-minute lease and attempts renewal every 4 minutes while the AI call is active. Lease-renewal helpers and ownership-loss tests exist. This is source/CI evidence only: real Queue execution, timer behavior under Cloudflare Worker lifecycle limits, worker termination, duplicate model work/cost, and recovery still require Preview integration tests.
 3. Recovery after worker termination, retry policy under real queue delivery, dead-letter queue configuration, poison-message handling, operational alerts, and worker health monitoring are not end-to-end verified.
 4. Current BARQ Brain behavior is **server-side draft generation and checkpointing only**. It does not autonomously edit GitHub repositories, run arbitrary commands, deploy, or operate the consumer app.
 5. A task created offline on the phone remains a local draft until the phone reconnects and submits it. Only after server acceptance/queueing can server-side work continue with the phone offline.
 
 ### Mobile app and sync
-1. There is no release-ready APK/AAB or verified signing/release pipeline.
-2. Real owner login, secure refresh flow, device management, and session expiry UX are incomplete.
+1. There is no release-ready APK/AAB or verified signing/release pipeline. CI has compiled Android debug Kotlin sources but intentionally has not packaged an APK.
+2. Real Google owner login, secure refresh flow, device management, and session expiry UX are implemented in source and pass unit/build checks where covered, but remain unverified against configured Preview credentials and on a physical device.
 3. Cache/outbox are initial implementations. Test retry behavior, duplicate prevention, expired credentials, app termination, corrupt cache, conflicting versions, and multi-device updates before relying on them.
 4. No proven end-to-end test has yet created a task on phone A and resumed/inspected it on phone B.
 5. Push notifications, background status refresh, accessibility, localization polish, and device-size testing remain.
