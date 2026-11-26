@@ -49,7 +49,7 @@ jobs:
           PY
           )"
 
-          echo "EXPECTED_D1_ID=$expected_id" >> "$GITHUB_ENV"
+          export EXPECTED_D1_ID="$expected_id"
           api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
           curl --fail --silent --show-error \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
