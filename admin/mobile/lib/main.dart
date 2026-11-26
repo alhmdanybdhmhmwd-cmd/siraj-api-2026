@@ -90,6 +90,11 @@ class _AdminHomePageState extends State<AdminHomePage>
   List<AdminTask> _tasks = [];
   List<AdminApproval> _approvals = [];
   List<Map<String, dynamic>> _auditEvents = [];
+  List<Map<String, dynamic>> _users = [];
+  List<Map<String, dynamic>> _pendingReports = [];
+  Map<String, dynamic> _userSummary = {};
+  String _userQuery = '';
+  String _moderationMessage = '';
   int _tab = 0;
   bool _loading = true;
   bool _online = false;
@@ -121,7 +126,11 @@ class _AdminHomePageState extends State<AdminHomePage>
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    _apiBase = prefs.getString('barq_admin_api_base') ?? '';
+    final configuredApiBase = prefs.getString('barq_admin_api_base');
+    _apiBase = resolveAdminApiBase(configuredApiBase);
+    if (configuredApiBase != _apiBase) {
+      await prefs.setString('barq_admin_api_base', _apiBase);
+    }
     _token = await _secure.read(key: 'barq_admin_owner_token') ?? '';
     _refreshToken = await _secure.read(key: 'barq_admin_refresh_token') ?? '';
     _sessionId = await _secure.read(key: 'barq_admin_session_id') ?? '';
@@ -177,6 +186,11 @@ class _AdminHomePageState extends State<AdminHomePage>
       final taskData = await _getJson('/v1/tasks');
       final approvalData = await _getJson('/v1/approvals');
       final auditData = await _getJson('/v1/audit');
+      try {
+        await _loadUsers();
+      } catch (error) {
+        _moderationMessage = error.toString().replaceFirst('Exception: ', '');
+      }
       _workspace = Map<String, dynamic>.from(
         workspaceData['workspace'] as Map? ?? {},
       );
@@ -276,6 +290,200 @@ class _AdminHomePageState extends State<AdminHomePage>
       );
     }
     return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+  }
+
+  Future<Map<String, dynamic>> _patchJson(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    var response = await http
+        .patch(Uri.parse(_base + path),
+            headers: _headers, body: jsonEncode(body))
+        .timeout(const Duration(seconds: 18));
+    if (response.statusCode == 401 && await _refreshSession()) {
+      response = await http
+          .patch(Uri.parse(_base + path),
+              headers: _headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 18));
+    }
+    if (response.statusCode != 200) {
+      throw Exception(
+          'تعذر تنفيذ الإجراء (' + response.statusCode.toString() + ')');
+    }
+    return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+  }
+
+  Future<void> _loadUsers({String? query}) async {
+    if (query != null) _userQuery = query.trim();
+    final suffix =
+        _userQuery.isEmpty ? '' : '?q=' + Uri.encodeQueryComponent(_userQuery);
+    final data = await _getJson('/v1/users' + suffix);
+    final reportData = await _getJson('/v1/reports');
+    _users = (data['users'] as List? ?? [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+    _pendingReports = (reportData['reports'] as List? ?? [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+    _userSummary = Map<String, dynamic>.from(data['summary'] as Map? ?? {});
+    _moderationMessage = '';
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _moderateUser(Map<String, dynamic> user) async {
+    final reasonController = TextEditingController();
+    var action = (user['is_suspended'] == 1 || user['is_suspended'] == true)
+        ? 'unsuspend'
+        : 'suspend';
+    var duration = '72';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(
+              action == 'suspend' ? 'مراجعة حظر الحساب' : 'إلغاء حظر الحساب'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                action == 'suspend'
+                    ? 'الحظر قرار إداري يدوي بعد مراجعة الأدلة. عدد الحظر والبلاغات مؤشرات فقط ولا تؤدي إلى حظر تلقائي.'
+                    : 'سيُعاد تفعيل الحساب وتُلغى حالة الحظر الحالية.',
+              ),
+              const SizedBox(height: 12),
+              if (action == 'suspend')
+                DropdownButtonFormField<String>(
+                  initialValue: duration,
+                  decoration: const InputDecoration(labelText: 'مدة الحظر'),
+                  items: const [
+                    DropdownMenuItem(value: '24', child: Text('24 ساعة')),
+                    DropdownMenuItem(value: '72', child: Text('3 أيام')),
+                    DropdownMenuItem(value: '168', child: Text('7 أيام')),
+                    DropdownMenuItem(value: '720', child: Text('30 يومًا')),
+                    DropdownMenuItem(
+                        value: 'permanent', child: Text('دون مدة محددة')),
+                  ],
+                  onChanged: (value) =>
+                      setDialogState(() => duration = value ?? '72'),
+                ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: reasonController,
+                minLines: 2,
+                maxLines: 4,
+                maxLength: 1000,
+                decoration: const InputDecoration(
+                  labelText: 'سبب القرار (إلزامي)',
+                  hintText: 'اكتب سببًا واضحًا يستند إلى مراجعة البلاغات',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(
+                  action == 'suspend' ? 'تأكيد الحظر' : 'تأكيد إلغاء الحظر'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) {
+      reasonController.dispose();
+      return;
+    }
+    final reason = reasonController.text.trim();
+    reasonController.dispose();
+    if (reason.length < 8) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('اكتب سببًا واضحًا لا يقل عن 8 أحرف')),
+        );
+      return;
+    }
+    try {
+      await _patchJson(
+        '/v1/users/' + (user['id'] ?? '').toString() + '/suspension',
+        {
+          'action': action,
+          'reason': reason,
+          if (action == 'suspend')
+            'durationHours':
+                duration == 'permanent' ? null : int.parse(duration),
+        },
+      );
+      await _loadUsers();
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(action == 'suspend'
+                  ? 'تم تسجيل قرار الحظر'
+                  : 'تم إلغاء الحظر')),
+        );
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(error.toString().replaceFirst('Exception: ', ''))),
+        );
+    }
+  }
+
+  Future<void> _reviewReport(Map<String, dynamic> report, String status) async {
+    final noteController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title:
+            Text(status == 'reviewed' ? 'تأكيد مراجعة البلاغ' : 'رفض البلاغ'),
+        content: TextField(
+          controller: noteController,
+          minLines: 2,
+          maxLines: 4,
+          maxLength: 1000,
+          decoration:
+              const InputDecoration(labelText: 'ملاحظة المراجعة (إلزامية)'),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('إلغاء')),
+          FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('حفظ')),
+        ],
+      ),
+    );
+    final note = noteController.text.trim();
+    noteController.dispose();
+    if (confirmed != true) return;
+    if (note.length < 4) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('أضف ملاحظة للمراجعة')),
+        );
+      return;
+    }
+    try {
+      await _patchJson('/v1/reports/' + (report['id'] ?? '').toString(), {
+        'status': status,
+        'note': note,
+      });
+      await _loadUsers();
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(error.toString().replaceFirst('Exception: ', ''))),
+        );
+    }
   }
 
   Future<bool> _refreshSession() {
@@ -679,8 +887,9 @@ class _AdminHomePageState extends State<AdminHomePage>
     if (_apiBase.isEmpty || _token.isEmpty || !isValidAdminApiBase(_apiBase)) {
       throw Exception('أكمل إعداد اتصال HTTPS وجلسة المالك أولًا');
     }
-    if (bytes.isEmpty || bytes.length > 4 * 1024 * 1024) {
-      throw Exception('حجم الصورة يجب ألا يتجاوز 4 ميغابايت');
+    // Keep the base64 JSON request below the public gateway's request ceiling.
+    if (bytes.isEmpty || bytes.length > 3 * 1024 * 1024) {
+      throw Exception('حجم الصورة يجب ألا يتجاوز 3 ميغابايت');
     }
     final response = await http
         .post(
@@ -1568,66 +1777,94 @@ class _AdminHomePageState extends State<AdminHomePage>
             onPressed: _showSettings,
             icon: const Icon(Icons.settings_outlined),
           ),
-          IconButton(
-            tooltip: 'الأجهزة',
-            onPressed: _token.isEmpty ? null : _showDevices,
-            icon: const Icon(Icons.devices_outlined),
-          ),
-          IconButton(
-            tooltip: 'إنهاء الجلسة',
-            onPressed: _token.isEmpty ? null : _logout,
-            icon: const Icon(Icons.logout),
-          ),
+          if (_token.isNotEmpty) ...[
+            IconButton(
+              tooltip: 'الأجهزة',
+              onPressed: _showDevices,
+              icon: const Icon(Icons.devices_outlined),
+            ),
+            IconButton(
+              tooltip: 'إنهاء الجلسة',
+              onPressed: _logout,
+              icon: const Icon(Icons.logout),
+            ),
+          ],
           const SizedBox(width: 6),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: _load,
-        child: _loading && _tasks.isEmpty
-            ? const Center(child: CircularProgressIndicator())
-            : IndexedStack(
-                index: _tab,
+        child: _token.isEmpty
+            ? ListView(
+                padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
                 children: [
-                  _dashboard(),
-                  _tasksView(),
-                  _approvalsView(),
-                  _auditView(),
+                  _signInCard(),
+                  const SizedBox(height: 12),
+                  Text(
+                    _connectionMessage,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white60),
+                  ),
                 ],
-              ),
+              )
+            : _loading && _tasks.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : IndexedStack(
+                    index: _tab,
+                    children: [
+                      _dashboard(),
+                      _tasksView(),
+                      _approvalsView(),
+                      _auditView(),
+                      _usersView(),
+                    ],
+                  ),
       ),
-      floatingActionButton: _tab == 1
-          ? FloatingActionButton.extended(
-              onPressed: () => _showCreateTask(),
-              icon: const Icon(Icons.add),
-              label: const Text('مهمة جديدة'),
-            )
-          : _tab == 0
+      floatingActionButton: _token.isEmpty
+          ? null
+          : _tab == 1
               ? FloatingActionButton.extended(
-                  onPressed: () => _showCreateTask(assistant: true),
-                  icon: const Icon(Icons.bolt),
-                  label: const Text('اسأل BARQ Brain'),
+                  onPressed: () => _showCreateTask(),
+                  icon: const Icon(Icons.add),
+                  label: const Text('مهمة جديدة'),
                 )
-              : null,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _tab,
-        onDestinationSelected: (value) => setState(() => _tab = value),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
-            label: 'الرئيسية',
-          ),
-          NavigationDestination(icon: Icon(Icons.task_alt), label: 'المهام'),
-          NavigationDestination(
-            icon: Icon(Icons.verified_user_outlined),
-            label: 'الموافقات',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.receipt_long_outlined),
-            label: 'السجل',
-          ),
-        ],
-      ),
+              : _tab == 0
+                  ? FloatingActionButton.extended(
+                      onPressed: () => _showCreateTask(assistant: true),
+                      icon: const Icon(Icons.bolt),
+                      label: const Text('اسأل BARQ Brain'),
+                    )
+                  : null,
+      bottomNavigationBar: _token.isEmpty
+          ? null
+          : NavigationBar(
+              selectedIndex: _tab,
+              onDestinationSelected: (value) => setState(() => _tab = value),
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.dashboard_outlined),
+                  selectedIcon: Icon(Icons.dashboard),
+                  label: 'الرئيسية',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.task_alt),
+                  label: 'المهام',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.verified_user_outlined),
+                  label: 'الموافقات',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.receipt_long_outlined),
+                  label: 'السجل',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.people_alt_outlined),
+                  selectedIcon: Icon(Icons.people_alt),
+                  label: 'المستخدمون',
+                ),
+              ],
+            ),
     );
   }
 
@@ -1644,9 +1881,8 @@ class _AdminHomePageState extends State<AdminHomePage>
         )
         .length;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 160),
       children: [
-        if (_token.isEmpty) _signInCard(),
         _workspaceCard(),
         const SizedBox(height: 14),
         Row(
@@ -1788,14 +2024,28 @@ class _AdminHomePageState extends State<AdminHomePage>
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white70, height: 1.4),
               ),
+              if (_googleOidcClientId.isEmpty) ...[
+                const SizedBox(height: 12),
+                const Text(
+                  'تسجيل الدخول غير مهيأ بعد: يلزم ربط معرّف Google OAuth الأصلي بالتطبيق والخادم.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: _gold, height: 1.4),
+                ),
+              ],
               const SizedBox(height: 14),
               FilledButton.icon(
-                onPressed: _apiBase.isEmpty ? _showSettings : _loginWithGoogle,
+                onPressed: _apiBase.isEmpty
+                    ? _showSettings
+                    : _googleOidcClientId.isEmpty
+                        ? null
+                        : _loginWithGoogle,
                 icon: const Icon(Icons.login),
                 label: Text(
                   _apiBase.isEmpty
                       ? 'إعداد عنوان الخادم'
-                      : 'المتابعة باستخدام Google',
+                      : _googleOidcClientId.isEmpty
+                          ? 'تسجيل الدخول غير مهيأ'
+                          : 'المتابعة باستخدام Google',
                 ),
               ),
             ],
@@ -2167,6 +2417,227 @@ class _AdminHomePageState extends State<AdminHomePage>
                 ),
               ),
             ),
+        ],
+      );
+
+  Widget _usersView() => ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+        children: [
+          const Text(
+            'إدارة مستخدمي BARQ',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'إحصاءات المستخدمين، وعدد من حظروهم، والبلاغات الواردة ومراجعة قرارات الحظر.',
+            style: TextStyle(color: Colors.white60),
+          ),
+          const SizedBox(height: 14),
+          if (_moderationMessage.isNotEmpty)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  _moderationMessage,
+                  style: const TextStyle(color: _gold),
+                ),
+              ),
+            ),
+          Row(
+            children: [
+              Expanded(
+                  child: _metricCard(
+                'إجمالي المستخدمين',
+                (_userSummary['totalUsers'] ?? 0).toString(),
+                Icons.people_alt_outlined,
+                _blue,
+              )),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: _metricCard(
+                'الحسابات المحظورة',
+                (_userSummary['suspendedUsers'] ?? 0).toString(),
+                Icons.gpp_bad_outlined,
+                Colors.redAccent,
+              )),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _metricCard(
+            'البلاغات قيد المراجعة',
+            (_userSummary['pendingReports'] ?? 0).toString(),
+            Icons.flag_outlined,
+            _gold,
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            textInputAction: TextInputAction.search,
+            onSubmitted: (value) => _loadUsers(query: value),
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.search),
+              hintText: 'ابحث بالاسم أو اسم المستخدم أو الهاتف',
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: () => _loadUsers(query: _userQuery),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text('قائمة المستخدمين',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          if (_users.isEmpty)
+            _emptyState(
+              'لا توجد بيانات مستخدمين',
+              'قد تحتاج قاعدة البيانات إلى ترحيل نظام البلاغات والإشراف أولًا',
+            )
+          else
+            ..._users.map((user) {
+              final blocks =
+                  int.tryParse((user['block_count'] ?? 0).toString()) ?? 0;
+              final reports =
+                  int.tryParse((user['report_count'] ?? 0).toString()) ?? 0;
+              final pending = int.tryParse(
+                      (user['pending_report_count'] ?? 0).toString()) ??
+                  0;
+              final suspended =
+                  user['is_suspended'] == 1 || user['is_suspended'] == true;
+              return Card(
+                margin: const EdgeInsets.only(bottom: 9),
+                child: Padding(
+                  padding: const EdgeInsets.all(13),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const CircleAvatar(child: Icon(Icons.person_outline)),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  (user['display_name'] ?? 'مستخدم').toString(),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold),
+                                ),
+                                Text(
+                                  '@${user['username'] ?? '-'}',
+                                  style: const TextStyle(
+                                      color: Colors.white60, fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (suspended)
+                            const Chip(
+                              label: Text('محظور'),
+                              avatar: Icon(Icons.block, size: 16),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text('الهاتف: ${user['phone'] ?? 'غير متوفر'}'),
+                      const SizedBox(height: 5),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          Chip(
+                              avatar: const Icon(Icons.block, size: 16),
+                              label: Text('حظروه $blocks')),
+                          Chip(
+                              avatar: const Icon(Icons.flag_outlined, size: 16),
+                              label: Text('البلاغات $reports')),
+                          Chip(
+                              avatar:
+                                  const Icon(Icons.pending_actions, size: 16),
+                              label: Text('قيد المراجعة $pending')),
+                        ],
+                      ),
+                      if (blocks >= 3 || pending >= 3)
+                        const Text(
+                          'يستحق مراجعة بشرية — المؤشرات لا تعني حظرًا تلقائيًا',
+                          style: TextStyle(color: _gold, fontSize: 12),
+                        ),
+                      if (suspended &&
+                          (user['suspension_reason'] ?? '')
+                              .toString()
+                              .isNotEmpty)
+                        Text(
+                          'سبب الحظر: ${user['suspension_reason']}',
+                          style: const TextStyle(
+                              color: Colors.white60, fontSize: 12),
+                        ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () => _moderateUser(user),
+                          icon: Icon(suspended ? Icons.lock_open : Icons.gavel),
+                          label: Text(suspended
+                              ? 'إلغاء الحظر'
+                              : 'مراجعة / حظر الحساب'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          const SizedBox(height: 14),
+          const Text('البلاغات الجديدة',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          if (_pendingReports.isEmpty)
+            _emptyState('لا توجد بلاغات معلقة',
+                'ستظهر البلاغات هنا بعد وصولها من تطبيق برق')
+          else
+            ..._pendingReports.map((report) => Card(
+                  margin: const EdgeInsets.only(bottom: 9),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          (report['reported_display_name'] ??
+                                  report['reported_username'] ??
+                                  'مستخدم')
+                              .toString(),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Text('نوع البلاغ: ${report['category'] ?? '-'}'),
+                        if ((report['details'] ?? '').toString().isNotEmpty)
+                          Text((report['details'] ?? '').toString()),
+                        Text(
+                          'رقم المبلّغ: ${report['reporter_id'] ?? '-'}',
+                          style: const TextStyle(
+                              color: Colors.white54, fontSize: 11),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () =>
+                                    _reviewReport(report, 'dismissed'),
+                                child: const Text('رفض البلاغ'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: FilledButton(
+                                onPressed: () =>
+                                    _reviewReport(report, 'reviewed'),
+                                child: const Text('تمت المراجعة'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                )),
         ],
       );
 

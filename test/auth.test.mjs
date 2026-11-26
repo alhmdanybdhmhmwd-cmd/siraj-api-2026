@@ -61,6 +61,7 @@ class FakeDB {
     this.users = [this.user];
     this.recovery = null;
     this.sessionVersion = 0;
+    this.isSuspended = false;
     this.recoveryAttempts = new Map();
     this.loginAttempts = new Map();
     this.transcriptionRateLimit = null;

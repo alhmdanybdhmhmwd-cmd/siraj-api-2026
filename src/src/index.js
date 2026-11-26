@@ -1158,6 +1158,15 @@ export default {
           }, 401);
         }
 
+        const suspension = await env.DB.prepare(
+          `SELECT 1 FROM barq_user_suspensions
+           WHERE user_id = ? AND lifted_at IS NULL
+             AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)`
+        ).bind(user.id).first();
+        if (suspension) {
+          return json({ error: "Account is suspended. Contact BARQ support for review." }, 403);
+        }
+
         const sessionVersion = await getSessionVersion(env, user.id);
         const isNewDevice = deviceId
           ? await registerDeviceSession(env, user.id, deviceId, deviceName)
@@ -1176,6 +1185,49 @@ export default {
 
       if (!currentUser) {
         return json({ error: "Unauthorized" }, 401);
+      }
+
+      // User reports are private, authenticated, and limited to one pending report per reporter/target pair.
+      if (method === "POST" && path === "/api/reports") {
+        const body = await readJsonRequestLimited(request);
+        const targetId = String(body?.userId || "").trim();
+        const category = String(body?.category || "").trim();
+        const details = String(body?.details || "").trim();
+        const allowedCategories = new Set(["spam", "harassment", "impersonation", "inappropriate_content", "fraud", "other"]);
+        if (!targetId || targetId.length > 128 || targetId === currentUser.sub ||
+            !allowedCategories.has(category) || details.length > 1200) {
+          return json({ error: "Invalid report details" }, 400);
+        }
+        const target = await env.DB.prepare("SELECT id FROM users WHERE id = ?").bind(targetId).first();
+        if (!target) return json({ error: "User not found" }, 404);
+        let recentReports;
+        try {
+          recentReports = await env.DB.prepare(
+            "SELECT COUNT(*) AS count FROM user_reports WHERE reporter_id = ? AND created_at >= datetime('now', '-1 day')"
+          ).bind(currentUser.sub).first();
+        } catch (error) {
+          if (/no such table/i.test(String(error?.message || error))) {
+            return json({ error: "Moderation migration required" }, 503);
+          }
+          throw error;
+        }
+        if (Number(recentReports?.count || 0) >= 10) {
+          return json({ error: "Daily report limit reached" }, 429);
+        }
+        const reportId = crypto.randomUUID();
+        try {
+          await env.DB.prepare(
+            "INSERT INTO user_reports (id, reporter_id, reported_user_id, category, details) VALUES (?, ?, ?, ?, ?)"
+          ).bind(reportId, currentUser.sub, targetId, category, details).run();
+        } catch (error) {
+          const message = String(error?.message || error || "");
+          if (/idx_user_reports_one_pending_per_pair|UNIQUE constraint/i.test(message)) {
+            return json({ error: "A pending report for this user already exists" }, 409);
+          }
+          if (/no such table/i.test(message)) return json({ error: "Moderation migration required" }, 503);
+          throw error;
+        }
+        return json({ report: { id: reportId, status: "pending" } }, 201);
       }
 
       // Optional visual identity packages are small, versioned JSON bundles.

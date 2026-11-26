@@ -51,7 +51,23 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const requestPath = new URL(req.url, "https://vercel.invalid").pathname;
+    const parsedRequestUrl = new URL(req.url, "https://vercel.invalid");
+    const requestPath = parsedRequestUrl.pathname;
+    // Admin mobile clients use /api/admin as the public Vercel gateway prefix.
+    // The shared Cloudflare Worker owns /admin/*, so strip only the Vercel
+    // transport prefix while preserving the Admin namespace and query string.
+    const isAdminGatewayRequest = requestPath === "/api/admin" ||
+      requestPath.startsWith("/api/admin/");
+    // Public health probes live under /api on Vercel, while the Worker
+    // exposes them at /health/* without the API prefix.
+    const isHealthGatewayRequest = requestPath === "/api/health" ||
+      requestPath.startsWith("/api/health/");
+    const upstreamRequestUrl =
+      (isAdminGatewayRequest || isHealthGatewayRequest
+        ? requestPath.slice("/api".length)
+        : requestPath) + parsedRequestUrl.search;
+    const isAdminVisionUpload = req.method === "POST" &&
+      requestPath === "/api/admin/v1/brain/vision";
     const isMediaUpload = req.method === "POST" && requestPath === "/api/media";
     const isMultipartChunkUpload = req.method === "PUT" &&
       /^\/api\/media\/uploads\/[A-Za-z0-9-]{1,128}\/chunks\/\d+$/.test(requestPath);
@@ -68,8 +84,13 @@ module.exports = async (req, res) => {
     const maxProxyBinaryBytes = 4 * 1024 * 1024;
     const maxTranscriptionBytes = 2 * 1024 * 1024;
     const maxMultipartChunkBytes = 1 * 1024 * 1024;
+    // Base64 expands a 3 MiB Admin image to just over 4 MiB of JSON.
+    // Keep this below Vercel's request ceiling while allowing image analysis.
+    const maxAdminVisionBytes = 4 * 1024 * 1024 + 256 * 1024;
     const maxJsonBytes = 256 * 1024;
-    const bodyLimit = isMultipartChunkUpload
+    const bodyLimit = isAdminVisionUpload
+      ? maxAdminVisionBytes
+      : isMultipartChunkUpload
       ? maxMultipartChunkBytes
       : isTranscriptionUpload
         ? maxTranscriptionBytes
@@ -77,7 +98,9 @@ module.exports = async (req, res) => {
           isPrivateMemoryPhotoUpload || isSparkMediaUpload || isSparkAudioReplyUpload
           ? maxProxyBinaryBytes
           : maxJsonBytes;
-    const limitMessage = isTranscriptionUpload
+    const limitMessage = isAdminVisionUpload
+      ? "BARQ Admin image analysis payload must not exceed 4.25 MiB"
+      : isTranscriptionUpload
       ? "Audio transcription payload must not exceed 2 MiB"
       : isMultipartChunkUpload
         ? "Transport chunk must not exceed 1 MiB"
@@ -146,7 +169,7 @@ module.exports = async (req, res) => {
     let lastError = null;
     for (let index = 0; index < upstreams.length; index += 1) {
       try {
-        response = await fetch(upstreams[index] + req.url, {
+        response = await fetch(upstreams[index] + upstreamRequestUrl, {
           method: req.method,
           headers,
           body: ["GET", "HEAD"].includes(req.method) ? undefined : body,

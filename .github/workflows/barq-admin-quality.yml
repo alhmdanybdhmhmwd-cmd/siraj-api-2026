@@ -7,7 +7,7 @@ on:
       - ".github/workflows/barq-admin-quality.yml"
   push:
     branches:
-      - "barq-admin-foundation-2026-11-23"
+      - "barq/**"
     paths:
       - "admin/**"
       - ".github/workflows/barq-admin-quality.yml"

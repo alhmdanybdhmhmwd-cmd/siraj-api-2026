@@ -17,7 +17,7 @@ test("real libSQL applies every isolated Preview migration and supports BARQ dat
       .filter(name => name.endsWith(".sql"))
       .sort();
 
-    assert.equal(migrations.length, 17, "all 17 Preview migrations must be exercised");
+    assert.equal(migrations.length, 18, "all 18 Preview migrations must be exercised");
 
     for (const migration of migrations) {
       const sql = readFileSync(join(migrationsDirectory, migration), "utf8");
@@ -33,7 +33,7 @@ test("real libSQL applies every isolated Preview migration and supports BARQ dat
     );
     const tableNames = new Set(tables.rows.map(row => row.name));
     for (const name of [
-      "users", "friendships", "messages", "group_messages",
+      "users", "friendships", "messages", "group_messages", "blocked_users", "user_reports", "barq_user_suspensions", "barq_user_moderation_actions",
       "message_reactions", "pinned_messages", "ephemeral_messages",
       "media_upload_sessions", "media_upload_parts", "media_upload_chunks",
       "hidden_private_messages", "private_conversation_state"
@@ -54,6 +54,36 @@ test("real libSQL applies every isolated Preview migration and supports BARQ dat
       db.prepare("INSERT INTO users (id, username, display_name, password_hash, password_salt) VALUES (?, ?, ?, ?, ?)")
         .bind("u2", "barq_two", "BARQ Two", "hash2", "salt2")
     ]);
+
+    await db.prepare(
+      "INSERT INTO blocked_users (blocker_id, blocked_id) VALUES (?, ?)"
+    ).bind("u1", "u2").run();
+    await db.prepare(
+      "INSERT INTO user_reports (id, reporter_id, reported_user_id, category, details) VALUES (?, ?, ?, ?, ?)"
+    ).bind("report-u2-1", "u1", "u2", "spam", "Repeated unsolicited messages").run();
+    const moderationCounts = await db.prepare(`
+      SELECT
+        (SELECT COUNT(DISTINCT blocker_id) FROM blocked_users WHERE blocked_id = 'u2') AS blocks,
+        (SELECT COUNT(*) FROM user_reports WHERE reported_user_id = 'u2' AND status = 'pending') AS reports
+    `).first();
+    assert.deepEqual(
+      [Number(moderationCounts.blocks), Number(moderationCounts.reports)],
+      [1, 1],
+      "the admin dashboard must be able to count distinct blockers and pending reports"
+    );
+    await db.prepare(
+      "INSERT INTO barq_user_suspensions (user_id, reason, suspended_by) VALUES (?, ?, ?)"
+    ).bind("u2", "Confirmed policy violation", "owner@example.com").run();
+    const activeSuspension = await db.prepare(
+      "SELECT user_id FROM barq_user_suspensions WHERE user_id = ? AND lifted_at IS NULL"
+    ).bind("u2").first();
+    assert.equal(activeSuspension.user_id, "u2");
+    await assert.rejects(
+      () => db.prepare(
+        "INSERT INTO user_reports (id, reporter_id, reported_user_id, category) VALUES (?, ?, ?, ?)"
+      ).bind("report-u2-duplicate", "u1", "u2", "spam").run(),
+      /UNIQUE|unique/
+    );
 
     await assert.rejects(() => db.batch([
       db.prepare("INSERT INTO users (id, username, display_name, password_hash, password_salt) VALUES (?, ?, ?, ?, ?)")

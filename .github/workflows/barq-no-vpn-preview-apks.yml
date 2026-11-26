@@ -1,0 +1,106 @@
+name: BARQ and Admin optimized preview APKs (ARM64)
+
+on:
+  push:
+    branches: [barq/no-vpn-routing-2026-11-25]
+    paths:
+      - 'android/**'
+      - 'admin/mobile/**'
+      - '.github/workflows/barq-no-vpn-preview-apks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: barq-no-vpn-preview-apks
+  cancel-in-progress: false
+
+jobs:
+  build-barq:
+    name: Build BARQ Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: barq/no-vpn-routing-2026-11-25
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.50.0"
+          channel: stable
+          cache: true
+      - name: Resolve BARQ packages
+        working-directory: android
+        run: flutter pub get
+      - name: Analyze BARQ
+        working-directory: android
+        run: flutter analyze --no-pub
+      - name: Test BARQ
+        working-directory: android
+        run: flutter test --no-pub
+      - name: Build ARM64 release APK
+        working-directory: android
+        run: flutter build apk --release --target-platform android-arm64 --dart-define=BARQ_API_BASE=https://siraj-api-2026.vercel.app
+      - name: Report APK size
+        run: |
+          test -s android/build/app/outputs/flutter-apk/app-release.apk
+          stat -c 'BARQ release APK size: %s bytes' android/build/app/outputs/flutter-apk/app-release.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: barq-no-vpn-arm64-release
+          path: android/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  build-admin:
+    name: Build BARQ Admin Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: barq/no-vpn-routing-2026-11-25
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.50.0"
+          channel: stable
+          cache: true
+      - name: Resolve Admin packages
+        working-directory: admin/mobile
+        run: flutter pub get
+      - name: Analyze Admin
+        working-directory: admin/mobile
+        run: flutter analyze --no-pub
+      - name: Test Admin
+        working-directory: admin/mobile
+        run: flutter test --no-pub
+      - name: Build ARM64 release APK
+        working-directory: admin/mobile
+        env:
+          BARQ_GOOGLE_OIDC_CLIENT_ID: ${{ secrets.BARQ_GOOGLE_OIDC_CLIENT_ID }}
+        run: |
+          if [ -z "$BARQ_GOOGLE_OIDC_CLIENT_ID" ]; then
+            echo "::warning::BARQ_GOOGLE_OIDC_CLIENT_ID is not configured; Google owner sign-in will remain disabled in this APK."
+          fi
+          flutter build apk --release --target-platform android-arm64 \
+            --dart-define=BARQ_API_BASE=https://siraj-api-2026.vercel.app \
+            --dart-define=BARQ_GOOGLE_OIDC_CLIENT_ID="$BARQ_GOOGLE_OIDC_CLIENT_ID"
+      - name: Report APK size
+        run: |
+          test -s admin/mobile/build/app/outputs/flutter-apk/app-release.apk
+          stat -c 'BARQ Admin release APK size: %s bytes' admin/mobile/build/app/outputs/flutter-apk/app-release.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: barq-admin-no-vpn-arm64-release
+          path: admin/mobile/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
