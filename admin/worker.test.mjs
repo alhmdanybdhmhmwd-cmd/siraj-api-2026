@@ -1,7 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, validateAdminAccessClaims, processAdminDeadLetterMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches, constantTimeTextEqual } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, validateAdminAccessClaims, processAdminDeadLetterMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches, constantTimeTextEqual, encryptActivationCode, decryptActivationCode } from "./worker.js";
+
+
+test("activation codes are encrypted at rest and decrypt only with the server key", async () => {
+  const code = "barq-admin-owner-code-".padEnd(40, "X");
+  const secret = "test-secret-material-that-is-at-least-32-characters";
+  const encrypted = await encryptActivationCode(code, secret);
+  assert.notEqual(encrypted, code);
+  assert.equal(await decryptActivationCode(encrypted, secret), code);
+  await assert.rejects(() => decryptActivationCode(encrypted, secret + "-wrong"));
+});
 
 test("idempotency keys are bounded and cannot be silently truncated", () => {
   assert.deepEqual(validateIdempotencyKey(null), { ok: true, value: null });
