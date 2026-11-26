@@ -1,4 +1,6 @@
-# BARQ Admin Phase 2 — Knowledge and Project Understanding
+# BARQ Admin knowledge work package — Project Understanding
+
+> Numbering note: this document was originally named Phase 2 scope. In the canonical `docs/BARQ_ADMIN_MASTER_ROADMAP.md`, knowledge and project understanding is master Phase 5; master Phase 2 is workspace, tasks, and checkpoints.
 
 Last updated: 2026-11-24
 Status: IN PROGRESS — source ingestion and live retrieval acceptance are not yet complete.
