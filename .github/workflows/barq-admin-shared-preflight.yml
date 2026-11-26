@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - barq-admin-foundation-2026-11-23
+      - barq/no-vpn-routing-rebased-2026-11-26
     paths:
       - ".github/workflows/barq-admin-shared-preflight.yml"
       - "wrangler.toml"
@@ -29,12 +30,12 @@ jobs:
 
       - name: Verify Cloudflare credentials and shared BARQ resources (read-only)
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.BARQ_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.BARQ_CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          test -n "${CLOUDFLARE_API_TOKEN:-}" || { echo "::error::CLOUDFLARE_API_TOKEN is missing from GitHub Environment barq-admin-preview."; exit 1; }
-          test -n "${CLOUDFLARE_ACCOUNT_ID:-}" || { echo "::error::CLOUDFLARE_ACCOUNT_ID is missing from GitHub Environment barq-admin-preview."; exit 1; }
+          test -n "${CLOUDFLARE_API_TOKEN:-}" || { echo "::error::BARQ_CLOUDFLARE_API_TOKEN is missing from repository Actions secrets or the barq-admin-preview environment."; exit 1; }
+          test -n "${CLOUDFLARE_ACCOUNT_ID:-}" || { echo "::error::BARQ_CLOUDFLARE_ACCOUNT_ID is missing from repository Actions variables or the barq-admin-preview environment."; exit 1; }
 
           expected_id="$(python3 - <<'PY'
           import re
