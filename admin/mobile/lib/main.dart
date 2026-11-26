@@ -423,44 +423,32 @@ class _AdminHomePageState extends State<AdminHomePage>
   Future<void> _rotateActivationCode() async {
     if (_token.isEmpty || !isValidAdminApiBase(_apiBase)) return;
     try {
-      final response = await http
-          .post(Uri.parse(_base + '/v1/auth/activation-code/rotate'), headers: _headers)
-          .timeout(const Duration(seconds: 20));
+      final response = await http.post(Uri.parse(_base + '/v1/auth/activation-code/rotate'), headers: _headers).timeout(const Duration(seconds: 20));
       final data = Map<String, dynamic>.from(jsonDecode(response.body) as Map);
-      if (response.statusCode != 200 || (data['code'] ?? '').toString().isEmpty) {
-        throw Exception('تعذر إنشاء رمز التفعيل (' + response.statusCode.toString() + ')');
-      }
+      if (response.statusCode != 200 || (data['code'] ?? '').toString().isEmpty) throw Exception('تعذر إنشاء رمز التفعيل');
       _activationCode = data['code'].toString();
       await _secure.write(key: 'barq_admin_activation_code', value: _activationCode);
       if (mounted) setState(() {});
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
-      );
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))));
     }
   }
 
   Future<void> _revokeActivationCode() async {
     try {
-      final response = await http
-          .post(Uri.parse(_base + '/v1/auth/activation-code/revoke'), headers: _headers)
-          .timeout(const Duration(seconds: 20));
+      final response = await http.post(Uri.parse(_base + '/v1/auth/activation-code/revoke'), headers: _headers).timeout(const Duration(seconds: 20));
       if (response.statusCode != 200) throw Exception('تعذر إلغاء رمز التفعيل');
       _activationCode = '';
       await _secure.delete(key: 'barq_admin_activation_code');
       if (mounted) setState(() {});
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
-      );
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))));
     }
   }
 
   Future<void> _activateWithCode(String rawCode) async {
     if (!isValidAdminApiBase(_apiBase)) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('أدخل عنوان خادم الإدارة أولًا')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('أدخل عنوان خادم الإدارة أولًا')));
       return;
     }
     final code = rawCode.toUpperCase().replaceAll(RegExp(r'[\\s-]'), '');
@@ -1698,10 +1686,7 @@ class _AdminHomePageState extends State<AdminHomePage>
       children: [
         if (_token.isEmpty) _signInCard(),
         _workspaceCard(),
-        if (_token.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          _activationCodeCard(),
-        ],
+        if (_token.isNotEmpty) _activationCodeCard(),
         const SizedBox(height: 14),
         Row(
           children: [
@@ -1852,12 +1837,7 @@ class _AdminHomePageState extends State<AdminHomePage>
                       : 'المتابعة باستخدام Google',
                 ),
               ),
-              const SizedBox(height: 8),
-              TextButton.icon(
-                onPressed: _apiBase.isEmpty ? _showSettings : _showActivationEntry,
-                icon: const Icon(Icons.key_outlined),
-                label: const Text('تفعيل برمز من الهاتف الأساسي'),
-              ),
+              TextButton.icon(onPressed: _apiBase.isEmpty ? _showSettings : _showActivationEntry, icon: const Icon(Icons.key_outlined), label: const Text('تفعيل برمز من الهاتف الأساسي')),
             ],
           ),
         ),
@@ -2325,44 +2305,28 @@ class _AdminHomePageState extends State<AdminHomePage>
       );
 }
 ).hasMatch(code)) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('رمز التفعيل يجب أن يتكون من 48 حرفًا ورقمًا')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('رمز التفعيل غير مكتمل')));
       return;
     }
     try {
-      final response = await http
-          .post(
-            Uri.parse(_base + '/v1/auth/activate'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'code': code,
-              'deviceName': Platform.isIOS ? 'BARQ Admin — iPhone' : 'BARQ Admin — Android',
-              'platform': Platform.isIOS ? 'ios' : 'android',
-            }),
-          )
-          .timeout(const Duration(seconds: 25));
+      final response = await http.post(
+        Uri.parse(_base + '/v1/auth/activate'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'code': code, 'deviceName': Platform.isIOS ? 'BARQ Admin — iPhone' : 'BARQ Admin — Android', 'platform': Platform.isIOS ? 'ios' : 'android'}),
+      ).timeout(const Duration(seconds: 25));
       final data = Map<String, dynamic>.from(jsonDecode(response.body) as Map);
-      if (response.statusCode != 200) {
-        throw Exception(response.statusCode == 429
-            ? 'محاولات كثيرة؛ انتظر دقيقة ثم حاول'
-            : 'رمز التفعيل غير صحيح أو تم إلغاؤه');
-      }
+      if (response.statusCode != 200) throw Exception(response.statusCode == 429 ? 'محاولات كثيرة؛ انتظر دقيقة' : 'رمز التفعيل غير صحيح أو ملغى');
       _token = (data['accessToken'] ?? '').toString();
       _refreshToken = (data['refreshToken'] ?? '').toString();
       _sessionId = (data['sessionId'] ?? '').toString();
-      if (_token.isEmpty || _refreshToken.isEmpty || _sessionId.isEmpty) {
-        throw Exception('استجابة التفعيل غير مكتملة');
-      }
+      if (_token.isEmpty || _refreshToken.isEmpty || _sessionId.isEmpty) throw Exception('استجابة التفعيل غير مكتملة');
       await _secure.write(key: 'barq_admin_owner_token', value: _token);
       await _secure.write(key: 'barq_admin_refresh_token', value: _refreshToken);
       await _secure.write(key: 'barq_admin_session_id', value: _sessionId);
       if (mounted) Navigator.of(context).pop();
       await _load();
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
-      );
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))));
     }
   }
 
@@ -2372,24 +2336,7 @@ class _AdminHomePageState extends State<AdminHomePage>
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('تفعيل BARQ Admin على هذا الهاتف'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('أدخل رمز التفعيل الذي يظهر في هاتف الإدارة الأساسي.'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              textCapitalization: TextCapitalization.characters,
-              autocorrect: false,
-              enableSuggestions: false,
-              decoration: const InputDecoration(
-                labelText: 'رمز التفعيل',
-                hintText: '48 حرفًا وأرقامًا',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
+        content: TextField(controller: controller, textCapitalization: TextCapitalization.characters, autocorrect: false, enableSuggestions: false, decoration: const InputDecoration(labelText: 'رمز التفعيل', hintText: '48 حرفًا ورقمًا')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إلغاء')),
           FilledButton(onPressed: () => _activateWithCode(controller.text), child: const Text('تفعيل هذا الهاتف')),
@@ -2400,56 +2347,21 @@ class _AdminHomePageState extends State<AdminHomePage>
   }
 
   Widget _activationCodeCard() {
-    final grouped = _activationCode.isEmpty
-        ? ''
-        : _activationCode.replaceAllMapped(RegExp(r'.{1,6}'), (match) => match.group(0)! + ' ').trim();
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Row(children: [
-              Icon(Icons.key_outlined, color: _gold),
-              SizedBox(width: 8),
-              Expanded(child: Text('رمز تفعيل هاتف آخر', style: TextStyle(fontWeight: FontWeight.bold))),
-              Icon(Icons.verified_user_outlined, color: _gold),
-            ]),
-            const SizedBox(height: 8),
-            const Text(
-              'استخدم الرمز في أي هاتف تثبّت عليه BARQ Admin. يبقى صالحًا حتى تجدده أو تلغيه.',
-              style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
-            ),
-            const SizedBox(height: 12),
-            if (_activationCode.isNotEmpty)
-              SelectableText(grouped, textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 1.1))
-            else
-              const Text('لم يتم إنشاء رمز بعد', textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white60)),
-            const SizedBox(height: 10),
-            FilledButton.icon(
-              onPressed: _rotateActivationCode,
-              icon: const Icon(Icons.autorenew),
-              label: Text(_activationCode.isEmpty ? 'إنشاء رمز التفعيل' : 'تجديد الرمز'),
-            ),
-            if (_activationCode.isNotEmpty)
-              TextButton.icon(
-                onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: _activationCode));
-                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('تم نسخ رمز التفعيل')),
-                  );
-                },
-                icon: const Icon(Icons.copy),
-                label: const Text('نسخ الرمز'),
-              ),
-            if (_activationCode.isNotEmpty)
-              TextButton(onPressed: _revokeActivationCode, child: const Text('إلغاء الرمز الحالي')),
-          ],
-        ),
-      ),
-    );
+    final grouped = _activationCode.replaceAllMapped(RegExp(r'.{1,6}'), (m) => m.group(0)! + ' ').trim();
+    return Card(child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const Text('رمز تفعيل هاتف آخر', style: TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        const Text('يعمل على أي هاتف تثبّت عليه BARQ Admin حتى تجدده أو تلغيه.', style: TextStyle(color: Colors.white70, fontSize: 12)),
+        const SizedBox(height: 12),
+        if (_activationCode.isEmpty) const Text('لم يتم إنشاء رمز بعد', textAlign: TextAlign.center)
+        else SelectableText(grouped, textAlign: TextAlign.center, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 1)),
+        FilledButton.icon(onPressed: _rotateActivationCode, icon: const Icon(Icons.autorenew), label: Text(_activationCode.isEmpty ? 'إنشاء رمز التفعيل' : 'تجديد الرمز')),
+        if (_activationCode.isNotEmpty) TextButton.icon(onPressed: () async { await Clipboard.setData(ClipboardData(text: _activationCode)); }, icon: const Icon(Icons.copy), label: const Text('نسخ الرمز')),
+        if (_activationCode.isNotEmpty) TextButton(onPressed: _revokeActivationCode, child: const Text('إلغاء الرمز')),
+      ]),
+    ));
   }
 
   Future<void> _syncOutbox(SharedPreferences prefs) async {
