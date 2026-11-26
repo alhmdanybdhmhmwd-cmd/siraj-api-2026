@@ -407,22 +407,28 @@ class _AdminHomePageState extends State<AdminHomePage>
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('رمز التفعيل'),
+          title: const Text('إدارة رمز التفعيل'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
-                  'هذا هو الرمز الرئيسي الذي تستخدمه لتفعيل BARQ Admin على أجهزتك الموثوقة.'),
+                'هذا الرمز يفعّل BARQ Admin على أجهزتك الموثوقة. يمكنك نسخه أو تغييره من هنا.',
+              ),
               const SizedBox(height: 12),
-              SelectableText(code,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+              SelectableText(
+                code,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.1,
+                ),
+              ),
               const SizedBox(height: 8),
               const Text(
-                  'احتفظ به في مكان آمن. يمكن إيقافه أو تغييره من إعداد الخادم.',
-                  style: TextStyle(color: Colors.white60, fontSize: 12)),
+                'عند تغيير الرمز، يتوقف الرمز السابق عن تفعيل أجهزة جديدة. الجلسات المفتوحة تبقى مستقلة ويمكن إلغاؤها من إدارة الأجهزة.',
+                style: TextStyle(color: Colors.white60, fontSize: 12),
+              ),
             ],
           ),
           actions: [
@@ -430,25 +436,199 @@ class _AdminHomePageState extends State<AdminHomePage>
               onPressed: () async {
                 await Clipboard.setData(ClipboardData(text: code));
                 if (dialogContext.mounted) Navigator.pop(dialogContext);
-                if (mounted)
+                if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('تم نسخ رمز التفعيل')),
                   );
+                }
               },
-              child: const Text('نسخ الرمز'),
+              child: const Text('نسخ'),
             ),
             TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('إغلاق')),
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                _rotateActivationCode();
+              },
+              child: const Text('إنشاء رمز جديد'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                _promptCustomActivationCode();
+              },
+              child: const Text('تعيين رمز بنفسي'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                _disableActivationCode();
+              },
+              child: const Text('إيقاف الرمز'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('إغلاق'),
+            ),
           ],
         ),
       );
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text(error.toString().replaceFirst('Exception: ', ''))),
+            content: Text(error.toString().replaceFirst('Exception: ', '')),
+          ),
         );
+      }
+    }
+  }
+
+  Future<void> _rotateActivationCode({String? code}) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse(_base + '/v1/auth/activation-code'),
+            headers: _headers,
+            body: jsonEncode(code == null ? <String, dynamic>{} : {'code': code}),
+          )
+          .timeout(const Duration(seconds: 20));
+      final data = Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+      if (response.statusCode != 200) {
+        throw Exception('تعذر تغيير رمز التفعيل (' +
+            response.statusCode.toString() + ')');
+      }
+      final nextCode = (data['code'] ?? '').toString();
+      if (nextCode.isEmpty) throw Exception('لم يرجع الخادم الرمز الجديد');
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('تم إنشاء رمز التفعيل الجديد'),
+          content: SelectableText(
+            nextCode,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: nextCode));
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تم نسخ الرمز الجديد')),
+                  );
+                }
+              },
+              child: const Text('نسخ الرمز'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('إغلاق'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.toString().replaceFirst('Exception: ', '')),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _promptCustomActivationCode() async {
+    final controller = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('تعيين رمز التفعيل'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          autocorrect: false,
+          enableSuggestions: false,
+          decoration: const InputDecoration(
+            labelText: 'رمز جديد (32 إلى 128 حرفًا)',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.length < 32 ||
+                  value.length > 128 ||
+                  !RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(value)) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('استخدم 32 إلى 128 حرفًا إنجليزيًا أو رقمًا'),
+                  ),
+                );
+                return;
+              }
+              Navigator.pop(dialogContext);
+              _rotateActivationCode(code: value);
+            },
+            child: const Text('حفظ الرمز'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+  }
+
+  Future<void> _disableActivationCode() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('إيقاف رمز التفعيل؟'),
+        content: const Text(
+          'لن يتمكن أي هاتف جديد من التفعيل حتى تنشئ رمزًا جديدًا. الجلسات الحالية لن تُغلق تلقائيًا.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('تراجع'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('إيقاف الرمز'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final response = await http
+          .delete(
+            Uri.parse(_base + '/v1/auth/activation-code'),
+            headers: _headers,
+          )
+          .timeout(const Duration(seconds: 20));
+      if (response.statusCode != 200) {
+        throw Exception('تعذر إيقاف الرمز (' +
+            response.statusCode.toString() + ')');
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم إيقاف التفعيل للأجهزة الجديدة')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.toString().replaceFirst('Exception: ', '')),
+          ),
+        );
+      }
     }
   }
 
