@@ -110,4 +110,5 @@ jobs:
       - name: Report APK build skipped until stable signing is configured
         if: ${{ steps.signing.outputs.configured != 'true' }}
         shell: bash
-        run: echo "::warning::APK packaging skipped: stable BARQ Admin signing secrets are not configured."
+        run: |
+          echo "::warning::APK packaging skipped: stable BARQ Admin signing secrets are not configured."
