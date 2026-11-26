@@ -474,7 +474,7 @@ class _AdminHomePageState extends State<AdminHomePage>
       }
       return;
     }
-    final code = rawCode.toUpperCase().replaceAll(RegExp(r'[^A-F0-9]'), '');
+    final code = rawCode.toUpperCase().replaceAll(RegExp(r'[\s-]'), '');
     if (!RegExp(r'^[A-F0-9]{48}
     if (_syncing) return;
     _syncing = true;
