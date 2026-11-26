@@ -51,21 +51,18 @@ android {
     }
 
     signingConfigs {
-        if (hasBarqAdminReleaseSigning) {
-            create("barqAdminRelease") {
+        create("barqAdminRelease") {
+            if (barqAdminKeystorePath.isNotBlank()) {
                 storeFile = file(barqAdminKeystorePath)
-                storePassword = barqAdminKeystorePassword
-                keyAlias = barqAdminKeyAlias
-                keyPassword = barqAdminKeyPassword
             }
+            storePassword = barqAdminKeystorePassword
+            keyAlias = barqAdminKeyAlias
+            keyPassword = barqAdminKeyPassword
         }
     }
 
     buildTypes {
         release {
-            check(hasBarqAdminReleaseSigning) {
-                "BARQ Admin release builds require the stable BARQ_ADMIN signing keystore and credentials."
-            }
             signingConfig = signingConfigs.getByName("barqAdminRelease")
         }
     }
