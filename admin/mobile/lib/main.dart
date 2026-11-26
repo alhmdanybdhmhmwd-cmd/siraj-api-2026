@@ -121,7 +121,11 @@ class _AdminHomePageState extends State<AdminHomePage>
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    _apiBase = prefs.getString('barq_admin_api_base') ?? '';
+    final configuredApiBase = prefs.getString('barq_admin_api_base');
+    _apiBase = resolveAdminApiBase(configuredApiBase);
+    if (configuredApiBase != _apiBase) {
+      await prefs.setString('barq_admin_api_base', _apiBase);
+    }
     _token = await _secure.read(key: 'barq_admin_owner_token') ?? '';
     _refreshToken = await _secure.read(key: 'barq_admin_refresh_token') ?? '';
     _sessionId = await _secure.read(key: 'barq_admin_session_id') ?? '';

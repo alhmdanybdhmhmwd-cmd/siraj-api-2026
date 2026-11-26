@@ -115,3 +115,43 @@ This checkpoint records verified repository/CI evidence only. It does not mark P
 5. Run live retrieval demonstrations for product identity, roadmap, feature requirements, architecture, known issues, contradictory/stale decisions, and prompt-injection resistance.
 
 **Status remains IN PROGRESS.** CI success is not evidence of live ingestion, live OIDC, live model retrieval, or complete source coverage.
+
+## Phase 2 verification update — 2026-11-26 (latest checkpoint)
+
+This update supersedes older CI status notes above where the commit/run differs. It records only evidence available from the repository and CI; it does not waive live acceptance gates.
+
+### Latest verified repository and shared-resource checks
+
+- PR #14 current head: `b5b7f7e35e29b943c9de491bf4c01d02eee38d4b`.
+- Backend tests run `45881368725`: **passed**.
+- BARQ Admin Quality run `45881368727`: **passed**. Admin Worker quality, Flutter dependency/format/analyze/tests, Android AppAuth wiring, and Android debug Kotlin compilation all completed successfully. No APK was packaged.
+- Cloudflare shared-resource preflight run `45879412531`: **passed**; the configured credentials could read the expected shared D1 database `siraj-db` and Worker `siraj-api`.
+- Approved additive Admin migrations run `45881199665`: **passed**. The workflow verified the target resources, applied the seven reviewed migration files, and verified the required Admin tables. The sixth migration file is intentionally empty. This was an approved D1 schema write; it did not read or delete user records.
+- Vercel Preview check for the current branch: **Ready**. This is not proof of live Worker reachability, live Brain retrieval, or no-VPN access from Yemen.
+- Cloudflare Workers Builds bot's latest report for head `b5b7f7e` was still **in progress** at its latest observation; earlier builds on older commits failed without an actionable diagnostic in the available summary. The current build is not counted as passed until a completed successful result is observed.
+- PR #14 remains draft/open. No PR was merged, no production deployment was performed, and no APK was packaged.
+
+### Remaining hard blockers to Phase 2 completion
+
+1. The latest Cloudflare Workers Build for the current head has not yet been confirmed successful.
+2. Admin owner secrets, Google owner allowlist, and the exact allowed Admin origin have not been verified on the shared Worker.
+3. No immutable-SHA indexing run has been executed against live `/admin/v1/knowledge`; no full batch-completion, skipped-file audit, or coverage/freshness report exists.
+4. Live BARQ Brain model-backed retrieval and citation acceptance have not been demonstrated against the indexed repository.
+5. Live Google OIDC sign-in has not been demonstrated. Physical-device tests remain deferred to the end of BARQ Admin Phase 3, as instructed.
+
+### Current phase decision
+
+**Phase 2 remains IN PROGRESS.** The shared D1 preflight and approved additive migrations are now verified as successful, and all current backend/Admin/mobile CI checks have passed. Phase 2 cannot yet be declared complete because the current Cloudflare build, owner configuration, immutable-SHA indexing/coverage, live Brain retrieval, and live Google OIDC acceptance gates remain open.
+
+
+## Phase 2 verification update — 2026-11-26 (commit 2be3c91)
+
+- PR #14 head: `2be3c91c32d566da378f7d2c81e83326f8f4d0a8` (draft/open; not merged).
+- Backend tests on this head: run `45884314000` passed.
+- BARQ Admin Worker quality job on this head: run `45884313964`, job `admin-quality`, passed. Admin mobile quality job in the same run was still in progress at checkpoint time; do not count it as passed until its terminal result is observed.
+- Shared-resource preflight on this exact head: run `45884307749` passed. The workflow now checks out the triggering revision (`github.sha`) instead of the foundation branch, preventing a false green against stale source. The read-only preflight verified the configured shared `siraj-db` and `siraj-api` are visible to the existing GitHub Actions credentials.
+- Previously approved additive Admin D1 migrations remain applied and verified by run `45881199665`; do not rerun them.
+- Vercel Preview for this head: passed. No production deployment or APK packaging occurred.
+- Still open: terminal result for the latest Admin mobile job; final Cloudflare Workers Build result; shared Worker owner email/JWT/origin configuration verification; immutable-SHA ingestion batches and reconciliation/coverage report; live BARQ Brain model retrieval/citation acceptance; live Google OIDC acceptance.
+
+**Phase 2 remains IN PROGRESS.** This checkpoint does not assert live ingestion, live Brain retrieval, live OIDC, or end-to-end no-VPN acceptance.

@@ -24,6 +24,96 @@ function makeRequest({ url = "/api/media", method = "POST", headers = {}, chunks
   };
 }
 
+test("proxy maps public health probes to the Worker health namespace", async () => {
+  const originalFetch = globalThis.fetch;
+  let forwardedUrl = "";
+  globalThis.fetch = async (url) => {
+    forwardedUrl = String(url);
+    return new Response(JSON.stringify({ status: "alive", service: "barq-api" }), {
+      status: 200, headers: { "content-type": "application/json" }
+    });
+  };
+  try {
+    const res = makeResponse();
+    await handler(makeRequest({
+      url: "/api/health/live?source=mobile",
+      method: "GET",
+      chunks: []
+    }), res);
+    assert.equal(
+      forwardedUrl,
+      "https://siraj-api.alhmdanybdhmhmwd.workers.dev/health/live?source=mobile"
+    );
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(JSON.parse(res.body.toString()), {
+      status: "alive", service: "barq-api"
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("proxy maps BARQ Admin gateway paths to the shared Worker namespace", async () => {
+  const originalFetch = globalThis.fetch;
+  let forwarded;
+  globalThis.fetch = async (url, options) => {
+    forwarded = { url: String(url), method: options.method, body: options.body };
+    return new Response(JSON.stringify({ workspace: { current_project: "BARQ" } }), {
+      status: 200, headers: { "content-type": "application/json" }
+    });
+  };
+  try {
+    const res = makeResponse();
+    await handler(makeRequest({
+      url: "/api/admin/v1/workspace?view=owner",
+      method: "GET",
+      chunks: []
+    }), res);
+    assert.equal(
+      forwarded.url,
+      "https://siraj-api.alhmdanybdhmhmwd.workers.dev/admin/v1/workspace?view=owner"
+    );
+    assert.equal(forwarded.method, "GET");
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(JSON.parse(res.body.toString()), {
+      workspace: { current_project: "BARQ" }
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("proxy allows bounded Admin image-analysis JSON through the gateway", async () => {
+  const originalFetch = globalThis.fetch;
+  let forwardedUrl = "";
+  globalThis.fetch = async (url) => {
+    forwardedUrl = String(url);
+    return new Response(JSON.stringify({ answer: "تم التحليل" }), {
+      status: 200, headers: { "content-type": "application/json" }
+    });
+  };
+  try {
+    const res = makeResponse();
+    const payload = Buffer.from(JSON.stringify({
+      prompt: "حلل الصورة",
+      image: "data:image/jpeg;base64," + "A".repeat(300 * 1024)
+    }));
+    await handler(makeRequest({
+      url: "/api/admin/v1/brain/vision",
+      method: "POST",
+      headers: { "content-type": "application/json", "content-length": String(payload.length) },
+      chunks: [payload]
+    }), res);
+    assert.equal(
+      forwardedUrl,
+      "https://siraj-api.alhmdanybdhmhmwd.workers.dev/admin/v1/brain/vision"
+    );
+    assert.equal(res.statusCode, 200);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("proxy forwards SPARK media metadata and idempotency headers", async () => {
   const originalFetch = globalThis.fetch;
   let forwarded;
