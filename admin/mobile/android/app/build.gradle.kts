@@ -10,13 +10,6 @@ val barqAdminKeystorePath = System.getenv("BARQ_ADMIN_KEYSTORE_PATH").orEmpty()
 val barqAdminKeystorePassword = System.getenv("BARQ_ADMIN_KEYSTORE_PASSWORD").orEmpty()
 val barqAdminKeyAlias = System.getenv("BARQ_ADMIN_KEY_ALIAS").orEmpty()
 val barqAdminKeyPassword = System.getenv("BARQ_ADMIN_KEY_PASSWORD").orEmpty()
-val hasBarqAdminReleaseSigning = listOf(
-    barqAdminKeystorePath,
-    barqAdminKeystorePassword,
-    barqAdminKeyAlias,
-    barqAdminKeyPassword
-).all { it.isNotBlank() }
-
 val barqGoogleOidcRedirectScheme =
     if (barqGoogleOidcClientId.endsWith(".apps.googleusercontent.com")) {
         "com.googleusercontent.apps." + barqGoogleOidcClientId.substringBefore(".")
