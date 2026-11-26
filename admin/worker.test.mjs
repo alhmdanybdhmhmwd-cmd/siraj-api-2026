@@ -118,7 +118,7 @@ test("BARQ Brain prompts include current workspace context and no execution auth
   assert.match(messages[0].content, /BARQ Admin/);
   assert.match(messages[0].content, /Never publish to production/);
   assert.match(messages[0].content, /two-hour target/);
-  assert.match(messages[0].content, /owner explicitly approved Google OIDC with Authorization Code \+ PKCE/);
+  assert.match(messages[0].content, /server-issued activation code for BARQ Admin/);
 });
 
 test("image generation prompt is required and bounded", () => {
