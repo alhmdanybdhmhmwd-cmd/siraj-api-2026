@@ -44,8 +44,8 @@ jobs:
           import re
           from pathlib import Path
           config = Path("wrangler.toml").read_text()
-          name = re.search(r'database_name\\s*=\\s*"([^"]+)"', config)
-          ident = re.search(r'database_id\\s*=\\s*"([^"]+)"', config)
+          name = re.search(r'database_name\s*=\s*"([^"]+)"', config)
+          ident = re.search(r'database_id\s*=\s*"([^"]+)"', config)
           if not name or name.group(1) != "siraj-db":
               raise SystemExit("Refusing: root Worker config does not target siraj-db.")
           if not ident or ident.group(1) != "0db93afd-4bf5-4423-9e25-7a2f4f4bdbe0":
@@ -80,12 +80,12 @@ jobs:
           if len(files) != 7:
               raise SystemExit(f"Expected 7 reviewed Admin migrations, found {len(files)}.")
           for path in files:
-              sql = re.sub(r"--[^\\n]*", "", path.read_text())
+              sql = re.sub(r"--[^\n]*", "", path.read_text())
               statements = [s.strip() for s in sql.split(";") if s.strip()]
               for statement in statements:
-                  if not re.match(r"^(CREATE TABLE IF NOT EXISTS|CREATE INDEX IF NOT EXISTS|CREATE TRIGGER IF NOT EXISTS|PRAGMA foreign_keys\\s*=\\s*ON)\\b", statement, re.I):
+                  if not re.match(r"^(CREATE TABLE IF NOT EXISTS|CREATE INDEX IF NOT EXISTS|CREATE TRIGGER IF NOT EXISTS|PRAGMA foreign_keys\s*=\s*ON)\b", statement, re.I):
                       raise SystemExit(f"Refusing non-additive or unreviewed SQL in {path.name}: {statement[:80]!r}")
-                  if re.search(r"\\b(DROP|ALTER|DELETE|UPDATE|INSERT|REPLACE|VACUUM)\\b", statement, re.I):
+                  if re.search(r"\b(DROP|ALTER|DELETE|UPDATE|INSERT|REPLACE|VACUUM)\b", statement, re.I):
                       raise SystemExit(f"Refusing destructive/data-changing SQL in {path.name}.")
           print("All Admin migrations contain only reviewed additive CREATE/PRAGMA statements.")
           PY
