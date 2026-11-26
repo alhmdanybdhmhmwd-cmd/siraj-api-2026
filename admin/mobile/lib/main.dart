@@ -447,7 +447,7 @@ class _AdminHomePageState extends State<AdminHomePage>
 
   Future<void> _activateWithCode(String rawCode) async {
     if (!isValidAdminApiBase(_apiBase)) return;
-    final code = rawCode.toUpperCase().replaceAll(RegExp(r'[\\s-]'), '');
+    final code = rawCode.toUpperCase().replaceAll(RegExp(r'[\s-]'), '');
     if (!RegExp(r'^[A-F0-9]{48}$').hasMatch(code)) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('رمز التفعيل غير مكتمل')));
       return;
