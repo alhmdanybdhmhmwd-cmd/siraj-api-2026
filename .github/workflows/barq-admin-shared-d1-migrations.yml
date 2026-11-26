@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: barq-admin-foundation-2026-11-23
+          ref: ${{ github.sha }}
 
       - uses: actions/setup-node@v4
         with:
@@ -33,13 +33,13 @@ jobs:
 
       - name: Verify exact shared D1 and existing Worker before any write
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.BARQ_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.BARQ_CLOUDFLARE_ACCOUNT_ID }}
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${CLOUDFLARE_API_TOKEN:-}" || { echo "::error::Cloudflare token missing from barq-admin-preview environment."; exit 1; }
-          test -n "${CLOUDFLARE_ACCOUNT_ID:-}" || { echo "::error::Cloudflare account ID missing from barq-admin-preview environment."; exit 1; }
+          test -n "${CLOUDFLARE_API_TOKEN:-}" || { echo "::error::BARQ_CLOUDFLARE_API_TOKEN is missing from repository Actions secrets or barq-admin-preview."; exit 1; }
+          test -n "${CLOUDFLARE_ACCOUNT_ID:-}" || { echo "::error::BARQ_CLOUDFLARE_ACCOUNT_ID is missing from repository Actions variables or barq-admin-preview."; exit 1; }
           python3 - <<'PY'
           import re
           from pathlib import Path
@@ -75,25 +75,56 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import re
+          import sqlite3
           from pathlib import Path
+
           files = sorted(Path("admin/migrations").glob("*.sql"))
           if len(files) != 7:
               raise SystemExit(f"Expected 7 reviewed Admin migrations, found {len(files)}.")
+
+          db = sqlite3.connect(":memory:")
+          trigger_pattern = re.compile(
+              r"CREATE TRIGGER IF NOT EXISTS (admin_audit_no_update|admin_audit_no_delete) "
+              r"BEFORE (UPDATE|DELETE) ON admin_audit_events\s+"
+              r"BEGIN\s+SELECT RAISE\(ABORT, 'admin audit events are immutable'\);\s+END\s*;",
+              re.I | re.S,
+          )
+
           for path in files:
-              sql = re.sub(r"--[^\n]*", "", path.read_text())
-              statements = [s.strip() for s in sql.split(";") if s.strip()]
+              sql = re.sub(r"--[^\n]*", "", path.read_text()).strip()
+              triggers = trigger_pattern.findall(sql)
+              sql_without_triggers = trigger_pattern.sub("", sql)
+              if re.search(r"CREATE\s+TRIGGER", sql_without_triggers, re.I):
+                  raise SystemExit(f"Unreviewed trigger definition in {path.name}.")
+              statements = [s.strip() for s in sql_without_triggers.split(";") if s.strip()]
               for statement in statements:
-                  if not re.match(r"^(CREATE TABLE IF NOT EXISTS|CREATE INDEX IF NOT EXISTS|CREATE TRIGGER IF NOT EXISTS|PRAGMA foreign_keys\s*=\s*ON)\b", statement, re.I):
-                      raise SystemExit(f"Refusing non-additive or unreviewed SQL in {path.name}: {statement[:80]!r}")
+                  if not re.match(
+                      r"^(CREATE TABLE IF NOT EXISTS|CREATE INDEX IF NOT EXISTS|PRAGMA foreign_keys\s*=\s*ON)\b",
+                      statement, re.I
+                  ):
+                      raise SystemExit(
+                          f"Refusing non-additive or unreviewed SQL in {path.name}: {statement[:80]!r}"
+                      )
                   if re.search(r"\b(DROP|ALTER|DELETE|UPDATE|INSERT|REPLACE|VACUUM)\b", statement, re.I):
                       raise SystemExit(f"Refusing destructive/data-changing SQL in {path.name}.")
-          print("All Admin migrations contain only reviewed additive CREATE/PRAGMA statements.")
+              try:
+                  db.executescript(sql)
+              except sqlite3.Error as exc:
+                  raise SystemExit(f"SQLite schema validation failed for {path.name}: {exc}")
+
+          objects = db.execute(
+              "SELECT name FROM sqlite_master WHERE type IN ('table','index','trigger') "
+              "AND name NOT LIKE 'sqlite_%'"
+          ).fetchall()
+          if any(not name.startswith("admin_") and not name.startswith("idx_admin_") for (name,) in objects):
+              raise SystemExit("Migration created an object outside the BARQ Admin namespace.")
+          print("All seven Admin migrations passed additive SQL policy and SQLite in-memory schema validation.")
           PY
 
       - name: Apply idempotent Admin schema to the verified shared BARQ D1
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.BARQ_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.BARQ_CLOUDFLARE_ACCOUNT_ID }}
         shell: bash
         run: |
           set -euo pipefail
@@ -108,8 +139,8 @@ jobs:
 
       - name: Verify required Admin tables exist without reading user data
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.BARQ_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.BARQ_CLOUDFLARE_ACCOUNT_ID }}
         shell: bash
         run: |
           set -euo pipefail
