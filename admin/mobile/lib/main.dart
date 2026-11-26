@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 
 import 'models.dart';
+import 'pin_lock.dart';
 import 'security.dart';
 
 const _blue = Color(0xFF2785FF);
@@ -89,6 +90,8 @@ class _AdminHomePageState extends State<AdminHomePage>
   bool _loading = true;
   bool _online = false;
   bool _syncing = false;
+  bool _pinLocked = false;
+  bool _pinDialogVisible = false;
 
   @override
   void initState() {
@@ -106,7 +109,13 @@ class _AdminHomePageState extends State<AdminHomePage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _load();
+    if (state != AppLifecycleState.resumed) return;
+    if (_token.isNotEmpty && !_pinLocked) {
+      setState(() => _pinLocked = true);
+      _promptPin(setup: false);
+    } else if (_token.isEmpty) {
+      _load();
+    }
   }
 
   String get _base => _apiBase.replaceFirst(RegExp(r'/+$'), '');
@@ -115,12 +124,21 @@ class _AdminHomePageState extends State<AdminHomePage>
         'Content-Type': 'application/json',
       };
 
-  Future<void> _load() async {
+  Future<void> _load({bool skipPinCheck = false}) async {
     final prefs = await SharedPreferences.getInstance();
     _apiBase = prefs.getString('barq_admin_api_base') ?? '';
     _token = await _secure.read(key: 'barq_admin_owner_token') ?? '';
     _refreshToken = await _secure.read(key: 'barq_admin_refresh_token') ?? '';
     _sessionId = await _secure.read(key: 'barq_admin_session_id') ?? '';
+    if (!skipPinCheck && _token.isNotEmpty) {
+      final salt = await _secure.read(key: 'barq_admin_pin_salt');
+      final verifier = await _secure.read(key: 'barq_admin_pin_verifier');
+      if (mounted) setState(() => _pinLocked = true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _promptPin(setup: salt == null || verifier == null);
+      });
+      return;
+    }
     _readCache(prefs);
     _mergeOutboxDrafts(prefs);
     if (_apiBase.isEmpty || _token.isEmpty) {
@@ -302,6 +320,8 @@ class _AdminHomePageState extends State<AdminHomePage>
         await _secure.delete(key: 'barq_admin_owner_token');
         await _secure.delete(key: 'barq_admin_refresh_token');
         await _secure.delete(key: 'barq_admin_session_id');
+    await _secure.delete(key: 'barq_admin_pin_salt');
+    await _secure.delete(key: 'barq_admin_pin_verifier');
         _token = '';
         _refreshToken = '';
         _sessionId = '';
@@ -433,6 +453,49 @@ class _AdminHomePageState extends State<AdminHomePage>
         );
     }
   }
+
+
+  Future<void> _promptPin({required bool setup}) async {
+    if (_pinDialogVisible || !mounted) return;
+    _pinDialogVisible = true;
+    final accepted = await showAdminPinDialog(context, _secure, setup: setup);
+    _pinDialogVisible = false;
+    if (accepted && mounted) {
+      setState(() => _pinLocked = false);
+      await _load(skipPinCheck: true);
+    }
+  }
+
+  Widget _pinLockedCard() => Center(
+        child: Card(
+          margin: const EdgeInsets.all(20),
+          child: Padding(
+            padding: const EdgeInsets.all(22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.lock_outline, color: _gold, size: 42),
+                const SizedBox(height: 12),
+                const Text(
+                  'BARQ Admin مقفل',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'أدخل رمز القفل المحلي لعرض مساحة الإدارة.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 14),
+                FilledButton.icon(
+                  onPressed: () => _promptPin(setup: false),
+                  icon: const Icon(Icons.lock_open),
+                  label: const Text('فتح التطبيق'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
 
   Future<void> _syncOutbox(SharedPreferences prefs) async {
     if (_syncing) return;
@@ -1588,28 +1651,30 @@ class _AdminHomePageState extends State<AdminHomePage>
         actions: [
           IconButton(
             tooltip: 'إعدادات الاتصال',
-            onPressed: _showSettings,
+            onPressed: _pinLocked ? null : _showSettings,
             icon: const Icon(Icons.settings_outlined),
           ),
           IconButton(
             tooltip: 'رمز التفعيل',
-            onPressed: _token.isEmpty ? null : _showActivationCode,
+            onPressed: _token.isEmpty || _pinLocked ? null : _showActivationCode,
             icon: const Icon(Icons.vpn_key_outlined),
           ),
           IconButton(
             tooltip: 'الأجهزة',
-            onPressed: _token.isEmpty ? null : _showDevices,
+            onPressed: _token.isEmpty || _pinLocked ? null : _showDevices,
             icon: const Icon(Icons.devices_outlined),
           ),
           IconButton(
             tooltip: 'إنهاء الجلسة',
-            onPressed: _token.isEmpty ? null : _logout,
+            onPressed: _token.isEmpty || _pinLocked ? null : _logout,
             icon: const Icon(Icons.logout),
           ),
           const SizedBox(width: 6),
         ],
       ),
-      body: RefreshIndicator(
+      body: _pinLocked
+          ? _pinLockedCard()
+          : RefreshIndicator(
         onRefresh: _load,
         child: _loading && _tasks.isEmpty
             ? const Center(child: CircularProgressIndicator())
@@ -1623,7 +1688,7 @@ class _AdminHomePageState extends State<AdminHomePage>
                 ],
               ),
       ),
-      floatingActionButton: _tab == 1
+      floatingActionButton: _pinLocked ? null : _tab == 1
           ? FloatingActionButton.extended(
               onPressed: () => _showCreateTask(),
               icon: const Icon(Icons.add),
@@ -1636,7 +1701,7 @@ class _AdminHomePageState extends State<AdminHomePage>
                   label: const Text('اسأل BARQ Brain'),
                 )
               : null,
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: _pinLocked ? null : NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (value) => setState(() => _tab = value),
         destinations: const [
