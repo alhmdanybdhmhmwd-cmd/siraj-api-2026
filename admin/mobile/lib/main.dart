@@ -318,8 +318,8 @@ class _AdminHomePageState extends State<AdminHomePage>
         await _secure.delete(key: 'barq_admin_owner_token');
         await _secure.delete(key: 'barq_admin_refresh_token');
         await _secure.delete(key: 'barq_admin_session_id');
-    await _secure.delete(key: 'barq_admin_pin_salt');
-    await _secure.delete(key: 'barq_admin_pin_verifier');
+        await _secure.delete(key: 'barq_admin_pin_salt');
+        await _secure.delete(key: 'barq_admin_pin_verifier');
         _token = '';
         _refreshToken = '';
         _sessionId = '';
@@ -451,7 +451,6 @@ class _AdminHomePageState extends State<AdminHomePage>
         );
     }
   }
-
 
   Future<void> _promptPin({required bool setup}) async {
     if (_pinDialogVisible || !mounted) return;
@@ -1658,7 +1657,8 @@ class _AdminHomePageState extends State<AdminHomePage>
           ),
           IconButton(
             tooltip: 'رمز التفعيل',
-            onPressed: _token.isEmpty || _pinLocked ? null : _showActivationCode,
+            onPressed:
+                _token.isEmpty || _pinLocked ? null : _showActivationCode,
             icon: const Icon(Icons.vpn_key_outlined),
           ),
           IconButton(
@@ -1677,52 +1677,57 @@ class _AdminHomePageState extends State<AdminHomePage>
       body: _pinLocked
           ? _pinLockedCard()
           : RefreshIndicator(
-        onRefresh: _load,
-        child: _loading && _tasks.isEmpty
-            ? const Center(child: CircularProgressIndicator())
-            : IndexedStack(
-                index: _tab,
-                children: [
-                  _dashboard(),
-                  _tasksView(),
-                  _approvalsView(),
-                  _auditView(),
-                ],
-              ),
-      ),
-      floatingActionButton: _pinLocked ? null : _tab == 1
-          ? FloatingActionButton.extended(
-              onPressed: () => _showCreateTask(),
-              icon: const Icon(Icons.add),
-              label: const Text('مهمة جديدة'),
-            )
-          : _tab == 0
+              onRefresh: _load,
+              child: _loading && _tasks.isEmpty
+                  ? const Center(child: CircularProgressIndicator())
+                  : IndexedStack(
+                      index: _tab,
+                      children: [
+                        _dashboard(),
+                        _tasksView(),
+                        _approvalsView(),
+                        _auditView(),
+                      ],
+                    ),
+            ),
+      floatingActionButton: _pinLocked
+          ? null
+          : _tab == 1
               ? FloatingActionButton.extended(
-                  onPressed: () => _showCreateTask(assistant: true),
-                  icon: const Icon(Icons.bolt),
-                  label: const Text('اسأل BARQ Brain'),
+                  onPressed: () => _showCreateTask(),
+                  icon: const Icon(Icons.add),
+                  label: const Text('مهمة جديدة'),
                 )
-              : null,
-      bottomNavigationBar: _pinLocked ? null : NavigationBar(
-        selectedIndex: _tab,
-        onDestinationSelected: (value) => setState(() => _tab = value),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
-            label: 'الرئيسية',
-          ),
-          NavigationDestination(icon: Icon(Icons.task_alt), label: 'المهام'),
-          NavigationDestination(
-            icon: Icon(Icons.verified_user_outlined),
-            label: 'الموافقات',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.receipt_long_outlined),
-            label: 'السجل',
-          ),
-        ],
-      ),
+              : _tab == 0
+                  ? FloatingActionButton.extended(
+                      onPressed: () => _showCreateTask(assistant: true),
+                      icon: const Icon(Icons.bolt),
+                      label: const Text('اسأل BARQ Brain'),
+                    )
+                  : null,
+      bottomNavigationBar: _pinLocked
+          ? null
+          : NavigationBar(
+              selectedIndex: _tab,
+              onDestinationSelected: (value) => setState(() => _tab = value),
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.dashboard_outlined),
+                  selectedIcon: Icon(Icons.dashboard),
+                  label: 'الرئيسية',
+                ),
+                NavigationDestination(
+                    icon: Icon(Icons.task_alt), label: 'المهام'),
+                NavigationDestination(
+                  icon: Icon(Icons.verified_user_outlined),
+                  label: 'الموافقات',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.receipt_long_outlined),
+                  label: 'السجل',
+                ),
+              ],
+            ),
     );
   }
 
