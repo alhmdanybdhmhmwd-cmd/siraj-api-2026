@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, validateAdminAccessClaims, processAdminDeadLetterMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, validateAdminAccessClaims, processAdminDeadLetterMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches, constantTimeTextEqual } from "./worker.js";
 
 test("idempotency keys are bounded and cannot be silently truncated", () => {
   assert.deepEqual(validateIdempotencyKey(null), { ok: true, value: null });
@@ -396,4 +396,12 @@ test("task and checkpoint writes always retain workspace ownership in SQL predic
     /SELECT 1 FROM admin_tasks WHERE id = \? AND workspace_id = \? AND last_checkpoint_id = \?/);
   assert.match(source,
     /SELECT 1 FROM admin_tasks WHERE id = \? AND workspace_id = \? AND last_checkpoint_id = \? AND checkpoint_version = \?/);
+});
+
+
+test("activation secret comparison rejects mismatched lengths and compares equal-length values", () => {
+  assert.equal(constantTimeTextEqual("a".repeat(64), "a".repeat(64)), true);
+  assert.equal(constantTimeTextEqual("a".repeat(64), "b".repeat(64)), false);
+  assert.equal(constantTimeTextEqual("short", "shorter"), false);
+  assert.equal(constantTimeTextEqual(null, "x"), false);
 });
