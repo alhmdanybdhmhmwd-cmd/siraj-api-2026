@@ -1,7 +1,7 @@
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
-import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl, summarizeIndexCoverage, selectIndexBatch, normalizeAllowedRepositories, selectIndexBatchWithSkips, ingestRepository, containsLikelySecret, classifyIndexPath, fetchWithRetry, createKnowledgeChunkRecords, planKnowledgeReconciliation } from "./ingest_github_repo.mjs";
+import { shouldIndexPath, splitKnowledgeContent, inferSourceType, normalizeAdminApiUrl, summarizeIndexCoverage, selectIndexBatch, normalizeAllowedRepositories, selectIndexBatchWithSkips, ingestRepository, reconcileRepository, containsLikelySecret, classifyIndexPath, fetchWithRetry, createKnowledgeChunkRecords, planKnowledgeReconciliation } from "./ingest_github_repo.mjs";
 
 test("repository ingestion allowlists project files and excludes secrets/build output", () => {
   assert.equal(shouldIndexPath("docs/BARQ_PRODUCT.md"), true);
@@ -101,6 +101,65 @@ test("repository ingestion refuses truncated GitHub trees before indexing partia
 
     assert.equal(calls.length, 2);
     assert.equal(calls.some(url => url.endsWith("/v1/knowledge")), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("repository reconciliation fetches every indexed page and reports stale and missing current sources", async () => {
+  const originalFetch = globalThis.fetch;
+  const revision = "d".repeat(40);
+  const oldRevision = "e".repeat(40);
+  const cursor = "123e4567-e89b-42d3-a456-426614174000";
+  const repository = "owner/barq";
+  const calls = [];
+  try {
+    globalThis.fetch = async input => {
+      const url = new URL(String(input));
+      calls.push(url);
+      if (url.pathname.endsWith("/commits/main")) {
+        return new Response(JSON.stringify({ sha: revision }), { status: 200 });
+      }
+      if (url.pathname.endsWith("/git/trees/" + revision)) {
+        return new Response(JSON.stringify({
+          truncated: false,
+          tree: [
+            { type: "blob", path: "docs/a.md", size: 100 },
+            { type: "blob", path: "docs/b.md", size: 100 },
+            { type: "blob", path: "node_modules/pkg/index.js", size: 10 }
+          ]
+        }), { status: 200 });
+      }
+      if (url.pathname.endsWith("/admin/v1/knowledge")) {
+        if (!url.searchParams.has("cursor")) {
+          return new Response(JSON.stringify({
+            sources: [{ source_path: repository + "/docs/a.md", source_revision: revision, title: "A" }],
+            hasMore: true,
+            nextCursor: cursor
+          }), { status: 200 });
+        }
+        assert.equal(url.searchParams.get("cursor"), cursor);
+        return new Response(JSON.stringify({
+          sources: [{ source_path: repository + "/docs/b.md", source_revision: oldRevision, title: "B old" }],
+          hasMore: false,
+          nextCursor: null
+        }), { status: 200 });
+      }
+      throw new Error("unexpected_fetch_url " + url.href);
+    };
+    const report = await reconcileRepository({
+      repository,
+      ref: "main",
+      githubToken: "read-only-test-token",
+      adminApiUrl: "https://admin.example.com/admin",
+      ownerToken: "short-lived-owner-token",
+      allowedRepositories: [repository]
+    });
+    assert.equal(report.currentPathCount, 2);
+    assert.equal(report.staleRevisions.length, 1);
+    assert.equal(report.notYetIndexed.includes("docs/b.md"), true);
+    assert.equal(report.chunkCompletenessVerified, false);
+    assert.equal(calls.filter(url => url.pathname.endsWith("/admin/v1/knowledge")).length, 2);
   } finally {
     globalThis.fetch = originalFetch;
   }
