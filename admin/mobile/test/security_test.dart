@@ -29,6 +29,4 @@ void main() {
     expect(isValidAdminApiBase('https://admin.example.com#fragment'), isFalse);
     expect(isValidAdminApiBase(''), isFalse);
   });
-
-
 }
