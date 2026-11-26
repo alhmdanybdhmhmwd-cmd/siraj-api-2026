@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, validateAdminAccessClaims, processAdminDeadLetterMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, validateAdminAccessClaims, processAdminDeadLetterMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches } from "./worker.js";
 
 test("idempotency keys are bounded and cannot be silently truncated", () => {
   assert.deepEqual(validateIdempotencyKey(null), { ok: true, value: null });
@@ -191,6 +191,32 @@ test("knowledge sources are versioned, typed, and bounded", () => {
   assert.equal(validateKnowledgeInput({
     sourceType: "runbook", sourcePath: "x", title: "x", content: "x".repeat(24001)
   }).ok, false);
+});
+
+test("knowledge listing validates exact repository scope and bounded immutable-revision pagination", () => {
+  const valid = validateKnowledgeListQuery(new URLSearchParams({
+    repository: "alhmdanybdhmhmwd-cmd/siraj-api-2026",
+    revision: "a".repeat(40),
+    cursor: "123e4567-e89b-42d3-a456-426614174000",
+    limit: "250"
+  }));
+  assert.deepEqual(valid, {
+    ok: true,
+    value: {
+      repository: "alhmdanybdhmhmwd-cmd/siraj-api-2026",
+      revision: "a".repeat(40),
+      cursor: "123e4567-e89b-42d3-a456-426614174000",
+      limit: 250
+    }
+  });
+  assert.equal(validateKnowledgeListQuery(new URLSearchParams({ repository: "../other/repo" })).ok, false);
+  assert.equal(validateKnowledgeListQuery(new URLSearchParams({ revision: "main" })).ok, false);
+  assert.equal(validateKnowledgeListQuery(new URLSearchParams({ cursor: "not-a-uuid" })).ok, false);
+  assert.equal(validateKnowledgeListQuery(new URLSearchParams({ limit: "501" })).ok, false);
+  assert.equal(validateKnowledgeListQuery(new URLSearchParams({ limit: "0" })).ok, false);
+  assert.deepEqual(validateKnowledgeListQuery(new URLSearchParams()).value, {
+    repository: "", revision: "", cursor: "", limit: 100
+  });
 });
 
 test("BARQ Brain ranks matching project sources and includes their citations", () => {
