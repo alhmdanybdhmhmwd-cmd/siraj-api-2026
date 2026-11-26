@@ -115,3 +115,27 @@ This checkpoint records verified repository/CI evidence only. It does not mark P
 5. Run live retrieval demonstrations for product identity, roadmap, feature requirements, architecture, known issues, contradictory/stale decisions, and prompt-injection resistance.
 
 **Status remains IN PROGRESS.** CI success is not evidence of live ingestion, live OIDC, live model retrieval, or complete source coverage.
+
+## Phase 2 verification update — 2026-11-26 (latest checkpoint)
+
+This update supersedes older CI status notes above where the commit/run differs. It records only evidence available from the repository and CI; it does not waive live acceptance gates.
+
+### Latest verified repository checks
+
+- BARQ Admin foundation commit `4d6aafb593e471c69954a42ff68f905fb7574fe3`: `auth-tests`, `admin-quality`, `admin-mobile-quality`, and Worker bundle diagnostics all completed successfully. Admin mobile analysis/tests and Android AppAuth/Kotlin validation passed; no APK was packaged.
+- Gateway rebased branch PR #14 commit `a9238f853cc79dd88fb8ec02135875146b681bc5`: both backend `auth-tests` runs completed successfully after updating the contract test to enforce the public gateway behavior.
+- The Cloudflare Workers Builds check for PR #14 reported failure. Its check summary does not expose a diagnostic cause in the available GitHub result; this remains unresolved and is not counted as a successful build.
+- PR #14 is draft/open and based directly on the current Admin foundation. No PR was merged and no production deployment or D1 write was performed.
+
+### Remaining hard blockers to Phase 2 completion
+
+1. Cloudflare credential integration `barq-cloudflare-admin-access` has not been confirmed as saved. Existing saved Cloudflare integrations still report no zones visible; the secure one-time connection is still pending.
+2. Without verified Cloudflare credentials, the exact shared account, Worker `siraj-api`, and D1 database `siraj-db` cannot be re-verified. The approved additive migrations remain unapplied; no live D1 write has occurred.
+3. Admin owner secrets, Google owner allowlist, and exact Admin origin have not been verified on the shared Worker.
+4. No immutable-SHA indexing run has been executed against live `/admin/v1/knowledge`; no live coverage/freshness report exists.
+5. No live BARQ Brain model-backed retrieval/citation acceptance has been demonstrated.
+6. Live Google OIDC handshake remains unverified. Physical-device tests remain deferred to the end of Phase 3, as instructed.
+
+### Current phase decision
+
+**Phase 2 remains IN PROGRESS.** Offline source and CI work is substantially prepared, but it would be inaccurate and unsafe to declare Phase 2 complete or start Phase 3 while the shared D1 migration, live indexing/coverage, owner configuration, and live Brain retrieval gates remain unverified.
