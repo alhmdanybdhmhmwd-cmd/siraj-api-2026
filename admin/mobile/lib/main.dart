@@ -309,7 +309,7 @@ class _AdminHomePageState extends State<AdminHomePage>
         await _secure.delete(key: 'barq_admin_owner_token');
         await _secure.delete(key: 'barq_admin_refresh_token');
         await _secure.delete(key: 'barq_admin_session_id');
-    await _secure.delete(key: 'barq_admin_activation_code');
+        await _secure.delete(key: 'barq_admin_activation_code');
         _token = '';
         _refreshToken = '';
         _sessionId = '';
@@ -675,6 +675,7 @@ class _AdminHomePageState extends State<AdminHomePage>
     await _secure.delete(key: 'barq_admin_owner_token');
     await _secure.delete(key: 'barq_admin_refresh_token');
     await _secure.delete(key: 'barq_admin_session_id');
+    await _secure.delete(key: 'barq_admin_activation_code');
     for (final key in [
       _cacheWorkspace,
       _cacheTasks,
