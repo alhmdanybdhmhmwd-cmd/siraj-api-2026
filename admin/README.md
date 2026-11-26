@@ -19,8 +19,10 @@ This directory is a separate Admin service boundary. It is not part of the BARQ 
 
 ## Development roadmap
 
-- Phase 2 knowledge and project understanding: still in progress; the selected target is the existing BARQ Worker and D1 database through `/admin/*`. Live indexing and retrieval remain blocked until the owner separately approves the additive production migrations and the Admin owner-authentication configuration is safely provisioned and verified. The isolated Preview harness is optional, not a prerequisite for the selected shared-runtime path. See `knowledge/PHASE2_SCOPE.md`.
-- Phase 3 safe development tools: architecture and safety contract started. Heavy repository work and builds are designed to run server-side/CI, not on the owner's phone. No GitHub write runner or autonomous repository-edit capability is claimed live yet. See `knowledge/PHASE3_SCOPE.md`.
+The numbered work packages below are historical internal labels, not the canonical BARQ Admin phase numbers. The authoritative sequence is `docs/BARQ_ADMIN_MASTER_ROADMAP.md`: knowledge and project understanding belongs to master Phase 5; safe development tools belong to master Phase 6. Master Phase 2 is workspace/tasks/checkpoints, and master Phase 3 is the Android Admin client and multi-device UX.
+
+- Knowledge and project understanding (master Phase 5): still in progress; the selected target is the existing BARQ Worker and D1 database through `/admin/*`. Live indexing and retrieval remain blocked until the owner separately approves the additive production migrations and the Admin owner-authentication configuration is safely provisioned and verified. The isolated Preview harness is optional, not a prerequisite for the selected shared-runtime path. See `knowledge/PHASE2_SCOPE.md`.
+- Safe development tools (master Phase 6): architecture and safety contract started. Heavy repository work and builds are designed to run server-side/CI, not on the owner's phone. No GitHub write runner or autonomous repository-edit capability is claimed live yet. See `knowledge/PHASE3_SCOPE.md`.
 
 ## Shared BARQ runtime integration (implemented in source; not deployed)
 
