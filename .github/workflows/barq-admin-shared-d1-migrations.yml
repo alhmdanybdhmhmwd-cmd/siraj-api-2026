@@ -105,8 +105,9 @@ jobs:
                       raise SystemExit(
                           f"Refusing non-additive or unreviewed SQL in {path.name}: {statement[:80]!r}"
                       )
-                  if re.search(r"\b(DROP|ALTER|DELETE|UPDATE|INSERT|REPLACE|VACUUM)\b", statement, re.I):
-                      raise SystemExit(f"Refusing destructive/data-changing SQL in {path.name}.")
+                  # The top-level allowlist above rejects DML/DDL mutations.
+                  # Do not scan nested CREATE TABLE clauses for DELETE: ON DELETE
+                  # CASCADE/SET NULL are legitimate foreign-key actions.
               try:
                   db.executescript(sql)
               except sqlite3.Error as exc:
