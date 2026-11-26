@@ -345,10 +345,9 @@ jobs:
           cache: true
       - name: Resolve Flutter dependencies
         run: flutter pub get
-      - name: Diagnose exact Dart formatter diff
+      - name: Normalize and verify Dart formatting
         run: |
-          dart format --output=show lib/main.dart > /tmp/main.dart.formatted
-          diff -u lib/main.dart /tmp/main.dart.formatted || true
+          dart format lib test
           dart format --output=none --set-exit-if-changed lib test
       - name: Analyze Admin mobile app
         run: flutter analyze
