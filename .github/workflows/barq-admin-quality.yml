@@ -371,18 +371,6 @@ jobs:
           echo "Unable to install the Flutter-pinned NDK after 3 attempts." >&2
           exit 1
       - uses: gradle/actions/setup-gradle@v4
-      - name: Add Maven Central fallback for Flutter included Gradle build
-        shell: bash
-        run: |
-          mkdir -p "$HOME/.gradle/init.d"
-          cat > "$HOME/.gradle/init.d/barq-maven-central-fallback.gradle" <<'GRADLE'
-          settingsEvaluated { settings ->
-              settings.pluginManagement.repositories {
-                  maven { url = uri("https://repo1.maven.org/maven2") }
-              }
-          }
-          GRADLE
-
       - name: Validate Android AppAuth platform wiring without building an APK
         timeout-minutes: 10
         run: |
