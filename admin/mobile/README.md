@@ -70,3 +70,10 @@ The shared-runtime handler reuses BARQ's existing Worker and D1 binding while ke
 ## Owner operating agreement
 
 BARQ is the main product, SPARK is its stories feature, BARQ Admin is the separate management app, and BARQ Brain is its assistant. The owner explicitly authorized Phase 2 on 2026-11-24. BARQ Brain project understanding and repository/code indexing are in progress; do not claim complete coverage until real Preview indexing and coverage/freshness checks pass. Production publishing, deployment, merging, pull-request base changes, spending, and other consequential external actions require specific owner approval.
+
+
+## Owner activation code management
+
+After the first trusted owner session is established, the owner can view, copy, generate, replace, or disable the BARQ Admin activation code from inside the app. The Worker stores only a SHA-256 verifier and AES-GCM ciphertext in the isolated Admin database; the encryption key is derived from the server-only `BARQ_ADMIN_JWT_SECRET`. Replacing the code blocks new activations using the previous code. Existing device sessions remain independent and can be revoked from the device manager. Disabling the activation code blocks new device activations without silently signing out existing devices.
+
+The initial owner bootstrap still requires a trusted server-side bootstrap credential to exist before the first owner session. Do not expose a public first-owner setup endpoint or embed a bootstrap secret in the APK. The activation-management migration is `0008_activation_code_management.sql`; apply it only to the isolated Admin Preview database for testing. Do not apply it to a shared/production BARQ database without explicit owner approval.
