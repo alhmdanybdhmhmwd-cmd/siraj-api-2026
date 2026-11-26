@@ -90,7 +90,7 @@ jobs:
 
           db = sqlite3.connect(":memory:")
           trigger_pattern = re.compile(
-              r"CREATE TRIGGER IF NOT EXISTS (admin_audit_no_update|admin_audit_no_delete)\\s+"
+              r"CREATE TRIGGER IF NOT EXISTS (admin_audit_no_update|admin_audit_no_delete)\s+"
               r"BEFORE (UPDATE|DELETE) ON admin_audit_events\s+"
               r"BEGIN\s+SELECT RAISE\(ABORT, 'admin audit events are immutable'\);\s+END\s*;",
               re.I | re.S,
