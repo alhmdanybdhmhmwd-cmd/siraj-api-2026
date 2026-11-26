@@ -2267,7 +2267,6 @@ class _AdminHomePageState extends State<AdminHomePage>
           ),
         ),
       );
-}
 
   Future<String> _requestImageAnalysis(
     Uint8List bytes,
