@@ -22,17 +22,6 @@ jobs:
           # Keep the source and workflow on the same immutable revision.
           ref: ${{ github.sha }}
 
-      - name: Require the public Google OAuth client ID
-        shell: bash
-        env:
-          BARQ_GOOGLE_OIDC_CLIENT_ID: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID }}
-        run: |
-          if [[ ! "$BARQ_GOOGLE_OIDC_CLIENT_ID" =~ ^[0-9]+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$ ]]; then
-            echo "::error::Set the GitHub Actions repository variable BARQ_GOOGLE_OIDC_CLIENT_ID to the native Android OAuth client ID before building."
-            exit 1
-          fi
-          echo "Google OAuth client ID format verified (value intentionally not printed)."
-
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -60,13 +49,10 @@ jobs:
 
       - name: Build compact internal ARM64 release APK
         working-directory: admin/mobile
-        env:
-          BARQ_GOOGLE_OIDC_CLIENT_ID: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID }}
         run: |
           flutter build apk --release \
             --target-platform android-arm64 \
-            --split-per-abi \
-            --dart-define=BARQ_GOOGLE_OIDC_CLIENT_ID="$BARQ_GOOGLE_OIDC_CLIENT_ID"
+            --split-per-abi
 
       - name: Verify APK and report size and checksum
         id: apk
