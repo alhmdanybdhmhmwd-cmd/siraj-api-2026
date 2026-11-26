@@ -9,6 +9,7 @@ on:
   push:
     branches:
       - "barq-admin-foundation-2026-11-23"
+      - "barq/admin-apk-arm64-oauth-fix-2026-11-27"
     paths:
       - "admin/**"
       - ".github/workflows/barq-admin-quality.yml"
