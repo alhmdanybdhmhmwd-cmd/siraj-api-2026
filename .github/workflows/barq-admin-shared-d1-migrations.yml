@@ -1,13 +1,6 @@
 name: BARQ Admin shared D1 migrations
 
 on:
-  push:
-    branches:
-      - barq/no-vpn-routing-rebased-2026-11-26
-    paths:
-      - ".github/workflows/barq-admin-shared-d1-migrations.yml"
-      - "admin/migrations/**"
-      - "wrangler.toml"
   workflow_dispatch:
     inputs:
       apply_migrations:
@@ -132,7 +125,7 @@ jobs:
           fi
 
       - name: Apply idempotent Admin schema to the verified shared BARQ D1
-        if: ${{ github.event_name == 'push' || inputs.apply_migrations == true }}
+        if: ${{ inputs.apply_migrations == true }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.BARQ_CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.BARQ_CLOUDFLARE_ACCOUNT_ID }}
@@ -149,7 +142,7 @@ jobs:
           done
 
       - name: Verify required Admin tables exist without reading user data
-        if: ${{ github.event_name == 'push' || inputs.apply_migrations == true }}
+        if: ${{ inputs.apply_migrations == true }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.BARQ_CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.BARQ_CLOUDFLARE_ACCOUNT_ID }}
