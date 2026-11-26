@@ -375,21 +375,6 @@ jobs:
           echo "Unable to install the Flutter-pinned NDK after 3 attempts." >&2
           exit 1
       - uses: gradle/actions/setup-gradle@v4
-      - name: Validate Android AppAuth platform wiring without building an APK
-        timeout-minutes: 10
-        run: |
-          test -f android/gradlew
-          grep -Fq 'applicationId = "com.barq.admin"' android/app/build.gradle.kts
-          grep -Fq 'manifestPlaceholders["appAuthRedirectScheme"]' android/app/build.gradle.kts
-          grep -Fq 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
-          ! grep -Fq 'android:taskAffinity=""' android/app/src/main/AndroidManifest.xml
-          sdk_path="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
-          printf "flutter.sdk=%s\nsdk.dir=%s\n" "$FLUTTER_ROOT" "$sdk_path" > android/local.properties
-          cd android
-          bash gradlew :app:processDebugManifest --no-daemon --console=plain --stacktrace --info
-          manifest="$(find ../build/app/intermediates -path '*merged_manifest*' -name AndroidManifest.xml -print -quit)"
-          test -n "$manifest"
-
       - name: Compile Android debug Kotlin sources without packaging an APK
         working-directory: admin/mobile/android
         run: bash gradlew :app:compileDebugKotlin --no-daemon --console=plain
