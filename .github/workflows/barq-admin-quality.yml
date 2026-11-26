@@ -317,8 +317,10 @@ jobs:
           assert config["ai"]["binding"] == "ADMIN_AI"
           assert config["observability"]["enabled"] is True
           assert "REPLACE_WITH" in config["vars"]["BARQ_ADMIN_ALLOWED_ORIGIN"]
-          assert "REPLACE_WITH" in config["vars"]["BARQ_GOOGLE_OIDC_CLIENT_ID"]
-          assert "REPLACE_WITH" in config["vars"]["BARQ_ADMIN_OWNER_EMAIL"]
+          assert "BARQ_ADMIN_ACTIVATION_CODE" not in config.get("vars", {})
+          worker_source = Path("admin/worker.js").read_text()
+          assert 'url.pathname === "/v1/auth/activate"' in worker_source
+          assert 'url.pathname === "/v1/auth/activation-code"' in worker_source
           serialized = str(config).lower()
           assert "barq-production" not in serialized
           assert "siraj-production" not in serialized
@@ -384,11 +386,9 @@ jobs:
           sdk_path="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
           printf "flutter.sdk=%s\nsdk.dir=%s\n" "$FLUTTER_ROOT" "$sdk_path" > android/local.properties
           cd android
-          export BARQ_GOOGLE_OIDC_CLIENT_ID="1234567890-test.apps.googleusercontent.com"
           bash gradlew :app:processDebugManifest --no-daemon --console=plain --stacktrace --info
           manifest="$(find ../build/app/intermediates -path '*merged_manifest*' -name AndroidManifest.xml -print -quit)"
           test -n "$manifest"
-          grep -Fq 'com.googleusercontent.apps.1234567890' "$manifest"
 
       - name: Compile Android debug Kotlin sources without packaging an APK
         working-directory: admin/mobile/android
@@ -410,22 +410,10 @@ jobs:
           test -n "$SHA1"
           echo "BARQ Admin Android signing SHA-1: $SHA1"
 
-      - name: Validate configured Google OAuth client ID for internal APK
-        if: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID != '' }}
-        shell: bash
-        env:
-          BARQ_GOOGLE_OIDC_CLIENT_ID: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID }}
-        run: |
-          if [[ ! "$BARQ_GOOGLE_OIDC_CLIENT_ID" =~ ^[0-9]+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$ ]]; then
-            echo "::error::BARQ_GOOGLE_OIDC_CLIENT_ID is not a valid native Android OAuth client ID."
-            exit 1
-          fi
-
       - name: Build compact BARQ Admin ARM64 internal APK
-        if: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID != '' && env.BARQ_ADMIN_SIGNING_CONFIGURED == 'true' }}
+        if: ${{ env.BARQ_ADMIN_SIGNING_CONFIGURED == 'true' }}
         working-directory: admin/mobile
         env:
-          BARQ_GOOGLE_OIDC_CLIENT_ID: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID }}
           BARQ_ADMIN_KEYSTORE_PATH: ${{ runner.temp }}/barq-admin-release.jks
           BARQ_ADMIN_KEYSTORE_PASSWORD: ${{ secrets.BARQ_ADMIN_KEYSTORE_PASSWORD }}
           BARQ_ADMIN_KEY_ALIAS: ${{ secrets.BARQ_ADMIN_KEY_ALIAS }}
@@ -434,11 +422,10 @@ jobs:
           test -s "$BARQ_ADMIN_KEYSTORE_PATH"
           flutter build apk --release \
             --target-platform android-arm64 \
-            --split-per-abi \
-            --dart-define=BARQ_GOOGLE_OIDC_CLIENT_ID="$BARQ_GOOGLE_OIDC_CLIENT_ID"
+            --split-per-abi
 
       - name: Verify internal APK size and checksum
-        if: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID != '' && env.BARQ_ADMIN_SIGNING_CONFIGURED == 'true' }}
+        if: ${{ env.BARQ_ADMIN_SIGNING_CONFIGURED == 'true' }}
         shell: bash
         run: |
           APK="admin/mobile/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
@@ -447,7 +434,7 @@ jobs:
           sha256sum "$APK"
 
       - name: Upload BARQ Admin ARM64 internal APK
-        if: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID != '' && env.BARQ_ADMIN_SIGNING_CONFIGURED == 'true' }}
+        if: ${{ env.BARQ_ADMIN_SIGNING_CONFIGURED == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: barq-admin-s7-arm64-internal
@@ -455,13 +442,10 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Report APK build skipped until OAuth and stable signing are configured
-        if: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID == '' || env.BARQ_ADMIN_SIGNING_CONFIGURED != 'true' }}
+      - name: Report APK build skipped until stable signing is configured
+        if: ${{ env.BARQ_ADMIN_SIGNING_CONFIGURED != 'true' }}
         shell: bash
         run: |
-          if [[ -z "${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID }}" ]]; then
-            echo "::warning::APK packaging skipped: BARQ_GOOGLE_OIDC_CLIENT_ID is not configured."
-          fi
           if [[ "$BARQ_ADMIN_SIGNING_CONFIGURED" != "true" ]]; then
             echo "::warning::APK packaging skipped: stable BARQ Admin signing secrets are not configured."
           fi
