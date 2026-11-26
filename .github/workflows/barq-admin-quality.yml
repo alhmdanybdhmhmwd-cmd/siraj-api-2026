@@ -149,7 +149,24 @@ jobs:
               RETURNING request_count
           """).fetchone()
           assert blocked_auth is None, "Auth rate limit allowed a sixth request"
-          print("Admin schema, immutable audit, owner sessions, OIDC nonce, refresh history and auth throttling checks passed.")
+          # First-run bootstrap is a one-time database claim; later contenders cannot replace it.
+          db.execute("""
+              INSERT INTO admin_activation_config (id, code_hash, encrypted_code, disabled)
+              VALUES (1, 'owner-code-hash', 'owner-code-ciphertext', 0)
+              ON CONFLICT(id) DO NOTHING
+          """)
+          db.execute("""
+              INSERT INTO admin_activation_config (id, code_hash, encrypted_code, disabled)
+              VALUES (1, 'attacker-code-hash', 'attacker-code-ciphertext', 0)
+              ON CONFLICT(id) DO NOTHING
+          """)
+          claimed = db.execute(
+              "SELECT code_hash, encrypted_code FROM admin_activation_config WHERE id=1"
+          ).fetchone()
+          assert claimed == ("owner-code-hash", "owner-code-ciphertext"), (
+              "First-owner claim was overwritten by a later bootstrap request"
+          )
+          print("Admin schema, immutable audit, owner sessions, OIDC nonce, refresh history, auth throttling and one-time bootstrap checks passed.")
           PY
       - name: Verify Admin schema can coexist with BARQ D1 schema (offline only)
         run: |
