@@ -456,8 +456,12 @@ class _AdminHomePageState extends State<AdminHomePage>
   Future<void> _promptPin({required bool setup}) async {
     if (_pinDialogVisible || !mounted) return;
     _pinDialogVisible = true;
-    final accepted = await showAdminPinDialog(context, _secure, setup: setup);
-    _pinDialogVisible = false;
+    var accepted = false;
+    try {
+      accepted = await showAdminPinDialog(context, _secure, setup: setup);
+    } finally {
+      _pinDialogVisible = false;
+    }
     if (accepted && mounted) {
       setState(() => _pinLocked = false);
       await _load(skipPinCheck: true);
