@@ -25,6 +25,34 @@ function decodeBase64url(value) {
   return Uint8Array.from(binary, char => char.charCodeAt(0));
 }
 
+async function activationEncryptionKey(secret) {
+  const material = await crypto.subtle.digest(
+    "SHA-256",
+    encoder.encode("barq-admin-activation-code-encryption-v1:" + secret)
+  );
+  return crypto.subtle.importKey("raw", material, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+
+async function encryptActivationCode(code, secret) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await activationEncryptionKey(secret);
+  const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoder.encode(code));
+  const packed = new Uint8Array(iv.length + encrypted.byteLength);
+  packed.set(iv);
+  packed.set(new Uint8Array(encrypted), iv.length);
+  return base64url(packed);
+}
+
+async function decryptActivationCode(value, secret) {
+  const packed = decodeBase64url(value);
+  if (packed.length < 29) throw new Error("activation_ciphertext_invalid");
+  const iv = packed.slice(0, 12);
+  const ciphertext = packed.slice(12);
+  const key = await activationEncryptionKey(secret);
+  const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
+  return new TextDecoder().decode(plaintext);
+}
+
 export function validateIdempotencyKey(value) {
   if (value === null || value === undefined || value === "") {
     return { ok: true, value: null };
@@ -643,8 +671,7 @@ async function handle(request, env) {
   if (!env.ADMIN_DB) return response({ error: "admin_database_unavailable" }, 503, allowedOrigin);
 
   if (request.method === "POST" && url.pathname === "/v1/auth/activate") {
-    if (!env.BARQ_ADMIN_JWT_SECRET || env.BARQ_ADMIN_JWT_SECRET.length < 32 ||
-        !env.BARQ_ADMIN_ACTIVATION_CODE || env.BARQ_ADMIN_ACTIVATION_CODE.length < 32) {
+    if (!env.BARQ_ADMIN_JWT_SECRET || env.BARQ_ADMIN_JWT_SECRET.length < 32) {
       return response({ error: "activation_not_configured" }, 503, allowedOrigin);
     }
     const body = await readJson(request);
@@ -658,9 +685,19 @@ async function handle(request, env) {
         !await consumeAdminAuthRateLimit(env, codeBucket, 8)) {
       return response({ error: "auth_rate_limited", retryAfterSeconds: 60 }, 429, allowedOrigin);
     }
+    const activationConfig = await env.ADMIN_DB.prepare(
+      "SELECT code_hash, disabled FROM admin_activation_config WHERE id = 1"
+    ).first();
+    if (activationConfig?.disabled) {
+      return response({ error: "activation_disabled" }, 403, allowedOrigin);
+    }
+    const expectedCodeHash = activationConfig?.code_hash ||
+      (typeof env.BARQ_ADMIN_ACTIVATION_CODE === "string" ? await authSha256Hex(env.BARQ_ADMIN_ACTIVATION_CODE) : "");
+    if (!expectedCodeHash) {
+      return response({ error: "activation_not_configured" }, 503, allowedOrigin);
+    }
     const suppliedHash = await authSha256Hex(body.code.trim());
-    const expectedHash = await authSha256Hex(env.BARQ_ADMIN_ACTIVATION_CODE);
-    if (!constantTimeTextEqual(suppliedHash, expectedHash)) {
+    if (!constantTimeTextEqual(suppliedHash, expectedCodeHash)) {
       return response({ error: "activation_code_invalid" }, 401, allowedOrigin);
     }
     const subject = "barq-admin-owner-v1";
@@ -796,13 +833,68 @@ async function handle(request, env) {
   if (!actor) return response({ error: "unauthorized" }, 401, allowedOrigin);
   const workspace = await ensureWorkspace(env, actor);
 
+  if (url.pathname === "/v1/auth/activation-code" &&
+      actor.subject !== "barq-admin-owner-v1") {
+    return response({ error: "forbidden" }, 403, allowedOrigin);
+  }
+
   if (request.method === "GET" && url.pathname === "/v1/auth/activation-code") {
-    if (actor.subject !== "barq-admin-owner-v1" ||
-        typeof env.BARQ_ADMIN_ACTIVATION_CODE !== "string" ||
-        env.BARQ_ADMIN_ACTIVATION_CODE.length < 32) {
-      return response({ error: "activation_code_unavailable" }, 403, allowedOrigin);
+    const config = await env.ADMIN_DB.prepare(
+      "SELECT encrypted_code, disabled FROM admin_activation_config WHERE id = 1"
+    ).first();
+    if (config?.disabled) return response({ error: "activation_code_disabled" }, 409, allowedOrigin);
+    if (config?.encrypted_code) {
+      try {
+        const code = await decryptActivationCode(config.encrypted_code, env.BARQ_ADMIN_JWT_SECRET);
+        return response({ code, managedInApp: true }, 200, allowedOrigin);
+      } catch {
+        return response({ error: "activation_code_unavailable" }, 503, allowedOrigin);
+      }
     }
-    return response({ code: env.BARQ_ADMIN_ACTIVATION_CODE }, 200, allowedOrigin);
+    if (typeof env.BARQ_ADMIN_ACTIVATION_CODE === "string" &&
+        env.BARQ_ADMIN_ACTIVATION_CODE.length >= 32) {
+      return response({ code: env.BARQ_ADMIN_ACTIVATION_CODE, managedInApp: false }, 200, allowedOrigin);
+    }
+    return response({ error: "activation_code_unavailable" }, 404, allowedOrigin);
+  }
+
+  if (request.method === "POST" && url.pathname === "/v1/auth/activation-code") {
+    if (!env.BARQ_ADMIN_JWT_SECRET || env.BARQ_ADMIN_JWT_SECRET.length < 32) {
+      return response({ error: "activation_management_unavailable" }, 503, allowedOrigin);
+    }
+    const body = await readJson(request);
+    if (!body || (body.code !== undefined &&
+        (typeof body.code !== "string" || body.code.trim().length < 32 ||
+         body.code.trim().length > 128 || !/^[A-Za-z0-9._-]+$/.test(body.code.trim())))) {
+      return response({ error: "invalid_activation_code" }, 400, allowedOrigin);
+    }
+    const code = body.code?.trim() || base64url(crypto.getRandomValues(new Uint8Array(32)));
+    const codeHash = await authSha256Hex(code);
+    const encryptedCode = await encryptActivationCode(code, env.BARQ_ADMIN_JWT_SECRET);
+    await env.ADMIN_DB.prepare(`
+      INSERT INTO admin_activation_config (id, code_hash, encrypted_code, disabled, updated_at)
+      VALUES (1, ?, ?, 0, CURRENT_TIMESTAMP)
+      ON CONFLICT(id) DO UPDATE SET
+        code_hash = excluded.code_hash,
+        encrypted_code = excluded.encrypted_code,
+        disabled = 0,
+        updated_at = CURRENT_TIMESTAMP
+    `).bind(codeHash, encryptedCode).run();
+    await audit(env, workspace, actor, "auth.activation_code.rotated", "owner", actor.subject,
+      { mode: body.code ? "custom" : "generated" });
+    return response({ code, generated: !body.code }, 200, allowedOrigin);
+  }
+
+  if (request.method === "DELETE" && url.pathname === "/v1/auth/activation-code") {
+    await env.ADMIN_DB.prepare(`
+      INSERT INTO admin_activation_config (id, code_hash, encrypted_code, disabled, updated_at)
+      VALUES (1, NULL, NULL, 1, CURRENT_TIMESTAMP)
+      ON CONFLICT(id) DO UPDATE SET
+        code_hash = NULL, encrypted_code = NULL, disabled = 1,
+        updated_at = CURRENT_TIMESTAMP
+    `).run();
+    await audit(env, workspace, actor, "auth.activation_code.disabled", "owner", actor.subject, {});
+    return response({ ok: true }, 200, allowedOrigin);
   }
 
   if (request.method === "GET" && url.pathname === "/v1/devices") {
