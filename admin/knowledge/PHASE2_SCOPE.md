@@ -82,3 +82,36 @@ Curated owner decisions are seeded in `admin/knowledge/BARQ_OWNER_CONTEXT.md`. T
 - Autonomous repository edits, repairs, merges, or deployments: later authorized phase.
 - Production data/resource changes, paid resource creation, and production deployment: approval-gated.
 - APK packaging and physical phone acceptance: later release/testing gates.
+
+
+## Phase 2 execution checkpoint — 2026-11-26
+
+This checkpoint records verified repository/CI evidence only. It does not mark Phase 2 complete.
+
+### Completed offline checks
+
+- Owner decision seed reviewed for product-boundary conflicts and time-sensitive statements. No direct conflict was found among the stable BARQ / SPARK / BARQ Admin identity decisions. Historical and unconfirmed items remain explicitly qualified.
+- Indexer tests cover exact repository allowlisting, secret/path exclusion, truncated-tree refusal, immutable-SHA resume, deterministic chunk identity, transient retry behavior, skip reasons, chunk completeness, and stale/deleted/not-yet-indexed source detection.
+- Brain tests cover project-scoped retrieval ranking and citations, multilingual query extraction, bounded result counts, conversation scoping, and treating indexed content as untrusted reference data.
+- Shared-runtime tests cover reuse of BARQ DB/AI bindings, no separate ADMIN_DB fallback, isolated /admin routing, health, preflight, and fail-closed behavior.
+- Auth tests cover Google ID-token signature/audience/issuer/owner/expiry checks, PKCE-related backend session controls, short-lived access claims, and hashed refresh-token persistence.
+- Latest verified BARQ Admin foundation CI on commit `fa50750017c0e2ecf235e14e8f009c0d0c1e29a6`: Backend tests run `45854460675` passed; BARQ Admin Quality run `45854460699` passed.
+
+### Still blocked / not yet evidenced
+
+- No immutable-SHA repository ingestion run has been executed against the live shared `/admin/v1/knowledge` endpoint. Therefore no indexed-file count, complete batch record, skipped-file audit, or live coverage/freshness report is claimed.
+- The additive Admin migrations have not been applied to `siraj-db`. The previously approved migration attempt was blocked because the `barq-admin-preview` GitHub environment lacked the required Cloudflare account/token credentials; no D1 writes occurred.
+- Admin owner secrets and the exact allowed Admin origin have not been verified on the shared Worker.
+- Live Google OIDC sign-in and live BARQ Brain model-backed retrieval have not been demonstrated.
+- No second repository is in scope; the only approved source repository remains `alhmdanybdhmhmwd-cmd/siraj-api-2026`.
+- Physical-device testing remains deferred to the end of BARQ Admin Phase 3, per the owner's latest scheduling instruction.
+
+### Next safe actions
+
+1. Restore access to the already approved Cloudflare preview credentials through the trusted secret-management path; never paste secrets into chat.
+2. Review and apply only the additive Admin migrations to the existing `siraj-db` after re-verifying the target database and environment.
+3. Verify the Admin owner allowlist/JWT/origin configuration without exposing secret values.
+4. Run the approved repository indexer in immutable-SHA batches, retain each batch summary, then generate coverage and reconciliation evidence.
+5. Run live retrieval demonstrations for product identity, roadmap, feature requirements, architecture, known issues, contradictory/stale decisions, and prompt-injection resistance.
+
+**Status remains IN PROGRESS.** CI success is not evidence of live ingestion, live OIDC, live model retrieval, or complete source coverage.
