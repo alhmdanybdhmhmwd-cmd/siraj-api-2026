@@ -1,4 +1,6 @@
-# BARQ Admin Phase 3 — Safe Development Tools
+# BARQ Admin safe development tools work package
+
+> Numbering note: this document was originally named Phase 3 scope. In the canonical `docs/BARQ_ADMIN_MASTER_ROADMAP.md`, safe development tools are master Phase 6; master Phase 3 is the Android Admin client and multi-device UX.
 
 Last updated: 2026-11-25
 Status: STARTED — architecture and safety contract; no repository write/CI execution tool is claimed live yet.
