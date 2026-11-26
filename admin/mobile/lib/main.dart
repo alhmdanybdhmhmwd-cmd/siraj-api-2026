@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:crypto/crypto.dart' as crypto;
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -17,6 +18,29 @@ const _blue = Color(0xFF2785FF);
 const _gold = Color(0xFFE8B95B);
 const _surface = Color(0xFF151E31);
 const _background = Color(0xFF0A1020);
+
+
+Uint8List _derivePinVerifier(String pin, List<int> salt) {
+  final hmac = crypto.Hmac(crypto.sha256, utf8.encode(pin));
+  var block = hmac.convert([...salt, 0, 0, 0, 1]).bytes;
+  final result = List<int>.from(block);
+  for (var iteration = 1; iteration < 20000; iteration++) {
+    block = hmac.convert(block).bytes;
+    for (var index = 0; index < result.length; index++) {
+      result[index] ^= block[index];
+    }
+  }
+  return Uint8List.fromList(result);
+}
+
+bool _constantTimeBytesEqual(List<int> left, List<int> right) {
+  if (left.length != right.length) return false;
+  var mismatch = 0;
+  for (var index = 0; index < left.length; index++) {
+    mismatch |= left[index] ^ right[index];
+  }
+  return mismatch == 0;
+}
 
 void main() => runApp(const BarqAdminApp());
 
@@ -90,6 +114,10 @@ class _AdminHomePageState extends State<AdminHomePage>
   bool _loading = true;
   bool _online = false;
   bool _syncing = false;
+  bool _pinLocked = false;
+  bool _pinDialogVisible = false;
+  int _pinFailedAttempts = 0;
+  DateTime? _pinLockedUntil;
 
   @override
   void initState() {
@@ -107,7 +135,10 @@ class _AdminHomePageState extends State<AdminHomePage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _load();
+    if (state == AppLifecycleState.resumed && _token.isNotEmpty && !_pinLocked) {
+      setState(() => _pinLocked = true);
+      _showPinDialog(setup: false);
+    }
   }
 
   String get _base => _apiBase.replaceFirst(RegExp(r'/+$'), '');
@@ -116,12 +147,21 @@ class _AdminHomePageState extends State<AdminHomePage>
         'Content-Type': 'application/json',
       };
 
-  Future<void> _load() async {
+  Future<void> _load({bool skipPinCheck = false}) async {
     final prefs = await SharedPreferences.getInstance();
     _apiBase = prefs.getString('barq_admin_api_base') ?? '';
     _token = await _secure.read(key: 'barq_admin_owner_token') ?? '';
     _refreshToken = await _secure.read(key: 'barq_admin_refresh_token') ?? '';
     _sessionId = await _secure.read(key: 'barq_admin_session_id') ?? '';
+    if (!skipPinCheck && _token.isNotEmpty) {
+      final saltValue = await _secure.read(key: 'barq_admin_pin_salt');
+      final verifier = await _secure.read(key: 'barq_admin_pin_verifier');
+      if (mounted) setState(() => _pinLocked = true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showPinDialog(setup: saltValue == null || verifier == null);
+      });
+      return;
+    }
     _readCache(prefs);
     _mergeOutboxDrafts(prefs);
     if (_apiBase.isEmpty || _token.isEmpty) {
