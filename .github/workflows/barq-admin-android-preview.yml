@@ -14,6 +14,8 @@ jobs:
   build-android-preview:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      BARQ_ADMIN_SIGNING_CONFIGURED: ${{ secrets.BARQ_ADMIN_KEYSTORE_BASE64 != '' && secrets.BARQ_ADMIN_KEYSTORE_PASSWORD != '' && secrets.BARQ_ADMIN_KEY_ALIAS != '' && secrets.BARQ_ADMIN_KEY_PASSWORD != '' }}
     steps:
       - name: Checkout selected Admin source revision
         uses: actions/checkout@v4
@@ -47,14 +49,30 @@ jobs:
         working-directory: admin/mobile
         run: flutter test
 
+      - name: Prepare stable BARQ Admin signing key
+        if: ${{ env.BARQ_ADMIN_SIGNING_CONFIGURED == 'true' }}
+        shell: bash
+        env:
+          BARQ_ADMIN_KEYSTORE_BASE64: ${{ secrets.BARQ_ADMIN_KEYSTORE_BASE64 }}
+        run: |
+          printf '%s' "$BARQ_ADMIN_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/barq-admin-release.jks"
+          test -s "$RUNNER_TEMP/barq-admin-release.jks"
+
       - name: Build compact internal ARM64 release APK
+        if: ${{ env.BARQ_ADMIN_SIGNING_CONFIGURED == 'true' }}
         working-directory: admin/mobile
+        env:
+          BARQ_ADMIN_KEYSTORE_PATH: ${{ runner.temp }}/barq-admin-release.jks
+          BARQ_ADMIN_KEYSTORE_PASSWORD: ${{ secrets.BARQ_ADMIN_KEYSTORE_PASSWORD }}
+          BARQ_ADMIN_KEY_ALIAS: ${{ secrets.BARQ_ADMIN_KEY_ALIAS }}
+          BARQ_ADMIN_KEY_PASSWORD: ${{ secrets.BARQ_ADMIN_KEY_PASSWORD }}
         run: |
           flutter build apk --release \
             --target-platform android-arm64 \
             --split-per-abi
 
       - name: Verify APK and report size and checksum
+        if: ${{ env.BARQ_ADMIN_SIGNING_CONFIGURED == 'true' }}
         id: apk
         shell: bash
         run: |
@@ -68,9 +86,15 @@ jobs:
           echo "APK SHA-256: $APK_SHA256"
 
       - name: Upload BARQ Admin S7 ARM64 APK
+        if: ${{ env.BARQ_ADMIN_SIGNING_CONFIGURED == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: barq-admin-s7-arm64-internal
           path: admin/mobile/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Report APK build skipped until stable signing is configured
+        if: ${{ env.BARQ_ADMIN_SIGNING_CONFIGURED != 'true' }}
+        shell: bash
+        run: echo "::warning::APK packaging skipped: stable BARQ Admin signing secrets are not configured."
