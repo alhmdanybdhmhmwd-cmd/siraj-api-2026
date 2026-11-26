@@ -842,7 +842,7 @@ async function handle(request, env) {
     const config = await env.ADMIN_DB.prepare(
       "SELECT encrypted_code, disabled FROM admin_activation_config WHERE id = 1"
     ).first();
-    if (config?.disabled) return response({ error: "activation_code_disabled" }, 409, allowedOrigin);
+    if (config?.disabled) return response({ code: null, disabled: true, managedInApp: true }, 200, allowedOrigin);
     if (config?.encrypted_code) {
       try {
         const code = await decryptActivationCode(config.encrypted_code, env.BARQ_ADMIN_JWT_SECRET);
