@@ -1936,6 +1936,7 @@ class _AdminHomePageState extends State<AdminHomePage>
                       index: _tab,
                       children: [
                         _dashboard(),
+                        _projectView(),
                         _tasksView(),
                         _approvalsView(),
                         _auditView(),
@@ -1944,7 +1945,7 @@ class _AdminHomePageState extends State<AdminHomePage>
             ),
       floatingActionButton: _pinLocked
           ? null
-          : _tab == 1
+          : _tab == 2
               ? FloatingActionButton.extended(
                   onPressed: () => _showCreateTask(),
                   icon: const Icon(Icons.add),
@@ -1967,6 +1968,11 @@ class _AdminHomePageState extends State<AdminHomePage>
                   icon: Icon(Icons.dashboard_outlined),
                   selectedIcon: Icon(Icons.dashboard),
                   label: 'الرئيسية',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.folder_open_outlined),
+                  selectedIcon: Icon(Icons.folder),
+                  label: 'المشروع',
                 ),
                 NavigationDestination(
                     icon: Icon(Icons.task_alt), label: 'المهام'),
@@ -2108,7 +2114,7 @@ class _AdminHomePageState extends State<AdminHomePage>
               style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
             ),
             TextButton(
-              onPressed: () => setState(() => _tab = 1),
+              onPressed: () => setState(() => _tab = 2),
               child: const Text('عرض الكل'),
             ),
           ],
@@ -2356,6 +2362,264 @@ class _AdminHomePageState extends State<AdminHomePage>
         ),
       );
 
+  Future<void> _editWorkspacePosition() async {
+    final projectController = TextEditingController(
+      text: (_workspace['current_project'] ?? 'BARQ').toString(),
+    );
+    final phaseController = TextEditingController(
+      text: (_workspace['current_phase'] ?? '').toString(),
+    );
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('تحديث موضع المشروع'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: projectController,
+              maxLength: 100,
+              decoration: const InputDecoration(labelText: 'اسم المشروع'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: phaseController,
+              maxLength: 100,
+              decoration: const InputDecoration(labelText: 'المرحلة الحالية'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+    final project = projectController.text.trim();
+    final phase = phaseController.text.trim();
+    projectController.dispose();
+    phaseController.dispose();
+    if (saved != true || project.isEmpty || phase.isEmpty) return;
+    final versionValue = _workspace['version'];
+    final version = versionValue is int
+        ? versionValue
+        : versionValue is num
+            ? versionValue.toInt()
+            : 0;
+    if (version < 1) {
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('حدّث مساحة العمل ثم أعد المحاولة')),
+        );
+      }
+      return;
+    }
+    try {
+      final response = await http
+          .patch(
+            Uri.parse(_base + '/v1/workspace'),
+            headers: _headers,
+            body: jsonEncode({
+              'currentProject': project,
+              'currentPhase': phase,
+              'expectedVersion': version,
+            }),
+          )
+          .timeout(const Duration(seconds: 18));
+      if (response.statusCode == 409) {
+        await _load();
+        throw Exception('تم تحديث موضع المشروع من جهاز آخر؛ حُملت أحدث نسخة');
+      }
+      if (response.statusCode != 200) {
+        throw Exception('تعذر حفظ موضع المشروع (' +
+            response.statusCode.toString() + ')');
+      }
+      final data = Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+      final updated = Map<String, dynamic>.from(
+        data['workspace'] as Map? ?? {},
+      );
+      _workspace = {
+        ..._workspace,
+        'current_project': updated['currentProject'] ?? project,
+        'current_phase': updated['currentPhase'] ?? phase,
+        'version': updated['version'] ?? version + 1,
+      };
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_cacheWorkspace, jsonEncode(_workspace));
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم حفظ موضع المشروع ومزامنته')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.toString().replaceFirst('Exception: ', '')),
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _projectView() {
+    final project = (_workspace['current_project'] ?? 'BARQ').toString();
+    final phase = (_workspace['current_phase'] ?? 'لم تُحدد المرحلة').toString();
+    final version = (_workspace['version'] ?? '-').toString();
+    final updatedAt = (_workspace['updated_at'] ?? '-').toString();
+    final activeTasks = _tasks.where((task) =>
+      ['queued', 'running', 'paused', 'needs_approval'].contains(task.status)
+    ).length;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+      children: [
+        const Text(
+          'المشروع الحالي',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'موضع العمل محفوظ على الخادم، ويمكن فتحه من أجهزتك الأخرى بعد المزامنة.',
+          style: TextStyle(color: Colors.white60),
+        ),
+        const SizedBox(height: 16),
+        _workspaceCard(),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('تفاصيل مساحة العمل',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                _detailRow('المشروع', project),
+                _detailRow('المرحلة الحالية', phase),
+                _detailRow('إصدار المزامنة', version),
+                _detailRow('آخر تحديث', updatedAt),
+                _detailRow('المهام النشطة', activeTasks.toString()),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: _online && !_loading ? _editWorkspacePosition : null,
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('تعديل موضع المشروع'),
+                ),
+                if (!_online)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text(
+                      'التعديل يحتاج اتصالًا بالخادم حتى لا تتعارض بيانات الأجهزة.',
+                      style: TextStyle(color: Colors.white60, fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('المهام الأخيرة',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                if (_tasks.isEmpty)
+                  const Text('لا توجد مهام محفوظة بعد',
+                      style: TextStyle(color: Colors.white60))
+                else
+                  ..._tasks.take(3).map(_taskTile),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _detailRow(String label, String value) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 112,
+              child: Text(label,
+                  style: const TextStyle(color: Colors.white60, fontSize: 12)),
+            ),
+            Expanded(child: Text(value, style: const TextStyle(fontSize: 13))),
+          ],
+        ),
+      );
+
+  Future<void> _showTaskDetails(AdminTask task) async {
+    final local = task.status == 'draft_offline';
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: _surface,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('تفاصيل المهمة',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 14),
+                Text(task.title,
+                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 10),
+                _detailRow('الحالة', local ? 'مسودة محلية' : task.status),
+                _detailRow('الأولوية', task.priority),
+                _detailRow('معرّف المهمة', task.id),
+                _detailRow('إصدار نقطة التقدم', task.checkpointVersion.toString()),
+                if (task.description.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text('التفاصيل', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 5),
+                  SelectableText(task.description),
+                ],
+                if (task.nextAction.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text('الإجراء التالي', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 5),
+                  Text(task.nextAction, style: const TextStyle(color: _gold)),
+                ],
+                if (local)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 12),
+                    child: Text(
+                      'هذه المسودة محفوظة على هذا الهاتف فقط، وستُرسل عند عودة الاتصال.',
+                      style: TextStyle(color: Colors.white60, fontSize: 12),
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                OutlinedButton(
+                  onPressed: () => Navigator.pop(sheetContext),
+                  child: const Text('إغلاق'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _tasksView() => ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
         children: [
@@ -2392,59 +2656,64 @@ class _AdminHomePageState extends State<AdminHomePage>
           };
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
-      child: Padding(
-        padding: const EdgeInsets.all(15),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    task.title,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _showTaskDetails(task),
+        child: Padding(
+          padding: const EdgeInsets.all(15),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      task.title,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 5,
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: .14),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      local ? 'محلي' : task.status,
+                      style: TextStyle(color: statusColor, fontSize: 11),
+                    ),
                   ),
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: .14),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    local ? 'محلي' : task.status,
-                    style: TextStyle(color: statusColor, fontSize: 11),
-                  ),
+                ],
+              ),
+              if (task.description.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  task.description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
                 ),
               ],
-            ),
-            if (task.description.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                task.description,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white70, fontSize: 13),
+              if (task.nextAction.isNotEmpty) ...[
+                const SizedBox(height: 9),
+                Text('التالي: ' + task.nextAction,
+                    style: const TextStyle(color: _gold, fontSize: 12)),
+              ],
+              if (!local && task.checkpointVersion > 0) ...[
+                const SizedBox(height: 5),
+                Text(
+                  'نقطة التقدم ' + task.checkpointVersion.toString(),
+                  style: const TextStyle(color: Colors.white54, fontSize: 11),
+                ),
+              ],
+              const SizedBox(height: 7),
+              const Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: Text('اضغط لعرض التفاصيل',
+                    style: TextStyle(color: Colors.white38, fontSize: 10)),
               ),
             ],
-            if (task.nextAction.isNotEmpty) ...[
-              const SizedBox(height: 9),
-              Text(
-                'التالي: ' + task.nextAction,
-                style: const TextStyle(color: _gold, fontSize: 12),
-              ),
-            ],
-            if (!local && task.checkpointVersion > 0) ...[
-              const SizedBox(height: 5),
-              Text(
-                'نقطة التقدم ' + task.checkpointVersion.toString(),
-                style: const TextStyle(color: Colors.white54, fontSize: 11),
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );
