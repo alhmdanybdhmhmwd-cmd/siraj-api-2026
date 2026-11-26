@@ -142,3 +142,16 @@ This update supersedes older CI status notes above where the commit/run differs.
 ### Current phase decision
 
 **Phase 2 remains IN PROGRESS.** The shared D1 preflight and approved additive migrations are now verified as successful, and all current backend/Admin/mobile CI checks have passed. Phase 2 cannot yet be declared complete because the current Cloudflare build, owner configuration, immutable-SHA indexing/coverage, live Brain retrieval, and live Google OIDC acceptance gates remain open.
+
+
+## Phase 2 verification update — 2026-11-26 (commit 2be3c91)
+
+- PR #14 head: `2be3c91c32d566da378f7d2c81e83326f8f4d0a8` (draft/open; not merged).
+- Backend tests on this head: run `45884314000` passed.
+- BARQ Admin Worker quality job on this head: run `45884313964`, job `admin-quality`, passed. Admin mobile quality job in the same run was still in progress at checkpoint time; do not count it as passed until its terminal result is observed.
+- Shared-resource preflight on this exact head: run `45884307749` passed. The workflow now checks out the triggering revision (`github.sha`) instead of the foundation branch, preventing a false green against stale source. The read-only preflight verified the configured shared `siraj-db` and `siraj-api` are visible to the existing GitHub Actions credentials.
+- Previously approved additive Admin D1 migrations remain applied and verified by run `45881199665`; do not rerun them.
+- Vercel Preview for this head: passed. No production deployment or APK packaging occurred.
+- Still open: terminal result for the latest Admin mobile job; final Cloudflare Workers Build result; shared Worker owner email/JWT/origin configuration verification; immutable-SHA ingestion batches and reconciliation/coverage report; live BARQ Brain model retrieval/citation acceptance; live Google OIDC acceptance.
+
+**Phase 2 remains IN PROGRESS.** This checkpoint does not assert live ingestion, live Brain retrieval, live OIDC, or end-to-end no-VPN acceptance.
