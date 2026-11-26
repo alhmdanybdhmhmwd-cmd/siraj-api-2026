@@ -663,7 +663,10 @@ class _AdminHomePageState extends State<AdminHomePage>
           );
       } else {
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('barq_admin_api_base', normalizeAdminApiBase(input));
+        await prefs.setString(
+          'barq_admin_api_base',
+          normalizeAdminApiBase(input),
+        );
         await _load();
       }
     }
