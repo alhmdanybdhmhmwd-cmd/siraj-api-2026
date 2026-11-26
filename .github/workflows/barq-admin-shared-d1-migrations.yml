@@ -1,6 +1,13 @@
 name: BARQ Admin shared D1 migrations
 
 on:
+  push:
+    branches:
+      - barq/no-vpn-routing-rebased-2026-11-26
+    paths:
+      - ".github/workflows/barq-admin-shared-d1-migrations.yml"
+      - "admin/migrations/**"
+      - "wrangler.toml"
   workflow_dispatch:
     inputs:
       apply_migrations:
