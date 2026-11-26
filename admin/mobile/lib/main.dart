@@ -127,7 +127,8 @@ class _AdminHomePageState extends State<AdminHomePage>
     _token = await _secure.read(key: 'barq_admin_owner_token') ?? '';
     _refreshToken = await _secure.read(key: 'barq_admin_refresh_token') ?? '';
     _sessionId = await _secure.read(key: 'barq_admin_session_id') ?? '';
-    _activationCode = await _secure.read(key: 'barq_admin_activation_code') ?? '';
+    _activationCode =
+        await _secure.read(key: 'barq_admin_activation_code') ?? '';
     _readCache(prefs);
     _mergeOutboxDrafts(prefs);
     if (_apiBase.isEmpty || _token.isEmpty) {
@@ -509,7 +510,8 @@ class _AdminHomePageState extends State<AdminHomePage>
         throw Exception('استجابة التفعيل غير مكتملة');
       }
       await _secure.write(key: 'barq_admin_owner_token', value: _token);
-      await _secure.write(key: 'barq_admin_refresh_token', value: _refreshToken);
+      await _secure.write(
+          key: 'barq_admin_refresh_token', value: _refreshToken);
       await _secure.write(key: 'barq_admin_session_id', value: _sessionId);
       if (mounted) Navigator.of(context).pop();
       await _load();
@@ -1999,7 +2001,11 @@ class _AdminHomePageState extends State<AdminHomePage>
                       : 'المتابعة باستخدام Google',
                 ),
               ),
-              TextButton.icon(onPressed: _apiBase.isEmpty ? _showSettings : _showActivationEntry, icon: const Icon(Icons.key_outlined), label: const Text('تفعيل برمز من الهاتف الأساسي')),
+              TextButton.icon(
+                  onPressed:
+                      _apiBase.isEmpty ? _showSettings : _showActivationEntry,
+                  icon: const Icon(Icons.key_outlined),
+                  label: const Text('تفعيل برمز من الهاتف الأساسي')),
             ],
           ),
         ),
