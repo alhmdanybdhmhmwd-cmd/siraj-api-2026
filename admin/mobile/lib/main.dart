@@ -352,7 +352,6 @@ class _AdminHomePageState extends State<AdminHomePage>
     if (code.length < 32 ||
         code.length > 128 ||
         !RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(code)) {
-).hasMatch(code)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('اختر رمزًا من 32 إلى 128 حرفًا أو رقمًا'),
