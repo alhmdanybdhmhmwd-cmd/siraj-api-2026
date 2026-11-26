@@ -366,14 +366,16 @@ class _AdminHomePageState extends State<AdminHomePage>
         throw Exception('استجابة التفعيل غير مكتملة');
       }
       await _secure.write(key: 'barq_admin_owner_token', value: _token);
-      await _secure.write(key: 'barq_admin_refresh_token', value: _refreshToken);
+      await _secure.write(
+          key: 'barq_admin_refresh_token', value: _refreshToken);
       await _secure.write(key: 'barq_admin_session_id', value: _sessionId);
       _activationController.clear();
       await _load();
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+          SnackBar(
+              content: Text(error.toString().replaceFirst('Exception: ', ''))),
         );
       }
     }
@@ -393,13 +395,17 @@ class _AdminHomePageState extends State<AdminHomePage>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('هذا هو الرمز الرئيسي الذي تستخدمه لتفعيل BARQ Admin على أجهزتك الموثوقة.'),
+              const Text(
+                  'هذا هو الرمز الرئيسي الذي تستخدمه لتفعيل BARQ Admin على أجهزتك الموثوقة.'),
               const SizedBox(height: 12),
-              SelectableText(code, textAlign: TextAlign.center,
-                style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+              SelectableText(code,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, letterSpacing: 1.2)),
               const SizedBox(height: 8),
-              const Text('احتفظ به في مكان آمن. يمكن إيقافه أو تغييره من إعداد الخادم.',
-                style: TextStyle(color: Colors.white60, fontSize: 12)),
+              const Text(
+                  'احتفظ به في مكان آمن. يمكن إيقافه أو تغييره من إعداد الخادم.',
+                  style: TextStyle(color: Colors.white60, fontSize: 12)),
             ],
           ),
           actions: [
@@ -407,20 +413,25 @@ class _AdminHomePageState extends State<AdminHomePage>
               onPressed: () async {
                 await Clipboard.setData(ClipboardData(text: code));
                 if (dialogContext.mounted) Navigator.pop(dialogContext);
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('تم نسخ رمز التفعيل')),
-                );
+                if (mounted)
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تم نسخ رمز التفعيل')),
+                  );
               },
               child: const Text('نسخ الرمز'),
             ),
-            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق')),
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('إغلاق')),
           ],
         ),
       );
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
-      );
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(error.toString().replaceFirst('Exception: ', ''))),
+        );
     }
   }
 
@@ -1796,28 +1807,31 @@ class _AdminHomePageState extends State<AdminHomePage>
               const Icon(Icons.vpn_key_outlined, color: _gold, size: 34),
               const SizedBox(height: 10),
               const Text('تفعيل BARQ Admin',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
               const SizedBox(height: 7),
               const Text(
-                'أدخل رمز التفعيل الرئيسي لفتح الإدارة على هذا الهاتف. يمكنك استخدام الرمز نفسه على أجهزتك الموثوقة الأخرى.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70, height: 1.4)),
+                  'أدخل رمز التفعيل الرئيسي لفتح الإدارة على هذا الهاتف. يمكنك استخدام الرمز نفسه على أجهزتك الموثوقة الأخرى.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70, height: 1.4)),
               const SizedBox(height: 14),
               TextField(
-                controller: _activationController,
-                obscureText: true,
-                enableSuggestions: false,
-                autocorrect: false,
-                decoration: const InputDecoration(
-                  labelText: 'رمز التفعيل',
-                  hintText: 'ألصق رمز التفعيل هنا',
-                  prefixIcon: Icon(Icons.key))),
+                  controller: _activationController,
+                  obscureText: true,
+                  enableSuggestions: false,
+                  autocorrect: false,
+                  decoration: const InputDecoration(
+                      labelText: 'رمز التفعيل',
+                      hintText: 'ألصق رمز التفعيل هنا',
+                      prefixIcon: Icon(Icons.key))),
               const SizedBox(height: 12),
               FilledButton.icon(
-                onPressed: _apiBase.isEmpty ? _showSettings : _activateWithCode,
-                icon: const Icon(Icons.lock_open),
-                label: Text(_apiBase.isEmpty ? 'إعداد عنوان الخادم' : 'تفعيل هذا الهاتف')),
+                  onPressed:
+                      _apiBase.isEmpty ? _showSettings : _activateWithCode,
+                  icon: const Icon(Icons.lock_open),
+                  label: Text(_apiBase.isEmpty
+                      ? 'إعداد عنوان الخادم'
+                      : 'تفعيل هذا الهاتف')),
             ],
           ),
         ),
