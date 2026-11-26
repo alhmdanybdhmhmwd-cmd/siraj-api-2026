@@ -634,14 +634,14 @@ class _AdminHomePageState extends State<AdminHomePage>
             ),
             const SizedBox(height: 8),
             const Text(
-              'عنوان خادم الإدارة فقط. تسجيل الدخول يتم عبر Google ولا تُدخل أي رمز يدويًا.',
+              'أدخل عنوان خادم برق الذي يستضيف مسار الإدارة /admin. مثال: https://example.com أو https://example.com/admin. تسجيل الدخول عبر Google فقط.',
             ),
             const SizedBox(height: 16),
             TextField(
               controller: baseController,
               keyboardType: TextInputType.url,
               decoration: const InputDecoration(
-                labelText: 'عنوان خادم BARQ Admin',
+                labelText: 'عنوان خادم BARQ (مسار /admin يُضاف تلقائيًا)',
               ),
             ),
             const SizedBox(height: 16),
@@ -654,17 +654,21 @@ class _AdminHomePageState extends State<AdminHomePage>
       ),
     );
     if (saved == true) {
-      final base = baseController.text.trim().replaceFirst(RegExp(r'/+$'), '');
-      if (!isValidAdminApiBase(base)) {
-        if (mounted)
+      final input = baseController.text.trim().replaceFirst(RegExp(r'/+$'), '');
+      if (!isValidAdminApiBase(input)) {
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('أدخل عنوان HTTPS صحيحًا لخادم الإدارة'),
             ),
           );
+        }
       } else {
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('barq_admin_api_base', base);
+        await prefs.setString(
+          'barq_admin_api_base',
+          normalizeAdminApiBase(input),
+        );
         await _load();
       }
     }

@@ -7,6 +7,7 @@ bool isValidAdminApiBase(String value) {
       uri.scheme == 'https' &&
       uri.host.isNotEmpty &&
       uri.userInfo.isEmpty &&
+      (uri.path.isEmpty || uri.path == '/admin') &&
       !uri.hasQuery &&
       !uri.hasFragment;
 }
@@ -28,4 +29,13 @@ String googleOidcRedirectUri(String clientId) {
     throw ArgumentError('invalid_google_client_id');
   }
   return 'com.googleusercontent.apps.$clientPrefix:/oauth2redirect';
+}
+
+String normalizeAdminApiBase(String value) {
+  final clean = value.trim().replaceFirst(RegExp(r'/+$'), '');
+  final uri = Uri.tryParse(clean);
+  if (uri == null || !isValidAdminApiBase(clean)) {
+    throw ArgumentError('invalid_admin_api_base');
+  }
+  return uri.path == '/admin' ? clean : '$clean/admin';
 }

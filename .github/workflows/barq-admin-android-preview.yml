@@ -15,10 +15,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - name: Checkout Admin source
+      - name: Checkout selected Admin source revision
         uses: actions/checkout@v4
         with:
-          ref: barq-admin-foundation-2026-11-23
+          # workflow_dispatch runs against the branch selected in GitHub Actions.
+          # Keep the source and workflow on the same immutable revision.
+          ref: ${{ github.sha }}
+
+      - name: Require the public Google OAuth client ID
+        shell: bash
+        env:
+          BARQ_GOOGLE_OIDC_CLIENT_ID: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID }}
+        run: |
+          if [[ ! "$BARQ_GOOGLE_OIDC_CLIENT_ID" =~ ^[0-9]+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$ ]]; then
+            echo "::error::Set the GitHub Actions repository variable BARQ_GOOGLE_OIDC_CLIENT_ID to the native Android OAuth client ID before building."
+            exit 1
+          fi
+          echo "Google OAuth client ID format verified (value intentionally not printed)."
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -45,23 +58,33 @@ jobs:
         working-directory: admin/mobile
         run: flutter test
 
-      - name: Build installable debug APK
+      - name: Build compact internal ARM64 release APK
         working-directory: admin/mobile
-        run: flutter build apk --debug
+        env:
+          BARQ_GOOGLE_OIDC_CLIENT_ID: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID }}
+        run: |
+          flutter build apk --release \
+            --target-platform android-arm64 \
+            --split-per-abi \
+            --dart-define=BARQ_GOOGLE_OIDC_CLIENT_ID="$BARQ_GOOGLE_OIDC_CLIENT_ID"
 
-      - name: Verify APK exists and report size
+      - name: Verify APK and report size and checksum
         id: apk
         shell: bash
         run: |
-          test -s admin/mobile/build/app/outputs/flutter-apk/app-debug.apk
-          APK_SIZE="$(stat -c '%s' admin/mobile/build/app/outputs/flutter-apk/app-debug.apk)"
+          APK="admin/mobile/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
+          test -s "$APK"
+          APK_SIZE="$(stat -c '%s' "$APK")"
+          APK_SHA256="$(sha256sum "$APK" | cut -d ' ' -f 1)"
           echo "size_bytes=$APK_SIZE" >> "$GITHUB_OUTPUT"
+          echo "sha256=$APK_SHA256" >> "$GITHUB_OUTPUT"
           echo "APK size: $APK_SIZE bytes"
+          echo "APK SHA-256: $APK_SHA256"
 
-      - name: Upload BARQ Admin APK
+      - name: Upload BARQ Admin S7 ARM64 APK
         uses: actions/upload-artifact@v4
         with:
-          name: barq-admin-s7-debug-apk
-          path: admin/mobile/build/app/outputs/flutter-apk/app-debug.apk
+          name: barq-admin-s7-arm64-internal
+          path: admin/mobile/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           if-no-files-found: error
           retention-days: 14

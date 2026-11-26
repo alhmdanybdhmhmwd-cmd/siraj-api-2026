@@ -6,6 +6,10 @@ plugins {
 
 
 val barqGoogleOidcClientId = System.getenv("BARQ_GOOGLE_OIDC_CLIENT_ID").orEmpty()
+val barqAdminKeystorePath = System.getenv("BARQ_ADMIN_KEYSTORE_PATH").orEmpty()
+val barqAdminKeystorePassword = System.getenv("BARQ_ADMIN_KEYSTORE_PASSWORD").orEmpty()
+val barqAdminKeyAlias = System.getenv("BARQ_ADMIN_KEY_ALIAS").orEmpty()
+val barqAdminKeyPassword = System.getenv("BARQ_ADMIN_KEY_PASSWORD").orEmpty()
 val barqGoogleOidcRedirectScheme =
     if (barqGoogleOidcClientId.endsWith(".apps.googleusercontent.com")) {
         "com.googleusercontent.apps." + barqGoogleOidcClientId.substringBefore(".")
@@ -39,11 +43,20 @@ android {
         manifestPlaceholders["appAuthRedirectScheme"] = barqGoogleOidcRedirectScheme
     }
 
+    signingConfigs {
+        create("barqAdminRelease") {
+            if (barqAdminKeystorePath.isNotBlank()) {
+                storeFile = file(barqAdminKeystorePath)
+            }
+            storePassword = barqAdminKeystorePassword
+            keyAlias = barqAdminKeyAlias
+            keyPassword = barqAdminKeyPassword
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("barqAdminRelease")
         }
     }
 }

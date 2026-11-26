@@ -12,6 +12,26 @@ Arabic RTL Flutter client for the independent BARQ Admin owner workspace.
 - Refresh/resume synchronization with the Admin API.
 - Android APK generation is deliberately deferred until programming, integration, and acceptance tests are complete.
 
+## Stable Android release signing (private)
+
+The Admin release APK must use one persistent signing key so its Android OAuth SHA-1 fingerprint remains stable across builds. Never commit the keystore or paste its password/private material into chat.
+
+Generate the keystore once on a trusted computer (keep a secure offline backup):
+
+```sh
+keytool -genkeypair -v -keystore barq-admin-release.jks -alias barq-admin -keyalg RSA -keysize 2048 -validity 10000
+keytool -list -v -keystore barq-admin-release.jks -alias barq-admin
+base64 -w0 barq-admin-release.jks
+```
+
+Store the Base64 output and the three credentials as GitHub Actions repository **Secrets** (not Variables):
+- `BARQ_ADMIN_KEYSTORE_BASE64`
+- `BARQ_ADMIN_KEYSTORE_PASSWORD`
+- `BARQ_ADMIN_KEY_ALIAS` (use `barq-admin`)
+- `BARQ_ADMIN_KEY_PASSWORD`
+
+The workflow decodes the keystore only on the temporary runner, prints its public SHA-1 fingerprint, and signs the ARM64 release APK with that same key. Use that exact SHA-1 and package `com.barq.admin` when creating the Android OAuth client. The public OAuth client ID belongs in the repository **Variable** `BARQ_GOOGLE_OIDC_CLIENT_ID`. Do not rotate or regenerate the signing key after OAuth registration; losing it means future updates cannot replace the installed app cleanly.
+
 ## Google OAuth configuration
 
 1. Create a Google OAuth client for the native Android application in Google Cloud Console. Register the exact Android package name and signing-certificate SHA-1 fingerprint used by the eventual build.
