@@ -327,6 +327,8 @@ jobs:
 
   admin-mobile-quality:
     runs-on: ubuntu-latest
+    env:
+      BARQ_ADMIN_SIGNING_CONFIGURED: ${{ secrets.BARQ_ADMIN_KEYSTORE_BASE64 != '' && secrets.BARQ_ADMIN_KEYSTORE_PASSWORD != '' && secrets.BARQ_ADMIN_KEY_ALIAS != '' && secrets.BARQ_ADMIN_KEY_PASSWORD != '' }}
     defaults:
       run:
         working-directory: admin/mobile
@@ -393,7 +395,7 @@ jobs:
         run: bash gradlew :app:compileDebugKotlin --no-daemon --console=plain
 
       - name: Prepare stable BARQ Admin signing key and report SHA-1
-        if: ${{ secrets.BARQ_ADMIN_KEYSTORE_BASE64 != '' && secrets.BARQ_ADMIN_KEYSTORE_PASSWORD != '' && secrets.BARQ_ADMIN_KEY_ALIAS != '' && secrets.BARQ_ADMIN_KEY_PASSWORD != '' }}
+        if: ${{ env.BARQ_ADMIN_SIGNING_CONFIGURED == 'true' }}
         shell: bash
         env:
           BARQ_ADMIN_KEYSTORE_BASE64: ${{ secrets.BARQ_ADMIN_KEYSTORE_BASE64 }}
@@ -420,7 +422,7 @@ jobs:
           fi
 
       - name: Build compact BARQ Admin ARM64 internal APK
-        if: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID != '' && secrets.BARQ_ADMIN_KEYSTORE_BASE64 != '' && secrets.BARQ_ADMIN_KEYSTORE_PASSWORD != '' && secrets.BARQ_ADMIN_KEY_ALIAS != '' && secrets.BARQ_ADMIN_KEY_PASSWORD != '' }}
+        if: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID != '' && env.BARQ_ADMIN_SIGNING_CONFIGURED == 'true' }}
         working-directory: admin/mobile
         env:
           BARQ_GOOGLE_OIDC_CLIENT_ID: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID }}
@@ -436,7 +438,7 @@ jobs:
             --dart-define=BARQ_GOOGLE_OIDC_CLIENT_ID="$BARQ_GOOGLE_OIDC_CLIENT_ID"
 
       - name: Verify internal APK size and checksum
-        if: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID != '' && secrets.BARQ_ADMIN_KEYSTORE_BASE64 != '' && secrets.BARQ_ADMIN_KEYSTORE_PASSWORD != '' && secrets.BARQ_ADMIN_KEY_ALIAS != '' && secrets.BARQ_ADMIN_KEY_PASSWORD != '' }}
+        if: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID != '' && env.BARQ_ADMIN_SIGNING_CONFIGURED == 'true' }}
         shell: bash
         run: |
           APK="admin/mobile/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
@@ -445,7 +447,7 @@ jobs:
           sha256sum "$APK"
 
       - name: Upload BARQ Admin ARM64 internal APK
-        if: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID != '' && secrets.BARQ_ADMIN_KEYSTORE_BASE64 != '' && secrets.BARQ_ADMIN_KEYSTORE_PASSWORD != '' && secrets.BARQ_ADMIN_KEY_ALIAS != '' && secrets.BARQ_ADMIN_KEY_PASSWORD != '' }}
+        if: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID != '' && env.BARQ_ADMIN_SIGNING_CONFIGURED == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: barq-admin-s7-arm64-internal
@@ -454,12 +456,12 @@ jobs:
           retention-days: 14
 
       - name: Report APK build skipped until OAuth and stable signing are configured
-        if: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID == '' || secrets.BARQ_ADMIN_KEYSTORE_BASE64 == '' || secrets.BARQ_ADMIN_KEYSTORE_PASSWORD == '' || secrets.BARQ_ADMIN_KEY_ALIAS == '' || secrets.BARQ_ADMIN_KEY_PASSWORD == '' }}
+        if: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID == '' || env.BARQ_ADMIN_SIGNING_CONFIGURED != 'true' }}
         shell: bash
         run: |
           if [[ -z "${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID }}" ]]; then
             echo "::warning::APK packaging skipped: BARQ_GOOGLE_OIDC_CLIENT_ID is not configured."
           fi
-          if [[ -z "${{ secrets.BARQ_ADMIN_KEYSTORE_BASE64 }}" || -z "${{ secrets.BARQ_ADMIN_KEYSTORE_PASSWORD }}" || -z "${{ secrets.BARQ_ADMIN_KEY_ALIAS }}" || -z "${{ secrets.BARQ_ADMIN_KEY_PASSWORD }}" ]]; then
+          if [[ "$BARQ_ADMIN_SIGNING_CONFIGURED" != "true" ]]; then
             echo "::warning::APK packaging skipped: stable BARQ Admin signing secrets are not configured."
           fi
