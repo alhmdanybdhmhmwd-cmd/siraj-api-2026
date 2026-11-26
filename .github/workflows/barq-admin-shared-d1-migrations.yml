@@ -1,14 +1,13 @@
 name: BARQ Admin shared D1 migrations
 
 on:
-  push:
-    branches:
-      - barq-admin-foundation-2026-11-23
-    paths:
-      - ".github/workflows/barq-admin-shared-d1-migrations.yml"
-      - "admin/migrations/**"
-      - "wrangler.toml"
   workflow_dispatch:
+    inputs:
+      apply_migrations:
+        description: "Set true only after explicit approval to write the reviewed Admin schema to siraj-db"
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -121,8 +120,12 @@ jobs:
               raise SystemExit("Migration created an object outside the BARQ Admin namespace.")
           print("All seven Admin migrations passed additive SQL policy and SQLite in-memory schema validation.")
           PY
+          if [[ "${{ inputs.apply_migrations }}" != "true" ]]; then
+            echo "Dry run only: no D1 migration writes were requested."
+          fi
 
       - name: Apply idempotent Admin schema to the verified shared BARQ D1
+        if: ${{ inputs.apply_migrations == true }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.BARQ_CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.BARQ_CLOUDFLARE_ACCOUNT_ID }}
@@ -139,6 +142,7 @@ jobs:
           done
 
       - name: Verify required Admin tables exist without reading user data
+        if: ${{ inputs.apply_migrations == true }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.BARQ_CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.BARQ_CLOUDFLARE_ACCOUNT_ID }}
