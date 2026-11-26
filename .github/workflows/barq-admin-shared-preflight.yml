@@ -26,7 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: barq-admin-foundation-2026-11-23
+          ref: ${{ github.sha }}
 
       - name: Verify Cloudflare credentials and shared BARQ resources (read-only)
         env:
