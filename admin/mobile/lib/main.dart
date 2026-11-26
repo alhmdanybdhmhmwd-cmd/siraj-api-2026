@@ -654,10 +654,15 @@ class _AdminHomePageState extends State<AdminHomePage>
       ),
     );
     if (saved == true) {
-      final input = baseController.text.trim().replaceFirst(RegExp(r'/+
+      final input = baseController.text.trim().replaceFirst(RegExp(r'/+$'), '');
+      if (!isValidAdminApiBase(input)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
               content: Text('أدخل عنوان HTTPS صحيحًا لخادم الإدارة'),
             ),
           );
+        }
       } else {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(
