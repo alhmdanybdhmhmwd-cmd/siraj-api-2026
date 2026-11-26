@@ -1,8 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, validateAdminAccessClaims, processAdminDeadLetterMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches, constantTimeTextEqual, encryptActivationCode, decryptActivationCode } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, validateAdminAccessClaims, processAdminDeadLetterMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches, constantTimeTextEqual, encryptActivationCode, decryptActivationCode, validateInitialOwnerCode } from "./worker.js";
 
+
+test("first owner activation code must be a strong bounded app-selected code", () => {
+  const valid = "MyBARQAdminOwnerCode-2026-FirstRun-01";
+  assert.deepEqual(validateInitialOwnerCode("  " + valid + "  "), {
+    ok: true,
+    value: valid
+  });
+  assert.equal(validateInitialOwnerCode("too-short").error, "invalid_initial_activation_code");
+  assert.equal(validateInitialOwnerCode("x".repeat(129)).ok, false);
+  assert.equal(validateInitialOwnerCode("contains spaces and punctuation!").ok, false);
+  assert.equal(validateInitialOwnerCode(null).ok, false);
+});
 
 test("activation codes are encrypted at rest and decrypt only with the server key", async () => {
   const code = "barq-admin-owner-code-".padEnd(40, "X");
