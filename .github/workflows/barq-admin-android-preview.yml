@@ -2,6 +2,12 @@ name: BARQ Admin Android Preview APK
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - barq-admin-foundation-2026-11-23
+    paths:
+      - "admin/mobile/**"
+      - ".github/workflows/barq-admin-android-preview.yml"
 
 permissions:
   contents: read
@@ -29,7 +35,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.50.0"
+          flutter-version: "3.50.1"
           channel: stable
           cache: true
 
