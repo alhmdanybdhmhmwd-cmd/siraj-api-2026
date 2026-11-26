@@ -670,6 +670,74 @@ async function handle(request, env) {
   if (url.pathname === "/health") return response({ ok: true, service: env.BARQ_ADMIN_RUNTIME_MODE === "shared" ? "barq-admin" : "barq-admin-preview" });
   if (!env.ADMIN_DB) return response({ error: "admin_database_unavailable" }, 503, allowedOrigin);
 
+  if (request.method === "POST" && url.pathname === "/v1/auth/bootstrap") {
+    if (!env.BARQ_ADMIN_JWT_SECRET || env.BARQ_ADMIN_JWT_SECRET.length < 32) {
+      return response({ error: "activation_not_configured" }, 503, allowedOrigin);
+    }
+    if (typeof env.BARQ_ADMIN_ACTIVATION_CODE === "string" &&
+        env.BARQ_ADMIN_ACTIVATION_CODE.length >= 32) {
+      return response({ error: "owner_already_initialized" }, 409, allowedOrigin);
+    }
+    const body = await readJson(request);
+    const code = typeof body?.code === "string" ? body.code.trim() : "";
+    if (code.length < 32 || code.length > 128 || !/^[A-Za-z0-9._-]+$/.test(code)) {
+      return response({ error: "invalid_initial_activation_code" }, 400, allowedOrigin);
+    }
+    const clientIp = request.headers.get("CF-Connecting-IP") || "unknown";
+    const ipBucket = "bootstrap-ip:" + await authSha256Hex(clientIp);
+    if (!await consumeAdminAuthRateLimit(env, ipBucket, 3)) {
+      return response({ error: "auth_rate_limited", retryAfterSeconds: 60 }, 429, allowedOrigin);
+    }
+
+    // The first successful database insert claims ownership. Competing first-run
+    // requests cannot create another owner: only the request whose unique
+    // ciphertext was inserted can create the initial device/session.
+    const subject = "barq-admin-owner-v1";
+    const codeHash = await authSha256Hex(code);
+    const encryptedCode = await encryptActivationCode(code, env.BARQ_ADMIN_JWT_SECRET);
+    const deviceId = crypto.randomUUID();
+    const sessionId = crypto.randomUUID();
+    const refreshToken = createRefreshToken();
+    const refreshHash = await authSha256Hex(refreshToken);
+    const deviceName = typeof body.deviceName === "string" ? body.deviceName.trim().slice(0, 80) : "";
+    const platform = body.platform === "ios" ? "ios" : "android";
+    const results = await env.ADMIN_DB.batch([
+      env.ADMIN_DB.prepare(`
+        INSERT INTO admin_activation_config (id, code_hash, encrypted_code, disabled, updated_at)
+        VALUES (1, ?, ?, 0, CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO NOTHING
+      `).bind(codeHash, encryptedCode),
+      env.ADMIN_DB.prepare(`
+        INSERT INTO admin_owner_devices (id, owner_subject, device_name, platform)
+        SELECT ?, ?, ?, ?
+        WHERE EXISTS (
+          SELECT 1 FROM admin_activation_config
+          WHERE id = 1 AND code_hash = ? AND encrypted_code = ? AND disabled = 0
+        )
+      `).bind(deviceId, subject, deviceName || (platform === "ios" ? "iPhone" : "Android device"),
+        platform, codeHash, encryptedCode),
+      env.ADMIN_DB.prepare(`
+        INSERT INTO admin_owner_sessions
+          (id, owner_subject, device_id, refresh_token_hash, refresh_expires_at)
+        SELECT ?, ?, ?, ?, datetime('now', '+30 days')
+        WHERE EXISTS (SELECT 1 FROM admin_owner_devices WHERE id = ? AND revoked_at IS NULL)
+      `).bind(sessionId, subject, deviceId, refreshHash, deviceId),
+      env.ADMIN_DB.prepare(`
+        INSERT INTO admin_owner_refresh_token_history (token_hash, session_id)
+        SELECT ?, ? WHERE EXISTS (SELECT 1 FROM admin_owner_sessions WHERE id = ?)
+      `).bind(refreshHash, sessionId, sessionId)
+    ]);
+    if (!results[0]?.meta?.changes || !results[1]?.meta?.changes ||
+        !results[2]?.meta?.changes || !results[3]?.meta?.changes) {
+      return response({ error: "owner_already_initialized" }, 409, allowedOrigin);
+    }
+    const workspace = await ensureWorkspace(env, { subject });
+    await audit(env, workspace, { subject, deviceId }, "auth.owner_bootstrapped", "device", deviceId,
+      { platform, method: "first_run_claim" });
+    const accessToken = await createAdminAccessToken(env.BARQ_ADMIN_JWT_SECRET, subject, sessionId, deviceId);
+    return response({ accessToken, refreshToken, sessionId, deviceId, expiresIn: 600, bootstrapped: true }, 200, allowedOrigin);
+  }
+
   if (request.method === "POST" && url.pathname === "/v1/auth/activate") {
     if (!env.BARQ_ADMIN_JWT_SECRET || env.BARQ_ADMIN_JWT_SECRET.length < 32) {
       return response({ error: "activation_not_configured" }, 503, allowedOrigin);
