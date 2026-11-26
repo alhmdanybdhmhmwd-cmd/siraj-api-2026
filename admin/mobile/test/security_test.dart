@@ -1,8 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:barq_admin/security.dart'
-    show
-        isValidAdminApiBase,
-        normalizeAdminApiBase,
+import 'package:barq_admin/security.dart' show isValidAdminApiBase, normalizeAdminApiBase;
 
 void main() {
   test('accepts only the shared Admin route or its host origin', () {
