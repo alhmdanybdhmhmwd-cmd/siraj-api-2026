@@ -113,8 +113,6 @@ class _AdminHomePageState extends State<AdminHomePage>
     if (_token.isNotEmpty && !_pinLocked) {
       setState(() => _pinLocked = true);
       _promptPin(setup: false);
-    } else if (_token.isEmpty) {
-      _load();
     }
   }
 
