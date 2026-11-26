@@ -2441,20 +2441,8 @@ class _AdminHomePageState extends State<AdminHomePage>
         throw Exception('تعذر حفظ موضع المشروع (' +
             response.statusCode.toString() + ')');
       }
-      final data = Map<String, dynamic>.from(jsonDecode(response.body) as Map);
-      final updated = Map<String, dynamic>.from(
-        data['workspace'] as Map? ?? {},
-      );
-      _workspace = {
-        ..._workspace,
-        'current_project': updated['currentProject'] ?? project,
-        'current_phase': updated['currentPhase'] ?? phase,
-        'version': updated['version'] ?? version + 1,
-      };
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_cacheWorkspace, jsonEncode(_workspace));
+      await _load();
       if (mounted) {
-        setState(() {});
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('تم حفظ موضع المشروع ومزامنته')),
         );
