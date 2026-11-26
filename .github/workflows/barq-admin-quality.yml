@@ -54,6 +54,7 @@ jobs:
           db.execute("INSERT INTO admin_image_generation_limits(workspace_id, window_start, request_count) VALUES ('preserve-check', 1, 1)")
           db.executescript(Path("admin/migrations/0006_remove_image_usage_caps.sql").read_text())
           db.executescript(Path("admin/migrations/0007_brain_conversations.sql").read_text())
+          db.executescript(Path("admin/migrations/0008_activation_code_management.sql").read_text())
           names = {row[0] for row in db.execute(
               "SELECT name FROM sqlite_master WHERE type IN ('table','trigger')"
           )}
@@ -62,7 +63,7 @@ jobs:
               "admin_approvals", "admin_audit_events", "admin_project_knowledge",
               "admin_audit_no_update", "admin_audit_no_delete", "admin_owner_devices",
               "admin_owner_sessions", "admin_oidc_nonce_uses", "admin_auth_rate_limits",
-              "admin_owner_refresh_token_history", "admin_brain_conversations", "admin_brain_messages"
+              "admin_owner_refresh_token_history", "admin_brain_conversations", "admin_brain_messages", "admin_activation_config"
           }
           missing = required - names
           assert not missing, f"Missing schema objects: {sorted(missing)}"
