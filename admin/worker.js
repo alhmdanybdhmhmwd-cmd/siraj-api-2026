@@ -416,6 +416,21 @@ export function validateKnowledgeInput(value) {
   return { ok: true, value: { sourceType, sourcePath, sourceRevision, title, content } };
 }
 
+export function validateKnowledgeListQuery(params) {
+  const repository = params.get("repository") || "";
+  const revision = params.get("revision") || "";
+  const cursor = params.get("cursor") || "";
+  const rawLimit = params.get("limit") || "100";
+  const limit = Number(rawLimit);
+  if ((repository && !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) ||
+      (revision && !/^[a-f0-9]{40}$/i.test(revision)) ||
+      (cursor && !/^[0-9a-f-]{36}$/i.test(cursor)) ||
+      !/^[1-9][0-9]{0,2}$/.test(rawLimit) || !Number.isSafeInteger(limit) || limit > 500) {
+    return { ok: false, error: "invalid_knowledge_list_query" };
+  }
+  return { ok: true, value: { repository, revision, cursor, limit } };
+}
+
 export function knowledgeSearchTerms(query, limit = 12) {
   const safeLimit = Number.isSafeInteger(limit) ? Math.max(1, Math.min(20, limit)) : 12;
   return [...new Set((String(query || "").toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []))]
@@ -1114,12 +1129,40 @@ async function handle(request, env) {
   }
 
   if (request.method === "GET" && url.pathname === "/v1/knowledge") {
-    const rows = await env.ADMIN_DB.prepare(`
+    const parsed = validateKnowledgeListQuery(url.searchParams);
+    if (!parsed.ok) return response({ error: parsed.error }, 400, allowedOrigin);
+    const { repository, revision, cursor, limit } = parsed.value;
+    let sql = `
       SELECT id, source_type, source_path, source_revision, title, updated_at
       FROM admin_project_knowledge WHERE workspace_id = ?
-      ORDER BY updated_at DESC LIMIT 100
-    `).bind(workspace).all();
-    return response({ sources: rows.results || [] }, 200, allowedOrigin);
+    `;
+    const bindings = [workspace];
+    if (repository) {
+      const prefix = repository + "/";
+      sql += " AND substr(source_path, 1, ?) = ?";
+      bindings.push(prefix.length, prefix);
+    }
+    if (revision) {
+      sql += " AND source_revision = ?";
+      bindings.push(revision);
+    }
+    if (cursor) {
+      sql += " AND id > ?";
+      bindings.push(cursor);
+    }
+    sql += " ORDER BY id ASC LIMIT ?";
+    bindings.push(limit + 1);
+    const rows = await env.ADMIN_DB.prepare(sql).bind(...bindings).all();
+    const allSources = rows.results || [];
+    const hasMore = allSources.length > limit;
+    const sources = allSources.slice(0, limit);
+    return response({
+      repository: repository || null,
+      revision: revision || null,
+      sources,
+      nextCursor: hasMore ? sources[sources.length - 1].id : null,
+      hasMore
+    }, 200, allowedOrigin);
   }
 
   if (request.method === "POST" && url.pathname === "/v1/knowledge") {
