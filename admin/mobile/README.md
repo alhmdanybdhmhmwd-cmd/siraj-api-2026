@@ -5,7 +5,8 @@ Arabic RTL Flutter client for the independent BARQ Admin owner workspace.
 ## Current capabilities
 
 - Dark electric-blue and gold visual system, dashboard, tasks, owner approvals, and read-only audit timeline.
-- Google OpenID Connect sign-in through native AppAuth using Authorization Code + PKCE; no password or provider client secret is stored in the app.
+- Server-issued activation code for trusted devices; the same code can activate multiple phones.
+- A visible, authenticated activation-code panel with copy action for the owner.
 - A 10-minute Admin access token plus a rotating 30-day refresh token stored in Android secure storage.
 - Automatic access-token refresh, server-side logout, owner device inventory, and device/session revocation.
 - Cached workspace snapshots and a local offline task outbox.
@@ -32,27 +33,15 @@ Store the Base64 output and the three credentials as GitHub Actions repository *
 
 The workflow decodes the keystore only on the temporary runner, prints its public SHA-1 fingerprint, and signs the ARM64 release APK with that same key. Use that exact SHA-1 and package `com.barq.admin` when creating the Android OAuth client. The public OAuth client ID belongs in the repository **Variable** `BARQ_GOOGLE_OIDC_CLIENT_ID`. Do not rotate or regenerate the signing key after OAuth registration; losing it means future updates cannot replace the installed app cleanly.
 
-## Google OAuth configuration
+## Activation code and server configuration
 
-1. Create a Google OAuth client for the native Android application in Google Cloud Console. Register the exact Android package name and signing-certificate SHA-1 fingerprint used by the eventual build.
-2. Configure the matching Google native redirect scheme for AppAuth. The app derives the callback as `com.googleusercontent.apps.<client-id-prefix>:/oauth2redirect`; the Android manifest must register that scheme before a device build.
-3. Set the same public client identifier in the build process environment and Dart compile-time environment. This is required because Android AppAuth reads the redirect scheme from Gradle while Dart builds the redirect URI from `--dart-define`:
-   ```sh
-   export BARQ_GOOGLE_OIDC_CLIENT_ID='<Google-native-client-id>'
-   flutter build apk --dart-define=BARQ_GOOGLE_OIDC_CLIENT_ID="$BARQ_GOOGLE_OIDC_CLIENT_ID"
-   ```
-   Do not omit the `export`: without it, Gradle falls back to `com.barq.admin.auth` while the Dart client expects the Google-derived callback scheme, and Google sign-in will not return to the app.
-4. Configure these variables/secrets on the shared BARQ Worker environment:
-   - `BARQ_GOOGLE_OIDC_CLIENT_ID`: the same public Google client ID.
-   - `BARQ_ADMIN_OWNER_EMAIL`: the exact Google account email permitted to own this Admin workspace. Google must mark it verified.
-   - `BARQ_ADMIN_JWT_SECRET`: a random server-only secret of at least 32 characters.
-   - `BARQ_ADMIN_ALLOWED_ORIGIN`: the exact app/web origin where applicable.
-   - Optional `BARQ_ADMIN_OWNER_SUBJECT`: pin the verified Google `sub` after first controlled enrollment.
-5. For the selected shared-runtime design, set the app's Admin API base URL to the existing BARQ Worker URL with the `/admin` suffix (for example, `https://<barq-worker-host>/admin`). The shared Worker maps its existing `DB` and `AI` bindings to the Admin handler; all Admin tables remain in the `admin_` namespace. Applying Admin migrations to the live BARQ D1 is a separate production schema change and remains blocked until explicitly approved. The dedicated Admin Preview D1/Queue setup below is only an isolated sandbox alternative.
+The mobile app does not contain the activation secret. Configure a high-entropy random value (at least 32 characters) as the Cloudflare Worker secret `BARQ_ADMIN_ACTIVATION_CODE`, and configure `BARQ_ADMIN_JWT_SECRET` as a separate server-only secret of at least 32 characters. Never commit either value, place either in GitHub Variables, print either in logs, or embed either in the APK.
 
-The Worker validates Google RS256 signatures using Google's published signing keys and checks issuer, audience, expiry, verified email, owner allowlist, and one-time OIDC nonce. The Worker then issues its own session tokens. Google access tokens are not used as Admin API bearer tokens. The opaque refresh token is stored server-side only as a SHA-256 hash and rotated on every refresh; reuse revokes that session. Each API request checks that its session and device are still active. No signing secret belongs in the APK.
+The activation endpoint rate-limits attempts by client IP and a fingerprint of the supplied code. A successful activation creates a distinct revocable device session; the same master code may be used on multiple trusted devices. Once signed in, the app shows the activation code in its **رمز التفعيل** section so the owner can copy it. Anyone with an active owner session on a trusted device can view that code, as explicitly requested by the owner. Rotate the Worker secret to invalidate the old code and issue a new one. Device sessions remain individually revocable from the device-management screen.
 
-The app currently allows the owner to configure the HTTPS Admin API base URL from Settings. Google login remains disabled until the public client ID is supplied at build time and the matching server Preview configuration is installed.
+The shared BARQ Worker runtime and its existing D1 binding are reused. Activation sessions use the stable owner subject `barq-admin-owner-v1`; all Admin-owned tables retain their `admin_` namespace. No production database migration is required for this activation flow because it reuses the existing device, session, refresh-history, and rate-limit tables. Do not change the BARQ consumer app or its working API configuration.
+
+The Cloudflare Worker secret must be provisioned separately in the correct Preview environment before activation can succeed. This repository workflow does not create or reveal Cloudflare secrets. Do not send the secret through chat or commit it to GitHub.
 
 ## Build and test
 
