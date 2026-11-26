@@ -24,10 +24,12 @@ From the `admin/` directory:
 npm run knowledge:ingest
 ```
 
-The command prints a JSON summary with the resolved repository revision, indexed chunk count, skipped file count, eligible files in the current batch, remaining files, completion status, and `nextStartAfter`.
+The command prints a JSON summary with the resolved immutable revision, indexed chunk count, skipped reasons, batch cursor, batch completion, and (after the final batch) a paginated reconciliation report for current, stale, deleted, and incomplete sources.
 
-- If `complete` is `true`, that repository revision's eligible file set has been processed.
-- If `complete` is `false`, set `BARQ_ADMIN_GITHUB_START_AFTER` to the returned `nextStartAfter` value and run again.
+- If `complete` / `batchComplete` is `true`, the current revision's eligible file batches have been processed; this alone does not prove complete or fresh knowledge coverage.
+- After the final batch, the indexer automatically reads every indexed-source page for the approved repository and emits a reconciliation report.
+- `coverageComplete` is `true` only when every current eligible file has all expected chunks and there are no stale-revision or deleted-source records. Otherwise inspect `reconciliation` and `requiresOwnerReview`; no indexed records are deleted automatically.
+- If `batchComplete` is `false`, set `BARQ_ADMIN_GITHUB_START_AFTER` to the returned `nextStartAfter` value and run again.
 - Keep the repository and commit SHA unchanged across resumed batches.
 - If any batch fails, rerun it with the same cursor; source rows are upserted by workspace, repository-qualified path, and revision.
 - A new commit requires a new full indexing pass. Removed/renamed files and stale-source cleanup still need a dedicated reconciliation process; do not infer they were deleted from the index.
