@@ -415,7 +415,7 @@ class _AdminHomePageState extends State<AdminHomePage>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
+              Text(
                 disabled
                     ? 'التفعيل متوقف حاليًا. أنشئ رمزًا جديدًا أو عيّن رمزك لإعادة السماح بتفعيل الأجهزة.'
                     : 'هذا الرمز يفعّل BARQ Admin على أجهزتك الموثوقة. يمكنك نسخه أو تغييره من هنا.',
