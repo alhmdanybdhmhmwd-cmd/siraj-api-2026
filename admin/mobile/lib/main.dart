@@ -372,9 +372,11 @@ class _AdminHomePageState extends State<AdminHomePage>
         final error = data['error'];
         throw Exception(error == 'activation_not_configured'
             ? 'لم يجهّز الخادم رمز التفعيل بعد'
-            : error == 'auth_rate_limited'
-                ? 'محاولات كثيرة؛ انتظر دقيقة ثم حاول'
-                : 'رمز التفعيل غير صحيح أو تعذر إنشاء الجلسة');
+            : error == 'activation_disabled'
+                ? 'التفعيل متوقف حاليًا؛ تواصل مع المالك'
+                : error == 'auth_rate_limited'
+                    ? 'محاولات كثيرة؛ انتظر دقيقة ثم حاول'
+                    : 'رمز التفعيل غير صحيح أو تعذر إنشاء الجلسة');
       }
       _token = (data['accessToken'] ?? '').toString();
       _refreshToken = (data['refreshToken'] ?? '').toString();
