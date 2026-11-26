@@ -342,6 +342,60 @@ async function githubJson(url, token) {
   return response.json();
 }
 
+export async function reconcileRepository({ repository, ref = "HEAD", githubToken, adminApiUrl, ownerToken, allowedRepositories }) {
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository || "") ||
+      !githubToken || !adminApiUrl || !ownerToken) {
+    throw new Error("missing_reconciliation_configuration");
+  }
+  const allowed = normalizeAllowedRepositories(Array.isArray(allowedRepositories)
+    ? allowedRepositories.join(";")
+    : process.env.BARQ_ADMIN_GITHUB_ALLOWED_REPOSITORIES);
+  if (!allowed.includes(repository)) throw new Error("repository_not_owner_approved");
+  const apiBase = normalizeAdminApiUrl(adminApiUrl);
+  const commit = await githubJson(
+    "https://api.github.com/repos/" + repository + "/commits/" + encodeURIComponent(ref),
+    githubToken
+  );
+  const revision = commit.sha;
+  if (!/^[a-f0-9]{40}$/i.test(revision || "")) throw new Error("invalid_resolved_repository_revision");
+  const tree = await githubJson(
+    "https://api.github.com/repos/" + repository + "/git/trees/" + revision + "?recursive=1",
+    githubToken
+  );
+  if (tree.truncated) throw new Error("repository_tree_truncated_refusing_partial_reconciliation");
+  const currentPaths = (tree.tree || []).filter(entry =>
+    entry && entry.type === "blob" && shouldIndexPath(entry.path) &&
+    Number.isSafeInteger(entry.size) && entry.size >= 0 && entry.size <= 120000
+  ).map(entry => entry.path);
+  const indexedSources = [];
+  let cursor = "";
+  const seenCursors = new Set();
+  for (let pageNumber = 0; pageNumber < 1000; pageNumber++) {
+    const query = new URLSearchParams({ repository, limit: "500" });
+    if (cursor) query.set("cursor", cursor);
+    const response = await fetchWithRetry(apiBase + "/v1/knowledge?" + query.toString(), {
+      headers: { Authorization: "Bearer " + ownerToken, Accept: "application/json" }
+    });
+    if (!response.ok) throw new Error("admin_knowledge_list_" + response.status);
+    const page = await response.json();
+    if (!Array.isArray(page.sources)) throw new Error("invalid_admin_knowledge_list_response");
+    indexedSources.push(...page.sources.map(source => ({
+      sourcePath: source.source_path,
+      sourceRevision: source.source_revision,
+      title: source.title
+    })));
+    if (!page.hasMore) break;
+    if (typeof page.nextCursor !== "string" || !/^[0-9a-f-]{36}$/i.test(page.nextCursor) ||
+        seenCursors.has(page.nextCursor)) {
+      throw new Error("invalid_admin_knowledge_pagination_cursor");
+    }
+    seenCursors.add(page.nextCursor);
+    cursor = page.nextCursor;
+    if (pageNumber === 999) throw new Error("admin_knowledge_pagination_limit_exceeded");
+  }
+  return planKnowledgeReconciliation(repository, revision, currentPaths, indexedSources);
+}
+
 export async function ingestRepository({ repository, ref = "HEAD", startAfter = "", githubToken, adminApiUrl, ownerToken, allowedRepositories }) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository || "") ||
       !githubToken || !adminApiUrl || !ownerToken) {
@@ -434,15 +488,21 @@ export async function ingestRepository({ repository, ref = "HEAD", startAfter = 
 }
 
 async function main() {
-  const result = await ingestRepository({
+  const config = {
     repository: process.env.BARQ_ADMIN_GITHUB_REPOSITORY,
     ref: process.env.BARQ_ADMIN_GITHUB_REF || "HEAD",
-    startAfter: process.env.BARQ_ADMIN_GITHUB_START_AFTER || "",
     githubToken: process.env.BARQ_ADMIN_GITHUB_TOKEN,
     adminApiUrl: process.env.BARQ_ADMIN_API_URL,
     ownerToken: process.env.BARQ_ADMIN_OWNER_TOKEN,
     allowedRepositories: normalizeAllowedRepositories(process.env.BARQ_ADMIN_GITHUB_ALLOWED_REPOSITORIES)
+  };
+  const result = await ingestRepository({
+    ...config,
+    startAfter: process.env.BARQ_ADMIN_GITHUB_START_AFTER || ""
   });
+  if (result.complete) {
+    result.reconciliation = await reconcileRepository({ ...config, ref: result.revision });
+  }
   process.stdout.write(JSON.stringify(result) + "\n");
 }
 
