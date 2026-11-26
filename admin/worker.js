@@ -1,4 +1,4 @@
-import { createAdminAccessToken, createRefreshToken, sha256Hex as authSha256Hex, verifyGoogleIdToken } from "./auth.js";
+import { createAdminAccessToken, createRefreshToken, sha256Hex as authSha256Hex } from "./auth.js";
 
 const encoder = new TextEncoder();
 const TASK_STATUSES = new Set(["queued", "running", "paused", "needs_approval", "failed", "completed", "cancelled"]);
@@ -618,7 +618,7 @@ async function consumeAdminAuthRateLimit(env, bucketKey, maximum) {
   return Boolean(row);
 }
 
-function constantTimeTextEqual(left, right) {
+export function constantTimeTextEqual(left, right) {
   if (typeof left !== "string" || typeof right !== "string" || left.length !== right.length) return false;
   let mismatch = 0;
   for (let i = 0; i < left.length; i++) mismatch |= left.charCodeAt(i) ^ right.charCodeAt(i);
@@ -690,70 +690,6 @@ async function handle(request, env) {
       { platform, method: "activation_code" });
     const accessToken = await createAdminAccessToken(env.BARQ_ADMIN_JWT_SECRET, subject, sessionId, deviceId);
     return response({ accessToken, refreshToken, sessionId, deviceId, expiresIn: 600 }, 200, allowedOrigin);
-  }
-
-  if (request.method === "POST" && url.pathname === "/v1/auth/exchange") {
-    if (!env.BARQ_ADMIN_JWT_SECRET || env.BARQ_ADMIN_JWT_SECRET.length < 32 ||
-        (!env.BARQ_ADMIN_OWNER_EMAIL && !env.BARQ_ADMIN_OWNER_SUBJECT)) {
-      return response({ error: "owner_identity_not_configured" }, 503, allowedOrigin);
-    }
-    const clientIp = request.headers.get("CF-Connecting-IP") || "unknown";
-    const loginBucket = "oidc-exchange:" + await authSha256Hex(clientIp);
-    if (!await consumeAdminAuthRateLimit(env, loginBucket, 5)) {
-      return response({ error: "auth_rate_limited", retryAfterSeconds: 60 }, 429, allowedOrigin);
-    }
-    const body = await readJson(request);
-    if (!body || typeof body.idToken !== "string" || typeof body.nonce !== "string") {
-      return response({ error: "invalid_identity_request" }, 400, allowedOrigin);
-    }
-    let identity;
-    try {
-      identity = await verifyGoogleIdToken(body.idToken, body.nonce, env);
-    } catch (error) {
-      console.warn("BARQ Admin Google identity rejected:", String(error?.message || error));
-      return response({ error: "identity_verification_failed" }, 401, allowedOrigin);
-    }
-    const nonceHash = await authSha256Hex(body.nonce);
-    await env.ADMIN_DB.prepare("DELETE FROM admin_oidc_nonce_uses WHERE expires_at < CURRENT_TIMESTAMP").run();
-    try {
-      await env.ADMIN_DB.prepare(`
-        INSERT INTO admin_oidc_nonce_uses (nonce_hash, owner_subject, expires_at)
-        VALUES (?, ?, datetime('now', '+10 minutes'))
-      `).bind(nonceHash, identity.subject).run();
-    } catch {
-      return response({ error: "identity_proof_already_used" }, 401, allowedOrigin);
-    }
-    const deviceId = crypto.randomUUID();
-    const sessionId = crypto.randomUUID();
-    const refreshToken = createRefreshToken();
-    const refreshHash = await authSha256Hex(refreshToken);
-    const deviceName = typeof body.deviceName === "string" ? body.deviceName.trim().slice(0, 80) : "";
-    const platform = body.platform === "ios" ? "ios" : "android";
-    await env.ADMIN_DB.batch([
-      env.ADMIN_DB.prepare(`
-        INSERT INTO admin_owner_devices (id, owner_subject, device_name, platform)
-        VALUES (?, ?, ?, ?)
-      `).bind(deviceId, identity.subject, deviceName || (platform === "ios" ? "iPhone" : "Android device"), platform),
-      env.ADMIN_DB.prepare(`
-        INSERT INTO admin_owner_sessions
-          (id, owner_subject, device_id, refresh_token_hash, refresh_expires_at)
-        VALUES (?, ?, ?, ?, datetime('now', '+30 days'))
-      `).bind(sessionId, identity.subject, deviceId, refreshHash),
-      env.ADMIN_DB.prepare(`
-        INSERT INTO admin_owner_refresh_token_history (token_hash, session_id)
-        VALUES (?, ?)
-      `).bind(refreshHash, sessionId)
-    ]);
-    const workspace = await ensureWorkspace(env, { subject: identity.subject });
-    await audit(env, workspace, { subject: identity.subject, deviceId },
-      "auth.owner_session.created", "device", deviceId, { platform });
-    const accessToken = await createAdminAccessToken(
-      env.BARQ_ADMIN_JWT_SECRET, identity.subject, sessionId, deviceId
-    );
-    return response({
-      accessToken, refreshToken, sessionId, deviceId, expiresIn: 600,
-      owner: { subject: identity.subject, email: identity.email }
-    }, 200, allowedOrigin);
   }
 
   if (request.method === "POST" && url.pathname === "/v1/auth/refresh") {
