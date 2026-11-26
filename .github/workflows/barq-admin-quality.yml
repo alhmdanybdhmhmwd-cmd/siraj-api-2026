@@ -5,6 +5,7 @@ on:
     paths:
       - "admin/**"
       - ".github/workflows/barq-admin-quality.yml"
+      - ".github/workflows/barq-admin-android-preview.yml"
   push:
     branches:
       - "barq-admin-foundation-2026-11-23"
@@ -389,3 +390,47 @@ jobs:
       - name: Compile Android debug Kotlin sources without packaging an APK
         working-directory: admin/mobile/android
         run: bash gradlew :app:compileDebugKotlin --no-daemon --console=plain
+
+      - name: Validate configured Google OAuth client ID for internal APK
+        if: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID != '' }}
+        shell: bash
+        env:
+          BARQ_GOOGLE_OIDC_CLIENT_ID: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID }}
+        run: |
+          if [[ ! "$BARQ_GOOGLE_OIDC_CLIENT_ID" =~ ^[0-9]+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$ ]]; then
+            echo "::error::BARQ_GOOGLE_OIDC_CLIENT_ID is not a valid native Android OAuth client ID."
+            exit 1
+          fi
+
+      - name: Build compact BARQ Admin ARM64 internal APK
+        if: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID != '' }}
+        working-directory: admin/mobile
+        env:
+          BARQ_GOOGLE_OIDC_CLIENT_ID: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID }}
+        run: |
+          flutter build apk --release \
+            --target-platform android-arm64 \
+            --split-per-abi \
+            --dart-define=BARQ_GOOGLE_OIDC_CLIENT_ID="$BARQ_GOOGLE_OIDC_CLIENT_ID"
+
+      - name: Verify internal APK size and checksum
+        if: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID != '' }}
+        shell: bash
+        run: |
+          APK="admin/mobile/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
+          test -s "$APK"
+          echo "APK size: $(stat -c '%s' "$APK") bytes"
+          sha256sum "$APK"
+
+      - name: Upload BARQ Admin ARM64 internal APK
+        if: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: barq-admin-s7-arm64-internal
+          path: admin/mobile/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Report APK build skipped until OAuth client is configured
+        if: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID == '' }}
+        run: echo "::warning::Admin tests passed, but no installable APK was produced because BARQ_GOOGLE_OIDC_CLIENT_ID is not configured."
