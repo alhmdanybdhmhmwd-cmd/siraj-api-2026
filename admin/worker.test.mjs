@@ -185,6 +185,19 @@ test("vision assistant preserves owner phase and approval agreements", () => {
   assert.match(messages[0].content, /one identity, not separate agents or components/);
 });
 
+test("task knowledge retrieval receives the active workspace project", () => {
+  const source = readFileSync(new URL("./worker.js", import.meta.url), "utf8");
+  assert.match(source,
+    /retrieveKnowledgeForTask\(env, payload\.workspaceId, task\.title \+ " " \+ task\.description, workspace\.current_project\)/);
+  const start = source.indexOf("async function retrieveKnowledgeForTask");
+  const end = source.indexOf("\nexport function validateAdminAccessClaims", start);
+  assert.ok(start >= 0 && end > start);
+  const retrieval = source.slice(start, end);
+  assert.match(retrieval, /knowledgeProjectSqlFilter\(currentProject\)/);
+  assert.doesNotMatch(retrieval, /\/admin\/i);
+  assert.match(retrieval, /if \(!projectFilter\) return \[\]/);
+});
+
 test("knowledge sources are versioned, typed, and bounded", () => {
   const valid = validateKnowledgeInput({
     sourceType: "repository_file",
