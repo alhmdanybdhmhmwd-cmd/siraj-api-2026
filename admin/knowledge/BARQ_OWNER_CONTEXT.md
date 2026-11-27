@@ -305,3 +305,18 @@ This section supersedes any wording in earlier sections (including sections 9, 1
 - Updated `admin/knowledge/INDEXING_RUNBOOK.md` to describe actual reconciliation behavior accurately: all indexed pages are compared with the resolved eligible tree; stale revisions, missing old paths, not-yet-indexed paths, and incomplete chunks are reported. A rename is conservatively represented as an old path missing plus a new path not yet indexed; semantic rename matching is not implemented. No automatic deletion occurs.
 - No live shared D1 migration, live indexing, live OIDC/model acceptance, Preview deployment, APK, merge, or production change was performed. These remain acceptance gates, not completed work.
 - Stage 5 remains IN PROGRESS. Continue after the mobile job finishes; investigate any failure from its exact logs before making code changes. Re-run relevant CI on any new code commit. Docs-only commits may not trigger workflows; do not imply that an older CI run verifies a later source-code change.
+
+
+## 24. Owner roadmap adjustment — carry all unfinished Stage 5 work into Stage 6 — 2026-11-28
+
+- The owner explicitly directed that all unfinished work and acceptance items remaining from Stage 5 be carried into Stage 6, and that Stage 6 work begin now. This is a scope/scheduling decision, not a declaration that Stage 5's unfinished requirements passed or were implemented.
+- Stage 5 is therefore closed for scheduling purposes only, with status: owner-directed scope transfer; acceptance items outstanding. Preserve its implementation history, CI evidence, failures, and unverified items. Do not relabel Stage 5 as technically complete.
+- Stage 6 owns both its previously approved platform-administration scope (including the dedicated Users page) and the following Stage 5 carryovers:
+  1. Finish and record the Admin Mobile Quality CI run on the exact current HEAD, including Android AppAuth validation and Kotlin compilation; fix failures and rerun.
+  2. Diagnose the failed Workers Builds: siraj-api check from its actual Cloudflare build evidence; do not guess or deploy.
+  3. Run an authorized, isolated Preview knowledge-index/reconciliation exercise and validate live BARQ Brain retrieval, exact source-path/revision citations, stale/freshness reporting, conflicts between owner requirements/code/tests, Arabic/English behavior, project isolation, and prompt-injection resistance.
+  4. Verify eligible-tree coverage, chunk completeness, stale/deleted/not-yet-indexed reporting, and document the known limitation that semantic rename matching is not implemented.
+  5. Continue the automatic incident detection/diagnosis/repair/rollback/test/recovery/audit/notification capability as a Stage 6 deliverable; it remains unimplemented/unverified end-to-end until demonstrated in an isolated test environment.
+  6. Preserve all approval boundaries: no production migrations/data changes, destructive account actions, merge, production deploy, paid resources, or APK without the owner's explicit approval.
+- Start Stage 6 with the dedicated Users page and safe administration foundation, while carrying the Stage 5 acceptance backlog in the same stage. Do not create a duplicate BARQ user database; use existing BARQ account records and approved APIs. Keep owner-only authorization, least-privilege PII display, and append-only audit records. Do not expose passwords, tokens, private messages, or private media. Account-impacting actions remain disabled until their rules and safeguards are implemented and tested.
+- This decision supersedes prior notes that prohibited entering Stage 6 until every Stage 5 acceptance item had closed. It does not waive any test or safety requirement; it moves those items into Stage 6's tracked work.
