@@ -235,3 +235,14 @@ This section supersedes any wording in earlier sections (including sections 9, 1
 
 
 - Added a static regression guard proving the worker supplies workspace.current_project to retrieval, rejects unknown scopes before SQL, and does not reintroduce substring-based Admin detection. This is part of the latest stage-5 patch and awaits CI on the resulting HEAD.
+
+
+## 17. Stage 5 verification checkpoint — 2026-11-28
+
+- Latest working branch commit at this checkpoint: 084589f322f3bfbcca853f9815045633d8032ac5. PR #11 remains the existing draft review vehicle; no merge or deployment was performed.
+- The CI run on the earlier commit 341d883c9fcd17d445f1ec188545bd3e7afcb953 failed two project-scope tests in Backend tests and two corresponding Admin unit tests. Both failures traced to an incorrectly escaped JavaScript whitespace regular expression in normalizeKnowledgeProject; the approved BARQ Admin value was rejected. The normalizer was corrected and the current SQL retrieval path was aligned to that same canonical normalizer.
+- Additional stage-5 changes now pass workspace.current_project into task-time knowledge retrieval, fail closed before SQL for unknown projects, apply matching SQL and in-memory project filters, preserve the shared owner context, and escape LIKE metacharacters in search terms.
+- Unified assistant identity was corrected in both task and image-analysis prompts: BARQ Brain is the single assistant and the guardian of BARQ, not a separate agent or module. Regression assertions were updated accordingly.
+- GitHub Actions workflow-run lookup and commit status for the latest checkpoint SHA returned no workflow runs/status checks. Therefore the fixes are not yet CI-verified. The earlier Vercel check reported a build-rate-limit failure; it is an infrastructure/build-limit result, not evidence of a source-code defect.
+- Local execution of the repository test suite was unavailable in this environment because the GitHub host could not be resolved. Do not claim local tests passed.
+- Next verification: obtain a fresh Backend tests and BARQ Admin Quality run on the latest branch HEAD; inspect any failed job logs before making further changes. Keep the PR draft/open and do not build APK, merge, deploy, migrate, or modify production resources.
