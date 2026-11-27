@@ -425,8 +425,16 @@ test("knowledge sources remain isolated by selected project with only owner cont
   assert.equal(isKnowledgeSourceForProject("owner/repo/src/api.js", "BARQ Admin"), false);
   assert.equal(isKnowledgeSourceForProject("owner/repo/admin/knowledge/BARQ_OWNER_CONTEXT.md", "BARQ"), true);
   assert.equal(isKnowledgeSourceForProject("owner/repo/admin/knowledge/BARQ_OWNER_CONTEXT.md", "BARQ Admin"), true);
-  assert.match(knowledgeProjectSqlFilter("BARQ Admin"), /source_path LIKE 'admin\/%'/);
-  assert.match(knowledgeProjectSqlFilter("BARQ"), /source_path NOT LIKE 'admin\/%'/);
+  const adminSqlFilter = knowledgeProjectSqlFilter("BARQ Admin");
+  const barqSqlFilter = knowledgeProjectSqlFilter("BARQ");
+  assert.match(adminSqlFilter, /source_path LIKE 'admin\/%'/);
+  assert.match(adminSqlFilter, /substr\(substr\(source_path/);
+  assert.match(barqSqlFilter, /NOT \(source_path LIKE 'admin\/%'/);
+  assert.match(barqSqlFilter, /substr\(substr\(source_path/);
+  assert.doesNotMatch(adminSqlFilter, /%\/admin\/%/);
+  assert.doesNotMatch(barqSqlFilter, /%\/admin\/%/);
+  assert.equal(knowledgeProjectScope("owner/repo/docs/admin/guide.md"), "BARQ");
+  assert.equal(isKnowledgeSourceForProject("owner/repo/docs/admin/guide.md", "BARQ"), true);
   assert.equal(knowledgeProjectSqlFilter("notadmin"), null);
   assert.equal(knowledgeProjectSqlFilter("SPARK"), null);
   assert.equal(escapeKnowledgeLikePattern("a%b_c\\d"), "a\\%b\\_c\\\\d");
