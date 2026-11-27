@@ -257,3 +257,13 @@ This section supersedes any wording in earlier sections (including sections 9, 1
 - A repair is not complete until health checks and relevant regression tests pass and the affected BARQ behavior is confirmed recovered. If verification fails, the assistant must stop repeated risky attempts, roll back when safe, preserve logs/evidence, and notify the owner with the remaining blocker.
 - Production-impacting code/configuration changes, production deployments, database migrations or data edits, destructive actions, secret/permission changes, paid-resource changes, and external communications remain subject to the owner's explicit approval. The assistant must not bypass these gates in the name of automatic repair. The owner may later define narrower pre-approved production runbooks for specific reversible actions.
 - This requirement is an approved product behavior, not evidence that automatic repair is currently implemented or running. Do not claim it works until monitoring, incident triage, repair execution, policy enforcement, rollback, regression verification, audit logging, and alert delivery are implemented and tested end to end.
+
+
+## 19. Owner requirement — dedicated BARQ users page in BARQ Admin — 2026-11-28
+
+- The owner explicitly reminds the project not to omit a dedicated **Users** page in BARQ Admin. This is a first-class administration destination, not merely a user count on the dashboard.
+- The page belongs to the BARQ platform-management scope (Phase 7 of the Admin roadmap); Phase 5 must preserve and index this requirement so it is not lost when the Brain knowledge base is refreshed.
+- The intended page should provide a searchable, paginated view of BARQ accounts and a clear account detail view, using the existing BARQ user/account records and approved APIs rather than creating a duplicate user database.
+- The page should be designed for safe operational visibility: show only fields needed for administration, protect phone numbers and other personal data behind owner-only access, avoid exposing credentials, tokens, private message contents, or private media, and record privileged administrative actions in the append-only audit trail.
+- Any account-impacting actions (for example suspension, restoration, or account removal) require explicit product rules, confirmation, authorization checks, and auditable execution; do not invent or silently enable destructive user-management actions.
+- This section records an owner-approved requirement and roadmap placement; it does not claim the Users page or its API is implemented.
