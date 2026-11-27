@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, validateAdminAccessClaims, normalizeAdminActivationCode, createAdminActivationCode, processAdminDeadLetterMessage, processAdminTaskMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, knowledgeProjectScope, isKnowledgeSourceForProject, validateAdminAccessClaims, normalizeAdminActivationCode, createAdminActivationCode, processAdminDeadLetterMessage, processAdminTaskMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches } from "./worker.js";
 
 test("idempotency keys are bounded and cannot be silently truncated", () => {
   assert.deepEqual(validateIdempotencyKey(null), { ok: true, value: null });
@@ -380,6 +380,18 @@ test("knowledge ranking prefers title/path evidence and safely bounds result cou
   assert.deepEqual(exact.map(item => item.source_path), ["docs/design.md"]);
 });
 
+
+test("knowledge sources remain isolated by selected project with only owner context shared", () => {
+  assert.equal(knowledgeProjectScope("owner/repo/admin/worker.js"), "BARQ_ADMIN");
+  assert.equal(knowledgeProjectScope("owner/repo/src/api.js"), "BARQ");
+  assert.equal(knowledgeProjectScope("owner/repo/admin/knowledge/BARQ_OWNER_CONTEXT.md"), "shared");
+  assert.equal(isKnowledgeSourceForProject("owner/repo/admin/worker.js", "BARQ Admin"), true);
+  assert.equal(isKnowledgeSourceForProject("owner/repo/admin/worker.js", "BARQ"), false);
+  assert.equal(isKnowledgeSourceForProject("owner/repo/src/api.js", "BARQ"), true);
+  assert.equal(isKnowledgeSourceForProject("owner/repo/src/api.js", "BARQ Admin"), false);
+  assert.equal(isKnowledgeSourceForProject("owner/repo/admin/knowledge/BARQ_OWNER_CONTEXT.md", "BARQ"), true);
+  assert.equal(isKnowledgeSourceForProject("owner/repo/admin/knowledge/BARQ_OWNER_CONTEXT.md", "BARQ Admin"), true);
+});
 
 test("BARQ Brain chat input is bounded and conversation-scoped", () => {
   assert.deepEqual(validateBrainChatInput({ message: "  كيف نطور برق؟  " }), {
