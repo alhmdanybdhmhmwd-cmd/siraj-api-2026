@@ -1486,7 +1486,7 @@ export async function processAdminDeadLetterMessage(message, env) {
         await audit(env, payload.workspaceId,
           { subject: "barq-admin-dead-letter", deviceId: "server-queue" },
           "task.server_execution.recovered", "task", payload.taskId,
-          { queue: "barq-admin-preview-tasks" });
+          { queue: env.BARQ_ADMIN_TASK_QUEUE_NAME || "barq-admin-preview-tasks" });
         message.ack();
         return;
       }
@@ -1507,7 +1507,7 @@ export async function processAdminDeadLetterMessage(message, env) {
       await audit(env, payload.workspaceId,
         { subject: "barq-admin-dead-letter", deviceId: "server-queue" },
         "task.server_execution.dead_lettered", "task", payload.taskId,
-        { queue: "barq-admin-preview-dlq" });
+        { queue: env.BARQ_ADMIN_DEAD_LETTER_QUEUE_NAME || "barq-admin-preview-dlq" });
     }
     message.ack();
   } catch (error) {
