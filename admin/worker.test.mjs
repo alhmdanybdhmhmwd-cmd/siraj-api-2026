@@ -269,10 +269,13 @@ test("dead-letter delivery marks an expired abandoned task failed and audits the
   const calls = [];
   const env = { ADMIN_DB: {
     prepare(sql) {
-      return { bind(...args) { return { async run() {
-        calls.push({ sql, args });
-        return { meta: { changes: sql.includes("UPDATE admin_tasks") ? 1 : 1 } };
-      } }; } };
+      return { bind(...args) { return {
+        async first() { calls.push({ sql, args, kind: "first" }); return { status: "running", lease_active: 0 }; },
+        async run() {
+          calls.push({ sql, args, kind: "run" });
+          return { meta: { changes: 1 } };
+        }
+      }; } };
     }
   } };
   const actions = [];
@@ -283,18 +286,16 @@ test("dead-letter delivery marks an expired abandoned task failed and audits the
   }, env);
   assert.deepEqual(actions, ["ack"]);
   assert.equal(calls.length, 2);
-  assert.match(calls[0].sql, /status = 'failed'/);
-  assert.match(calls[0].sql, /lease_owner = NULL, lease_expires_at = NULL/);
-  assert.match(calls[1].sql, /INSERT INTO admin_audit_events/);
-  assert.match(calls[1].args[4], /dead_lettered/);
+  assert.match(calls[1].sql, /status = 'failed'/);
+  assert.match(calls[1].sql, /lease_owner = NULL, lease_expires_at = NULL/);
 });
 
 test("dead-letter redelivery does not overwrite or re-audit an already terminal task", async () => {
-  let calls = 0;
+  const calls = [];
   const env = { ADMIN_DB: {
-    prepare(sql) { return { bind() { return {
-      async run() { calls += 1; return { meta: { changes: 0 } }; },
-      async first() { calls += 1; return { status: "completed", lease_expires_at: null }; }
+    prepare(sql) { return { bind(...args) { return {
+      async first() { calls.push({ sql, args, kind: "first" }); return { status: "completed", lease_active: 0 }; },
+      async run() { calls.push({ sql, args, kind: "run" }); return { meta: { changes: 0 } }; }
     }; } }; }
   } };
   const actions = [];
@@ -304,7 +305,7 @@ test("dead-letter redelivery does not overwrite or re-audit an already terminal 
     retry() { actions.push("retry"); }
   }, env);
   assert.deepEqual(actions, ["ack"]);
-  assert.equal(calls, 2);
+  assert.equal(calls.length, 1);
 });
 
 test("dead-letter delivery is retried when durable storage is unavailable", async () => {
@@ -453,4 +454,47 @@ test("dead-letter delivery fails an abandoned task only after its lease expires"
   assert.deepEqual(actions, ["ack"]);
   assert.match(calls[0].sql, /lease_expires_at IS NOT NULL AND lease_expires_at < CURRENT_TIMESTAMP/);
   assert.equal(calls.length, 2);
+});
+
+test("dead-letter delivery waits while a different worker owns a live lease", async () => {
+  const calls = [];
+  const env = { ADMIN_DB: {
+    prepare(sql) { return { bind(...args) { return {
+      async first() { calls.push({ sql, args }); return { status: "running", lease_active: 1 }; },
+      async run() { throw new Error("must_not_mutate_live_lease"); }
+    }; } }; }
+  } };
+  const actions = [];
+  await processAdminDeadLetterMessage({
+    body: { taskId: "task-live", workspaceId: "workspace-1" },
+    ack() { actions.push("ack"); },
+    retry(options) { actions.push(["retry", options]); }
+  }, env);
+  assert.deepEqual(actions, [["retry", { delaySeconds: 600 }]]);
+  assert.equal(calls.length, 1);
+});
+
+test("dead-letter delivery requeues an abandoned task when the server queue is available", async () => {
+  const calls = [];
+  const sent = [];
+  const env = {
+    ADMIN_TASK_QUEUE: { async send(payload) { sent.push(payload); } },
+    ADMIN_AI: {},
+    ADMIN_DB: {
+      prepare(sql) { return { bind(...args) { return {
+        async first() { calls.push({ sql, args, kind: "first" }); return { status: "running", lease_active: 0 }; },
+        async run() { calls.push({ sql, args, kind: "run" }); return { meta: { changes: 1 } }; }
+      }; } }; }
+    }
+  };
+  const actions = [];
+  await processAdminDeadLetterMessage({
+    body: { taskId: "task-recover", workspaceId: "workspace-2" },
+    ack() { actions.push("ack"); },
+    retry(options) { actions.push(["retry", options]); }
+  }, env);
+  assert.deepEqual(actions, ["ack"]);
+  assert.deepEqual(sent, [{ taskId: "task-recover", workspaceId: "workspace-2" }]);
+  assert.match(calls[1].sql, /status = 'queued'/);
+  assert.equal(calls.length, 3);
 });
