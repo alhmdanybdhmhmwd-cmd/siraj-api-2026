@@ -414,48 +414,6 @@ test("owner activation codes are normalized strictly and generated with 192-bit 
   assert.equal(normalizeAdminActivationCode(null), null);
 });
 
-test("dead-letter delivery cannot fail a task while another worker holds a live lease", async () => {
-  const calls = [];
-  const env = { ADMIN_DB: {
-    prepare(sql) {
-      return { bind(...args) { return {
-        async run() { calls.push({ kind: "run", sql, args }); return { meta: { changes: 0 } }; },
-        async first() { calls.push({ kind: "first", sql, args }); return { status: "running", lease_expires_at: "2099-01-01 00:00:00" }; }
-      }; } };
-    }
-  } };
-  const actions = [];
-  await processAdminDeadLetterMessage({
-    body: { taskId: "task-live", workspaceId: "workspace-1" },
-    ack() { actions.push("ack"); },
-    retry(options) { actions.push(["retry", options]); }
-  }, env);
-  assert.deepEqual(actions, [["retry", { delaySeconds: 600 }]]);
-  assert.match(calls[0].sql, /lease_expires_at IS NOT NULL AND lease_expires_at < CURRENT_TIMESTAMP/);
-  assert.equal(calls.length, 2);
-});
-
-test("dead-letter delivery fails an abandoned task only after its lease expires", async () => {
-  const calls = [];
-  const env = { ADMIN_DB: {
-    prepare(sql) {
-      return { bind(...args) { return { async run() {
-        calls.push({ sql, args });
-        return { meta: { changes: sql.includes("UPDATE admin_tasks") ? 1 : 1 } };
-      } }; } };
-    }
-  } };
-  const actions = [];
-  await processAdminDeadLetterMessage({
-    body: { taskId: "task-abandoned", workspaceId: "workspace-1" },
-    ack() { actions.push("ack"); },
-    retry() { actions.push("retry"); }
-  }, env);
-  assert.deepEqual(actions, ["ack"]);
-  assert.match(calls[0].sql, /lease_expires_at IS NOT NULL AND lease_expires_at < CURRENT_TIMESTAMP/);
-  assert.equal(calls.length, 2);
-});
-
 test("dead-letter delivery waits while a different worker owns a live lease", async () => {
   const calls = [];
   const env = { ADMIN_DB: {
