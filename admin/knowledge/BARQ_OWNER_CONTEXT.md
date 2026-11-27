@@ -223,3 +223,12 @@ This section supersedes any wording in earlier sections (including sections 9, 1
 - These protection functions remain product requirements until each underlying monitoring, incident, repair, verification, audit, and alert path is implemented and tested. Do not claim operational protection without evidence.
 - Updated the Worker assistant and image-analysis prompts and their regression assertions to express one unified assistant identity.
 - Fixed a JavaScript regular-expression escaping defect in project-name normalization: whitespace normalization now uses the actual whitespace class (backslash-s), so the approved BARQ Admin identifier maps to BARQ_ADMIN while malformed identifiers still fail closed. The defect caused two project-scope regression tests to fail in the latest CI run; the fix must be re-verified by the next CI run.
+
+
+## 16. Stage 5 — retrieval isolation and LIKE safety — 2026-11-28
+
+- Removed the legacy substring-based project decision from the knowledge retrieval SQL path. The SQL filter is now built from the same canonical BARQ / BARQ Admin normalizer used by the result-level isolation check.
+- Unknown project identifiers now stop retrieval before querying project-specific knowledge. BARQ and BARQ Admin SQL filters preserve only the shared owner-decision context as the cross-project exception.
+- Passed the workspace current_project into the task worker retrieval call; previously it was omitted, which caused the final fail-closed filter to exclude all project-specific sources during task execution.
+- Added escaping for SQL LIKE wildcard characters in search terms and explicit ESCAPE clauses.
+- Added regression tests for the SQL project filters, unknown projects, and literal percent/underscore/backslash search values. CI verification is pending for the resulting commit.
