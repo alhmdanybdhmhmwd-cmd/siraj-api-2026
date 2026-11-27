@@ -194,7 +194,7 @@ test("task knowledge retrieval receives the active workspace project", () => {
   assert.ok(start >= 0 && end > start);
   const retrieval = source.slice(start, end);
   assert.match(retrieval, /knowledgeProjectSqlFilter\(currentProject\)/);
-  assert.doesNotMatch(retrieval, /\/admin\/i);
+  assert.doesNotMatch(retrieval, /\/admin/i);
   assert.match(retrieval, /if \(!projectFilter\) return \[\]/);
 });
 
