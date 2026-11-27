@@ -1,7 +1,26 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, knowledgeProjectScope, normalizeKnowledgeProject, isKnowledgeSourceForProject, knowledgeProjectSqlFilter, escapeKnowledgeLikePattern, validateAdminAccessClaims, normalizeAdminActivationCode, createAdminActivationCode, processAdminDeadLetterMessage, processAdminTaskMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, knowledgeProjectScope, normalizeKnowledgeProject, isKnowledgeSourceForProject, knowledgeProjectSqlFilter, escapeKnowledgeLikePattern, validateAdminAccessClaims, normalizeAdminActivationCode, createAdminActivationCode, processAdminDeadLetterMessage, processAdminTaskMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches, validatePlatformUsersQuery, maskPlatformUserPhone } from "./worker.js";
+
+
+test("platform users listing validates bounded pagination and query length", () => {
+  const valid = validatePlatformUsersQuery(new URL("https://admin.example/v1/platform/users?q=ali&page=2&pageSize=50"));
+  assert.deepEqual(valid, {
+    ok: true,
+    value: { query: "ali", page: 2, pageSize: 50, offset: 50 }
+  });
+  assert.equal(validatePlatformUsersQuery(new URL("https://admin.example/v1/platform/users?page=0")).ok, false);
+  assert.equal(validatePlatformUsersQuery(new URL("https://admin.example/v1/platform/users?pageSize=500")).ok, false);
+  assert.equal(validatePlatformUsersQuery(new URL("https://admin.example/v1/platform/users?q=" + "x".repeat(81))).ok, false);
+});
+
+test("platform users list masks phone numbers and never requires exposing them", () => {
+  assert.equal(maskPlatformUserPhone("+967771234567"), "••••4567");
+  assert.equal(maskPlatformUserPhone("1234"), "••••");
+  assert.equal(maskPlatformUserPhone(null), null);
+  assert.equal(maskPlatformUserPhone(""), null);
+});
 
 test("idempotency keys are bounded and cannot be silently truncated", () => {
   assert.deepEqual(validateIdempotencyKey(null), { ok: true, value: null });
