@@ -10,6 +10,8 @@ export function createSharedAdminEnvironment(env) {
     ADMIN_DB: env?.DB ?? null,
     ADMIN_AI: env?.AI ?? null,
     ADMIN_TASK_QUEUE: env?.ADMIN_TASK_QUEUE ?? null,
+    BARQ_ADMIN_TASK_QUEUE_NAME: env?.BARQ_ADMIN_TASK_QUEUE_NAME || "barq-admin-preview-tasks",
+    BARQ_ADMIN_DEAD_LETTER_QUEUE_NAME: env?.BARQ_ADMIN_DEAD_LETTER_QUEUE_NAME || "barq-admin-preview-dlq",
     BARQ_ADMIN_RUNTIME_MODE: "shared"
   };
 }
@@ -25,4 +27,16 @@ export async function handleSharedAdminRequest(request, env) {
   url.pathname = url.pathname.slice(ADMIN_PREFIX.length) || "/";
   const adminRequest = new Request(url, request);
   return adminWorker.fetch(adminRequest, createSharedAdminEnvironment(env));
+}
+
+export async function handleSharedAdminQueue(batch, env) {
+  const queueName = typeof batch?.queue === "string" ? batch.queue : "";
+  const sharedEnv = createSharedAdminEnvironment(env);
+  const knownQueues = new Set([
+    sharedEnv.BARQ_ADMIN_TASK_QUEUE_NAME,
+    sharedEnv.BARQ_ADMIN_DEAD_LETTER_QUEUE_NAME
+  ]);
+  if (!knownQueues.has(queueName)) return false;
+  await adminWorker.queue(batch, sharedEnv);
+  return true;
 }
