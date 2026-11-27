@@ -518,8 +518,8 @@ async function retrieveKnowledgeForTask(env, workspaceId, query, currentProject)
   const tokens = knowledgeSearchTerms(query);
   const adminProject = /admin/i.test(String(currentProject || ""));
   const projectFilter = adminProject
-    ? "(source_path LIKE '%/admin/%' OR source_path LIKE '%/admin/knowledge/BARQ_OWNER_CONTEXT.md%')"
-    : "(source_path NOT LIKE '%/admin/%' OR source_path LIKE '%/admin/knowledge/BARQ_OWNER_CONTEXT.md%')";
+    ? "(source_path LIKE 'admin/%' OR source_path LIKE '%/admin/%' OR source_path LIKE '%/admin/knowledge/BARQ_OWNER_CONTEXT.md%')"
+    : "((source_path NOT LIKE 'admin/%' AND source_path NOT LIKE '%/admin/%') OR source_path LIKE '%/admin/knowledge/BARQ_OWNER_CONTEXT.md%')";
   let statement;
   if (tokens.length) {
     const clauses = tokens.map(() =>
