@@ -437,9 +437,14 @@ export function validateKnowledgeInput(value) {
   const sourceRevision = typeof value.sourceRevision === "string" ? value.sourceRevision.trim() : "";
   const title = typeof value.title === "string" ? value.title.trim() : "";
   const content = typeof value.content === "string" ? value.content.trim() : "";
-  if (!KNOWLEDGE_TYPES.has(sourceType) || !sourcePath || sourcePath.length > 240 ||
-      sourceRevision.length > 100 || !title || title.length > 180 ||
-      !content || encoder.encode(content).length > 24000) {
+  const repositoryScopedPath = new RegExp("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/").test(sourcePath);
+  const safeSourcePath = sourcePath && sourcePath.length <= 240 &&
+    !/[\x00-\x1f\x7f]/.test(sourcePath) && !sourcePath.includes("\\") &&
+    !sourcePath.startsWith("/") && !sourcePath.split("/").some(part => part === "." || part === "..");
+  const validRepositoryRevision = !repositoryScopedPath || /^[a-f0-9]{40}$/i.test(sourceRevision);
+  if (!KNOWLEDGE_TYPES.has(sourceType) || !safeSourcePath ||
+      !sourceRevision || sourceRevision.length > 100 || !validRepositoryRevision ||
+      !title || title.length > 180 || !content || encoder.encode(content).length > 24000) {
     return { ok: false, error: "invalid_knowledge_source" };
   }
   return { ok: true, value: { sourceType, sourcePath, sourceRevision, title, content } };
