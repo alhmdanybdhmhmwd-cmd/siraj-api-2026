@@ -524,16 +524,9 @@ export function rankKnowledgeChunks(chunks, query, limit = 6) {
   const tokens = knowledgeSearchTerms(query);
   const safeLimit = Number.isSafeInteger(limit) ? Math.max(1, Math.min(12, limit)) : 6;
   const normalize = value => String(value || "").normalize("NFKC").toLowerCase().trim();
-  const tokenize = value => new Set(
-    normalize(value).match(/[\p{L}\p{N}]{3,}/gu) || []
-  );
-  const normalizedQuery = normalize(query);
+  const tokenize = value => new Set(normalize(value).match(/[\\p{L}\\p{N}]{3,}/gu) || []);
   const phrasePattern = tokens.length
-    ? new RegExp("(?<![\\p{L}\\p{N}])" + tokens.join("\\s+") + "(?![\\p{L}\\p{N}])", "u")
-    : null;
-  return (chunks || []).map(chunk => {");
-  const phrasePattern = escapedPhrase
-    ? new RegExp("(?<![\\p{L}\\p{N}])" + escapedPhrase + "(?![\\p{L}\\p{N}])", "u")
+    ? new RegExp("(?<![\\\\p{L}\\\\p{N}])" + tokens.join("\\\\s+") + "(?![\\\\p{L}\\\\p{N}])", "u")
     : null;
   return (chunks || []).map(chunk => {
     const normalizedTitle = normalize(chunk.title);
@@ -553,7 +546,7 @@ export function rankKnowledgeChunks(chunks, query, limit = 6) {
       if (inContent) score += 1;
       if (inTitle || inPath || inContent) matched++;
     }
-    // Phrase matches improve precision without treating ingestion timestamps as freshness.
+    // Phrase matches require Unicode-aware token boundaries; "art" must not match "cart".
     const phraseMatch = Boolean(phrasePattern && (
       phrasePattern.test(normalizedTitle) ||
       phrasePattern.test(normalizedPath) ||
@@ -565,20 +558,13 @@ export function rankKnowledgeChunks(chunks, query, limit = 6) {
       else score += 5;
     }
     const coverage = tokens.length ? matched / tokens.length : 0;
-    return {
-      ...chunk,
-      relevance_score: score + coverage,
-      matched_terms: matched,
-      phrase_match: phraseMatch
-    };
+    return { ...chunk, relevance_score: score + coverage, matched_terms: matched, phrase_match: phraseMatch };
   }).filter(chunk => chunk.relevance_score > 0)
     // updated_at is an ingestion timestamp, not source freshness or authority.
-    // Use a stable path tie-breaker instead of silently preferring recently indexed chunks.
     .sort((a, b) => b.relevance_score - a.relevance_score ||
       String(a.source_path || "").localeCompare(String(b.source_path || "")))
     .slice(0, safeLimit);
 }
-
 async function retrieveKnowledgeForTask(env, workspaceId, query, currentProject) {
   const tokens = knowledgeSearchTerms(query);
   const projectFilter = knowledgeProjectSqlFilter(currentProject);
