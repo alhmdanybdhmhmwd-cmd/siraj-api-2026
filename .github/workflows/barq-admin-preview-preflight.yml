@@ -1,0 +1,75 @@
+name: BARQ Admin Preview Preflight
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: barq-admin-preview-preflight
+  cancel-in-progress: false
+
+jobs:
+  inspect-preview:
+    if: github.ref == 'refs/heads/barq-admin-foundation-2026-11-23'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: barq-admin-preview
+    steps:
+      - name: Validate required Preview configuration without exposing values
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          ADMIN_D1_DATABASE_ID: ${{ vars.ADMIN_D1_DATABASE_ID }}
+          BARQ_GOOGLE_OIDC_CLIENT_ID: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID }}
+          BARQ_ADMIN_OWNER_EMAIL: ${{ vars.BARQ_ADMIN_OWNER_EMAIL }}
+          BARQ_ADMIN_ALLOWED_ORIGIN: ${{ vars.BARQ_ADMIN_ALLOWED_ORIGIN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          for key in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID ADMIN_D1_DATABASE_ID BARQ_GOOGLE_OIDC_CLIENT_ID BARQ_ADMIN_OWNER_EMAIL BARQ_ADMIN_ALLOWED_ORIGIN; do
+            if [ -z "${!key:-}" ]; then missing+=("$key"); fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf '::error::Preview preflight blocked; missing GitHub Environment values: %s\n' "${missing[*]}"
+            exit 1
+          fi
+          case "$BARQ_ADMIN_ALLOWED_ORIGIN" in
+            *REPLACE_WITH*|*'*'*) echo "::error::Admin origin must be exact and cannot contain a wildcard or placeholder."; exit 1 ;;
+          esac
+          case "$ADMIN_D1_DATABASE_ID" in
+            REPLACE_WITH*|'') echo "::error::A dedicated Preview D1 ID is required."; exit 1 ;;
+          esac
+          echo "Required Preview configuration is present; values are not printed."
+
+      - name: Install Wrangler
+        run: npm install --global wrangler@4
+
+      - name: Inspect dedicated Preview D1 and Queue resources (read-only)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          ADMIN_D1_DATABASE_ID: ${{ vars.ADMIN_D1_DATABASE_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 d1 list --json > /tmp/barq-admin-d1.json
+          python3 - <<'PY'
+          import json, os
+          rows = json.load(open("/tmp/barq-admin-d1.json"))
+          matches = [row for row in rows if row.get("uuid") == os.environ["ADMIN_D1_DATABASE_ID"]]
+          if len(matches) != 1 or matches[0].get("name") != "barq-admin-preview":
+              raise SystemExit("Dedicated D1 check failed: configured ID must identify barq-admin-preview.")
+          print("Dedicated Admin Preview D1: found.")
+          PY
+          npx --yes wrangler@4 queues list > /tmp/barq-admin-queues.txt
+          for queue in barq-admin-preview-tasks barq-admin-preview-dlq; do
+            if ! grep -Fq "$queue" /tmp/barq-admin-queues.txt; then
+              echo "::error::Required Preview Queue is missing: $queue"
+              exit 1
+            fi
+            echo "Required Preview Queue found: $queue"
+          done
+          echo "Read-only Preview preflight passed. No database, queue, secret, Worker, or production resource was changed."
