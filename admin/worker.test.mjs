@@ -482,3 +482,28 @@ test("dead-letter recovery retries when queue publishing fails and keeps the tas
   assert.equal(calls.find(call => call.kind === "send").payload.taskId, "task-send-failure");
   assert.match(calls.find(call => call.kind === "run").sql, /status = 'queued'/);
 });
+
+
+test("task consumer uses an atomic lease claim so duplicate queue deliveries cannot start two workers", () => {
+  const source = readFileSync(new URL("./worker.js", import.meta.url), "utf8");
+  const start = source.indexOf("async function processAdminTaskMessage");
+  const end = source.indexOf("export async function processAdminDeadLetterMessage", start);
+  assert.ok(start >= 0 && end > start, "Task consumer implementation must remain inspectable");
+  const consumer = source.slice(start, end);
+  assert.match(consumer, /UPDATE admin_tasks SET status = 'running', lease_owner = \?/);
+  assert.match(consumer, /WHERE id = \? AND workspace_id = \? AND \(/);
+  assert.match(consumer, /status = 'queued'/);
+  assert.match(consumer, /status = 'running' AND lease_expires_at IS NOT NULL AND lease_expires_at < CURRENT_TIMESTAMP/);
+  assert.match(consumer, /if \(!claimed\?\.meta\?\.changes\)/);
+  assert.match(consumer, /message\.ack\(\)/);
+});
+
+test("task completion and failure are fenced by the exact active lease owner", () => {
+  const source = readFileSync(new URL("./worker.js", import.meta.url), "utf8");
+  const start = source.indexOf("async function processAdminTaskMessage");
+  const end = source.indexOf("export async function processAdminDeadLetterMessage", start);
+  const consumer = source.slice(start, end);
+  assert.match(consumer, /WHERE id = \? AND workspace_id = \? AND lease_owner = \? AND status = 'running' AND checkpoint_version = \? AND lease_expires_at > CURRENT_TIMESTAMP/);
+  assert.match(consumer, /WHERE id = \? AND workspace_id = \? AND lease_owner = \? AND status = 'running'/);
+  assert.match(consumer, /if \(!results\?\.\[0\]\?\.meta\?\.changes \|\| !results\?\.\[1\]\?\.meta\?\.changes\)/);
+});
