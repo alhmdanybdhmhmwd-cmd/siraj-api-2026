@@ -269,7 +269,7 @@ export async function renewAdminTaskLease(env, taskId, workspaceId, leaseId) {
   return Boolean(result?.meta?.changes);
 }
 
-async function processAdminTaskMessage(message, env) {
+export async function processAdminTaskMessage(message, env) {
   const payload = message.body;
   if (!payload || typeof payload.taskId !== "string" || typeof payload.workspaceId !== "string") {
     message.ack();
