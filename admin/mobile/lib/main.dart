@@ -759,8 +759,9 @@ class _AdminHomePageState extends State<AdminHomePage>
           .whereType<Map>()
           .map((item) => Map<String, dynamic>.from(item))
           .toList();
+      final batch = splitOutboxBatch(pending);
       final remaining = <Map<String, dynamic>>[];
-      for (final item in pending) {
+      for (final item in batch.toSend) {
         try {
           Future<http.Response> sendPendingTask() => http
               .post(
@@ -787,6 +788,7 @@ class _AdminHomePageState extends State<AdminHomePage>
           remaining.add(item);
         }
       }
+      remaining.addAll(batch.deferred);
       await prefs.setString(_outboxKey, jsonEncode(remaining));
     } finally {
       _syncing = false;
