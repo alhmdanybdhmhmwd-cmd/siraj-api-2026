@@ -1486,7 +1486,13 @@ export async function processAdminDeadLetterMessage(message, env) {
     }
 
     if ((current?.status === "queued" || current?.status === "running") &&
-        env.ADMIN_TASK_QUEUE && env.ADMIN_AI) {
+        (!env.ADMIN_TASK_QUEUE || !env.ADMIN_AI)) {
+      // Missing runtime bindings are configuration gaps, not terminal task failures.
+      message.retry({ delaySeconds: 300 });
+      return;
+    }
+
+    if (current?.status === "queued" || current?.status === "running") {
       const recovered = await env.ADMIN_DB.prepare(`
         UPDATE admin_tasks SET status = 'queued', lease_owner = NULL, lease_expires_at = NULL,
           next_action = 'Recovered after worker lease expiry; waiting for server worker',
