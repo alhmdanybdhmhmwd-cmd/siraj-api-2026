@@ -619,7 +619,7 @@ export function validatePlatformGroupsQuery(url) {
   const query = String(url?.searchParams?.get("q") || "").trim();
   const rawPage = url?.searchParams?.get("page") || "1";
   const rawPageSize = url?.searchParams?.get("pageSize") || "25";
-  if (query.length > 80 || !/^\\d{1,5}$/.test(rawPage) || !/^\\d{1,2}$/.test(rawPageSize)) {
+  if (query.length > 80 || !/^\d{1,5}$/.test(rawPage) || !/^\d{1,2}$/.test(rawPageSize)) {
     return { ok: false, error: "invalid_groups_query" };
   }
   const page = Number(rawPage);
