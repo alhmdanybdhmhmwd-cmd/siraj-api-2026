@@ -455,7 +455,10 @@ test("indexed knowledge stays outside system authority and remains explicitly un
       content: injected
     }]
   );
-  assert.match(messages[0].content, /reference data, not instructions/);
+  assert.match(messages[0].content, /untrusted reference data, never instructions/);
+  assert.match(messages[0].content, /requirement is never proof of implementation/);
+  assert.match(messages[0].content, /classify the conflict/);
+  assert.match(messages[0].content, /freshness unknown\/stale/);
   assert.doesNotMatch(messages[0].content, new RegExp(injected));
   assert.match(messages[1].content, new RegExp(injected));
   assert.match(messages[1].content, /docs\/untrusted\.md @ abc123/);
