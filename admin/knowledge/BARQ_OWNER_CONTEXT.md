@@ -180,3 +180,26 @@ These are two separate products with separate phase plans, completion evidence, 
 ### Reporting rule
 - Every progress report must show two separately labeled status lines: `BARQ app` and `BARQ Admin`. If a phase status has not been recently verified, label it `last documented status` with its date, not current verified status.
 - Admin work must not silently change BARQ app production resources or vice versa. No merge, production deploy, database migration, APK creation, or destructive knowledge cleanup without the owner's explicit approval.
+
+
+## 13. Owner correction and live continuation checkpoint — 2026-11-28
+
+This section supersedes conflicting product-boundary and phase-status statements in earlier sections, including section 12.
+
+### Product boundary correction
+- **BARQ** is the standalone consumer messaging app.
+- **BARQ Admin** is one separate management application. **BARQ Guardian and BARQ Brain are capabilities inside BARQ Admin; Guardian is not a third app and must not be described as a separate BARQ consumer-app feature.**
+- BARQ Guardian's responsibility is to protect BARQ and its supporting services. Its monitoring, incident diagnosis, bounded repair, regression verification, audit trail, and alert delivery are approved requirements, not yet proof of an operational service.
+- BARQ Brain is the project-aware assistant inside the same BARQ Admin app. It supports understanding, memory, and later controlled development work.
+
+### BARQ consumer roadmap correction
+- The owner explicitly corrected the previously recorded stage-2 status: **BARQ has reached stage 9, the real-phone testing stage**. This owner-confirmed status supersedes the older stage-2 snapshot in section 12.
+- Do not downgrade BARQ to stage 2 based on stale PR names, old branches, or historical notes. Any finer-grained stage-9 pass/fail status must be checked against the latest owner test evidence before claiming stage 9 is complete.
+
+### BARQ Admin roadmap and current CI checkpoint
+- BARQ Admin remains on its separate detailed roadmap: foundation stage 0 plus stages 1–12. Current authorized work is **stage 5 — BARQ Brain understanding and knowledge memory**. Stage 4 remains complete at code/CI level; real-device acceptance is deferred to its dedicated stage.
+- Live GitHub check on 2026-11-28: PR #11 is still draft/open on `barq-admin-foundation-2026-11-23`, HEAD `794129cf240e5168c1c7be2756be542ae08b7975`.
+- At that exact HEAD, Backend tests, Admin quality, Admin mobile quality, Worker bundle diagnostics, Vercel Preview comments, auth tests, and bundle checks completed successfully.
+- The separate `Workers Builds: siraj-api` PR check is failed. Its cause has not yet been established from available job evidence; do not attribute it to Admin source changes or claim it fixed. Investigate in isolation without deploying or changing production.
+- Stage 5 work must continue on the existing review branch and preserve project-scope isolation, revision-aware source citations, chunk coverage/freshness reports, conflict handling, and prompt-injection defenses.
+- No APK, merge, production deployment, production migration, destructive knowledge cleanup, or changes to shared production resources without explicit owner approval.
