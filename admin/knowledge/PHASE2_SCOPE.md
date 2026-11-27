@@ -1,4 +1,6 @@
 # BARQ Admin Phase 2 — Knowledge and Project Understanding
+> **Historical roadmap snapshot:** This file documents an earlier BARQ Admin roadmap numbering and is retained for historical evidence. It does not override the owner's later authorization of the detailed 12-stage plan. The active detailed plan is currently at stage 5 (BARQ Brain: understanding and knowledge memory); older Phase 2/3 references below must be read as historical, not as current phase authority. See `BARQ_OWNER_CONTEXT.md` section 11 for the current status.
+
 
 Last updated: 2026-11-24
 Status: IN PROGRESS — source ingestion and live retrieval acceptance are not yet complete.
