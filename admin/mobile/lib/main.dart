@@ -247,8 +247,7 @@ class _AdminHomePageState extends State<AdminHomePage>
             .map((item) => Map<String, dynamic>.from(item))
             .toList();
       final approvals = prefs.getString(_cacheApprovals);
-      if (approvals != null) {
-        _approvals = (jsonDecode(approvals) as List)
+      if (approvals != null) {        _approvals = (jsonDecode(approvals) as List)
             .whereType<Map>()
             .map(
               (item) => AdminApproval.fromJson(Map<String, dynamic>.from(item)),
@@ -497,8 +496,7 @@ class _AdminHomePageState extends State<AdminHomePage>
                   ),
                 ),
               const SizedBox(height: 8),
-              if (!disabled)
-                const Text(
+              if (!disabled)                const Text(
                   'عند تغيير الرمز، يتوقف الرمز السابق عن تفعيل أجهزة جديدة. الجلسات المفتوحة تبقى مستقلة ويمكن إلغاؤها من إدارة الأجهزة.',
                   style: TextStyle(color: Colors.white60, fontSize: 12),
                 ),
@@ -747,8 +745,7 @@ class _AdminHomePageState extends State<AdminHomePage>
                 ),
               ],
             ),
-          ),
-        ),
+          ),        ),
       );
 
   Future<void> _syncOutbox(SharedPreferences prefs) async {
@@ -914,8 +911,9 @@ class _AdminHomePageState extends State<AdminHomePage>
     }
   }
 
-  Future<void> _logout() async {
-    final confirmed = await showDialog<bool>(
+  Future<void> _logout({bool confirm = true, bool sessionAlreadyRevoked = false}) async {
+    if (confirm) {
+      final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('إنهاء جلسة الإدارة؟'),
@@ -933,10 +931,11 @@ class _AdminHomePageState extends State<AdminHomePage>
           ),
         ],
       ),
-    );
-    if (confirmed != true) return;
+      );
+      if (confirmed != true) return;
+    }
     final prefs = await SharedPreferences.getInstance();
-    if (_sessionId.isNotEmpty &&
+    if (!sessionAlreadyRevoked && _sessionId.isNotEmpty &&
         _refreshToken.isNotEmpty &&
         _apiBase.isNotEmpty) {
       try {
@@ -997,8 +996,7 @@ class _AdminHomePageState extends State<AdminHomePage>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
+          children: [            const Text(
               'إعداد الاتصال الآمن',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
@@ -1247,8 +1245,7 @@ class _AdminHomePageState extends State<AdminHomePage>
               if (sources is List && sources.isNotEmpty) {
                 final references = sources.whereType<Map>().map((source) {
                   final path = (source['sourcePath'] ?? '').toString();
-                  final revision = (source['sourceRevision'] ?? '').toString();
-                  return revision.isEmpty
+                  final revision = (source['sourceRevision'] ?? '').toString();                  return revision.isEmpty
                       ? '• ' + path
                       : '• ' + path + ' @ ' + revision;
                 }).join('\n');
@@ -1497,8 +1494,7 @@ class _AdminHomePageState extends State<AdminHomePage>
                           : () async {
                               final prompt = promptController.text.trim();
                               if (prompt.isEmpty) {
-                                ScaffoldMessenger.of(this.context).showSnackBar(
-                                  const SnackBar(
+                                ScaffoldMessenger.of(this.context).showSnackBar(                                  const SnackBar(
                                     content: Text('اكتب وصف الصورة أولًا'),
                                   ),
                                 );
@@ -1747,8 +1743,7 @@ class _AdminHomePageState extends State<AdminHomePage>
                                         const SnackBar(
                                           content: Text(
                                             'صيغة الصورة غير مدعومة؛ استخدم JPEG أو PNG أو WebP',
-                                          ),
-                                        ),
+                                          ),                                        ),
                                       );
                                       return;
                                     }
@@ -1997,8 +1992,7 @@ class _AdminHomePageState extends State<AdminHomePage>
           ? null
           : NavigationBar(
               selectedIndex: _tab,
-              onDestinationSelected: (value) => setState(() => _tab = value),
-              destinations: const [
+              onDestinationSelected: (value) => setState(() => _tab = value),              destinations: const [
                 NavigationDestination(
                   icon: Icon(Icons.dashboard_outlined),
                   selectedIcon: Icon(Icons.dashboard),
@@ -2247,8 +2241,7 @@ class _AdminHomePageState extends State<AdminHomePage>
                               (revoked ? ' • ملغى' : ''),
                         ),
                         trailing: revoked
-                            ? const Icon(Icons.check_circle_outline, color: Colors.white38)
-                            : IconButton(
+                            ? const Icon(Icons.check_circle_outline, color: Colors.white38)                            : IconButton(
                                 tooltip: 'إبطال هذا الجهاز',
                                 icon: const Icon(Icons.block, color: Colors.redAccent),
                                 onPressed: id.isEmpty ? null : () async {
@@ -2305,7 +2298,7 @@ class _AdminHomePageState extends State<AdminHomePage>
                   final response = await http.post(Uri.parse(_base + '/v1/devices/revoke-all'), headers: _headers).timeout(const Duration(seconds: 15));
                   if (response.statusCode != 200) throw Exception('رفض الخادم إبطال الجلسات (' + response.statusCode.toString() + ')');
                   if (dialogContext.mounted) Navigator.pop(dialogContext);
-                  await _logout();
+                  await _logout(confirm: false, sessionAlreadyRevoked: true);
                 } catch (error) {
                   if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر إبطال جميع الأجهزة: ' + error.toString())));
                 }
@@ -2497,8 +2490,7 @@ class _AdminHomePageState extends State<AdminHomePage>
             content: Text(error.toString().replaceFirst('Exception: ', '')),
           ),
         );
-      }
-    }
+      }    }
   }
 
   Widget _projectView() {
@@ -2747,8 +2739,7 @@ class _AdminHomePageState extends State<AdminHomePage>
           ),
         ),
       ),
-    );
-  }
+    );  }
 
   Widget _approvalsView() => ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
