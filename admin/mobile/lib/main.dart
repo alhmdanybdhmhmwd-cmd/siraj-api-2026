@@ -91,6 +91,13 @@ class _AdminHomePageState extends State<AdminHomePage>
   List<AdminTask> _tasks = [];
   List<AdminApproval> _approvals = [];
   List<Map<String, dynamic>> _auditEvents = [];
+  List<Map<String, dynamic>> _platformUsers = [];
+  final TextEditingController _usersSearchController = TextEditingController();
+  int _usersTotal = 0;
+  int _usersPage = 1;
+  int _usersTotalPages = 0;
+  bool _usersLoading = false;
+  String _usersError = '';
   int _tab = 0;
   bool _loading = true;
   bool _online = false;
@@ -106,6 +113,7 @@ class _AdminHomePageState extends State<AdminHomePage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _usersSearchController.dispose();
     super.dispose();
   }
 
@@ -280,6 +288,170 @@ class _AdminHomePageState extends State<AdminHomePage>
     }
     return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
   }
+
+
+  Future<void> _loadPlatformUsers({int page = 1}) async {
+    if (_token.isEmpty) return;
+    setState(() {
+      _usersLoading = true;
+      _usersError = '';
+    });
+    try {
+      final query = Uri.encodeQueryComponent(_usersSearchController.text.trim());
+      final data = await _getJson(
+        '/v1/platform/users?q=' + query + '&page=' + page.toString() + '&pageSize=25',
+      );
+      if (!mounted) return;
+      setState(() {
+        _platformUsers = (data['users'] as List? ?? [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+        _usersTotal = (data['total'] as num?)?.toInt() ?? 0;
+        _usersPage = (data['page'] as num?)?.toInt() ?? page;
+        _usersTotalPages = (data['totalPages'] as num?)?.toInt() ?? 0;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _usersError = error.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      if (mounted) setState(() => _usersLoading = false);
+    }
+  }
+
+  Future<void> _showPlatformUserDetails(String userId) async {
+    try {
+      final data = await _getJson('/v1/platform/users/' + Uri.encodeComponent(userId));
+      final user = Map<String, dynamic>.from(data['user'] as Map? ?? {});
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('تفاصيل المستخدم'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('الاسم: ' + (user['displayName']?.toString() ?? '—')),
+              const SizedBox(height: 8),
+              Text('اسم برق: ' + (user['username']?.toString() ?? '—')),
+              const SizedBox(height: 8),
+              Text('رقم الهاتف: ' + (user['phone']?.toString() ?? 'غير مسجل')),
+              const SizedBox(height: 8),
+              SelectableText('معرّف الحساب: ' + (user['id']?.toString() ?? '—')),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('إغلاق'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
+  }
+
+  Widget _platformUsersView() => ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Text(
+            'المستخدمون',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'عرض حسابات BARQ الحالية فقط. أرقام الهاتف مخفية في القائمة وتظهر عند فتح تفاصيل الحساب.',
+            style: TextStyle(color: Colors.white60, fontSize: 12),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _usersSearchController,
+            textInputAction: TextInputAction.search,
+            onSubmitted: (_) => _loadPlatformUsers(page: 1),
+            decoration: InputDecoration(
+              hintText: 'ابحث بالاسم أو اسم برق أو رقم الهاتف',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: IconButton(
+                tooltip: 'بحث',
+                onPressed: () => _loadPlatformUsers(page: 1),
+                icon: const Icon(Icons.arrow_forward),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Text('إجمالي الحسابات: ${_usersTotal}',
+                  style: const TextStyle(color: Colors.white70)),
+              const Spacer(),
+              IconButton(
+                tooltip: 'تحديث',
+                onPressed: _usersLoading ? null : () => _loadPlatformUsers(page: _usersPage),
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
+          ),
+          if (_usersLoading) const LinearProgressIndicator(),
+          if (_usersError.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _emptyState('تعذر تحميل المستخدمين', _usersError),
+            TextButton(
+              onPressed: () => _loadPlatformUsers(page: _usersPage),
+              child: const Text('إعادة المحاولة'),
+            ),
+          ] else if (!_usersLoading && _platformUsers.isEmpty) ...[
+            const SizedBox(height: 12),
+            _emptyState(
+              'لا توجد نتائج',
+              'ابدأ بالبحث أو حدّث القائمة. لا يتم عرض بيانات تجريبية.',
+            ),
+          ] else ...[
+            ..._platformUsers.map((user) => Card(
+                  child: ListTile(
+                    leading: const CircleAvatar(child: Icon(Icons.person_outline)),
+                    title: Text(user['displayName']?.toString().isNotEmpty == true
+                        ? user['displayName'].toString()
+                        : 'مستخدم BARQ'),
+                    subtitle: Text(
+                      '@' + (user['username']?.toString() ?? '—') +
+                          '  •  ' + (user['phoneMasked']?.toString() ?? 'بدون رقم هاتف'),
+                    ),
+                    trailing: const Icon(Icons.chevron_left),
+                    onTap: () => _showPlatformUserDetails(user['id'].toString()),
+                  ),
+                )),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  tooltip: 'الصفحة السابقة',
+                  onPressed: _usersPage > 1 && !_usersLoading
+                      ? () => _loadPlatformUsers(page: _usersPage - 1)
+                      : null,
+                  icon: const Icon(Icons.chevron_right),
+                ),
+                Text('${_usersPage} / ${_usersTotalPages == 0 ? 1 : _usersTotalPages}'),
+                IconButton(
+                  tooltip: 'الصفحة التالية',
+                  onPressed: _usersPage < _usersTotalPages && !_usersLoading
+                      ? () => _loadPlatformUsers(page: _usersPage + 1)
+                      : null,
+                  icon: const Icon(Icons.chevron_left),
+                ),
+              ],
+            ),
+          ],
+        ],
+      );
 
   Future<bool> _refreshSession() {
     final inFlight = _refreshFuture;
@@ -1793,6 +1965,7 @@ class _AdminHomePageState extends State<AdminHomePage>
                   _tasksView(),
                   _approvalsView(),
                   _auditView(),
+                  _platformUsersView(),
                 ],
               ),
       ),
@@ -1811,7 +1984,10 @@ class _AdminHomePageState extends State<AdminHomePage>
               : null,
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
-        onDestinationSelected: (value) => setState(() => _tab = value),
+        onDestinationSelected: (value) {
+          setState(() => _tab = value);
+          if (value == 4) _loadPlatformUsers(page: 1);
+        },
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.dashboard_outlined),
@@ -1826,6 +2002,11 @@ class _AdminHomePageState extends State<AdminHomePage>
           NavigationDestination(
             icon: Icon(Icons.receipt_long_outlined),
             label: 'السجل',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.people_outline),
+            selectedIcon: Icon(Icons.people),
+            label: 'المستخدمون',
           ),
         ],
       ),
