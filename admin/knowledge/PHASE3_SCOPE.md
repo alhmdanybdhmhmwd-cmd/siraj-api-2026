@@ -1,4 +1,6 @@
 # BARQ Admin Phase 3 — Safe Development Tools
+> **Historical roadmap snapshot:** This file documents an earlier BARQ Admin roadmap numbering and is retained for historical evidence. It does not override the owner's later authorization of the detailed 12-stage plan. The active detailed plan is currently at stage 5 (BARQ Brain: understanding and knowledge memory); older Phase 3 references below must be read as historical, not as current phase authority. See `BARQ_OWNER_CONTEXT.md` section 11 for the current status.
+
 
 Last updated: 2026-11-25
 Status: STARTED — architecture and safety contract; no repository write/CI execution tool is claimed live yet.
