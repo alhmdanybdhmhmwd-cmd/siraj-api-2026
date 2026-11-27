@@ -277,3 +277,11 @@ This section supersedes any wording in earlier sections (including sections 9, 1
 - These fixes are committed in 4beec6b3a5a2dae8f362fe52eb2abb26b17586e0. CI was still running when this checkpoint was written; do not mark the fixes verified until Backend tests, Admin Quality, Admin Mobile Quality, and Bundle checks finish successfully on this exact HEAD.
 - The dedicated BARQ Users page is explicitly preserved as a Phase 7 platform-management requirement (section 19); Phase 5 must retain it in the Brain's owner-context knowledge.
 - No APK, merge, deployment, production migration, or production resource change was performed.
+
+
+## 21. Stage 5 latest CI follow-up — 2026-11-28
+
+- On commit 4beec6b3a5a2dae8f362fe52eb2abb26b17586e0, the shared owner-context scope regression passed, but Backend tests (377 passed, 1 failed) and Admin Quality (78 passed, 1 failed) both found one remaining assertion mismatch: the task prompt said “same assistant identity” while the regression guard requires the canonical phrase “one identity, not separate agents or components.”
+- The task prompt was aligned with the canonical single-assistant wording in commit cdc20d58f146b870b3ca637f75c66993856fcb9d. No behavior splitting Brain and Guardian was introduced; they remain one assistant.
+- Fresh check runs for cdc20d58f146b870b3ca637f75c66993856fcb9d were not yet visible at the time of this note. The latest code is not CI-verified; re-check Backend tests, Admin Quality, Admin Mobile Quality, and Bundle against the current PR HEAD.
+- Phase 5 remains in progress. Do not mark complete or advance to Phase 6 until current CI and the remaining knowledge lifecycle, citation, freshness, conflict, injection-resistance, and project-isolation checks have been reviewed.
