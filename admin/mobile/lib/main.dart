@@ -966,7 +966,6 @@ class _AdminHomePageState extends State<AdminHomePage>
     }
     if (!mounted) return;
     setState(() {
-      _apiBase = '';
       _token = '';
       _refreshToken = '';
       _sessionId = '';
