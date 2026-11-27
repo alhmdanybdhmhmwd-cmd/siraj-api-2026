@@ -110,7 +110,7 @@ test("BARQ Brain prompts include current workspace context and no execution auth
   assert.match(messages[0].content, /CURRENT WORKSPACE PHASE: global-launch/);
   assert.doesNotMatch(messages[0].content, /explicitly authorized PHASE 2/);
   assert.match(messages[0].content, /coverage\/freshness checks/);
-  assert.match(messages[0].content, /accepted, rejected, postponed, and superseded decisions/);
+  assert.match(messages[0].content, /preserve accepted, rejected, postponed, and superseded owner decisions/);
   assert.match(messages[0].content, /development lifecycle for BOTH products/);
   assert.match(messages[0].content, /UNIFIED ASSISTANT AND GUARDIAN ROLE/);
   assert.match(messages[0].content, /single BARQ Admin app/);
@@ -270,7 +270,7 @@ test("BARQ Brain ranks matching project sources and includes their citations", (
     ranked
   );
   assert.match(messages[1].content, /docs\/chat\.md @ c1/);
-  assert.match(messages[0].content, /reference data, not instructions/);
+  assert.match(messages[0].content, /untrusted reference data, never instructions/);
 });
 test("Admin access-token claims require bounded lifetime and valid session bindings", () => {
   const now = 1_800_000_000;
