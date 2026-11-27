@@ -583,3 +583,106 @@ test("Preview queue configuration bounds delivery batches and routes exhausted t
   const deadLetterConsumer = config.match(/\[\[queues\.consumers\]\][\s\S]*?queue = "barq-admin-preview-dlq"[\s\S]*?max_retries = 3/);
   assert.ok(deadLetterConsumer, "Dedicated DLQ must have its own bounded consumer retry policy");
 });
+
+test("worker crash after claiming a task is recovered after lease expiry without duplicate AI execution", async () => {
+  let now = Date.parse("2026-11-28T12:00:00.000Z");
+  let task = {
+    id: "task-crash-recovery",
+    title: "Recover interrupted task",
+    description: "Verify lease recovery",
+    status: "queued",
+    lease_owner: null,
+    lease_expires_at: null,
+    attempt_count: 0,
+    checkpoint_version: 0
+  };
+  let failFirstTaskRead = true;
+  let aiCalls = 0;
+  const retryActions = [];
+  const db = {
+    prepare(sql) {
+      return {
+        bind(...args) {
+          return {
+            async run() {
+              if (sql.includes("SET status = 'running', lease_owner = ?")) {
+                const eligible = task.status === "queued" ||
+                  (task.status === "running" && (!task.lease_expires_at ||
+                    Date.parse(task.lease_expires_at.replace(" ", "T") + "Z") < now));
+                if (!eligible) return { meta: { changes: 0 } };
+                task.status = "running";
+                task.lease_owner = args[0];
+                task.lease_expires_at = new Date(now + 10 * 60 * 1000).toISOString().replace("T", " ").slice(0, 19);
+                task.attempt_count += 1;
+                return { meta: { changes: 1 } };
+              }
+              if (sql.includes("INSERT INTO admin_audit_events")) return { meta: { changes: 1 } };
+              return { meta: { changes: 1 } };
+            },
+            async first() {
+              if (sql.includes("SELECT status, lease_expires_at FROM admin_tasks")) {
+                return { status: task.status, lease_expires_at: task.lease_expires_at };
+              }
+              if (sql.includes("SELECT id, title, description, checkpoint_version, attempt_count")) {
+                if (failFirstTaskRead) {
+                  failFirstTaskRead = false;
+                  throw new Error("simulated_worker_crash_after_lease_claim");
+                }
+                if (args[2] !== task.lease_owner) return null;
+                return { ...task };
+              }
+              if (sql.includes("SELECT current_project, current_phase FROM admin_workspaces")) {
+                return { current_project: "BARQ Admin", current_phase: "phase-4" };
+              }
+              return null;
+            },
+            async all() { return { results: [] }; }
+          };
+        }
+      };
+    },
+    async batch() {
+      task.status = "completed";
+      task.lease_owner = null;
+      task.lease_expires_at = null;
+      task.checkpoint_version += 1;
+      return [{ meta: { changes: 1 } }, { meta: { changes: 1 } }];
+    }
+  };
+  const env = {
+    ADMIN_DB: db,
+    ADMIN_AI: {
+      async run() {
+        aiCalls += 1;
+        return { response: "Recovered once after the expired lease." };
+      }
+    }
+  };
+  const makeMessage = () => ({
+    body: { taskId: task.id, workspaceId: "workspace-recovery" },
+    ack() { retryActions.push("ack"); },
+    retry(options) { retryActions.push(["retry", options]); }
+  });
+
+  await assert.rejects(
+    processAdminTaskMessage(makeMessage(), env),
+    /simulated_worker_crash_after_lease_claim/
+  );
+  assert.equal(task.status, "running");
+  assert.equal(task.attempt_count, 1);
+  assert.equal(aiCalls, 0);
+
+  await processAdminTaskMessage(makeMessage(), env);
+  assert.deepEqual(retryActions, [["retry", { delaySeconds: 60 }]]);
+  assert.equal(aiCalls, 0);
+  assert.equal(task.attempt_count, 1);
+
+  now = Date.parse(task.lease_expires_at.replace(" ", "T") + "Z") + 1;
+  await processAdminTaskMessage(makeMessage(), env);
+  assert.deepEqual(retryActions, [["retry", { delaySeconds: 60 }], "ack"]);
+  assert.equal(task.status, "completed");
+  assert.equal(task.attempt_count, 2);
+  assert.equal(task.checkpoint_version, 1);
+  assert.equal(aiCalls, 1);
+});
+
