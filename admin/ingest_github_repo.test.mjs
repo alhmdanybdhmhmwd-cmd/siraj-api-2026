@@ -254,6 +254,10 @@ test("owner knowledge seed preserves product boundaries and flags time-sensitive
   assert.match(seed, /No direct contradiction was found among the stable product-identity decisions/);
   assert.match(seed, /Feature requirements .* are not proof that the corresponding code is complete/);
   assert.match(seed, /The 12-stage BARQ roadmap supersedes the older 8-stage plan/);
+  assert.match(seed, /Current Admin roadmap status reconciliation/);
+  assert.match(seed, /The owner has explicitly authorized stage 5/);
+  assert.match(seed, /BARQ Guardian is an approved product requirement/);
+  assert.match(seed, /It is not yet an operational service/);
 });
 
 
