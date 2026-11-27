@@ -457,3 +457,28 @@ test("dead-letter delivery requeues an abandoned task when the server queue is a
   assert.match(calls[1].sql, /status = 'queued'/);
   assert.equal(calls.length, 3);
 });
+
+
+test("dead-letter recovery retries when queue publishing fails and keeps the task recoverable", async () => {
+  const calls = [];
+  const env = {
+    BARQ_ADMIN_TASK_QUEUE_NAME: "admin-tasks-custom",
+    ADMIN_AI: {},
+    ADMIN_TASK_QUEUE: { async send(payload) { calls.push({ kind: "send", payload }); throw new Error("queue_unavailable"); } },
+    ADMIN_DB: {
+      prepare(sql) { return { bind(...args) { return {
+        async first() { calls.push({ kind: "first", sql, args }); return { status: "running", lease_active: 0 }; },
+        async run() { calls.push({ kind: "run", sql, args }); return { meta: { changes: 1 } }; }
+      }; } }; }
+    }
+  };
+  const actions = [];
+  await processAdminDeadLetterMessage({
+    body: { taskId: "task-send-failure", workspaceId: "workspace-3" },
+    ack() { actions.push("ack"); },
+    retry(options) { actions.push(["retry", options]); }
+  }, env);
+  assert.deepEqual(actions, [["retry", { delaySeconds: 60 }]]);
+  assert.equal(calls.find(call => call.kind === "send").payload.taskId, "task-send-failure");
+  assert.match(calls.find(call => call.kind === "run").sql, /status = 'queued'/);
+});
