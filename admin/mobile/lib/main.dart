@@ -299,23 +299,37 @@ class _AdminHomePageState extends State<AdminHomePage>
 
   Future<void> _loadPlatformGroups({int page = 1}) async {
     if (_token.isEmpty) {
-      if (mounted) setState(() => _groupsError = 'سجّل الدخول بحساب المالك لعرض المجموعات');
+      if (mounted)
+        setState(
+            () => _groupsError = 'سجّل الدخول بحساب المالك لعرض المجموعات');
       return;
     }
-    setState(() { _groupsLoading = true; _groupsError = ''; });
+    setState(() {
+      _groupsLoading = true;
+      _groupsError = '';
+    });
     try {
-      final query = Uri.encodeQueryComponent(_groupsSearchController.text.trim());
-      final data = await _getJson('/v1/platform/groups?q=' + query + '&page=' + page.toString() + '&pageSize=25');
+      final query =
+          Uri.encodeQueryComponent(_groupsSearchController.text.trim());
+      final data = await _getJson('/v1/platform/groups?q=' +
+          query +
+          '&page=' +
+          page.toString() +
+          '&pageSize=25');
       if (!mounted) return;
       setState(() {
-        _platformGroups = (data['groups'] as List? ?? []).whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+        _platformGroups = (data['groups'] as List? ?? [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
         _groupsTotal = (data['total'] as num?)?.toInt() ?? 0;
         _groupsPage = (data['page'] as num?)?.toInt() ?? page;
         _groupsTotalPages = (data['totalPages'] as num?)?.toInt() ?? 0;
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() => _groupsError = error.toString().replaceFirst('Exception: ', ''));
+      setState(() =>
+          _groupsError = error.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _groupsLoading = false);
     }
@@ -324,36 +338,76 @@ class _AdminHomePageState extends State<AdminHomePage>
   Widget _platformGroupsView() => ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text('المجموعات', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+          const Text('المجموعات',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
           const SizedBox(height: 6),
-          const Text('عرض مجموعات برق الحالية للمتابعة فقط. لا يتم فتح الرسائل أو الوسائط الخاصة.', style: TextStyle(color: Colors.white60, fontSize: 12)),
+          const Text(
+              'عرض مجموعات برق الحالية للمتابعة فقط. لا يتم فتح الرسائل أو الوسائط الخاصة.',
+              style: TextStyle(color: Colors.white60, fontSize: 12)),
           const SizedBox(height: 16),
           TextField(
             controller: _groupsSearchController,
             textInputAction: TextInputAction.search,
             onSubmitted: (_) => _loadPlatformGroups(page: 1),
-            decoration: InputDecoration(hintText: 'ابحث باسم المجموعة أو وصفها', prefixIcon: const Icon(Icons.search), suffixIcon: IconButton(tooltip: 'بحث', onPressed: () => _loadPlatformGroups(page: 1), icon: const Icon(Icons.arrow_forward))),
+            decoration: InputDecoration(
+                hintText: 'ابحث باسم المجموعة أو وصفها',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: IconButton(
+                    tooltip: 'بحث',
+                    onPressed: () => _loadPlatformGroups(page: 1),
+                    icon: const Icon(Icons.arrow_forward))),
           ),
           const SizedBox(height: 12),
-          Row(children: [Text('إجمالي المجموعات: $_groupsTotal', style: const TextStyle(color: Colors.white70)), const Spacer(), IconButton(tooltip: 'تحديث', onPressed: _groupsLoading ? null : () => _loadPlatformGroups(page: _groupsPage), icon: const Icon(Icons.refresh))]),
+          Row(children: [
+            Text('إجمالي المجموعات: $_groupsTotal',
+                style: const TextStyle(color: Colors.white70)),
+            const Spacer(),
+            IconButton(
+                tooltip: 'تحديث',
+                onPressed: _groupsLoading
+                    ? null
+                    : () => _loadPlatformGroups(page: _groupsPage),
+                icon: const Icon(Icons.refresh))
+          ]),
           if (_groupsLoading) const LinearProgressIndicator(),
           if (_groupsError.isNotEmpty) ...[
             _emptyState('تعذر تحميل المجموعات', _groupsError),
-            TextButton(onPressed: () => _loadPlatformGroups(page: _groupsPage), child: const Text('إعادة المحاولة')),
+            TextButton(
+                onPressed: () => _loadPlatformGroups(page: _groupsPage),
+                child: const Text('إعادة المحاولة')),
           ] else if (!_groupsLoading && _platformGroups.isEmpty) ...[
             _emptyState('لا توجد مجموعات', 'لا توجد مجموعات مطابقة للبحث.'),
           ] else ...[
-            ..._platformGroups.map((group) => Card(child: ListTile(
-              leading: const CircleAvatar(child: Icon(Icons.groups_outlined)),
-              title: Text(group['name']?.toString() ?? 'مجموعة برق'),
-              subtitle: Text('المالك: ' + (group['ownerName']?.toString().isNotEmpty == true ? group['ownerName'].toString() : 'غير معروف') + '  •  الأعضاء: ' + (group['memberCount']?.toString() ?? '0')),
-              isThreeLine: (group['description']?.toString() ?? '').isNotEmpty,
-              trailing: const Icon(Icons.group_outlined),
-            ))),
+            ..._platformGroups.map((group) => Card(
+                    child: ListTile(
+                  leading:
+                      const CircleAvatar(child: Icon(Icons.groups_outlined)),
+                  title: Text(group['name']?.toString() ?? 'مجموعة برق'),
+                  subtitle: Text('المالك: ' +
+                      (group['ownerName']?.toString().isNotEmpty == true
+                          ? group['ownerName'].toString()
+                          : 'غير معروف') +
+                      '  •  الأعضاء: ' +
+                      (group['memberCount']?.toString() ?? '0')),
+                  isThreeLine:
+                      (group['description']?.toString() ?? '').isNotEmpty,
+                  trailing: const Icon(Icons.group_outlined),
+                ))),
             Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              IconButton(tooltip: 'الصفحة السابقة', onPressed: _groupsPage > 1 && !_groupsLoading ? () => _loadPlatformGroups(page: _groupsPage - 1) : null, icon: const Icon(Icons.chevron_right)),
-              Text('$_groupsPage / ${_groupsTotalPages == 0 ? 1 : _groupsTotalPages}'),
-              IconButton(tooltip: 'الصفحة التالية', onPressed: _groupsPage < _groupsTotalPages && !_groupsLoading ? () => _loadPlatformGroups(page: _groupsPage + 1) : null, icon: const Icon(Icons.chevron_left)),
+              IconButton(
+                  tooltip: 'الصفحة السابقة',
+                  onPressed: _groupsPage > 1 && !_groupsLoading
+                      ? () => _loadPlatformGroups(page: _groupsPage - 1)
+                      : null,
+                  icon: const Icon(Icons.chevron_right)),
+              Text(
+                  '$_groupsPage / ${_groupsTotalPages == 0 ? 1 : _groupsTotalPages}'),
+              IconButton(
+                  tooltip: 'الصفحة التالية',
+                  onPressed: _groupsPage < _groupsTotalPages && !_groupsLoading
+                      ? () => _loadPlatformGroups(page: _groupsPage + 1)
+                      : null,
+                  icon: const Icon(Icons.chevron_left)),
             ]),
           ],
         ],
