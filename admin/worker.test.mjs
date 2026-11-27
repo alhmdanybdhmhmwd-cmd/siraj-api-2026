@@ -495,9 +495,9 @@ test("task consumer uses an atomic lease claim so duplicate queue deliveries can
   assert.match(consumer, /status = 'queued'/);
   assert.match(consumer, /status = 'running' AND lease_expires_at IS NOT NULL AND lease_expires_at < CURRENT_TIMESTAMP/);
   assert.match(consumer, /if \(!claimed\?\.meta\?\.changes\)/);
-  assert.match(consumer, /message\\.ack\\(\\);\\s*\\}\\s*catch/);
-  assert.match(consumer, /message\\.retry\\(\\{ delaySeconds: Math\\.min\\(300/);
-  assert.match(consumer, /clearInterval\\(heartbeatTimer\\)/);
+  assert.match(consumer, /message\.ack\(\);\s*\}\s*catch/);
+  assert.match(consumer, /message\.retry\(\{ delaySeconds: Math\.min\(300/);
+  assert.match(consumer, /clearInterval\(heartbeatTimer\)/);
 });
 
 test("task completion and failure are fenced by the exact active lease owner", () => {
