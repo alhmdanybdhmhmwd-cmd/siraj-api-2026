@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, knowledgeProjectScope, isKnowledgeSourceForProject, validateAdminAccessClaims, normalizeAdminActivationCode, createAdminActivationCode, processAdminDeadLetterMessage, processAdminTaskMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, knowledgeProjectScope, normalizeKnowledgeProject, isKnowledgeSourceForProject, validateAdminAccessClaims, normalizeAdminActivationCode, createAdminActivationCode, processAdminDeadLetterMessage, processAdminTaskMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches } from "./worker.js";
 
 test("idempotency keys are bounded and cannot be silently truncated", () => {
   assert.deepEqual(validateIdempotencyKey(null), { ok: true, value: null });
@@ -380,6 +380,20 @@ test("knowledge ranking prefers title/path evidence and safely bounds result cou
   assert.deepEqual(exact.map(item => item.source_path), ["docs/design.md"]);
 });
 
+
+test("knowledge project selection is canonical and fails closed for unknown values", () => {
+  assert.equal(normalizeKnowledgeProject("BARQ"), "BARQ");
+  assert.equal(normalizeKnowledgeProject("BARQ Admin"), "BARQ_ADMIN");
+  assert.equal(normalizeKnowledgeProject("admin"), "BARQ_ADMIN");
+  for (const value of ["notadmin", "BARQ_ADMIN_BACKUP", "", null, "SPARK"]) {
+    assert.equal(normalizeKnowledgeProject(value), null);
+    assert.equal(isKnowledgeSourceForProject("docs/private.md", value), false);
+    assert.equal(isKnowledgeSourceForProject("admin/worker.js", value), false);
+  }
+  assert.equal(isKnowledgeSourceForProject(
+    "admin/knowledge/BARQ_OWNER_CONTEXT.md", "unknown-project"
+  ), true);
+});
 
 test("knowledge sources remain isolated by selected project with only owner context shared", () => {
   assert.equal(knowledgeProjectScope("owner/repo/admin/worker.js"), "BARQ_ADMIN");
