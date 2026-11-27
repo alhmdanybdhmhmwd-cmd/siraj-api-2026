@@ -1526,7 +1526,7 @@ export default {
     }
   },
   async queue(batch, env) {
-    const isDeadLetter = batch.queue === "barq-admin-preview-dlq";
+    const isDeadLetter = batch.queue === (env.BARQ_ADMIN_DEAD_LETTER_QUEUE_NAME || "barq-admin-preview-dlq");
     for (const message of batch.messages) {
       if (isDeadLetter) {
         await processAdminDeadLetterMessage(message, env);
