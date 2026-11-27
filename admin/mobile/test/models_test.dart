@@ -93,4 +93,39 @@ void main() {
     expect(merged.last.id, 'local-already-synced');
   });
 
+
+  test('outbox sync splits pending work into a small ordered batch', () {
+    final pending = List<Map<String, dynamic>>.generate(
+      7,
+      (index) => {'idempotencyKey': 'draft-$index', 'title': 'Draft $index'},
+    );
+
+    final batch = splitOutboxBatch(pending);
+
+    expect(
+      batch.toSend.map((item) => item['idempotencyKey']).toList(),
+      ['draft-0', 'draft-1', 'draft-2'],
+    );
+    expect(
+      batch.deferred.map((item) => item['idempotencyKey']).toList(),
+      ['draft-3', 'draft-4', 'draft-5', 'draft-6'],
+    );
+    expect(
+      [...batch.toSend, ...batch.deferred],
+      pending,
+    );
+  });
+
+  test('outbox sync accepts a smaller custom batch and rejects zero', () {
+    final pending = [
+      {'idempotencyKey': 'one', 'title': 'One'},
+      {'idempotencyKey': 'two', 'title': 'Two'},
+    ];
+
+    final batch = splitOutboxBatch(pending, limit: 1);
+    expect(batch.toSend, [pending.first]);
+    expect(batch.deferred, [pending.last]);
+    expect(() => splitOutboxBatch(pending, limit: 0), throwsArgumentError);
+  });
+
 }
