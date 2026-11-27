@@ -497,14 +497,20 @@ export function isKnowledgeSourceForProject(sourcePath, currentProject) {
 export function knowledgeProjectSqlFilter(currentProject) {
   const project = normalizeKnowledgeProject(currentProject);
   if (!project) return null;
+  // Match the same two accepted layouts as knowledgeProjectScope:
+  // a root-relative admin/ path, or owner/repository/admin/...
+  // Do not treat an arbitrary nested folder named "admin" as the Admin project.
+  const repositoryRelativePath =
+    "substr(substr(source_path, instr(source_path, '/') + 1), " +
+    "instr(substr(source_path, instr(source_path, '/') + 1), '/') + 1)";
+  const adminPath = "(source_path LIKE 'admin/%' OR " +
+    "(" + repositoryRelativePath + " LIKE 'admin/%'))";
+  const sharedPath = "(source_path = 'admin/knowledge/BARQ_OWNER_CONTEXT.md' OR " +
+    repositoryRelativePath + " = 'admin/knowledge/BARQ_OWNER_CONTEXT.md')";
   if (project === "BARQ_ADMIN") {
-    return "(source_path LIKE 'admin/%' OR source_path LIKE '%/admin/%' OR " +
-      "source_path = 'admin/knowledge/BARQ_OWNER_CONTEXT.md' OR " +
-      "source_path LIKE '%/admin/knowledge/BARQ_OWNER_CONTEXT.md')";
+    return "(" + adminPath + " OR " + sharedPath + ")";
   }
-  return "((source_path NOT LIKE 'admin/%' AND source_path NOT LIKE '%/admin/%') OR " +
-    "source_path = 'admin/knowledge/BARQ_OWNER_CONTEXT.md' OR " +
-    "source_path LIKE '%/admin/knowledge/BARQ_OWNER_CONTEXT.md')";
+  return "(NOT " + adminPath + " OR " + sharedPath + ")";
 }
 
 export function escapeKnowledgeLikePattern(value) {
