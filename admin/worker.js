@@ -523,13 +523,18 @@ export function escapeKnowledgeLikePattern(value) {
 export function rankKnowledgeChunks(chunks, query, limit = 6) {
   const tokens = knowledgeSearchTerms(query);
   const safeLimit = Number.isSafeInteger(limit) ? Math.max(1, Math.min(12, limit)) : 6;
+  const normalize = value => String(value || "").normalize("NFKC").toLowerCase().trim();
   const tokenize = value => new Set(
-    String(value || "").toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []
+    normalize(value).match(/[\\p{L}\\p{N}]{3,}/gu) || []
   );
+  const normalizedQuery = normalize(query);
   return (chunks || []).map(chunk => {
-    const title = tokenize(chunk.title);
-    const path = tokenize(chunk.source_path);
-    const content = tokenize(chunk.content);
+    const normalizedTitle = normalize(chunk.title);
+    const normalizedPath = normalize(chunk.source_path);
+    const normalizedContent = normalize(chunk.content);
+    const title = tokenize(normalizedTitle);
+    const path = tokenize(normalizedPath);
+    const content = tokenize(normalizedContent);
     let score = 0;
     let matched = 0;
     for (const token of tokens) {
@@ -541,11 +546,29 @@ export function rankKnowledgeChunks(chunks, query, limit = 6) {
       if (inContent) score += 1;
       if (inTitle || inPath || inContent) matched++;
     }
+    // Phrase matches improve precision without treating ingestion timestamps as freshness.
+    const phraseMatch = normalizedQuery.length >= 3 && (
+      normalizedTitle.includes(normalizedQuery) ||
+      normalizedPath.includes(normalizedQuery) ||
+      normalizedContent.includes(normalizedQuery)
+    );
+    if (phraseMatch) {
+      if (normalizedTitle.includes(normalizedQuery)) score += 14;
+      else if (normalizedPath.includes(normalizedQuery)) score += 9;
+      else score += 5;
+    }
     const coverage = tokens.length ? matched / tokens.length : 0;
-    return { ...chunk, relevance_score: score + coverage, matched_terms: matched };
+    return {
+      ...chunk,
+      relevance_score: score + coverage,
+      matched_terms: matched,
+      phrase_match: phraseMatch
+    };
   }).filter(chunk => chunk.relevance_score > 0)
+    // updated_at is an ingestion timestamp, not source freshness or authority.
+    // Use a stable path tie-breaker instead of silently preferring recently indexed chunks.
     .sort((a, b) => b.relevance_score - a.relevance_score ||
-      String(b.updated_at || "").localeCompare(String(a.updated_at || "")))
+      String(a.source_path || "").localeCompare(String(b.source_path || "")))
     .slice(0, safeLimit);
 }
 
