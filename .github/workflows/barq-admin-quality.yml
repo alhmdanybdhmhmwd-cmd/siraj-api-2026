@@ -399,7 +399,7 @@ jobs:
         run: |
           export BARQ_GOOGLE_OIDC_CLIENT_ID="1234567890-test.apps.googleusercontent.com"
           flutter build apk --debug --target-platform android-arm64 --split-per-abi
-          apk="build/app/outputs/flutter-apk/app-armeabi-v8a-debug.apk"
+          apk="build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk"
           test -s "$apk"
           size="$(stat -c '%s' "$apk")"
           test "$size" -lt 209715200
@@ -411,7 +411,7 @@ jobs:
         with:
           name: barq-admin-arm64-debug
           path: |
-            admin/mobile/build/app/outputs/flutter-apk/app-armeabi-v8a-debug.apk
+            admin/mobile/build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk
             admin/mobile/build/app/outputs/flutter-apk/SHA256SUMS.txt
             admin/mobile/build/app/outputs/flutter-apk/BUILD_INFO.txt
           if-no-files-found: error
