@@ -525,7 +525,7 @@ export function rankKnowledgeChunks(chunks, query, limit = 6) {
   const safeLimit = Number.isSafeInteger(limit) ? Math.max(1, Math.min(12, limit)) : 6;
   const normalize = value => String(value || "").normalize("NFKC").toLowerCase().trim();
   const tokenize = value => new Set(
-    normalize(value).match(/[\\p{L}\\p{N}]{3,}/gu) || []
+    normalize(value).match(/[\p{L}\p{N}]{3,}/gu) || []
   );
   const normalizedQuery = normalize(query);
   return (chunks || []).map(chunk => {
