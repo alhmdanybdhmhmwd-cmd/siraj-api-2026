@@ -349,6 +349,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       BARQ_ADMIN_SIGNING_CONFIGURED: ${{ secrets.BARQ_ADMIN_KEYSTORE_BASE64 != '' && secrets.BARQ_ADMIN_KEYSTORE_PASSWORD != '' && secrets.BARQ_ADMIN_KEY_ALIAS != '' && secrets.BARQ_ADMIN_KEY_PASSWORD != '' }}
+      # Packaging stays disabled until the owner explicitly approves an APK build.
+      BARQ_ADMIN_APK_BUILD_APPROVED: 'false'
     defaults:
       run:
         working-directory: admin/mobile
@@ -397,7 +399,7 @@ jobs:
         run: bash gradlew :app:compileDebugKotlin --no-daemon --console=plain
 
       - name: Prepare stable BARQ Admin signing key and report SHA-1
-        if: ${{ env.BARQ_ADMIN_SIGNING_CONFIGURED == 'true' }}
+        if: ${{ env.BARQ_ADMIN_SIGNING_CONFIGURED == 'true' && env.BARQ_ADMIN_APK_BUILD_APPROVED == 'true' }}
         shell: bash
         env:
           BARQ_ADMIN_KEYSTORE_BASE64: ${{ secrets.BARQ_ADMIN_KEYSTORE_BASE64 }}
@@ -413,7 +415,7 @@ jobs:
           echo "BARQ Admin Android signing SHA-1: $SHA1"
 
       - name: Build compact BARQ Admin ARM64 internal APK
-        if: ${{ env.BARQ_ADMIN_SIGNING_CONFIGURED == 'true' }}
+        if: ${{ env.BARQ_ADMIN_SIGNING_CONFIGURED == 'true' && env.BARQ_ADMIN_APK_BUILD_APPROVED == 'true' }}
         working-directory: admin/mobile
         env:
           BARQ_ADMIN_KEYSTORE_PATH: ${{ runner.temp }}/barq-admin-release.jks
@@ -427,7 +429,7 @@ jobs:
             --split-per-abi
 
       - name: Verify internal APK size and checksum
-        if: ${{ env.BARQ_ADMIN_SIGNING_CONFIGURED == 'true' }}
+        if: ${{ env.BARQ_ADMIN_SIGNING_CONFIGURED == 'true' && env.BARQ_ADMIN_APK_BUILD_APPROVED == 'true' }}
         shell: bash
         run: |
           APK="admin/mobile/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
@@ -436,7 +438,7 @@ jobs:
           sha256sum "$APK"
 
       - name: Upload BARQ Admin ARM64 internal APK
-        if: ${{ env.BARQ_ADMIN_SIGNING_CONFIGURED == 'true' }}
+        if: ${{ env.BARQ_ADMIN_SIGNING_CONFIGURED == 'true' && env.BARQ_ADMIN_APK_BUILD_APPROVED == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: barq-admin-s7-arm64-internal
@@ -445,7 +447,7 @@ jobs:
           retention-days: 14
 
       - name: Report APK build skipped until stable signing is configured
-        if: ${{ env.BARQ_ADMIN_SIGNING_CONFIGURED != 'true' }}
+        if: ${{ env.BARQ_ADMIN_SIGNING_CONFIGURED != 'true' || env.BARQ_ADMIN_APK_BUILD_APPROVED != 'true' }}
         shell: bash
         run: |
           if [[ "$BARQ_ADMIN_SIGNING_CONFIGURED" != "true" ]]; then
