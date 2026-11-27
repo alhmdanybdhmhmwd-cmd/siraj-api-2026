@@ -285,9 +285,10 @@ test("dead-letter delivery marks an expired abandoned task failed and audits the
     retry() { actions.push("retry"); }
   }, env);
   assert.deepEqual(actions, ["ack"]);
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
   assert.match(calls[1].sql, /status = 'failed'/);
   assert.match(calls[1].sql, /lease_owner = NULL, lease_expires_at = NULL/);
+  assert.match(calls[2].sql, /INSERT INTO admin_audit_events/);
 });
 
 test("dead-letter redelivery does not overwrite or re-audit an already terminal task", async () => {
