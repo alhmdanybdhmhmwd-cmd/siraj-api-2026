@@ -267,3 +267,13 @@ This section supersedes any wording in earlier sections (including sections 9, 1
 - The page should be designed for safe operational visibility: show only fields needed for administration, protect phone numbers and other personal data behind owner-only access, avoid exposing credentials, tokens, private message contents, or private media, and record privileged administrative actions in the append-only audit trail.
 - Any account-impacting actions (for example suspension, restoration, or account removal) require explicit product rules, confirmation, authorization checks, and auditable execution; do not invent or silently enable destructive user-management actions.
 - This section records an owner-approved requirement and roadmap placement; it does not claim the Users page or its API is implemented.
+
+
+## 20. Stage 5 regression-fix checkpoint — 2026-11-28
+
+- After the automatic-repair requirement and Users-page requirement were recorded, CI on f7fe1aa8fbc87a8a6cc449ce1fb623fbbff61490 exposed a malformed regular-expression literal in the new retrieval regression assertion. The assertion was corrected in commit 119f18d9822eef485dafcb24cf595f8fd411099d.
+- CI on 060f7cd5d1ec71cce1be8bfc9395c95e1e141723 then exposed two additional issues: the task prompt's exact guardian wording did not satisfy the existing identity assertion, and the project-scope classifier stripped the first two path segments from a root-relative admin/knowledge/BARQ_OWNER_CONTEXT.md path before recognizing it as shared.
+- The worker prompt now uses the canonical wording “single assistant and guardian of BARQ”; the scope classifier recognizes the root-relative shared owner context before applying repository-prefix normalization. Existing prefixed repository paths continue through the normal classifier.
+- These fixes are committed in 4beec6b3a5a2dae8f362fe52eb2abb26b17586e0. CI was still running when this checkpoint was written; do not mark the fixes verified until Backend tests, Admin Quality, Admin Mobile Quality, and Bundle checks finish successfully on this exact HEAD.
+- The dedicated BARQ Users page is explicitly preserved as a Phase 7 platform-management requirement (section 19); Phase 5 must retain it in the Brain's owner-context knowledge.
+- No APK, merge, deployment, production migration, or production resource change was performed.
