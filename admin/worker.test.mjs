@@ -686,3 +686,123 @@ test("worker crash after claiming a task is recovered after lease expiry without
   assert.equal(aiCalls, 1);
 });
 
+test("stale worker cannot overwrite a task after a newer lease owner completes", async () => {
+  let now = Date.parse("2026-11-28T13:00:00.000Z");
+  const task = {
+    id: "task-stale-worker",
+    title: "Fence stale worker",
+    description: "A later lease owner must win",
+    status: "queued",
+    lease_owner: null,
+    lease_expires_at: null,
+    attempt_count: 0,
+    checkpoint_version: 0,
+    last_checkpoint_id: null
+  };
+  let aiCalls = 0;
+  let signalFirstAiStarted;
+  const firstAiStarted = new Promise(resolve => { signalFirstAiStarted = resolve; });
+  let releaseFirstAi;
+  const firstAiResult = new Promise(resolve => { releaseFirstAi = resolve; });
+  const messageActions = { old: [], newer: [] };
+  const db = {
+    prepare(sql) {
+      return {
+        sql,
+        bind(...args) {
+          return {
+            sql, args,
+            async run() {
+              if (sql.includes("SET status = 'running', lease_owner = ?")) {
+                const expired = task.lease_expires_at &&
+                  Date.parse(task.lease_expires_at.replace(" ", "T") + "Z") < now;
+                if (!(task.status === "queued" || (task.status === "running" && expired))) {
+                  return { meta: { changes: 0 } };
+                }
+                task.status = "running";
+                task.lease_owner = args[0];
+                task.lease_expires_at = new Date(now + 600000).toISOString().replace("T", " ").slice(0, 19);
+                task.attempt_count += 1;
+                return { meta: { changes: 1 } };
+              }
+              if (sql.includes("UPDATE admin_tasks SET status = ?, lease_owner = NULL")) {
+                if (task.lease_owner !== args[4] || task.status !== "running") return { meta: { changes: 0 } };
+                task.status = args[0];
+                task.lease_owner = null;
+                task.lease_expires_at = null;
+                return { meta: { changes: 1 } };
+              }
+              return { meta: { changes: 1 } };
+            },
+            async first() {
+              if (sql.includes("SELECT status, lease_expires_at FROM admin_tasks")) {
+                return { status: task.status, lease_expires_at: task.lease_expires_at };
+              }
+              if (sql.includes("SELECT id, title, description, checkpoint_version, attempt_count")) {
+                return args[2] === task.lease_owner ? { ...task } : null;
+              }
+              if (sql.includes("SELECT current_project, current_phase FROM admin_workspaces")) {
+                return { current_project: "BARQ Admin", current_phase: "phase-4" };
+              }
+              return null;
+            },
+            async all() { return { results: [] }; }
+          };
+        }
+      };
+    },
+    async batch(statements) {
+      const update = statements[0];
+      const checkpoint = statements[1];
+      const ownsLease = task.status === "running" &&
+        task.lease_owner === update.args[4] &&
+        task.checkpoint_version === update.args[5] &&
+        task.lease_expires_at &&
+        Date.parse(task.lease_expires_at.replace(" ", "T") + "Z") > now;
+      if (!ownsLease) return [{ meta: { changes: 0 } }, { meta: { changes: 0 } }];
+      task.status = "completed";
+      task.checkpoint_version = update.args[0];
+      task.last_checkpoint_id = update.args[1];
+      task.lease_owner = null;
+      task.lease_expires_at = null;
+      return [{ meta: { changes: 1 } }, { meta: { changes: 1 } }];
+    }
+  };
+  const env = {
+    ADMIN_DB: db,
+    ADMIN_AI: {
+      async run() {
+        aiCalls += 1;
+        if (aiCalls === 1) {
+          signalFirstAiStarted();
+          return await firstAiResult;
+        }
+        return { response: "Completed by the newer lease owner." };
+      }
+    }
+  };
+  const makeMessage = key => ({
+    body: { taskId: task.id, workspaceId: "workspace-stale" },
+    ack() { messageActions[key].push("ack"); },
+    retry(options) { messageActions[key].push(["retry", options]); }
+  });
+
+  const oldWorker = processAdminTaskMessage(makeMessage("old"), env);
+  await firstAiStarted;
+  const oldLeaseExpiry = Date.parse(task.lease_expires_at.replace(" ", "T") + "Z");
+  now = oldLeaseExpiry + 1;
+  await processAdminTaskMessage(makeMessage("newer"), env);
+  assert.equal(task.status, "completed");
+  assert.equal(task.checkpoint_version, 1);
+  assert.equal(aiCalls, 2);
+  assert.deepEqual(messageActions.newer, ["ack"]);
+
+  releaseFirstAi({ response: "Late result from the stale worker." });
+  await oldWorker;
+  assert.equal(task.status, "completed");
+  assert.equal(task.checkpoint_version, 1);
+  assert.equal(task.last_checkpoint_id !== null, true);
+  assert.deepEqual(messageActions.old, [["retry", { delaySeconds: 15 }]]);
+  assert.equal(aiCalls, 2);
+});
+
