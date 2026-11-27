@@ -289,10 +289,11 @@ class _AdminHomePageState extends State<AdminHomePage>
     return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
   }
 
-
   Future<void> _loadPlatformUsers({int page = 1}) async {
     if (_token.isEmpty) {
-      if (mounted) setState(() => _usersError = 'سجّل الدخول بحساب المالك لعرض المستخدمين');
+      if (mounted)
+        setState(
+            () => _usersError = 'سجّل الدخول بحساب المالك لعرض المستخدمين');
       return;
     }
     setState(() {
@@ -300,9 +301,14 @@ class _AdminHomePageState extends State<AdminHomePage>
       _usersError = '';
     });
     try {
-      final query = Uri.encodeQueryComponent(_usersSearchController.text.trim());
+      final query =
+          Uri.encodeQueryComponent(_usersSearchController.text.trim());
       final data = await _getJson(
-        '/v1/platform/users?q=' + query + '&page=' + page.toString() + '&pageSize=25',
+        '/v1/platform/users?q=' +
+            query +
+            '&page=' +
+            page.toString() +
+            '&pageSize=25',
       );
       if (!mounted) return;
       setState(() {
@@ -326,7 +332,8 @@ class _AdminHomePageState extends State<AdminHomePage>
 
   Future<void> _showPlatformUserDetails(String userId) async {
     try {
-      final data = await _getJson('/v1/platform/users/' + Uri.encodeComponent(userId));
+      final data =
+          await _getJson('/v1/platform/users/' + Uri.encodeComponent(userId));
       final user = Map<String, dynamic>.from(data['user'] as Map? ?? {});
       if (!mounted) return;
       await showDialog<void>(
@@ -343,7 +350,8 @@ class _AdminHomePageState extends State<AdminHomePage>
               const SizedBox(height: 8),
               Text('رقم الهاتف: ' + (user['phone']?.toString() ?? 'غير مسجل')),
               const SizedBox(height: 8),
-              SelectableText('معرّف الحساب: ' + (user['id']?.toString() ?? '—')),
+              SelectableText(
+                  'معرّف الحساب: ' + (user['id']?.toString() ?? '—')), 
             ],
           ),
           actions: [
@@ -357,7 +365,8 @@ class _AdminHomePageState extends State<AdminHomePage>
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+        SnackBar(
+            content: Text(error.toString().replaceFirst('Exception: ', ''))),
       );
     }
   }
@@ -397,7 +406,9 @@ class _AdminHomePageState extends State<AdminHomePage>
               const Spacer(),
               IconButton(
                 tooltip: 'تحديث',
-                onPressed: _usersLoading ? null : () => _loadPlatformUsers(page: _usersPage),
+                onPressed: _usersLoading
+                    ? null
+                    : () => _loadPlatformUsers(page: _usersPage),
                 icon: const Icon(Icons.refresh),
               ),
             ],
@@ -419,16 +430,21 @@ class _AdminHomePageState extends State<AdminHomePage>
           ] else ...[
             ..._platformUsers.map((user) => Card(
                   child: ListTile(
-                    leading: const CircleAvatar(child: Icon(Icons.person_outline)),
-                    title: Text(user['displayName']?.toString().isNotEmpty == true
-                        ? user['displayName'].toString()
-                        : 'مستخدم BARQ'),
+                    leading:
+                        const CircleAvatar(child: Icon(Icons.person_outline)),
+                    title: Text(
+                        user['displayName']?.toString().isNotEmpty == true
+                            ? user['displayName'].toString()
+                            : 'مستخدم BARQ'),
                     subtitle: Text(
-                      '@' + (user['username']?.toString() ?? '—') +
-                          '  •  ' + (user['phoneMasked']?.toString() ?? 'بدون رقم هاتف'),
+                      '@' +
+                          (user['username']?.toString() ?? '—') +
+                          '  •  ' +
+                          (user['phoneMasked']?.toString() ?? 'بدون رقم هاتف'),
                     ),
                     trailing: const Icon(Icons.chevron_left),
-                    onTap: () => _showPlatformUserDetails(user['id'].toString()),
+                    onTap: () =>
+                        _showPlatformUserDetails(user['id'].toString()),
                   ),
                 )),
             const SizedBox(height: 8),
@@ -442,7 +458,8 @@ class _AdminHomePageState extends State<AdminHomePage>
                       : null,
                   icon: const Icon(Icons.chevron_right),
                 ),
-                Text('${_usersPage} / ${_usersTotalPages == 0 ? 1 : _usersTotalPages}'),
+                Text(
+                    '${_usersPage} / ${_usersTotalPages == 0 ? 1 : _usersTotalPages}'),
                 IconButton(
                   tooltip: 'الصفحة التالية',
                   onPressed: _usersPage < _usersTotalPages && !_usersLoading
