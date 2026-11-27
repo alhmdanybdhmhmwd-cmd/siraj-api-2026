@@ -320,3 +320,14 @@ This section supersedes any wording in earlier sections (including sections 9, 1
   6. Preserve all approval boundaries: no production migrations/data changes, destructive account actions, merge, production deploy, paid resources, or APK without the owner's explicit approval.
 - Start Stage 6 with the dedicated Users page and safe administration foundation, while carrying the Stage 5 acceptance backlog in the same stage. Do not create a duplicate BARQ user database; use existing BARQ account records and approved APIs. Keep owner-only authorization, least-privilege PII display, and append-only audit records. Do not expose passwords, tokens, private messages, or private media. Account-impacting actions remain disabled until their rules and safeguards are implemented and tested.
 - This decision supersedes prior notes that prohibited entering Stage 6 until every Stage 5 acceptance item had closed. It does not waive any test or safety requirement; it moves those items into Stage 6's tracked work.
+
+
+## 25. Stage 6 implementation checkpoint — BARQ Users read-only foundation — 2026-11-28
+
+- The owner-approved Stage 5 carryover into Stage 6 is recorded in section 24. Stage 5 is closed for scheduling only; its acceptance gaps remain open under Stage 6.
+- Implemented on the existing draft PR branch: owner-authenticated read-only GET /v1/platform/users with bounded search and pagination, querying the existing shared BARQ users table through the existing shared Worker DB binding. No duplicate users database or schema migration was added.
+- The list response allowlists account id, username, display name, and a masked phone number. A separate owner-authenticated detail read returns the phone number only when the owner opens an individual account. Password hashes/salts, tokens, private messages, and private media are not selected or returned.
+- Both list and detail reads create append-only Admin audit events. No suspend, restore, delete, or other account-mutating endpoint was added.
+- Added the Arabic RTL Users destination in the Admin Flutter app, with search, pagination, masked phone display, and an owner-only detail dialog. User data is fetched from the API and is not written to local cache.
+- Added regression coverage for bounded query/pagination, phone masking, read-only route shape, allowlisted fields, and audit calls. Admin Quality on commit 3377afa9857e0200743cc83961cddfa5a1bc6331 passed 82/82 Admin unit tests and the offline schema/audit safety checks. The separate Admin Mobile Quality run was still in progress at the checkpoint; do not report Android analysis/AppAuth/Kotlin validation as passed until its exact run completes.
+- Current PR #11 remains Draft/open. No live user records were queried, no Preview deployment, migration, merge, production deployment, APK, or account mutation was performed. Live Preview verification of the users API remains outstanding.
