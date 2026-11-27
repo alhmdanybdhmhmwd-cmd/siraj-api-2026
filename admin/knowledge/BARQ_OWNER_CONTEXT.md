@@ -163,3 +163,20 @@ This section is the newest status authority for the current BARQ Admin workstrea
 - The BARQ Guardian is an approved product requirement for BARQ: persistent server-side monitoring, incident detection, diagnosis, bounded isolated repair, regression verification, durable audit, and alerting. It is not yet an operational service. Never claim it is monitoring or repairing BARQ until all those components have been implemented and tested.
 - Remaining stage 5 acceptance work includes: verify CI after each current commit; investigate the Cloudflare build failure without changing production; complete mobile-quality CI; strengthen evidence and conflict/freshness reporting; establish accurate coverage for each explicitly approved repository; and document the exact stage 5 pass/fail/deferred test ledger. Physical-device testing remains deferred to the dedicated BARQ Admin phone-testing stage.
 - Do not create an APK, merge PR #11, deploy, change production resources/data, or delete indexed knowledge as part of this work without the owner's explicit approval.
+## 12. Strict separation: BARQ app roadmap vs BARQ Admin roadmap — 2026-11-28
+
+These are two separate products with separate phase plans, completion evidence, branches, tests, and release gates. Never transfer a phase number or completion status from one product to the other.
+
+### BARQ (the user-facing messaging app)
+- The BARQ app has its own roadmap. The latest retrieved project status (2026-11-26) records BARQ stage 2 as still open/in progress; the backend checks had passed and connection configuration defaulted through Vercel, but database migrations had not been applied. Real-device testing from Yemen without VPN and branch Preview testing were not verified in that status snapshot.
+- Do not use BARQ Admin's detailed 12-stage phase names/numbers to describe BARQ. Do not mark BARQ stage 2 complete based on Admin tests or commits.
+- BARQ Guardian is a BARQ-app requirement: detect BARQ incidents, diagnose them, attempt bounded automatic repairs, run regression checks, preserve an audit trail, and alert the owner. It is not yet an operational guardian unless implementation and live verification prove it.
+
+### BARQ Admin (the separate management app)
+- BARQ Admin follows the detailed 12-work-stage roadmap (foundation stage 0 plus stages 1–12). Its current work is stage 5: BARQ Brain understanding and knowledge memory. Stage 4 (persistent server-side execution engine) is complete at the code/CI level; physical-device testing remains deferred.
+- Current Admin review PR is #11 on `barq-admin-foundation-2026-11-23`, draft/open and not merged. Check the live PR head and CI before every status report.
+- At the latest verified PR head `3eb0471f69a45b5ff19047bfa463b930b16fc1f0`, `admin-quality`, `auth-tests`, and `bundle` passed; `admin-mobile-quality` remained in progress; `Workers Builds: siraj-api` failed. Investigate the Worker build failure and await mobile-quality completion before declaring the stage-5 changes green.
+
+### Reporting rule
+- Every progress report must show two separately labeled status lines: `BARQ app` and `BARQ Admin`. If a phase status has not been recently verified, label it `last documented status` with its date, not current verified status.
+- Admin work must not silently change BARQ app production resources or vice versa. No merge, production deploy, database migration, APK creation, or destructive knowledge cleanup without the owner's explicit approval.
