@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, knowledgeProjectScope, normalizeKnowledgeProject, isKnowledgeSourceForProject, knowledgeProjectSqlFilter, escapeKnowledgeLikePattern, validateAdminAccessClaims, normalizeAdminActivationCode, createAdminActivationCode, processAdminDeadLetterMessage, processAdminTaskMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches, validatePlatformUsersQuery, maskPlatformUserPhone } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, knowledgeProjectScope, normalizeKnowledgeProject, isKnowledgeSourceForProject, knowledgeProjectSqlFilter, escapeKnowledgeLikePattern, validateAdminAccessClaims, normalizeAdminActivationCode, createAdminActivationCode, processAdminDeadLetterMessage, processAdminTaskMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches, validatePlatformUsersQuery, maskPlatformUserPhone, decodePlatformUserId } from "./worker.js";
 
 
 
@@ -30,6 +30,15 @@ test("platform users listing validates bounded pagination and query length", () 
   assert.equal(validatePlatformUsersQuery(new URL("https://admin.example/v1/platform/users?page=0")).ok, false);
   assert.equal(validatePlatformUsersQuery(new URL("https://admin.example/v1/platform/users?pageSize=500")).ok, false);
   assert.equal(validatePlatformUsersQuery(new URL("https://admin.example/v1/platform/users?q=" + "x".repeat(81))).ok, false);
+});
+
+test("platform user detail IDs reject malformed and path-traversal encodings", () => {
+  assert.deepEqual(decodePlatformUserId("user-123"), { ok: true, value: "user-123" });
+  assert.deepEqual(decodePlatformUserId("user%2D123"), { ok: true, value: "user-123" });
+  assert.deepEqual(decodePlatformUserId("%2Fadmin"), { ok: false, error: "invalid_user_id" });
+  assert.deepEqual(decodePlatformUserId("bad%ZZ"), { ok: false, error: "invalid_user_id" });
+  assert.deepEqual(decodePlatformUserId(""), { ok: false, error: "invalid_user_id" });
+  assert.deepEqual(decodePlatformUserId("x".repeat(129)), { ok: false, error: "invalid_user_id" });
 });
 
 test("platform users list masks phone numbers and never requires exposing them", () => {
