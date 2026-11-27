@@ -262,7 +262,7 @@ This section supersedes any wording in earlier sections (including sections 9, 1
 ## 19. Owner requirement — dedicated BARQ users page in BARQ Admin — 2026-11-28
 
 - The owner explicitly reminds the project not to omit a dedicated **Users** page in BARQ Admin. This is a first-class administration destination, not merely a user count on the dashboard.
-- The page belongs to the BARQ platform-management scope (Phase 7 of the Admin roadmap); Phase 5 must preserve and index this requirement so it is not lost when the Brain knowledge base is refreshed.
+- Owner roadmap adjustment (2026-11-28): move the dedicated Users page forward to **Phase 6** as an explicit Admin operations/tooling deliverable; do not defer the page to Phase 7. Phase 5 must preserve and index the requirement, while Phase 6 owns its implementation and acceptance.
 - The intended page should provide a searchable, paginated view of BARQ accounts and a clear account detail view, using the existing BARQ user/account records and approved APIs rather than creating a duplicate user database.
 - The page should be designed for safe operational visibility: show only fields needed for administration, protect phone numbers and other personal data behind owner-only access, avoid exposing credentials, tokens, private message contents, or private media, and record privileged administrative actions in the append-only audit trail.
 - Any account-impacting actions (for example suspension, restoration, or account removal) require explicit product rules, confirmation, authorization checks, and auditable execution; do not invent or silently enable destructive user-management actions.
@@ -275,7 +275,7 @@ This section supersedes any wording in earlier sections (including sections 9, 1
 - CI on 060f7cd5d1ec71cce1be8bfc9395c95e1e141723 then exposed two additional issues: the task prompt's exact guardian wording did not satisfy the existing identity assertion, and the project-scope classifier stripped the first two path segments from a root-relative admin/knowledge/BARQ_OWNER_CONTEXT.md path before recognizing it as shared.
 - The worker prompt now uses the canonical wording “single assistant and guardian of BARQ”; the scope classifier recognizes the root-relative shared owner context before applying repository-prefix normalization. Existing prefixed repository paths continue through the normal classifier.
 - These fixes are committed in 4beec6b3a5a2dae8f362fe52eb2abb26b17586e0. CI was still running when this checkpoint was written; do not mark the fixes verified until Backend tests, Admin Quality, Admin Mobile Quality, and Bundle checks finish successfully on this exact HEAD.
-- The dedicated BARQ Users page is explicitly preserved as a Phase 7 platform-management requirement (section 19); Phase 5 must retain it in the Brain's owner-context knowledge.
+- The dedicated BARQ Users page is now scheduled for Phase 6 by the owner's 2026-11-28 roadmap adjustment (section 19); Phase 5 must retain it in the Brain's owner-context knowledge.
 - No APK, merge, deployment, production migration, or production resource change was performed.
 
 
@@ -285,3 +285,13 @@ This section supersedes any wording in earlier sections (including sections 9, 1
 - The task prompt was aligned with the canonical single-assistant wording in commit cdc20d58f146b870b3ca637f75c66993856fcb9d. No behavior splitting Brain and Guardian was introduced; they remain one assistant.
 - Fresh check runs for cdc20d58f146b870b3ca637f75c66993856fcb9d were not yet visible at the time of this note. The latest code is not CI-verified; re-check Backend tests, Admin Quality, Admin Mobile Quality, and Bundle against the current PR HEAD.
 - Phase 5 remains in progress. Do not mark complete or advance to Phase 6 until current CI and the remaining knowledge lifecycle, citation, freshness, conflict, injection-resistance, and project-isolation checks have been reviewed.
+
+
+## 22. Owner roadmap adjustment — move BARQ Users page to Phase 6 — 2026-11-28
+
+- The owner explicitly requested that the dedicated Users page be included in Phase 5 or Phase 6 rather than waiting until Phase 7. The agreed placement is **Phase 6**, keeping Phase 5 focused on completing BARQ Brain's knowledge and safety foundation.
+- Phase 6 must deliver a dedicated **المستخدمون** destination in BARQ Admin, with searchable and paginated BARQ account listings, account detail views, and integration with the existing BARQ account records and approved APIs. Do not create a duplicate user database.
+- Preserve owner-only access, least-privilege field visibility, personal-data protection, and append-only audit records for privileged actions. Never expose passwords, credentials, tokens, private message contents, or private media.
+- Account-impacting actions such as suspension, restoration, or removal must remain disabled until explicit product rules, authorization checks, confirmation UX, and auditable execution are implemented and tested. No destructive account action is authorized by this roadmap placement alone.
+- Phase 5 remains active and must retain this requirement in BARQ Brain's knowledge. Phase 6 implementation must be separately planned and tested; Phase 7 remains responsible for the broader platform-management scope.
+- This is a roadmap decision only. It does not claim the Users page, its API, or account actions are implemented, and it does not authorize merge, deployment, production migrations, or APK creation.
