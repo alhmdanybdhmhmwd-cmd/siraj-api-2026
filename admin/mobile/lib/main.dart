@@ -291,7 +291,10 @@ class _AdminHomePageState extends State<AdminHomePage>
 
 
   Future<void> _loadPlatformUsers({int page = 1}) async {
-    if (_token.isEmpty) return;
+    if (_token.isEmpty) {
+      if (mounted) setState(() => _usersError = 'سجّل الدخول بحساب المالك لعرض المستخدمين');
+      return;
+    }
     setState(() {
       _usersLoading = true;
       _usersError = '';
