@@ -141,3 +141,12 @@ No direct contradiction was found among the stable product-identity decisions in
 ### Knowledge-record handling
 
 Keep owner intent separate from implementation evidence. For every indexed owner decision, retain this document path, its source revision, review date, and decision status (approved, rejected, postponed, superseded, or needs_owner_confirmation). For implementation claims, require separate code/test/deployment evidence with its own exact revision and observation time. Never infer a decision's effective date from the file's last-updated date alone.
+## BARQ Guardian — حارس تطبيق برق
+
+- The owner requires a persistent BARQ Guardian as a core BARQ Admin capability. It must protect the BARQ consumer app and its supporting services, not merely act as a dashboard or wait for the owner to report failures.
+- The intended guardian monitors service health, application/API failures, database and storage availability, background jobs, delivery queues, and relevant error signals continuously on server-side infrastructure, including while the owner's phone is closed or offline.
+- It should detect incidents, correlate evidence, diagnose likely causes, propose or apply bounded repairs to non-production code/configuration when authorized, run focused regression and safety tests, verify recovery, retry safely, and keep an auditable incident/repair record.
+- The guardian must distinguish detection, diagnosis, code change, test evidence, preview validation, and production recovery. It must never report an incident as fixed until the relevant verification passes.
+- Safe, reversible repairs in isolated development branches may be autonomous within owner-approved scope. Production deployment, merging, production data changes, destructive operations, secret access/rotation, permission changes, paid services, and public communications remain behind explicit action-specific owner approval.
+- If automatic repair cannot be verified, the guardian must stop escalating risk, preserve evidence, report the blocker, and provide a safe recovery recommendation. It must not weaken authentication, authorization, audit logging, backups, or environment isolation.
+- This is an approved product requirement, not proof that a live guardian already exists. Do not claim continuous monitoring or autonomous repair is operational until the monitoring pipeline, incident workflow, repair executor, test/verification gates, approval boundaries, durable audit trail, and alert delivery have been implemented and tested.
