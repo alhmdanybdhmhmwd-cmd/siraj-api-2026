@@ -92,6 +92,7 @@ class _AdminHomePageState extends State<AdminHomePage>
   bool _syncing = false;
   bool _pinLocked = false;
   bool _pinDialogVisible = false;
+  final Set<String> _approvalBusy = <String>{};
 
   @override
   void initState() {
@@ -868,6 +869,8 @@ class _AdminHomePageState extends State<AdminHomePage>
       );
       return;
     }
+    if (_approvalBusy.contains(id)) return;
+    setState(() => _approvalBusy.add(id));
     try {
       final response = await http
           .patch(
@@ -906,6 +909,8 @@ class _AdminHomePageState extends State<AdminHomePage>
           ),
         );
       }
+    } finally {
+      if (mounted) setState(() => _approvalBusy.remove(id));
     }
   }
 
@@ -2812,17 +2817,29 @@ class _AdminHomePageState extends State<AdminHomePage>
                           children: [
                             Expanded(
                               child: OutlinedButton(
-                                onPressed: () =>
-                                    _decideApproval(approval.id, 'rejected'),
+                                onPressed: _approvalBusy.contains(approval.id)
+                                    ? null
+                                    : () => _decideApproval(
+                                        approval.id, 'rejected'),
                                 child: const Text('رفض'),
                               ),
                             ),
                             const SizedBox(width: 10),
                             Expanded(
                               child: FilledButton(
-                                onPressed: () =>
-                                    _decideApproval(approval.id, 'approved'),
-                                child: const Text('موافقة'),
+                                onPressed: _approvalBusy.contains(approval.id)
+                                    ? null
+                                    : () => _decideApproval(
+                                        approval.id, 'approved'),
+                                child: _approvalBusy.contains(approval.id)
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Text('موافقة'),
                               ),
                             ),
                           ],
