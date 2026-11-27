@@ -1,4 +1,6 @@
 # BARQ Brain repository indexing runbook
+> **Project separation:** The current approved repository contains both BARQ and BARQ Admin. Brain retrieval must use the selected workspace project: `admin/**` sources are BARQ Admin-only, non-`admin/**` sources are BARQ-only, and `admin/knowledge/BARQ_OWNER_CONTEXT.md` is the sole shared owner-decision seed. Verify this path classifier when repository layout changes; never broaden it silently.
+
 
 This procedure indexes an explicitly selected GitHub repository revision into BARQ Brain's `admin_project_knowledge` tables. The selected architecture uses the existing BARQ Worker and D1 database through the isolated `/admin/*` route; it does not read or index consumer user, message, or SPARK records.
 
