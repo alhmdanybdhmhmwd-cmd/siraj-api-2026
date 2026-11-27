@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, knowledgeProjectScope, normalizeKnowledgeProject, isKnowledgeSourceForProject, knowledgeProjectSqlFilter, escapeKnowledgeLikePattern, validateAdminAccessClaims, normalizeAdminActivationCode, createAdminActivationCode, processAdminDeadLetterMessage, processAdminTaskMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches, validatePlatformUsersQuery, maskPlatformUserPhone, decodePlatformUserId } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, knowledgeProjectScope, normalizeKnowledgeProject, isKnowledgeSourceForProject, knowledgeProjectSqlFilter, escapeKnowledgeLikePattern, validateAdminAccessClaims, normalizeAdminActivationCode, createAdminActivationCode, processAdminDeadLetterMessage, processAdminTaskMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches, validatePlatformUsersQuery, validatePlatformGroupsQuery, maskPlatformUserPhone, decodePlatformUserId } from "./worker.js";
 
 
 
@@ -19,6 +19,30 @@ test("BARQ platform user routes are owner-scoped read-only and expose only allow
   assert.match(detailRoute, /SELECT id, username, display_name, phone FROM users WHERE id = \?/);
   assert.match(detailRoute, /platform\.user\.viewed/);
   assert.doesNotMatch(listRoute + detailRoute, /password_hash|password_salt|private_messages|profile_photos|INSERT INTO users|UPDATE users|DELETE FROM users/);
+});
+
+test("BARQ platform groups route is owner-scoped, read-only, paginated, and audited", () => {
+  const source = readFileSync(new URL("./worker.js", import.meta.url), "utf8");
+  const start = source.indexOf('if (request.method === "GET" && url.pathname === "/v1/platform/groups")');
+  const end = source.indexOf('if (request.method === "GET" && url.pathname === "/v1/workspace")');
+  assert.ok(start >= 0 && end > start);
+  const route = source.slice(start, end);
+  assert.match(route, /FROM chat_groups g/);
+  assert.match(route, /LEFT JOIN users u ON u.id = g.owner_id/);
+  assert.match(route, /FROM group_members gm WHERE gm.group_id = g.id/);
+  assert.match(route, /platform\\.groups\\.listed/);
+  assert.doesNotMatch(route, /INSERT INTO chat_groups|UPDATE chat_groups|DELETE FROM chat_groups|group_messages|private_messages/);
+});
+
+test("platform groups listing validates bounded pagination and query length", () => {
+  const valid = validatePlatformGroupsQuery(new URL("https://admin.example/v1/platform/groups?q=family&page=3&pageSize=20"));
+  assert.deepEqual(valid, {
+    ok: true,
+    value: { query: "family", page: 3, pageSize: 20, offset: 40 }
+  });
+  assert.equal(validatePlatformGroupsQuery(new URL("https://admin.example/v1/platform/groups?page=0")).ok, false);
+  assert.equal(validatePlatformGroupsQuery(new URL("https://admin.example/v1/platform/groups?pageSize=500")).ok, false);
+  assert.equal(validatePlatformGroupsQuery(new URL("https://admin.example/v1/platform/groups?q=" + "x".repeat(81))).ok, false);
 });
 
 test("platform users listing validates bounded pagination and query length", () => {
