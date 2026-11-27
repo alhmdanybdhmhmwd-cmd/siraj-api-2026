@@ -386,7 +386,7 @@ test("BARQ Brain extracts bounded multilingual search terms for knowledge retrie
   assert.equal(knowledgeSearchTerms("one two three", 999).length, 3);
 });
 
-test("knowledge ranking prefers title/path evidence and safely bounds result count", () => {
+test("knowledge ranking prefers title/path evidence, phrase matches, and bounded results", () => {
   const chunks = [
     { title: "General notes", source_path: "docs/other.md", content: "BARQ messages" },
     { title: "BARQ messaging architecture", source_path: "docs/barq-chat.md", content: "delivery and retries" },
@@ -396,6 +396,17 @@ test("knowledge ranking prefers title/path evidence and safely bounds result cou
   assert.equal(ranked.length, 3);
   assert.equal(ranked[0].source_path, "docs/barq-chat.md");
   assert.ok(ranked[0].matched_terms >= 1);
+  const phraseRanked = rankKnowledgeChunks([
+    { title: "BARQ support guide", source_path: "docs/phrase.md", content: "owner support" },
+    { title: "BARQ reference", source_path: "docs/scattered.md", content: "support details and guide" }
+  ], "BARQ support guide");
+  assert.equal(phraseRanked[0].source_path, "docs/phrase.md");
+  assert.equal(phraseRanked[0].phrase_match, true);
+  const stableTie = rankKnowledgeChunks([
+    { title: "BARQ notes", source_path: "z-notes.md", content: "", updated_at: "2026-11-28" },
+    { title: "BARQ notes", source_path: "a-notes.md", content: "", updated_at: "2025-01-01" }
+  ], "BARQ");
+  assert.deepEqual(stableTie.map(item => item.source_path), ["a-notes.md", "z-notes.md"]);
   const exact = rankKnowledgeChunks([
     { title: "Cartography notes", source_path: "docs/cart.md", content: "mapping" },
     { title: "Art direction", source_path: "docs/design.md", content: "visual identity" }
