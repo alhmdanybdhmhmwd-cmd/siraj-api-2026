@@ -478,11 +478,18 @@ export function knowledgeProjectScope(sourcePath) {
   return path.startsWith("admin/") ? "BARQ_ADMIN" : "BARQ";
 }
 
+export function normalizeKnowledgeProject(currentProject) {
+  const value = String(currentProject || "").trim().toUpperCase().replace(/[\\s_-]+/g, "");
+  if (value === "BARQADMIN" || value === "ADMIN") return "BARQ_ADMIN";
+  if (value === "BARQ") return "BARQ";
+  return null;
+}
+
 export function isKnowledgeSourceForProject(sourcePath, currentProject) {
   const scope = knowledgeProjectScope(sourcePath);
   if (scope === "shared") return true;
-  const requested = /admin/i.test(String(currentProject || "")) ? "BARQ_ADMIN" : "BARQ";
-  return scope === requested;
+  const requested = normalizeKnowledgeProject(currentProject);
+  return requested !== null && scope === requested;
 }
 
 export function rankKnowledgeChunks(chunks, query, limit = 6) {
