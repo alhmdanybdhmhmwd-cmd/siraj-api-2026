@@ -316,6 +316,22 @@ async function processAdminTaskMessage(message, env) {
     SELECT current_project, current_phase FROM admin_workspaces WHERE id = ?
   `).bind(payload.workspaceId).first();
 
+  if (!task) {
+    message.ack();
+    return;
+  }
+  if (!workspace) {
+    const failed = await env.ADMIN_DB.prepare(`
+      UPDATE admin_tasks SET status = 'failed', lease_owner = NULL, lease_expires_at = NULL,
+        next_action = 'Workspace no longer exists; review or recreate the task',
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND workspace_id = ? AND lease_owner = ? AND status = 'running'
+    `).bind(payload.taskId, payload.workspaceId, leaseId).run();
+    if (failed?.meta?.changes) message.ack();
+    else message.retry({ delaySeconds: 60 });
+    return;
+  }
+
   let heartbeatTimer;
   let leaseLost = false;
   try {
