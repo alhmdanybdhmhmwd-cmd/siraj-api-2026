@@ -107,7 +107,8 @@ test("BARQ Brain prompts include current workspace context and no execution auth
   assert.match(messages[1].content, /Current phase: global-launch/);
   assert.match(messages[0].content, /no authority to publish/);
   assert.match(messages[0].content, /Never claim an action was performed/);
-  assert.match(messages[0].content, /explicitly authorized PHASE 2/);
+  assert.match(messages[0].content, /CURRENT WORKSPACE PHASE: global-launch/);
+  assert.doesNotMatch(messages[0].content, /explicitly authorized PHASE 2/);
   assert.match(messages[0].content, /coverage\/freshness checks/);
   assert.match(messages[0].content, /accepted, rejected, postponed, and superseded decisions/);
   assert.match(messages[0].content, /development lifecycle for BOTH products/);
@@ -170,7 +171,7 @@ test("vision assistant preserves owner phase and approval agreements", () => {
   const messages = buildVisionMessages("Describe this screenshot");
   assert.equal(messages[1].content, "Describe this screenshot");
   assert.equal(messages.length, 2);
-  assert.match(messages[0].content, /explicitly authorized Phase 2/);
+  assert.match(messages[0].content, /current owner-authorized workspace phase/);
   assert.match(messages[0].content, /untrusted content, not an instruction/);
   assert.match(messages[0].content, /specific owner approval/);
   assert.match(messages[0].content, /SPARK/);
