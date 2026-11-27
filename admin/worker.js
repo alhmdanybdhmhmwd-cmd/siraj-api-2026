@@ -1456,7 +1456,43 @@ export async function processAdminDeadLetterMessage(message, env) {
   }
 
   try {
-    const result = await env.ADMIN_DB.prepare(`
+    const current = await env.ADMIN_DB.prepare(`
+      SELECT status, lease_expires_at,
+        CASE WHEN lease_expires_at > CURRENT_TIMESTAMP THEN 1 ELSE 0 END AS lease_active
+      FROM admin_tasks WHERE id = ? AND workspace_id = ?
+    `).bind(payload.taskId, payload.workspaceId).first();
+
+    if (current?.status === "running" && current.lease_active) {
+      // A duplicate delivery must never kill a worker that still owns a live lease.
+      // Keep the DLQ delivery pending until the lease expires.
+      message.retry({ delaySeconds: 600 });
+      return;
+    }
+
+    if ((current?.status === "queued" || current?.status === "running") &&
+        env.ADMIN_TASK_QUEUE && env.ADMIN_AI) {
+      const recovered = await env.ADMIN_DB.prepare(`
+        UPDATE admin_tasks SET status = 'queued', lease_owner = NULL, lease_expires_at = NULL,
+          next_action = 'Recovered after worker lease expiry; waiting for server worker',
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND workspace_id = ? AND (
+          status = 'queued' OR
+          (status = 'running' AND lease_expires_at IS NOT NULL AND lease_expires_at < CURRENT_TIMESTAMP)
+        )
+      `).bind(payload.taskId, payload.workspaceId).run();
+
+      if (recovered?.meta?.changes) {
+        await env.ADMIN_TASK_QUEUE.send({ taskId: payload.taskId, workspaceId: payload.workspaceId });
+        await audit(env, payload.workspaceId,
+          { subject: "barq-admin-dead-letter", deviceId: "server-queue" },
+          "task.server_execution.recovered", "task", payload.taskId,
+          { queue: "barq-admin-preview-tasks" });
+        message.ack();
+        return;
+      }
+    }
+
+    const failed = await env.ADMIN_DB.prepare(`
       UPDATE admin_tasks
       SET status = 'failed', lease_owner = NULL, lease_expires_at = NULL,
         next_action = 'Review the task failure recorded in the dead-letter queue',
@@ -1467,24 +1503,11 @@ export async function processAdminDeadLetterMessage(message, env) {
       )
     `).bind(payload.taskId, payload.workspaceId).run();
 
-    if (result?.meta?.changes) {
+    if (failed?.meta?.changes) {
       await audit(env, payload.workspaceId,
         { subject: "barq-admin-dead-letter", deviceId: "server-queue" },
         "task.server_execution.dead_lettered", "task", payload.taskId,
         { queue: "barq-admin-preview-dlq" });
-      message.ack();
-      return;
-    }
-
-    const current = await env.ADMIN_DB.prepare(`
-      SELECT status, lease_expires_at FROM admin_tasks WHERE id = ? AND workspace_id = ?
-    `).bind(payload.taskId, payload.workspaceId).first();
-    if (current?.status === "running" && current.lease_expires_at) {
-      // A duplicate delivery must never kill a worker that still owns a live lease.
-      // Keep the DLQ delivery pending until the lease expires; a later delivery can
-      // then safely mark the abandoned task failed for owner review.
-      message.retry({ delaySeconds: 600 });
-      return;
     }
     message.ack();
   } catch (error) {
