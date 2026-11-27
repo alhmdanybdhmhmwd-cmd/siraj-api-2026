@@ -34,10 +34,18 @@ The command prints a JSON summary with the resolved immutable revision, indexed 
 - If `batchComplete` is `false`, set `BARQ_ADMIN_GITHUB_START_AFTER` to the returned `nextStartAfter` value and run again.
 - Keep the repository and commit SHA unchanged across resumed batches.
 - If any batch fails, rerun it with the same cursor; source rows are upserted by workspace, repository-qualified path, and revision.
-- A new commit requires a new full indexing pass. Removed/renamed files and stale-source cleanup still need a dedicated reconciliation process; do not infer they were deleted from the index.
+- A new commit requires a new full indexing pass. Reconciliation compares the current eligible tree with every paginated indexed source and reports stale revisions, paths missing from the current tree, files not yet indexed, and incomplete chunks. A rename is conservatively represented as an old path missing plus a new path not yet indexed; the current report does not claim a semantic rename match. No stale/deleted records are removed automatically, and no cleanup is implied.
 
 ## Completion evidence
 
 Record repository, resolved commit SHA, batch count, indexed chunks, skipped files, final `complete=true`, run time, and any provider/API errors. Do not claim full BARQ project coverage until every required repository and approved owner-context source is indexed and a separate coverage/freshness report verifies it.
 
 The indexer requires an explicit exact repository allowlist, excludes configured sensitive paths and likely secret patterns, and records the resolved commit SHA. These controls are defense in depth, not a guarantee that arbitrary repository content is safe. Review repository scope and keep credentials, signing keys, tokens, and private user data out of the index.
+
+
+## Reconciliation limits — 2026-11-28
+
+- The current implementation verifies repository path presence and chunk completeness against a resolved immutable commit, after fetching every indexed-source page. It does not infer semantic renames, because the indexed listing does not yet expose content fingerprints for safe old/new path matching.
+- A renamed file is therefore visible as both a missing old path and a not-yet-indexed new path until the new revision is ingested. This is an explicit review signal, not a data-loss event.
+- Stale revisions and paths missing from the current tree remain in the knowledge store for audit/history. Do not add automatic deletion or overwrite historical evidence as part of Phase 5.
+- Coverage verification is limited to eligible source files under the current path/size/extension policy. Skipped paths and reasons must remain visible in the ingestion summary; coverage is not a claim about excluded or unapproved repositories.
