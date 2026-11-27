@@ -598,6 +598,29 @@ async function retrieveKnowledgeForTask(env, workspaceId, query, currentProject)
   );
 }
 
+
+export function validatePlatformUsersQuery(url) {
+  const query = String(url?.searchParams?.get("q") || "").trim();
+  const rawPage = url?.searchParams?.get("page") || "1";
+  const rawPageSize = url?.searchParams?.get("pageSize") || "25";
+  if (query.length > 80 || !/^\\d{1,5}$/.test(rawPage) || !/^\\d{1,2}$/.test(rawPageSize)) {
+    return { ok: false, error: "invalid_users_query" };
+  }
+  const page = Number(rawPage);
+  const pageSize = Number(rawPageSize);
+  if (!Number.isSafeInteger(page) || page < 1 || page > 10000 ||
+      !Number.isSafeInteger(pageSize) || pageSize < 10 || pageSize > 50) {
+    return { ok: false, error: "invalid_users_pagination" };
+  }
+  return { ok: true, value: { query, page, pageSize, offset: (page - 1) * pageSize } };
+}
+
+export function maskPlatformUserPhone(phone) {
+  if (phone === null || phone === undefined || String(phone).trim() === "") return null;
+  const digits = String(phone).replace(/\\D/g, "");
+  return digits.length <= 4 ? "••••" : "••••" + digits.slice(-4);
+}
+
 export function validateAdminAccessClaims(claims, now = Math.floor(Date.now() / 1000)) {
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   return Boolean(claims && typeof claims === "object" && !Array.isArray(claims) &&
@@ -1118,6 +1141,63 @@ async function handle(request, env) {
       }
       return response({ error: "vision_analysis_failed" }, 502, allowedOrigin);
     }
+  }
+
+
+  if (request.method === "GET" && url.pathname === "/v1/platform/users") {
+    const parsed = validatePlatformUsersQuery(url);
+    if (!parsed.ok) return response({ error: parsed.error }, 400, allowedOrigin);
+    const { query, page, pageSize, offset } = parsed.value;
+    const pattern = "%" + query + "%";
+    const totalRow = await env.ADMIN_DB.prepare(`
+      SELECT COUNT(*) AS total FROM users
+      WHERE (? = '' OR instr(lower(coalesce(username, '')), lower(?)) > 0
+        OR instr(lower(coalesce(display_name, '')), lower(?)) > 0
+        OR instr(coalesce(phone, ''), ?) > 0)
+    `).bind(query, query, query, query).first();
+    const rows = await env.ADMIN_DB.prepare(`
+      SELECT id, username, display_name, phone FROM users
+      WHERE (? = '' OR instr(lower(coalesce(username, '')), lower(?)) > 0
+        OR instr(lower(coalesce(display_name, '')), lower(?)) > 0
+        OR instr(coalesce(phone, ''), ?) > 0)
+      ORDER BY id ASC LIMIT ? OFFSET ?
+    `).bind(query, query, query, query, pageSize, offset).all();
+    const total = Math.max(0, Number(totalRow?.total || 0));
+    const users = (rows.results || []).map(user => ({
+      id: user.id,
+      username: user.username,
+      displayName: user.display_name,
+      phoneMasked: maskPlatformUserPhone(user.phone)
+    }));
+    await audit(env, workspace, actor, "platform.users.listed", "users", "list", {
+      queryLength: query.length, page, pageSize, returned: users.length
+    });
+    return response({
+      users, page, pageSize, total,
+      totalPages: Math.ceil(total / pageSize),
+      hasPrevious: page > 1,
+      hasNext: offset + users.length < total
+    }, 200, allowedOrigin);
+  }
+
+  if (request.method === "GET" && url.pathname.startsWith("/v1/platform/users/")) {
+    const userId = decodeURIComponent(url.pathname.slice("/v1/platform/users/".length));
+    if (!userId || userId.length > 128 || userId.includes("/")) {
+      return response({ error: "invalid_user_id" }, 400, allowedOrigin);
+    }
+    const user = await env.ADMIN_DB.prepare(`
+      SELECT id, username, display_name, phone FROM users WHERE id = ? LIMIT 1
+    `).bind(userId).first();
+    if (!user) return response({ error: "user_not_found" }, 404, allowedOrigin);
+    await audit(env, workspace, actor, "platform.user.viewed", "user", user.id, {});
+    return response({
+      user: {
+        id: user.id,
+        username: user.username,
+        displayName: user.display_name,
+        phone: user.phone || null
+      }
+    }, 200, allowedOrigin);
   }
 
   if (request.method === "GET" && url.pathname === "/v1/workspace") {
