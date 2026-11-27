@@ -862,20 +862,50 @@ class _AdminHomePageState extends State<AdminHomePage>
   }
 
   Future<void> _decideApproval(String id, String status) async {
+    if (id.isEmpty || !const {'approved', 'rejected'}.contains(status)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('بيانات قرار الموافقة غير صالحة')),
+      );
+      return;
+    }
     try {
       final response = await http
           .patch(
-            Uri.parse(_base + '/v1/approvals/' + id),
+            Uri.parse(_base + '/v1/approvals/' + Uri.encodeComponent(id)),
             headers: _headers,
             body: jsonEncode({'status': status}),
           )
           .timeout(const Duration(seconds: 18));
-      if (response.statusCode != 200) throw Exception('تعذر حفظ القرار');
+      if (response.statusCode != 200) {
+        var message = 'تعذر حفظ القرار (' + response.statusCode.toString() + ')';
+        try {
+          final data = jsonDecode(response.body);
+          if (data is Map && data['error'] == 'approval_not_pending') {
+            message = 'تم اتخاذ قرار بشأن هذه الموافقة مسبقًا؛ حدّث القائمة';
+          } else if (data is Map && data['error'] == 'forbidden') {
+            message = 'ليست لديك صلاحية اتخاذ هذا القرار';
+          }
+        } catch (_) {}
+        throw Exception(message);
+      }
       await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(status == 'approved'
+                ? 'تم تسجيل الموافقة'
+                : 'تم تسجيل الرفض'),
+          ),
+        );
+      }
     } catch (error) {
-      if (mounted)
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.toString().replaceFirst('Exception: ', '')),
+          ),
+        );
+      }
     }
   }
 
