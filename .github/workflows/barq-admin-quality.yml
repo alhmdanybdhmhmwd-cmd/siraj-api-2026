@@ -393,3 +393,26 @@ jobs:
       - name: Compile Android debug Kotlin sources without packaging an APK
         working-directory: admin/mobile/android
         run: bash gradlew :app:compileDebugKotlin --no-daemon --console=plain
+
+      - name: Build BARQ Admin ARM64 debug APK for device testing
+        timeout-minutes: 30
+        run: |
+          export BARQ_GOOGLE_OIDC_CLIENT_ID="1234567890-test.apps.googleusercontent.com"
+          flutter build apk --debug --target-platform android-arm64 --split-per-abi
+          apk="build/app/outputs/flutter-apk/app-armeabi-v8a-debug.apk"
+          test -s "$apk"
+          size="$(stat -c '%s' "$apk")"
+          test "$size" -lt 209715200
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$apk"
+          sha256sum "$apk" | tee build/app/outputs/flutter-apk/SHA256SUMS.txt
+          printf "APK_SIZE_BYTES=%s\\n" "$size" | tee build/app/outputs/flutter-apk/BUILD_INFO.txt
+      - name: Upload BARQ Admin ARM64 debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: barq-admin-arm64-debug
+          path: |
+            admin/mobile/build/app/outputs/flutter-apk/app-armeabi-v8a-debug.apk
+            admin/mobile/build/app/outputs/flutter-apk/SHA256SUMS.txt
+            admin/mobile/build/app/outputs/flutter-apk/BUILD_INFO.txt
+          if-no-files-found: error
+          retention-days: 14
