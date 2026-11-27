@@ -314,3 +314,15 @@ BARQ Brain شريك تقني وتشغيلي وتسويقي: يشرح ويخطط 
 6. اختبار الهاتف الحقيقي في المرحلة المخصصة لاحقًا.
 
 PR #11 يبقى Draft/open. لا merge أو deploy أو migrations أو تغييرات إنتاجية أو APK دون موافقة صريحة.
+
+
+
+## 28. Stage 6 — Unified Brain/Guardian dashboard and latest CI — 2026-11-28
+
+- Updated the Admin dashboard's old hard-coded Phase 2 statement to reflect the owner-approved Stage 6 scope and the transfer of outstanding Stage 5 acceptance items. The dashboard now explicitly identifies BARQ Brain and Guardian as one assistant identity.
+- The new groups administration API and mobile view were hardened to return a bounded `groups_unavailable` response when the lazily-created BARQ group tables are not available; no schema is created or mutated by the Admin read route.
+- On commit `ca4c3c4e4f26031c02dd0324e4eec99b2bf16864`: Backend auth-tests passed (run `46084108990`); Admin Quality passed with **85 tests and 0 failures** (run `46084104773`, job `140789584238`); bundle diagnostic passed (run `46084104820`). Flutter formatting and Dart analysis passed in Admin Mobile Quality, and Flutter tests passed; Android SDK setup passed. Pinned NDK installation was still in progress at the last check, so AppAuth validation and Kotlin compilation are not yet verified.
+- The Cloudflare check `Workers Builds: siraj-api` failed on this commit (check URL in GitHub points to the Cloudflare build dashboard). The available GitHub/Cloudflare integration does not expose that build's detailed log; do not infer a cause. The next diagnostic requires the actual Cloudflare build log.
+- Unintended APK workflow event: an existing push-triggered preview workflow started on an earlier mobile-source push and produced artifact `barq-admin-s7-debug-apk` (90,039,902 bytes) from older commit `7cc53efe9c28dac6421b4e5fd74978bce5c69cfd`. This was not an owner-approved deliverable build. The artifact was not downloaded, shared, installed, or released. Workflow commit `3f7e0539a73d5cfb0a93b5ec98a884de87f1f0c1` adds a job-level guard requiring manual `workflow_dispatch`; subsequent pushes cannot start that APK job. The artifact remains in GitHub Actions retention until 2026-12-11 unless an owner removes it from Actions. Do not provide or distribute it without explicit approval.
+- PR #11 remains Draft/open. No merge, production deployment, D1 migration, production data change, or account-mutating action was performed.
+- Remaining Stage 6 gates: finish Android AppAuth/Kotlin validation, inspect Cloudflare build logs, run isolated Preview tests for user/group reads and BARQ Brain knowledge acceptance, and implement/prove the incident auto-repair flow end-to-end in a non-production environment.
