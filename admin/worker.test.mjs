@@ -265,16 +265,13 @@ test("Admin access-token claims require bounded lifetime and valid session bindi
 });
 
 
-test("dead-letter delivery marks an expired abandoned task failed and audits the incident", async () => {
+test("dead-letter delivery keeps an expired task recoverable when runtime bindings are missing", async () => {
   const calls = [];
   const env = { ADMIN_DB: {
     prepare(sql) {
       return { bind(...args) { return {
         async first() { calls.push({ sql, args, kind: "first" }); return { status: "running", lease_active: 0 }; },
-        async run() {
-          calls.push({ sql, args, kind: "run" });
-          return { meta: { changes: 1 } };
-        }
+        async run() { calls.push({ sql, args, kind: "run" }); return { meta: { changes: 1 } }; }
       }; } };
     }
   } };
@@ -282,13 +279,10 @@ test("dead-letter delivery marks an expired abandoned task failed and audits the
   await processAdminDeadLetterMessage({
     body: { taskId: "task-1", workspaceId: "workspace-1" },
     ack() { actions.push("ack"); },
-    retry() { actions.push("retry"); }
+    retry(options) { actions.push(["retry", options]); }
   }, env);
-  assert.deepEqual(actions, ["ack"]);
-  assert.equal(calls.length, 3);
-  assert.match(calls[1].sql, /status = 'failed'/);
-  assert.match(calls[1].sql, /lease_owner = NULL, lease_expires_at = NULL/);
-  assert.match(calls[2].sql, /INSERT INTO admin_audit_events/);
+  assert.deepEqual(actions, [["retry", { delaySeconds: 300 }]]);
+  assert.equal(calls.length, 1);
 });
 
 test("dead-letter redelivery does not overwrite or re-audit an already terminal task", async () => {
