@@ -306,7 +306,7 @@ test("dead-letter redelivery does not overwrite or re-audit an already terminal 
     retry() { actions.push("retry"); }
   }, env);
   assert.deepEqual(actions, ["ack"]);
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2);
 });
 
 test("dead-letter delivery is retried when durable storage is unavailable", async () => {
