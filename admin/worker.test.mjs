@@ -537,3 +537,49 @@ test("task completion and failure are fenced by the exact active lease owner", (
   assert.match(consumer, /WHERE id = \? AND workspace_id = \? AND lease_owner = \? AND status = 'running'/);
   assert.match(consumer, /if \(!results\?\.\[0\]\?\.meta\?\.changes \|\| !results\?\.\[1\]\?\.meta\?\.changes\)/);
 });
+
+
+test("duplicate task delivery waits for the active lease owner without invoking BARQ Brain twice", async () => {
+  const calls = [];
+  const actions = [];
+  let claimAttempted = false;
+  const env = {
+    ADMIN_AI: { async run() { throw new Error("duplicate_worker_must_not_run_ai"); } },
+    ADMIN_DB: {
+      prepare(sql) {
+        return { bind(...args) { return {
+          async run() {
+            calls.push({ kind: "claim", sql, args });
+            claimAttempted = true;
+            return { meta: { changes: 0 } };
+          },
+          async first() {
+            calls.push({ kind: "read", sql, args });
+            assert.equal(claimAttempted, true);
+            return { status: "running", lease_expires_at: "2099-01-01 00:00:00" };
+          }
+        }; } };
+      }
+    }
+  };
+
+  await processAdminTaskMessage({
+    body: { taskId: "task-active-owner", workspaceId: "workspace-1" },
+    ack() { actions.push("ack"); },
+    retry(options) { actions.push(["retry", options]); }
+  }, env);
+
+  assert.equal(calls.length, 2);
+  assert.deepEqual(actions, [["retry", { delaySeconds: 60 }]]);
+});
+
+test("Preview queue configuration bounds delivery batches and routes exhausted tasks to a dedicated DLQ", () => {
+  const config = readFileSync(new URL("./wrangler.toml.example", import.meta.url), "utf8");
+  const taskConsumer = config.match(/\[\[queues\.consumers\]\][\s\S]*?dead_letter_queue = "barq-admin-preview-dlq"/);
+  assert.ok(taskConsumer, "Task consumer must route exhausted deliveries to the dedicated Preview DLQ");
+  assert.match(taskConsumer[0], /queue = "barq-admin-preview-tasks"/);
+  assert.match(taskConsumer[0], /max_batch_size = 1/);
+  assert.match(taskConsumer[0], /max_retries = 5/);
+  const deadLetterConsumer = config.match(/\[\[queues\.consumers\]\][\s\S]*?queue = "barq-admin-preview-dlq"[\s\S]*?max_retries = 3/);
+  assert.ok(deadLetterConsumer, "Dedicated DLQ must have its own bounded consumer retry policy");
+});
