@@ -423,7 +423,7 @@ jobs:
         working-directory: admin/mobile/android
         run: bash gradlew :app:compileDebugKotlin --no-daemon --console=plain
 
-      - name: Build BARQ Admin ARM64 release APK for device testing
+      - name: Build BARQ Admin ARM64 debug-signed preview APK (not a production release)
         timeout-minutes: 30
         run: |
           export BARQ_GOOGLE_OIDC_CLIENT_ID="1234567890-test.apps.googleusercontent.com"
@@ -432,13 +432,20 @@ jobs:
           test -s "$apk"
           size="$(stat -c '%s' "$apk")"
           test "$size" -lt 62914560
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$apk"
+          signer="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          "$signer" verify --verbose "$apk"
+          "$signer" verify --print-certs "$apk" | tee /tmp/barq-admin-apk-certificate.txt
+          grep -Fq "CN=Android Debug" /tmp/barq-admin-apk-certificate.txt
           sha256sum "$apk" | tee build/app/outputs/flutter-apk/SHA256SUMS.txt
-          printf "APK_SIZE_BYTES=%s\\n" "$size" | tee build/app/outputs/flutter-apk/BUILD_INFO.txt
-      - name: Upload BARQ Admin ARM64 release APK
+          {
+            printf "APK_SIZE_BYTES=%s\\n" "$size"
+            printf "SIGNING=debug-only-preview-not-for-production\\n"
+            printf "DEVICE_TARGET=arm64-v8a\\n"
+          } | tee build/app/outputs/flutter-apk/BUILD_INFO.txt
+      - name: Upload BARQ Admin ARM64 debug-signed preview APK
         uses: actions/upload-artifact@v4
         with:
-          name: barq-admin-arm64-release
+          name: barq-admin-arm64-debug-signed-preview
           path: |
             admin/mobile/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
             admin/mobile/build/app/outputs/flutter-apk/SHA256SUMS.txt
