@@ -1,4 +1,4 @@
-# BARQ Owner Context — Phase 2 Knowledge Seed
+# BARQ Owner Context — Approved Project Knowledge Seed
 
 Last reviewed: 2026-11-24
 Status: Owner-approved project context for BARQ Brain indexing. This document is a curated summary of owner decisions and project history, not proof that every feature is implemented or currently deployed. Verify implementation against the current source tree, CI, and deployment evidence before making status claims.
