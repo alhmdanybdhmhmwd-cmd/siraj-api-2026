@@ -504,6 +504,7 @@ test("task completion and failure are fenced by the exact active lease owner", (
   const source = readFileSync(new URL("./worker.js", import.meta.url), "utf8");
   const start = source.indexOf("async function processAdminTaskMessage");
   const end = source.indexOf("\nconst KNOWLEDGE_TYPES", start);
+  assert.ok(start >= 0 && end > start, "Task consumer implementation must remain inspectable");
   const consumer = source.slice(start, end);
   assert.match(consumer, /WHERE id = \? AND workspace_id = \? AND lease_owner = \? AND status = 'running' AND checkpoint_version = \? AND lease_expires_at > CURRENT_TIMESTAMP/);
   assert.match(consumer, /WHERE id = \? AND workspace_id = \? AND lease_owner = \? AND status = 'running'/);
