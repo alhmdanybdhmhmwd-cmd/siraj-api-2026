@@ -499,6 +499,9 @@ test("task consumer uses an atomic lease claim so duplicate queue deliveries can
   assert.match(consumer, /message\.ack\(\);\s*\}\s*catch/);
   assert.match(consumer, /message\.retry\(\{ delaySeconds: Math\.min\(300/);
   assert.match(consumer, /clearInterval\(heartbeatTimer\)/);
+  assert.match(consumer, /if \(!task\) \{\s*message\.ack\(\);/);
+  assert.match(consumer, /Workspace no longer exists; review or recreate the task/);
+  assert.match(consumer, /if \(failed\?\.meta\?\.changes\) message\.ack\(\)/);
 });
 
 test("task completion and failure are fenced by the exact active lease owner", () => {
