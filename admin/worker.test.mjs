@@ -113,6 +113,8 @@ test("BARQ Brain prompts include current workspace context and no execution auth
   assert.match(messages[0].content, /accepted, rejected, postponed, and superseded decisions/);
   assert.match(messages[0].content, /development lifecycle for BOTH products/);
   assert.match(messages[0].content, /BARQ GUARDIAN/);
+  assert.match(messages[0].content, /inside the single BARQ Admin application/);
+  assert.match(messages[0].content, /not a third app/);
   assert.match(messages[0].content, /Never claim the guardian is operational/);
   assert.match(messages[0].content, /strictly separate/);
   assert.doesNotMatch(messages[0].content, /Phase 3 GitHub repair\/edit\/test tools/);
