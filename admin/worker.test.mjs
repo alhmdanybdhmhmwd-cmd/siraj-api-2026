@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, knowledgeProjectScope, normalizeKnowledgeProject, isKnowledgeSourceForProject, validateAdminAccessClaims, normalizeAdminActivationCode, createAdminActivationCode, processAdminDeadLetterMessage, processAdminTaskMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, knowledgeProjectScope, normalizeKnowledgeProject, isKnowledgeSourceForProject, knowledgeProjectSqlFilter, escapeKnowledgeLikePattern, validateAdminAccessClaims, normalizeAdminActivationCode, createAdminActivationCode, processAdminDeadLetterMessage, processAdminTaskMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches } from "./worker.js";
 
 test("idempotency keys are bounded and cannot be silently truncated", () => {
   assert.deepEqual(validateIdempotencyKey(null), { ok: true, value: null });
@@ -412,6 +412,11 @@ test("knowledge sources remain isolated by selected project with only owner cont
   assert.equal(isKnowledgeSourceForProject("owner/repo/src/api.js", "BARQ Admin"), false);
   assert.equal(isKnowledgeSourceForProject("owner/repo/admin/knowledge/BARQ_OWNER_CONTEXT.md", "BARQ"), true);
   assert.equal(isKnowledgeSourceForProject("owner/repo/admin/knowledge/BARQ_OWNER_CONTEXT.md", "BARQ Admin"), true);
+  assert.match(knowledgeProjectSqlFilter("BARQ Admin"), /source_path LIKE 'admin\/%'/);
+  assert.match(knowledgeProjectSqlFilter("BARQ"), /source_path NOT LIKE 'admin\/%'/);
+  assert.equal(knowledgeProjectSqlFilter("notadmin"), null);
+  assert.equal(knowledgeProjectSqlFilter("SPARK"), null);
+  assert.equal(escapeKnowledgeLikePattern("a%b_c\\d"), "a\\%b\\_c\\\\d");
 });
 
 test("BARQ Brain chat input is bounded and conversation-scoped", () => {
