@@ -1148,7 +1148,6 @@ async function handle(request, env) {
     const parsed = validatePlatformUsersQuery(url);
     if (!parsed.ok) return response({ error: parsed.error }, 400, allowedOrigin);
     const { query, page, pageSize, offset } = parsed.value;
-    const pattern = "%" + query + "%";
     const totalRow = await env.ADMIN_DB.prepare(`
       SELECT COUNT(*) AS total FROM users
       WHERE (? = '' OR instr(lower(coalesce(username, '')), lower(?)) > 0
