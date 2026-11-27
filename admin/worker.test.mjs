@@ -4,6 +4,23 @@ import { readFileSync } from "node:fs";
 import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, knowledgeProjectScope, normalizeKnowledgeProject, isKnowledgeSourceForProject, knowledgeProjectSqlFilter, escapeKnowledgeLikePattern, validateAdminAccessClaims, normalizeAdminActivationCode, createAdminActivationCode, processAdminDeadLetterMessage, processAdminTaskMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches, validatePlatformUsersQuery, maskPlatformUserPhone } from "./worker.js";
 
 
+
+test("BARQ platform user routes are owner-scoped read-only and expose only allowlisted fields", () => {
+  const source = readFileSync(new URL("./worker.js", import.meta.url), "utf8");
+  const listStart = source.indexOf('if (request.method === "GET" && url.pathname === "/v1/platform/users")');
+  const detailStart = source.indexOf('if (request.method === "GET" && url.pathname.startsWith("/v1/platform/users/"))');
+  const workspaceStart = source.indexOf('if (request.method === "GET" && url.pathname === "/v1/workspace")');
+  assert.ok(listStart >= 0 && detailStart > listStart && workspaceStart > detailStart);
+  const listRoute = source.slice(listStart, detailStart);
+  const detailRoute = source.slice(detailStart, workspaceStart);
+  assert.match(listRoute, /SELECT id, username, display_name, phone FROM users/);
+  assert.match(listRoute, /phoneMasked: maskPlatformUserPhone/);
+  assert.match(listRoute, /platform\.users\.listed/);
+  assert.match(detailRoute, /SELECT id, username, display_name, phone FROM users WHERE id = \?/);
+  assert.match(detailRoute, /platform\.user\.viewed/);
+  assert.doesNotMatch(listRoute + detailRoute, /password_hash|password_salt|private_messages|profile_photos|INSERT INTO users|UPDATE users|DELETE FROM users/);
+});
+
 test("platform users listing validates bounded pagination and query length", () => {
   const valid = validatePlatformUsersQuery(new URL("https://admin.example/v1/platform/users?q=ali&page=2&pageSize=50"));
   assert.deepEqual(valid, {
