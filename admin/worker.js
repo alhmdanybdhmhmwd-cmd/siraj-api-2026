@@ -1236,40 +1236,45 @@ async function handle(request, env) {
     const parsed = validatePlatformGroupsQuery(url);
     if (!parsed.ok) return response({ error: parsed.error }, 400, allowedOrigin);
     const { query, page, pageSize, offset } = parsed.value;
-    const totalRow = await env.ADMIN_DB.prepare(`
-      SELECT COUNT(*) AS total FROM chat_groups g
-      WHERE (? = '' OR instr(lower(coalesce(g.name, '')), lower(?)) > 0
-        OR instr(lower(coalesce(g.description, '')), lower(?)) > 0)
-    `).bind(query, query, query).first();
-    const rows = await env.ADMIN_DB.prepare(`
-      SELECT g.id, g.name, g.description, g.created_at,
-             coalesce(u.display_name, u.username, '') AS owner_name,
-             (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id) AS member_count
-      FROM chat_groups g
-      LEFT JOIN users u ON u.id = g.owner_id
-      WHERE (? = '' OR instr(lower(coalesce(g.name, '')), lower(?)) > 0
-        OR instr(lower(coalesce(g.description, '')), lower(?)) > 0)
-      ORDER BY g.created_at DESC, g.id ASC
-      LIMIT ? OFFSET ?
-    `).bind(query, query, query, pageSize, offset).all();
-    const total = Math.max(0, Number(totalRow?.total || 0));
-    const groups = (rows.results || []).map(group => ({
-      id: group.id,
-      name: group.name,
-      description: group.description,
-      createdAt: group.created_at,
-      ownerName: group.owner_name || null,
-      memberCount: Math.max(0, Number(group.member_count || 0))
-    }));
-    await audit(env, workspace, actor, "platform.groups.listed", "groups", "list", {
-      queryLength: query.length, page, pageSize, returned: groups.length
-    });
-    return response({
-      groups, page, pageSize, total,
-      totalPages: Math.ceil(total / pageSize),
-      hasPrevious: page > 1,
-      hasNext: offset + groups.length < total
-    }, 200, allowedOrigin);
+    try {
+      const totalRow = await env.ADMIN_DB.prepare(`
+        SELECT COUNT(*) AS total FROM chat_groups g
+        WHERE (? = '' OR instr(lower(coalesce(g.name, '')), lower(?)) > 0
+          OR instr(lower(coalesce(g.description, '')), lower(?)) > 0)
+      `).bind(query, query, query).first();
+      const rows = await env.ADMIN_DB.prepare(`
+        SELECT g.id, g.name, g.description, g.created_at,
+               coalesce(u.display_name, u.username, '') AS owner_name,
+               (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id) AS member_count
+        FROM chat_groups g
+        LEFT JOIN users u ON u.id = g.owner_id
+        WHERE (? = '' OR instr(lower(coalesce(g.name, '')), lower(?)) > 0
+          OR instr(lower(coalesce(g.description, '')), lower(?)) > 0)
+        ORDER BY g.created_at DESC, g.id ASC
+        LIMIT ? OFFSET ?
+      `).bind(query, query, query, pageSize, offset).all();
+      const total = Math.max(0, Number(totalRow?.total || 0));
+      const groups = (rows.results || []).map(group => ({
+        id: group.id,
+        name: group.name,
+        description: group.description,
+        createdAt: group.created_at,
+        ownerName: group.owner_name || null,
+        memberCount: Math.max(0, Number(group.member_count || 0))
+      }));
+      await audit(env, workspace, actor, "platform.groups.listed", "groups", "list", {
+        queryLength: query.length, page, pageSize, returned: groups.length
+      });
+      return response({
+        groups, page, pageSize, total,
+        totalPages: Math.ceil(total / pageSize),
+        hasPrevious: page > 1,
+        hasNext: offset + groups.length < total
+      }, 200, allowedOrigin);
+    } catch (error) {
+      console.error("BARQ Admin groups listing failed:", error);
+      return response({ error: "groups_unavailable" }, 503, allowedOrigin);
+    }
   }
 
   if (request.method === "GET" && url.pathname === "/v1/workspace") {
