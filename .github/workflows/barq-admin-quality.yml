@@ -310,7 +310,7 @@ jobs:
           assert len(dlq_consumers) == 1, "Dead-letter queue must have a dedicated consumer"
           assert dlq_consumers[0]["max_retries"] == 3
           worker_source = Path("admin/worker.js").read_text()
-          assert 'batch.queue === "barq-admin-preview-dlq"' in worker_source
+          assert 'batch.queue === (env.BARQ_ADMIN_DEAD_LETTER_QUEUE_NAME || "barq-admin-preview-dlq")' in worker_source
           assert "task.server_execution.dead_lettered" in worker_source
           assert "export async function renewAdminTaskLease" in worker_source
           assert "setInterval(() =>" in worker_source
