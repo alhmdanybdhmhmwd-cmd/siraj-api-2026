@@ -20,7 +20,7 @@ permissions:
 
 concurrency:
   group: barq-admin-quality-v2-${{ github.event.pull_request.head.ref || github.ref_name }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   admin-quality:
