@@ -351,7 +351,7 @@ class _AdminHomePageState extends State<AdminHomePage>
               Text('رقم الهاتف: ' + (user['phone']?.toString() ?? 'غير مسجل')),
               const SizedBox(height: 8),
               SelectableText(
-                  'معرّف الحساب: ' + (user['id']?.toString() ?? '—')), 
+                  'معرّف الحساب: ' + (user['id']?.toString() ?? '—')),
             ],
           ),
           actions: [
