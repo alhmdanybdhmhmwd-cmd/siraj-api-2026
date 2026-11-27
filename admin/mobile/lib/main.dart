@@ -92,6 +92,13 @@ class _AdminHomePageState extends State<AdminHomePage>
   List<AdminApproval> _approvals = [];
   List<Map<String, dynamic>> _auditEvents = [];
   List<Map<String, dynamic>> _platformUsers = [];
+  List<Map<String, dynamic>> _platformGroups = [];
+  final TextEditingController _groupsSearchController = TextEditingController();
+  int _groupsTotal = 0;
+  int _groupsPage = 1;
+  int _groupsTotalPages = 0;
+  bool _groupsLoading = false;
+  String _groupsError = '';
   final TextEditingController _usersSearchController = TextEditingController();
   int _usersTotal = 0;
   int _usersPage = 1;
@@ -114,6 +121,7 @@ class _AdminHomePageState extends State<AdminHomePage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _usersSearchController.dispose();
+    _groupsSearchController.dispose();
     super.dispose();
   }
 
@@ -288,6 +296,68 @@ class _AdminHomePageState extends State<AdminHomePage>
     }
     return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
   }
+
+  Future<void> _loadPlatformGroups({int page = 1}) async {
+    if (_token.isEmpty) {
+      if (mounted) setState(() => _groupsError = 'سجّل الدخول بحساب المالك لعرض المجموعات');
+      return;
+    }
+    setState(() { _groupsLoading = true; _groupsError = ''; });
+    try {
+      final query = Uri.encodeQueryComponent(_groupsSearchController.text.trim());
+      final data = await _getJson('/v1/platform/groups?q=' + query + '&page=' + page.toString() + '&pageSize=25');
+      if (!mounted) return;
+      setState(() {
+        _platformGroups = (data['groups'] as List? ?? []).whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+        _groupsTotal = (data['total'] as num?)?.toInt() ?? 0;
+        _groupsPage = (data['page'] as num?)?.toInt() ?? page;
+        _groupsTotalPages = (data['totalPages'] as num?)?.toInt() ?? 0;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _groupsError = error.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _groupsLoading = false);
+    }
+  }
+
+  Widget _platformGroupsView() => ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Text('المجموعات', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          const Text('عرض مجموعات برق الحالية للمتابعة فقط. لا يتم فتح الرسائل أو الوسائط الخاصة.', style: TextStyle(color: Colors.white60, fontSize: 12)),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _groupsSearchController,
+            textInputAction: TextInputAction.search,
+            onSubmitted: (_) => _loadPlatformGroups(page: 1),
+            decoration: InputDecoration(hintText: 'ابحث باسم المجموعة أو وصفها', prefixIcon: const Icon(Icons.search), suffixIcon: IconButton(tooltip: 'بحث', onPressed: () => _loadPlatformGroups(page: 1), icon: const Icon(Icons.arrow_forward))),
+          ),
+          const SizedBox(height: 12),
+          Row(children: [Text('إجمالي المجموعات: $_groupsTotal', style: const TextStyle(color: Colors.white70)), const Spacer(), IconButton(tooltip: 'تحديث', onPressed: _groupsLoading ? null : () => _loadPlatformGroups(page: _groupsPage), icon: const Icon(Icons.refresh))]),
+          if (_groupsLoading) const LinearProgressIndicator(),
+          if (_groupsError.isNotEmpty) ...[
+            _emptyState('تعذر تحميل المجموعات', _groupsError),
+            TextButton(onPressed: () => _loadPlatformGroups(page: _groupsPage), child: const Text('إعادة المحاولة')),
+          ] else if (!_groupsLoading && _platformGroups.isEmpty) ...[
+            _emptyState('لا توجد مجموعات', 'لا توجد مجموعات مطابقة للبحث.'),
+          ] else ...[
+            ..._platformGroups.map((group) => Card(child: ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.groups_outlined)),
+              title: Text(group['name']?.toString() ?? 'مجموعة برق'),
+              subtitle: Text('المالك: ' + (group['ownerName']?.toString().isNotEmpty == true ? group['ownerName'].toString() : 'غير معروف') + '  •  الأعضاء: ' + (group['memberCount']?.toString() ?? '0')),
+              isThreeLine: (group['description']?.toString() ?? '').isNotEmpty,
+              trailing: const Icon(Icons.group_outlined),
+            ))),
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              IconButton(tooltip: 'الصفحة السابقة', onPressed: _groupsPage > 1 && !_groupsLoading ? () => _loadPlatformGroups(page: _groupsPage - 1) : null, icon: const Icon(Icons.chevron_right)),
+              Text('$_groupsPage / ${_groupsTotalPages == 0 ? 1 : _groupsTotalPages}'),
+              IconButton(tooltip: 'الصفحة التالية', onPressed: _groupsPage < _groupsTotalPages && !_groupsLoading ? () => _loadPlatformGroups(page: _groupsPage + 1) : null, icon: const Icon(Icons.chevron_left)),
+            ]),
+          ],
+        ],
+      );
 
   Future<void> _loadPlatformUsers({int page = 1}) async {
     if (_token.isEmpty) {
@@ -1986,6 +2056,7 @@ class _AdminHomePageState extends State<AdminHomePage>
                   _approvalsView(),
                   _auditView(),
                   _platformUsersView(),
+                  _platformGroupsView(),
                 ],
               ),
       ),
@@ -2007,6 +2078,7 @@ class _AdminHomePageState extends State<AdminHomePage>
         onDestinationSelected: (value) {
           setState(() => _tab = value);
           if (value == 4) _loadPlatformUsers(page: 1);
+          if (value == 5) _loadPlatformGroups(page: 1);
         },
         destinations: const [
           NavigationDestination(
@@ -2027,6 +2099,11 @@ class _AdminHomePageState extends State<AdminHomePage>
             icon: Icon(Icons.people_outline),
             selectedIcon: Icon(Icons.people),
             label: 'المستخدمون',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.groups_outlined),
+            selectedIcon: Icon(Icons.groups),
+            label: 'المجموعات',
           ),
         ],
       ),
