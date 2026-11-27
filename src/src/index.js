@@ -815,6 +815,16 @@ export default {
       }
     ]);
   },
+  async queue(batch, env) {
+    try {
+      const { handleSharedAdminQueue } = await import("../../admin/shared_runtime.js");
+      const handled = await handleSharedAdminQueue(batch, env);
+      if (!handled) throw new Error("unrecognized_queue");
+    } catch (error) {
+      console.error("BARQ Admin queue handler failed:", error?.name || "Error");
+      throw error;
+    }
+  },
   async fetch(request, env, ctx) {
     env = { ...env, DB: createDatabaseProvider(env.DB) };
     const requestPath = new URL(request.url).pathname;
