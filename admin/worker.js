@@ -617,7 +617,7 @@ export function validatePlatformUsersQuery(url) {
 
 export function maskPlatformUserPhone(phone) {
   if (phone === null || phone === undefined || String(phone).trim() === "") return null;
-  const digits = String(phone).replace(/\\D/g, "");
+  const digits = String(phone).replace(/\D/g, "");
   return digits.length <= 4 ? "••••" : "••••" + digits.slice(-4);
 }
 
