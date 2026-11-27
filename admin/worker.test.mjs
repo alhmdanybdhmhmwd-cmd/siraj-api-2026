@@ -487,7 +487,7 @@ test("dead-letter recovery retries when queue publishing fails and keeps the tas
 test("task consumer uses an atomic lease claim so duplicate queue deliveries cannot start two workers", () => {
   const source = readFileSync(new URL("./worker.js", import.meta.url), "utf8");
   const start = source.indexOf("async function processAdminTaskMessage");
-  const end = source.indexOf("export async function processAdminDeadLetterMessage", start);
+  const end = source.indexOf("\nconst KNOWLEDGE_TYPES", start);
   assert.ok(start >= 0 && end > start, "Task consumer implementation must remain inspectable");
   const consumer = source.slice(start, end);
   assert.match(consumer, /UPDATE admin_tasks SET status = 'running', lease_owner = \?/);
@@ -495,13 +495,15 @@ test("task consumer uses an atomic lease claim so duplicate queue deliveries can
   assert.match(consumer, /status = 'queued'/);
   assert.match(consumer, /status = 'running' AND lease_expires_at IS NOT NULL AND lease_expires_at < CURRENT_TIMESTAMP/);
   assert.match(consumer, /if \(!claimed\?\.meta\?\.changes\)/);
-  assert.match(consumer, /message\.ack\(\)/);
+  assert.match(consumer, /message\\.ack\\(\\);\\s*\\}\\s*catch/);
+  assert.match(consumer, /message\\.retry\\(\\{ delaySeconds: Math\\.min\\(300/);
+  assert.match(consumer, /clearInterval\\(heartbeatTimer\\)/);
 });
 
 test("task completion and failure are fenced by the exact active lease owner", () => {
   const source = readFileSync(new URL("./worker.js", import.meta.url), "utf8");
   const start = source.indexOf("async function processAdminTaskMessage");
-  const end = source.indexOf("export async function processAdminDeadLetterMessage", start);
+  const end = source.indexOf("\nconst KNOWLEDGE_TYPES", start);
   const consumer = source.slice(start, end);
   assert.match(consumer, /WHERE id = \? AND workspace_id = \? AND lease_owner = \? AND status = 'running' AND checkpoint_version = \? AND lease_expires_at > CURRENT_TIMESTAMP/);
   assert.match(consumer, /WHERE id = \? AND workspace_id = \? AND lease_owner = \? AND status = 'running'/);
