@@ -90,3 +90,24 @@ List<AdminTask> mergeOutboxDrafts(
   }
   return [...drafts, ...serverTasks];
 }
+
+class OutboxBatch {
+  const OutboxBatch({required this.toSend, required this.deferred});
+
+  final List<Map<String, dynamic>> toSend;
+  final List<Map<String, dynamic>> deferred;
+}
+
+OutboxBatch splitOutboxBatch(
+  List<Map<String, dynamic>> pending, {
+  int limit = 3,
+}) {
+  if (limit < 1) {
+    throw ArgumentError.value(limit, 'limit', 'must be positive');
+  }
+  final boundary = pending.length < limit ? pending.length : limit;
+  return OutboxBatch(
+    toSend: pending.take(boundary).toList(),
+    deferred: pending.skip(boundary).toList(),
+  );
+}
