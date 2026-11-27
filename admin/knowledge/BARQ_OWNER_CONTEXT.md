@@ -331,3 +331,17 @@ This section supersedes any wording in earlier sections (including sections 9, 1
 - Added the Arabic RTL Users destination in the Admin Flutter app, with search, pagination, masked phone display, and an owner-only detail dialog. User data is fetched from the API and is not written to local cache.
 - Added regression coverage for bounded query/pagination, phone masking, read-only route shape, allowlisted fields, and audit calls. Admin Quality on commit 3377afa9857e0200743cc83961cddfa5a1bc6331 passed 82/82 Admin unit tests and the offline schema/audit safety checks. The separate Admin Mobile Quality run was still in progress at the checkpoint; do not report Android analysis/AppAuth/Kotlin validation as passed until its exact run completes.
 - Current PR #11 remains Draft/open. No live user records were queried, no Preview deployment, migration, merge, production deployment, APK, or account mutation was performed. Live Preview verification of the users API remains outstanding.
+
+
+
+## 26. Stage 6 continuation — Users API hardening and current CI — 2026-11-28
+
+- Continued Stage 6 on PR #11, branch `barq-admin-foundation-2026-11-23`; code HEAD at the time of verification: `598ed8ca320eef48a18b10ec4cbdb341606cb855`.
+- Hardened the owner-authenticated user-detail read route: malformed percent-encoding and path-separator identifiers are rejected with HTTP 400 instead of allowing URI decoding exceptions to escape. Added focused regression tests for valid IDs, encoded IDs, malformed escapes, empty IDs, oversized IDs, and path traversal.
+- Backend CI run `46083259224`: **passed**, 382 tests and 0 failures (job `140786892267`).
+- Admin Quality CI run `46083259233`: **passed**, 83 Admin unit tests and 0 failures, plus existing offline schema/audit and Preview-preflight checks (job `140786910691`).
+- Admin Mobile Quality in the same run was still in progress at this checkpoint. Flutter setup and dependency resolution passed; formatter diagnostics passed; Dart analysis was running. Do not report mobile tests, AppAuth validation, or Kotlin compilation as passed until the job completes on this exact code HEAD.
+- The earlier Admin Mobile Quality run on commit `ba7f6678846048d671149ab8c15ba6b5cc6c64ff` completed successfully, including Flutter analysis/tests, AppAuth validation, and Android Kotlin compilation without APK packaging. This earlier result does not replace verification of the newer user-ID hardening commit.
+- The Users page remains read-only, owner-only, backed by existing BARQ user records, with masked list phone numbers, on-demand account detail, and append-only audit events. No account mutation routes, duplicate user database, migration, or production data access were added.
+- Remaining Stage 6 work includes Preview verification of user reads with synthetic/test data, broader platform-management capabilities, and all Stage 5 carryovers: live isolated knowledge indexing/retrieval acceptance, Cloudflare build-failure diagnosis from actual logs, and an end-to-end isolated automatic incident repair demonstration.
+- No merge, deployment, production migration/data change, APK, paid resource, or destructive action was performed.
