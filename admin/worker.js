@@ -524,9 +524,9 @@ export function rankKnowledgeChunks(chunks, query, limit = 6) {
   const tokens = knowledgeSearchTerms(query);
   const safeLimit = Number.isSafeInteger(limit) ? Math.max(1, Math.min(12, limit)) : 6;
   const normalize = value => String(value || "").normalize("NFKC").toLowerCase().trim();
-  const tokenize = value => new Set(normalize(value).match(/[\\p{L}\\p{N}]{3,}/gu) || []);
+  const tokenize = value => new Set(normalize(value).match(/[\p{L}\p{N}]{3,}/gu) || []);
   const phrasePattern = tokens.length
-    ? new RegExp("(?<![\\\\p{L}\\\\p{N}])" + tokens.join("\\\\s+") + "(?![\\\\p{L}\\\\p{N}])", "u")
+    ? new RegExp("(?<![\\p{L}\\p{N}])" + tokens.join("\\s+") + "(?![\\p{L}\\p{N}])", "u")
     : null;
   return (chunks || []).map(chunk => {
     const normalizedTitle = normalize(chunk.title);
