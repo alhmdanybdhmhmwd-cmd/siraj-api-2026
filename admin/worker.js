@@ -625,7 +625,7 @@ export function decodePlatformUserId(encodedUserId) {
   } catch {
     return { ok: false, error: "invalid_user_id" };
   }
-  if (!userId || userId.length > 128 || userId.includes("/") || userId.includes("\\\\")) {
+  if (!userId || userId.length > 128 || userId.includes("/") || userId.includes("\\")) {
     return { ok: false, error: "invalid_user_id" };
   }
   return { ok: true, value: userId };
