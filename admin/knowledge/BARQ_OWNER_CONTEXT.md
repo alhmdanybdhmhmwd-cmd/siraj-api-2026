@@ -232,3 +232,6 @@ This section supersedes any wording in earlier sections (including sections 9, 1
 - Passed the workspace current_project into the task worker retrieval call; previously it was omitted, which caused the final fail-closed filter to exclude all project-specific sources during task execution.
 - Added escaping for SQL LIKE wildcard characters in search terms and explicit ESCAPE clauses.
 - Added regression tests for the SQL project filters, unknown projects, and literal percent/underscore/backslash search values. CI verification is pending for the resulting commit.
+
+
+- Added a static regression guard proving the worker supplies workspace.current_project to retrieval, rejects unknown scopes before SQL, and does not reintroduce substring-based Admin detection. This is part of the latest stage-5 patch and awaits CI on the resulting HEAD.
