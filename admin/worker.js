@@ -528,7 +528,9 @@ export function rankKnowledgeChunks(chunks, query, limit = 6) {
     normalize(value).match(/[\p{L}\p{N}]{3,}/gu) || []
   );
   const normalizedQuery = normalize(query);
-  const escapedPhrase = normalizedQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\  const normalizedQuery = normalize(query);
+  const phrasePattern = tokens.length
+    ? new RegExp("(?<![\\p{L}\\p{N}])" + tokens.join("\\s+") + "(?![\\p{L}\\p{N}])", "u")
+    : null;
   return (chunks || []).map(chunk => {");
   const phrasePattern = escapedPhrase
     ? new RegExp("(?<![\\p{L}\\p{N}])" + escapedPhrase + "(?![\\p{L}\\p{N}])", "u")
