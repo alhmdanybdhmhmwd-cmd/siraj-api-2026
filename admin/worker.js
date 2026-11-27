@@ -542,7 +542,11 @@ async function retrieveKnowledgeForTask(env, workspaceId, query, currentProject)
     ).bind(workspaceId);
   }
   const rows = await statement.all();
-  return rankKnowledgeChunks(rows.results || [], query, 6);
+  return rankKnowledgeChunks(
+    (rows.results || []).filter(item => isKnowledgeSourceForProject(item.source_path, currentProject)),
+    query,
+    6
+  );
 }
 
 export function validateAdminAccessClaims(claims, now = Math.floor(Date.now() / 1000)) {
