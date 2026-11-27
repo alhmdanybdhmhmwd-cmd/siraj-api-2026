@@ -476,7 +476,7 @@ export function rankKnowledgeChunks(chunks, query, limit = 6) {
   const tokens = knowledgeSearchTerms(query);
   const safeLimit = Number.isSafeInteger(limit) ? Math.max(1, Math.min(12, limit)) : 6;
   const tokenize = value => new Set(
-    String(value || "").toLowerCase().match(/[\\p{L}\\p{N}]{3,}/gu) || []
+    String(value || "").toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []
   );
   return (chunks || []).map(chunk => {
     const title = tokenize(chunk.title);
