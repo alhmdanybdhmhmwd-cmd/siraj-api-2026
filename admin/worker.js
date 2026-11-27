@@ -615,6 +615,22 @@ export function validatePlatformUsersQuery(url) {
   return { ok: true, value: { query, page, pageSize, offset: (page - 1) * pageSize } };
 }
 
+export function decodePlatformUserId(encodedUserId) {
+  if (typeof encodedUserId !== "string") {
+    return { ok: false, error: "invalid_user_id" };
+  }
+  let userId;
+  try {
+    userId = decodeURIComponent(encodedUserId);
+  } catch {
+    return { ok: false, error: "invalid_user_id" };
+  }
+  if (!userId || userId.length > 128 || userId.includes("/") || userId.includes("\\\\")) {
+    return { ok: false, error: "invalid_user_id" };
+  }
+  return { ok: true, value: userId };
+}
+
 export function maskPlatformUserPhone(phone) {
   if (phone === null || phone === undefined || String(phone).trim() === "") return null;
   const digits = String(phone).replace(/\D/g, "");
@@ -1180,10 +1196,11 @@ async function handle(request, env) {
   }
 
   if (request.method === "GET" && url.pathname.startsWith("/v1/platform/users/")) {
-    const userId = decodeURIComponent(url.pathname.slice("/v1/platform/users/".length));
-    if (!userId || userId.length > 128 || userId.includes("/")) {
-      return response({ error: "invalid_user_id" }, 400, allowedOrigin);
+    const parsedUserId = decodePlatformUserId(url.pathname.slice("/v1/platform/users/".length));
+    if (!parsedUserId.ok) {
+      return response({ error: parsedUserId.error }, 400, allowedOrigin);
     }
+    const userId = parsedUserId.value;
     const user = await env.ADMIN_DB.prepare(`
       SELECT id, username, display_name, phone FROM users WHERE id = ? LIMIT 1
     `).bind(userId).first();
