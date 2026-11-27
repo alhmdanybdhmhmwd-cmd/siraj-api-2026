@@ -373,6 +373,11 @@ test("knowledge ranking prefers title/path evidence and safely bounds result cou
   assert.equal(ranked.length, 3);
   assert.equal(ranked[0].source_path, "docs/barq-chat.md");
   assert.ok(ranked[0].matched_terms >= 1);
+  const exact = rankKnowledgeChunks([
+    { title: "Cartography notes", source_path: "docs/cart.md", content: "mapping" },
+    { title: "Art direction", source_path: "docs/design.md", content: "visual identity" }
+  ], "art");
+  assert.deepEqual(exact.map(item => item.source_path), ["docs/design.md"]);
 });
 
 
