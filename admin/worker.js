@@ -475,16 +475,19 @@ export function knowledgeSearchTerms(query, limit = 12) {
 export function rankKnowledgeChunks(chunks, query, limit = 6) {
   const tokens = knowledgeSearchTerms(query);
   const safeLimit = Number.isSafeInteger(limit) ? Math.max(1, Math.min(12, limit)) : 6;
+  const tokenize = value => new Set(
+    String(value || "").toLowerCase().match(/[\\p{L}\\p{N}]{3,}/gu) || []
+  );
   return (chunks || []).map(chunk => {
-    const title = String(chunk.title || "").toLowerCase();
-    const path = String(chunk.source_path || "").toLowerCase();
-    const content = String(chunk.content || "").toLowerCase();
+    const title = tokenize(chunk.title);
+    const path = tokenize(chunk.source_path);
+    const content = tokenize(chunk.content);
     let score = 0;
     let matched = 0;
     for (const token of tokens) {
-      const inTitle = title.includes(token);
-      const inPath = path.includes(token);
-      const inContent = content.includes(token);
+      const inTitle = title.has(token);
+      const inPath = path.has(token);
+      const inContent = content.has(token);
       if (inTitle) score += 7;
       if (inPath) score += 4;
       if (inContent) score += 1;
