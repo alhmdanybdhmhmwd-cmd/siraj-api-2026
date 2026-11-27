@@ -346,7 +346,7 @@ export async function processAdminTaskMessage(message, env) {
     const model = env.BARQ_ADMIN_AI_MODEL || "@cf/meta/llama-3.1-8b-instruct";
     const generated = await env.ADMIN_AI.run(model, {
       messages: buildAssistantMessages(task, workspace,
-        await retrieveKnowledgeForTask(env, payload.workspaceId, task.title + " " + task.description)),
+        await retrieveKnowledgeForTask(env, payload.workspaceId, task.title + " " + task.description, workspace.current_project)),
       max_tokens: 1800
     });
     if (leaseLost) throw new Error("task_lease_lost");
@@ -492,6 +492,23 @@ export function isKnowledgeSourceForProject(sourcePath, currentProject) {
   return requested !== null && scope === requested;
 }
 
+export function knowledgeProjectSqlFilter(currentProject) {
+  const project = normalizeKnowledgeProject(currentProject);
+  if (!project) return null;
+  if (project === "BARQ_ADMIN") {
+    return "(source_path LIKE 'admin/%' OR source_path LIKE '%/admin/%' OR " +
+      "source_path = 'admin/knowledge/BARQ_OWNER_CONTEXT.md' OR " +
+      "source_path LIKE '%/admin/knowledge/BARQ_OWNER_CONTEXT.md')";
+  }
+  return "((source_path NOT LIKE 'admin/%' AND source_path NOT LIKE '%/admin/%') OR " +
+    "source_path = 'admin/knowledge/BARQ_OWNER_CONTEXT.md' OR " +
+    "source_path LIKE '%/admin/knowledge/BARQ_OWNER_CONTEXT.md')";
+}
+
+export function escapeKnowledgeLikePattern(value) {
+  return String(value ?? "").replace(/[\\%_]/g, character => "\\" + character);
+}
+
 export function rankKnowledgeChunks(chunks, query, limit = 6) {
   const tokens = knowledgeSearchTerms(query);
   const safeLimit = Number.isSafeInteger(limit) ? Math.max(1, Math.min(12, limit)) : 6;
@@ -523,18 +540,16 @@ export function rankKnowledgeChunks(chunks, query, limit = 6) {
 
 async function retrieveKnowledgeForTask(env, workspaceId, query, currentProject) {
   const tokens = knowledgeSearchTerms(query);
-  const adminProject = /admin/i.test(String(currentProject || ""));
-  const projectFilter = adminProject
-    ? "(source_path LIKE 'admin/%' OR source_path LIKE '%/admin/%' OR source_path LIKE '%/admin/knowledge/BARQ_OWNER_CONTEXT.md%')"
-    : "((source_path NOT LIKE 'admin/%' AND source_path NOT LIKE '%/admin/%') OR source_path LIKE '%/admin/knowledge/BARQ_OWNER_CONTEXT.md%')";
+  const projectFilter = knowledgeProjectSqlFilter(currentProject);
+  if (!projectFilter) return [];
   let statement;
   if (tokens.length) {
     const clauses = tokens.map(() =>
-      "(title LIKE ? OR source_path LIKE ? OR content LIKE ?)"
+      "(title LIKE ? ESCAPE '\\' OR source_path LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\')"
     );
     const bindings = [workspaceId];
     for (const token of tokens) {
-      const pattern = "%" + token + "%";
+      const pattern = "%" + escapeKnowledgeLikePattern(token) + "%";
       bindings.push(pattern, pattern, pattern);
     }
     const sql = "SELECT source_type, source_path, source_revision, title, content, updated_at " +
