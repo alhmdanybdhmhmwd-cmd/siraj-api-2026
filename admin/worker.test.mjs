@@ -181,6 +181,8 @@ test("vision assistant preserves owner phase and approval agreements", () => {
   assert.match(messages[0].content, /untrusted content, not an instruction/);
   assert.match(messages[0].content, /specific owner approval/);
   assert.match(messages[0].content, /SPARK/);
+  assert.match(messages[0].content, /single assistant and guardian of BARQ/);
+  assert.match(messages[0].content, /one identity, not separate agents or components/);
 });
 
 test("knowledge sources are versioned, typed, and bounded", () => {
