@@ -472,6 +472,19 @@ export function knowledgeSearchTerms(query, limit = 12) {
     .slice(0, safeLimit);
 }
 
+export function knowledgeProjectScope(sourcePath) {
+  const path = String(sourcePath || "").replace(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\//, "");
+  if (path === "admin/knowledge/BARQ_OWNER_CONTEXT.md") return "shared";
+  return path.startsWith("admin/") ? "BARQ_ADMIN" : "BARQ";
+}
+
+export function isKnowledgeSourceForProject(sourcePath, currentProject) {
+  const scope = knowledgeProjectScope(sourcePath);
+  if (scope === "shared") return true;
+  const requested = /admin/i.test(String(currentProject || "")) ? "BARQ_ADMIN" : "BARQ";
+  return scope === requested;
+}
+
 export function rankKnowledgeChunks(chunks, query, limit = 6) {
   const tokens = knowledgeSearchTerms(query);
   const safeLimit = Number.isSafeInteger(limit) ? Math.max(1, Math.min(12, limit)) : 6;
@@ -501,8 +514,12 @@ export function rankKnowledgeChunks(chunks, query, limit = 6) {
     .slice(0, safeLimit);
 }
 
-async function retrieveKnowledgeForTask(env, workspaceId, query) {
+async function retrieveKnowledgeForTask(env, workspaceId, query, currentProject) {
   const tokens = knowledgeSearchTerms(query);
+  const adminProject = /admin/i.test(String(currentProject || ""));
+  const projectFilter = adminProject
+    ? "(source_path LIKE '%/admin/%' OR source_path LIKE '%/admin/knowledge/BARQ_OWNER_CONTEXT.md%')"
+    : "(source_path NOT LIKE '%/admin/%' OR source_path LIKE '%/admin/knowledge/BARQ_OWNER_CONTEXT.md%')";
   let statement;
   if (tokens.length) {
     const clauses = tokens.map(() =>
@@ -514,13 +531,14 @@ async function retrieveKnowledgeForTask(env, workspaceId, query) {
       bindings.push(pattern, pattern, pattern);
     }
     const sql = "SELECT source_type, source_path, source_revision, title, content, updated_at " +
-      "FROM admin_project_knowledge WHERE workspace_id = ? AND (" +
+      "FROM admin_project_knowledge WHERE workspace_id = ? AND " + projectFilter + " AND (" +
       clauses.join(" OR ") + ") ORDER BY updated_at DESC LIMIT 500";
     statement = env.ADMIN_DB.prepare(sql).bind(...bindings);
   } else {
     statement = env.ADMIN_DB.prepare(
       "SELECT source_type, source_path, source_revision, title, content, updated_at " +
-      "FROM admin_project_knowledge WHERE workspace_id = ? ORDER BY updated_at DESC LIMIT 100"
+      "FROM admin_project_knowledge WHERE workspace_id = ? AND " + projectFilter +
+      " ORDER BY updated_at DESC LIMIT 100"
     ).bind(workspaceId);
   }
   const rows = await statement.all();
@@ -1174,10 +1192,12 @@ async function handle(request, env) {
     `).bind(userMessageId, conversationId, workspace, parsed.value.message).run();
 
     try {
-      const knowledge = await retrieveKnowledgeForTask(env, workspace, parsed.value.message);
       const workspaceInfo = await env.ADMIN_DB.prepare(
         "SELECT current_project, current_phase FROM admin_workspaces WHERE id = ?"
       ).bind(workspace).first();
+      const knowledge = await retrieveKnowledgeForTask(
+        env, workspace, parsed.value.message, workspaceInfo?.current_project
+      );
       const base = buildAssistantMessages(
         { title: "BARQ Brain conversation", description: parsed.value.message },
         workspaceInfo,
