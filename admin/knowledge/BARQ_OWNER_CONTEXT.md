@@ -212,3 +212,14 @@ This section supersedes conflicting product-boundary and phase-status statements
 - Hardened knowledge project selection: only canonical BARQ / BARQ Admin identifiers are accepted. Unknown or malformed project identifiers now fail closed for project-specific sources rather than silently defaulting to BARQ or being classified as Admin by a substring match. The shared owner-decision seed remains readable by both approved projects.
 - Added regression tests for malformed names (including substring lookalikes), unknown projects, and the shared-source exception.
 - Changes are committed on the existing draft PR branch only. They are not yet verified until CI completes on the latest HEAD. No preview index run, D1 migration, APK build, merge, or production deployment was performed.
+
+
+## 15. Owner correction — Brain and Guardian are one assistant — 2026-11-28
+
+This section supersedes any wording in earlier sections (including sections 9, 13, and 14) that presents BARQ Brain and BARQ Guardian as two separate capabilities, agents, modules, or components.
+
+- BARQ Admin is one application with one assistant. BARQ Brain is that assistant, and the guardian role is the same assistant. Do not describe Brain and Guardian as separate assistants, parallel modules, or separate applications.
+- The single BARQ Brain assistant helps the owner and protects the separate BARQ consumer app and its supporting services. Its protection responsibilities include monitoring, incident detection and diagnosis, bounded authorized repair, regression verification, audit records, and alerts.
+- These protection functions remain product requirements until each underlying monitoring, incident, repair, verification, audit, and alert path is implemented and tested. Do not claim operational protection without evidence.
+- Updated the Worker assistant and image-analysis prompts and their regression assertions to express one unified assistant identity.
+- Fixed a JavaScript regular-expression escaping defect in project-name normalization: whitespace normalization now uses the actual whitespace class (backslash-s), so the approved BARQ Admin identifier maps to BARQ_ADMIN while malformed identifiers still fail closed. The defect caused two project-scope regression tests to fail in the latest CI run; the fix must be re-verified by the next CI run.
