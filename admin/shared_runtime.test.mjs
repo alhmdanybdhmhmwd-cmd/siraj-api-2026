@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createSharedAdminEnvironment, handleSharedAdminRequest } from "./shared_runtime.js";
+import { createSharedAdminEnvironment, handleSharedAdminRequest, handleSharedAdminQueue } from "./shared_runtime.js";
 
 test("shared Admin environment maps the existing BARQ DB and AI bindings", () => {
   const DB = { prepare() {} };
@@ -53,4 +53,28 @@ test("Admin routes receive the shared DB binding and fail closed if it is absent
   const response = await handleSharedAdminRequest(request, {});
   assert.equal(response.status, 503);
   assert.deepEqual(await response.json(), { error: "admin_database_unavailable" });
+});
+
+test("shared Worker dispatches only the explicitly named Admin queues", async () => {
+  const acked = [];
+  const batch = {
+    queue: "admin-tasks-custom",
+    messages: [{ body: null, ack() { acked.push(true); }, retry() {} }]
+  };
+  assert.equal(await handleSharedAdminQueue(batch, {
+    BARQ_ADMIN_TASK_QUEUE_NAME: "admin-tasks-custom",
+    BARQ_ADMIN_DEAD_LETTER_QUEUE_NAME: "admin-dlq-custom"
+  }), true);
+  assert.deepEqual(acked, [true]);
+  assert.equal(await handleSharedAdminQueue({ ...batch, queue: "unrelated-queue" }, {}), false);
+});
+
+test("shared Worker uses the default Admin queue names only when not overridden", async () => {
+  const acked = [];
+  const batch = {
+    queue: "barq-admin-preview-dlq",
+    messages: [{ body: null, ack() { acked.push(true); }, retry() {} }]
+  };
+  assert.equal(await handleSharedAdminQueue(batch, {}), true);
+  assert.deepEqual(acked, [true]);
 });
