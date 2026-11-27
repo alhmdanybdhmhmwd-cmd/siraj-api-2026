@@ -496,7 +496,8 @@ class _AdminHomePageState extends State<AdminHomePage>
                   ),
                 ),
               const SizedBox(height: 8),
-              if (!disabled)                const Text(
+              if (!disabled)
+                const Text(
                   'عند تغيير الرمز، يتوقف الرمز السابق عن تفعيل أجهزة جديدة. الجلسات المفتوحة تبقى مستقلة ويمكن إلغاؤها من إدارة الأجهزة.',
                   style: TextStyle(color: Colors.white60, fontSize: 12),
                 ),
@@ -996,7 +997,8 @@ class _AdminHomePageState extends State<AdminHomePage>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [            const Text(
+          children: [
+            const Text(
               'إعداد الاتصال الآمن',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
@@ -1245,7 +1247,8 @@ class _AdminHomePageState extends State<AdminHomePage>
               if (sources is List && sources.isNotEmpty) {
                 final references = sources.whereType<Map>().map((source) {
                   final path = (source['sourcePath'] ?? '').toString();
-                  final revision = (source['sourceRevision'] ?? '').toString();                  return revision.isEmpty
+                  final revision = (source['sourceRevision'] ?? '').toString();
+                  return revision.isEmpty
                       ? '• ' + path
                       : '• ' + path + ' @ ' + revision;
                 }).join('\n');
