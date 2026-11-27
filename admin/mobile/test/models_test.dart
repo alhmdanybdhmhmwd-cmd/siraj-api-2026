@@ -48,4 +48,49 @@ void main() {
       expect(merged.first.nextAction, 'سيتم الإرسال عند عودة الاتصال');
     },
   );
+
+  test('offline outbox drafts retain description and priority', () {
+    final merged = mergeOutboxDrafts(
+      const [
+        AdminTask(id: 'server-1', title: 'Server task', status: 'queued'),
+      ],
+      [
+        {
+          'idempotencyKey': 'offline-details',
+          'title': 'Offline task',
+          'description': 'Saved before connection returned',
+          'priority': 'high',
+        },
+      ],
+    );
+
+    expect(merged, hasLength(2));
+    expect(merged.first.id, 'local-offline-details');
+    expect(merged.first.description, 'Saved before connection returned');
+    expect(merged.first.priority, 'high');
+    expect(merged.last.id, 'server-1');
+  });
+
+  test('outbox merge skips drafts already represented by server ids', () {
+    const syncedTask = AdminTask(
+      id: 'local-already-synced',
+      title: 'Server copy',
+      status: 'queued',
+    );
+
+    final merged = mergeOutboxDrafts(
+      const [syncedTask],
+      [
+        {'idempotencyKey': 'already-synced', 'title': 'Stale local copy'},
+        {'idempotencyKey': 'new-draft', 'title': 'New draft'},
+        {'idempotencyKey': 'new-draft', 'title': 'Duplicate draft'},
+      ],
+    );
+
+    expect(merged, hasLength(2));
+    expect(merged.first.id, 'local-new-draft');
+    expect(merged.first.title, 'New draft');
+    expect(merged.last.id, 'local-already-synced');
+  });
+
 }
