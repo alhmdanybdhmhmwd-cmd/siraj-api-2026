@@ -265,7 +265,7 @@ test("Admin access-token claims require bounded lifetime and valid session bindi
 });
 
 
-test("dead-letter delivery marks a still-active task failed and audits the incident", async () => {
+test("dead-letter delivery marks an expired abandoned task failed and audits the incident", async () => {
   const calls = [];
   const env = { ADMIN_DB: {
     prepare(sql) {
@@ -292,7 +292,10 @@ test("dead-letter delivery marks a still-active task failed and audits the incid
 test("dead-letter redelivery does not overwrite or re-audit an already terminal task", async () => {
   let calls = 0;
   const env = { ADMIN_DB: {
-    prepare() { return { bind() { return { async run() { calls += 1; return { meta: { changes: 0 } }; } }; } }; }
+    prepare(sql) { return { bind() { return {
+      async run() { calls += 1; return { meta: { changes: 0 } }; },
+      async first() { calls += 1; return { status: "completed", lease_expires_at: null }; }
+    }; } }; }
   } };
   const actions = [];
   await processAdminDeadLetterMessage({
@@ -301,7 +304,7 @@ test("dead-letter redelivery does not overwrite or re-audit an already terminal 
     retry() { actions.push("retry"); }
   }, env);
   assert.deepEqual(actions, ["ack"]);
-  assert.equal(calls, 1);
+  assert.equal(calls, 2);
 });
 
 test("dead-letter delivery is retried when durable storage is unavailable", async () => {
