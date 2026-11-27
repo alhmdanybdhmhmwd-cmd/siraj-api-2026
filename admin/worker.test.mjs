@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, validateAdminAccessClaims, normalizeAdminActivationCode, createAdminActivationCode, processAdminDeadLetterMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, validateAdminAccessClaims, normalizeAdminActivationCode, createAdminActivationCode, processAdminDeadLetterMessage, processAdminTaskMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches } from "./worker.js";
 
 test("idempotency keys are bounded and cannot be silently truncated", () => {
   assert.deepEqual(validateIdempotencyKey(null), { ok: true, value: null });
@@ -407,6 +407,35 @@ test("owner activation codes are normalized strictly and generated with 192-bit 
   assert.equal(normalizeAdminActivationCode("x".repeat(48)), null);
   assert.equal(normalizeAdminActivationCode("A".repeat(47)), null);
   assert.equal(normalizeAdminActivationCode(null), null);
+});
+
+test("task delivery retries without claiming when the Admin AI binding is missing", async () => {
+  const calls = [];
+  const env = { ADMIN_DB: {
+    prepare(sql) { return { bind(...args) { return {
+      async run() { calls.push({ sql, args }); return { meta: { changes: 1 } }; }
+    }; } }; }
+  } };
+  const actions = [];
+  await processAdminTaskMessage({
+    body: { taskId: "task-no-ai", workspaceId: "workspace-1" },
+    ack() { actions.push("ack"); },
+    retry(options) { actions.push(["retry", options]); }
+  }, env);
+  assert.deepEqual(actions, [["retry", { delaySeconds: 300 }]]);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].sql, /status = 'queued'/);
+  assert.equal(calls[0].args[1], "task-no-ai");
+});
+
+test("task delivery retries without touching storage when the Admin database binding is missing", async () => {
+  const actions = [];
+  await processAdminTaskMessage({
+    body: { taskId: "task-no-db", workspaceId: "workspace-1" },
+    ack() { actions.push("ack"); },
+    retry(options) { actions.push(["retry", options]); }
+  }, {});
+  assert.deepEqual(actions, [["retry", { delaySeconds: 60 }]]);
 });
 
 test("dead-letter delivery waits while a different worker owns a live lease", async () => {
