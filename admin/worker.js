@@ -528,6 +528,11 @@ export function rankKnowledgeChunks(chunks, query, limit = 6) {
     normalize(value).match(/[\p{L}\p{N}]{3,}/gu) || []
   );
   const normalizedQuery = normalize(query);
+  const escapedPhrase = normalizedQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\  const normalizedQuery = normalize(query);
+  return (chunks || []).map(chunk => {");
+  const phrasePattern = escapedPhrase
+    ? new RegExp("(?<![\\p{L}\\p{N}])" + escapedPhrase + "(?![\\p{L}\\p{N}])", "u")
+    : null;
   return (chunks || []).map(chunk => {
     const normalizedTitle = normalize(chunk.title);
     const normalizedPath = normalize(chunk.source_path);
@@ -547,14 +552,14 @@ export function rankKnowledgeChunks(chunks, query, limit = 6) {
       if (inTitle || inPath || inContent) matched++;
     }
     // Phrase matches improve precision without treating ingestion timestamps as freshness.
-    const phraseMatch = normalizedQuery.length >= 3 && (
-      normalizedTitle.includes(normalizedQuery) ||
-      normalizedPath.includes(normalizedQuery) ||
-      normalizedContent.includes(normalizedQuery)
-    );
+    const phraseMatch = Boolean(phrasePattern && (
+      phrasePattern.test(normalizedTitle) ||
+      phrasePattern.test(normalizedPath) ||
+      phrasePattern.test(normalizedContent)
+    ));
     if (phraseMatch) {
-      if (normalizedTitle.includes(normalizedQuery)) score += 14;
-      else if (normalizedPath.includes(normalizedQuery)) score += 9;
+      if (phrasePattern.test(normalizedTitle)) score += 14;
+      else if (phrasePattern.test(normalizedPath)) score += 9;
       else score += 5;
     }
     const coverage = tokens.length ? matched / tokens.length : 0;
