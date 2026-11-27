@@ -31,6 +31,8 @@ test("BARQ platform groups route is owner-scoped, read-only, paginated, and audi
   assert.match(route, /LEFT JOIN users u ON u.id = g.owner_id/);
   assert.match(route, /FROM group_members gm WHERE gm.group_id = g.id/);
   assert.match(route, /platform\.groups\.listed/);
+  assert.match(route, /groups_unavailable/);
+  assert.match(route, /catch \(error\)/);
   assert.doesNotMatch(route, /INSERT INTO chat_groups|UPDATE chat_groups|DELETE FROM chat_groups|group_messages|private_messages/);
 });
 
