@@ -187,6 +187,22 @@ test("knowledge sources are versioned, typed, and bounded", () => {
   });
   assert.equal(valid.ok, true);
   assert.equal(validateKnowledgeInput({
+    sourceType: "repository_file", sourcePath: "owner/repo/docs/guide.md",
+    sourceRevision: "a".repeat(40), title: "Guide", content: "Verified repository source"
+  }).ok, true);
+  assert.equal(validateKnowledgeInput({
+    sourceType: "repository_file", sourcePath: "owner/repo/docs/guide.md",
+    sourceRevision: "abc123", title: "Guide", content: "Unverifiable repository source"
+  }).ok, false);
+  assert.equal(validateKnowledgeInput({
+    sourceType: "repository_file", sourcePath: "owner/repo/../private.md",
+    sourceRevision: "a".repeat(40), title: "Unsafe path", content: "x"
+  }).ok, false);
+  assert.equal(validateKnowledgeInput({
+    sourceType: "repository_file", sourcePath: "docs/guide.md",
+    sourceRevision: "", title: "Missing revision", content: "x"
+  }).ok, false);
+  assert.equal(validateKnowledgeInput({
     sourceType: "unknown", sourcePath: "x", title: "x", content: "x"
   }).ok, false);
   assert.equal(validateKnowledgeInput({
