@@ -293,7 +293,7 @@ async function processAdminTaskMessage(message, env) {
       attempt_count = attempt_count + 1, updated_at = CURRENT_TIMESTAMP
     WHERE id = ? AND workspace_id = ? AND (
       status = 'queued' OR
-      (status = 'running' AND lease_expires_at IS NOT NULL AND lease_expires_at < CURRENT_TIMESTAMP)
+      (status = 'running' AND (lease_expires_at IS NULL OR lease_expires_at < CURRENT_TIMESTAMP))
     )
   `).bind(leaseId, payload.taskId, payload.workspaceId).run();
 
@@ -1477,7 +1477,7 @@ export async function processAdminDeadLetterMessage(message, env) {
           updated_at = CURRENT_TIMESTAMP
         WHERE id = ? AND workspace_id = ? AND (
           status = 'queued' OR
-          (status = 'running' AND lease_expires_at IS NOT NULL AND lease_expires_at < CURRENT_TIMESTAMP)
+          (status = 'running' AND (lease_expires_at IS NULL OR lease_expires_at < CURRENT_TIMESTAMP))
         )
       `).bind(payload.taskId, payload.workspaceId).run();
 
@@ -1499,7 +1499,7 @@ export async function processAdminDeadLetterMessage(message, env) {
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND workspace_id = ? AND (
         status = 'queued' OR
-        (status = 'running' AND lease_expires_at IS NOT NULL AND lease_expires_at < CURRENT_TIMESTAMP)
+        (status = 'running' AND (lease_expires_at IS NULL OR lease_expires_at < CURRENT_TIMESTAMP))
       )
     `).bind(payload.taskId, payload.workspaceId).run();
 
