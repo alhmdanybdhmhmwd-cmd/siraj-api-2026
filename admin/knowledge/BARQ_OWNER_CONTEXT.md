@@ -203,3 +203,12 @@ This section supersedes conflicting product-boundary and phase-status statements
 - The separate `Workers Builds: siraj-api` PR check is failed. Its cause has not yet been established from available job evidence; do not attribute it to Admin source changes or claim it fixed. Investigate in isolation without deploying or changing production.
 - Stage 5 work must continue on the existing review branch and preserve project-scope isolation, revision-aware source citations, chunk coverage/freshness reports, conflict handling, and prompt-injection defenses.
 - No APK, merge, production deployment, production migration, destructive knowledge cleanup, or changes to shared production resources without explicit owner approval.
+
+
+## 14. Stage 5 continuation — knowledge isolation hardening and Guardian boundary — 2026-11-28
+
+- Corrected the product boundary: BARQ Admin is one application containing both BARQ Brain and BARQ Guardian. Guardian protects the separate BARQ consumer app and its supporting services; it is not a third app or a standalone BARQ consumer-app feature.
+- Updated the Brain system prompt to enforce this boundary and added a regression assertion.
+- Hardened knowledge project selection: only canonical BARQ / BARQ Admin identifiers are accepted. Unknown or malformed project identifiers now fail closed for project-specific sources rather than silently defaulting to BARQ or being classified as Admin by a substring match. The shared owner-decision seed remains readable by both approved projects.
+- Added regression tests for malformed names (including substring lookalikes), unknown projects, and the shared-source exception.
+- Changes are committed on the existing draft PR branch only. They are not yet verified until CI completes on the latest HEAD. No preview index run, D1 migration, APK build, merge, or production deployment was performed.
