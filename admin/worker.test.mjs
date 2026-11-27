@@ -385,6 +385,7 @@ test("knowledge sources remain isolated by selected project with only owner cont
   assert.equal(knowledgeProjectScope("owner/repo/admin/worker.js"), "BARQ_ADMIN");
   assert.equal(knowledgeProjectScope("owner/repo/src/api.js"), "BARQ");
   assert.equal(knowledgeProjectScope("owner/repo/admin/knowledge/BARQ_OWNER_CONTEXT.md"), "shared");
+  assert.equal(knowledgeProjectScope("admin/worker.js"), "BARQ_ADMIN");
   assert.equal(isKnowledgeSourceForProject("owner/repo/admin/worker.js", "BARQ Admin"), true);
   assert.equal(isKnowledgeSourceForProject("owner/repo/admin/worker.js", "BARQ"), false);
   assert.equal(isKnowledgeSourceForProject("owner/repo/src/api.js", "BARQ"), true);
