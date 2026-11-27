@@ -2198,85 +2198,93 @@ class _AdminHomePageState extends State<AdminHomePage>
                 ? const Text('لا توجد أجهزة مسجلة')
                 : ListView(
                     shrinkWrap: true,
-                    children: devices
-                        .map(
-                          (device) => ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: const Icon(Icons.phone_android),
-                            title: Text(
-                              (device['device_name'] ?? 'جهاز').toString(),
-                            ),
-                            subtitle: Text(
-                              (device['platform'] ?? '').toString() +
-                                  ' • آخر نشاط: ' +
-                                  (device['last_seen_at'] ?? '-').toString() +
-                                  ((device['revoked_at'] == null)
-                                      ? ''
-                                      : ' • ملغى'),
-                            ),
-                            trailing: device['revoked_at'] == null
-                                ? IconButton(
-                                    tooltip: 'إبطال هذا الجهاز',
-                                    icon: const Icon(
-                                      Icons.block,
-                                      color: Colors.redAccent,
+                    children: devices.map((device) {
+                      final revoked = device['revoked_at'] != null;
+                      final id = (device['id'] ?? '').toString();
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.phone_android),
+                        title: Text((device['device_name'] ?? 'جهاز').toString()),
+                        subtitle: Text(
+                          (device['platform'] ?? '').toString() +
+                              ' • آخر نشاط: ' +
+                              (device['last_seen_at'] ?? '-').toString() +
+                              (revoked ? ' • ملغى' : ''),
+                        ),
+                        trailing: revoked
+                            ? const Icon(Icons.check_circle_outline, color: Colors.white38)
+                            : IconButton(
+                                tooltip: 'إبطال هذا الجهاز',
+                                icon: const Icon(Icons.block, color: Colors.redAccent),
+                                onPressed: id.isEmpty ? null : () async {
+                                  final confirmed = await showDialog<bool>(
+                                    context: dialogContext,
+                                    builder: (confirmContext) => AlertDialog(
+                                      title: const Text('إبطال الجهاز؟'),
+                                      content: const Text('لن يستطيع هذا الجهاز استخدام جلسة الإدارة بعد الإبطال. يمكنك تفعيله مجددًا برمز المالك.'),
+                                      actions: [
+                                        TextButton(onPressed: () => Navigator.pop(confirmContext, false), child: const Text('إلغاء')),
+                                        FilledButton(onPressed: () => Navigator.pop(confirmContext, true), child: const Text('إبطال')),
+                                      ],
                                     ),
-                                    onPressed: () async {
-                                      final id =
-                                          (device['id'] ?? '').toString();
-                                      final response = await http
-                                          .delete(
-                                            Uri.parse(
-                                              _base + '/v1/devices/' + id,
-                                            ),
-                                            headers: _headers,
-                                          )
-                                          .timeout(const Duration(seconds: 15));
-                                      if (response.statusCode == 200 &&
-                                          dialogContext.mounted) {
-                                        Navigator.pop(dialogContext);
-                                        await _load();
-                                      }
-                                    },
-                                  )
-                                : const Icon(
-                                    Icons.check_circle_outline,
-                                    color: Colors.white38,
-                                  ),
-                          ),
-                        )
-                        .toList(),
+                                  );
+                                  if (confirmed != true || !dialogContext.mounted) return;
+                                  try {
+                                    final response = await http.delete(
+                                      Uri.parse(_base + '/v1/devices/' + Uri.encodeComponent(id)),
+                                      headers: _headers,
+                                    ).timeout(const Duration(seconds: 15));
+                                    if (response.statusCode != 200) {
+                                      throw Exception('رفض الخادم إبطال الجهاز (' + response.statusCode.toString() + ')');
+                                    }
+                                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                                    await _load();
+                                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إبطال جلسة الجهاز')));
+                                  } catch (error) {
+                                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر إبطال الجهاز: ' + error.toString())));
+                                  }
+                                },
+                              ),
+                      );
+                    }).toList(),
                   ),
           ),
           actions: [
             TextButton(
               onPressed: () async {
-                final response = await http
-                    .post(
-                      Uri.parse(_base + '/v1/devices/revoke-all'),
-                      headers: _headers,
-                    )
-                    .timeout(const Duration(seconds: 15));
-                if (dialogContext.mounted) Navigator.pop(dialogContext);
-                if (response.statusCode == 200) await _logout();
+                final activeCount = devices.where((device) => device['revoked_at'] == null).length;
+                if (activeCount == 0) { if (dialogContext.mounted) Navigator.pop(dialogContext); return; }
+                final confirmed = await showDialog<bool>(
+                  context: dialogContext,
+                  builder: (confirmContext) => AlertDialog(
+                    title: const Text('إبطال جميع الأجهزة؟'),
+                    content: Text('سيتم إنهاء جلسات ' + activeCount.toString() + ' جهازًا، بما فيها هذا الجهاز. لن تتمكن من المتابعة حتى تعيد تفعيل جهازك.'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(confirmContext, false), child: const Text('إلغاء')),
+                      FilledButton(onPressed: () => Navigator.pop(confirmContext, true), child: const Text('إبطال الجميع')),
+                    ],
+                  ),
+                );
+                if (confirmed != true || !dialogContext.mounted) return;
+                try {
+                  final response = await http.post(Uri.parse(_base + '/v1/devices/revoke-all'), headers: _headers).timeout(const Duration(seconds: 15));
+                  if (response.statusCode != 200) throw Exception('رفض الخادم إبطال الجلسات (' + response.statusCode.toString() + ')');
+                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                  await _logout();
+                } catch (error) {
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر إبطال جميع الأجهزة: ' + error.toString())));
+                }
               },
               child: const Text('إبطال جميع الأجهزة'),
             ),
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('إغلاق'),
-            ),
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('إغلاق')),
           ],
         ),
       );
     } catch (error) {
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('تعذر تحميل الأجهزة: ' + error.toString())),
-        );
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر تحميل الأجهزة: ' + error.toString())));
     }
   }
-
   Widget _workspaceCard() {
     final project = (_workspace['current_project'] ?? 'BARQ').toString();
     final phase =
