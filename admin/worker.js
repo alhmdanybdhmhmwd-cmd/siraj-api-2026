@@ -1190,35 +1190,40 @@ async function handle(request, env) {
     const parsed = validatePlatformUsersQuery(url);
     if (!parsed.ok) return response({ error: parsed.error }, 400, allowedOrigin);
     const { query, page, pageSize, offset } = parsed.value;
-    const totalRow = await env.ADMIN_DB.prepare(`
-      SELECT COUNT(*) AS total FROM users
-      WHERE (? = '' OR instr(lower(coalesce(username, '')), lower(?)) > 0
-        OR instr(lower(coalesce(display_name, '')), lower(?)) > 0
-        OR instr(coalesce(phone, ''), ?) > 0)
-    `).bind(query, query, query, query).first();
-    const rows = await env.ADMIN_DB.prepare(`
-      SELECT id, username, display_name, phone FROM users
-      WHERE (? = '' OR instr(lower(coalesce(username, '')), lower(?)) > 0
-        OR instr(lower(coalesce(display_name, '')), lower(?)) > 0
-        OR instr(coalesce(phone, ''), ?) > 0)
-      ORDER BY id ASC LIMIT ? OFFSET ?
-    `).bind(query, query, query, query, pageSize, offset).all();
-    const total = Math.max(0, Number(totalRow?.total || 0));
-    const users = (rows.results || []).map(user => ({
-      id: user.id,
-      username: user.username,
-      displayName: user.display_name,
-      phoneMasked: maskPlatformUserPhone(user.phone)
-    }));
-    await audit(env, workspace, actor, "platform.users.listed", "users", "list", {
-      queryLength: query.length, page, pageSize, returned: users.length
-    });
-    return response({
-      users, page, pageSize, total,
-      totalPages: Math.ceil(total / pageSize),
-      hasPrevious: page > 1,
-      hasNext: offset + users.length < total
-    }, 200, allowedOrigin);
+    try {
+      const totalRow = await env.ADMIN_DB.prepare(`
+        SELECT COUNT(*) AS total FROM users
+        WHERE (? = '' OR instr(lower(coalesce(username, '')), lower(?)) > 0
+          OR instr(lower(coalesce(display_name, '')), lower(?)) > 0
+          OR instr(coalesce(phone, ''), ?) > 0)
+      `).bind(query, query, query, query).first();
+      const rows = await env.ADMIN_DB.prepare(`
+        SELECT id, username, display_name, phone FROM users
+        WHERE (? = '' OR instr(lower(coalesce(username, '')), lower(?)) > 0
+          OR instr(lower(coalesce(display_name, '')), lower(?)) > 0
+          OR instr(coalesce(phone, ''), ?) > 0)
+        ORDER BY id ASC LIMIT ? OFFSET ?
+      `).bind(query, query, query, query, pageSize, offset).all();
+      const total = Math.max(0, Number(totalRow?.total || 0));
+      const users = (rows.results || []).map(user => ({
+        id: user.id,
+        username: user.username,
+        displayName: user.display_name,
+        phoneMasked: maskPlatformUserPhone(user.phone)
+      }));
+      await audit(env, workspace, actor, "platform.users.listed", "users", "list", {
+        queryLength: query.length, page, pageSize, returned: users.length
+      });
+      return response({
+        users, page, pageSize, total,
+        totalPages: Math.ceil(total / pageSize),
+        hasPrevious: page > 1,
+        hasNext: offset + users.length < total
+      }, 200, allowedOrigin);
+    } catch (error) {
+      console.error("BARQ Admin users listing failed:", error);
+      return response({ error: "users_unavailable" }, 503, allowedOrigin);
+    }
   }
 
   if (request.method === "GET" && url.pathname.startsWith("/v1/platform/users/")) {
