@@ -151,3 +151,20 @@ For commit `6fec4f629c0ff2857d4c9d997c72895b11b97579`:
 - Vercel's external status remains `Deployment rate limited — retry in 24 hours`. This is recorded for the owner and BARQ Brain; continue code/tests offline.
 - Cloudflare integration/account zone visibility and isolated Preview access remain recorded external blockers. BARQ Brain/owner should reconnect the correct least-privilege Cloudflare integration, inspect provider build logs, and establish separate Preview resources when available. No credentials should be pasted into chat.
 - No APK was packaged, no merge/deploy occurred, and no production resource was changed.
+
+
+## Exact-head verification update — 2026-11-28, commit 8bf614588765900d63ac4b96ac92eca032ec33ff
+
+- Backend tests: **passed** — run `46096630671`.
+- Admin Quality: **passed** — run `46096630702`, job `140829356566`; Worker syntax, Admin unit tests, isolated schema/audit immutability, BARQ D1 schema coexistence, workspace/task concurrency, read-only Preview preflight, and isolated Preview template checks all completed successfully.
+- Admin Mobile Quality: formatter, Flutter analysis, and Flutter widget tests: **passed** on this exact SHA. Android SDK/NDK setup and Gradle setup also passed.
+- Android AppAuth merged-manifest validation: **in progress** at the latest poll. Kotlin compilation has not started yet. Do not claim Android platform acceptance until both remaining steps finish successfully.
+- The mobile widget test was updated to assert the actual signed-out privacy explanation and ensure aggregate totals/health indicators remain hidden before owner authentication.
+- PR #11 remains Draft/open. No APK packaging, merge, deployment, production migration, production data mutation, or destructive action was performed.
+
+## Phase status clarification
+
+- Phase 5 acceptance remains open; knowledge indexing freshness/coverage, citations, conflict handling, injection resistance, and project isolation still require evidence.
+- Phase 6 remains in progress; isolated Preview and end-to-end repair acceptance remain outstanding.
+- The owner explicitly approved **preparatory/partial Phase 7 implementation in parallel** with Phases 5 and 6. This does not close either earlier phase and does not authorize declaring Phase 7 formally started/accepted ahead of those gates.
+- BARQ consumer app remains in Phase 9 real-device testing.
