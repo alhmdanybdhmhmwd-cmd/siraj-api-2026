@@ -62,6 +62,8 @@ test("BARQ platform user routes are owner-scoped read-only and expose only allow
   assert.match(listRoute, /catch \(error\)/);
   assert.match(detailRoute, /SELECT id, username, display_name, phone FROM users WHERE id = \?/);
   assert.match(detailRoute, /platform\.user\.viewed/);
+  assert.match(detailRoute, /user_unavailable/);
+  assert.match(detailRoute, /catch \(error\)/);
   assert.doesNotMatch(listRoute + detailRoute, /password_hash|password_salt|private_messages|profile_photos|INSERT INTO users|UPDATE users|DELETE FROM users/);
 });
 
