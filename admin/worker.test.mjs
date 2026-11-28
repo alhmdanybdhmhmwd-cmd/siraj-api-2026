@@ -39,6 +39,9 @@ test("platform overview is aggregate-only, owner-audited, and tolerates unavaila
   assert.match(route, /SELECT COUNT\(\*\) AS total FROM users/);
   assert.match(route, /SELECT COUNT\(\*\) AS total FROM chat_groups/);
   assert.match(route, /groupsAvailable/);
+  assert.match(route, /SELECT 1 AS ok/);
+  assert.match(route, /aiBindingConfigured: Boolean\(env\.ADMIN_AI\)/);
+  assert.match(route, /runtimeMode:/);
   assert.match(route, /platform\.overview\.viewed/);
   assert.match(route, /platform_overview_unavailable/);
   assert.doesNotMatch(route, /SELECT .*phone|password_hash|password_salt|private_messages|group_messages|profile_photos|INSERT INTO|UPDATE |DELETE FROM/);
