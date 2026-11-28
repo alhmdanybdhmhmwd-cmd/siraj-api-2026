@@ -28,6 +28,25 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('Platform overview is reachable and owner-gated', (
+    tester,
+  ) async {
+    await openAdminTab(tester, 'إدارة المنصة');
+
+    expect(find.text('إدارة المنصة'), findsWidgets);
+    expect(
+      find.textContaining('ملخص تشغيلي للقراءة فقط'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('سجّل الدخول بحساب المالك لعرض ملخص المنصة'),
+      findsOneWidget,
+    );
+    expect(find.text('إجمالي المستخدمين'), findsNothing);
+    expect(find.text('إجمالي المجموعات'), findsNothing);
+    expect(find.textContaining('محتوى الرسائل'), findsNothing);
+  });
+
   testWidgets('Users page is reachable and protects account data', (
     tester,
   ) async {
