@@ -400,7 +400,7 @@ class _AdminHomePageState extends State<AdminHomePage>
                             : 'غير معروف') +
                         '  •  الأعضاء: ' +
                         (group['memberCount']?.toString() ?? '0'),
-                  ].join('\\n')),
+                  ].join('\n')),
                   isThreeLine:
                       (group['description']?.toString() ?? '').isNotEmpty,
                   trailing: const Icon(Icons.group_outlined),
