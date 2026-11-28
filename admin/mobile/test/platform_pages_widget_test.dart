@@ -44,6 +44,8 @@ void main() {
     );
     expect(find.text('إجمالي المستخدمين'), findsNothing);
     expect(find.text('إجمالي المجموعات'), findsNothing);
+    expect(find.text('سلامة الخدمات'), findsNothing);
+    expect(find.text('قاعدة بيانات BARQ Admin'), findsNothing);
     expect(find.textContaining('محتوى الرسائل'), findsNothing);
   });
 
