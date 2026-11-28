@@ -168,3 +168,13 @@ For commit `6fec4f629c0ff2857d4c9d997c72895b11b97579`:
 - Phase 6 remains in progress; isolated Preview and end-to-end repair acceptance remain outstanding.
 - The owner explicitly approved **preparatory/partial Phase 7 implementation in parallel** with Phases 5 and 6. This does not close either earlier phase and does not authorize declaring Phase 7 formally started/accepted ahead of those gates.
 - BARQ consumer app remains in Phase 9 real-device testing.
+
+
+## Latest continuation — overview request race protection (2026-11-28)
+
+- Commit `2961e559e663cbaf81d712f8b08d6fa8718c2fcf` adds a request-generation guard to the platform overview loader. If refreshes overlap, only the newest request may update the displayed overview, error, or loading state.
+- If the owner session is absent, the overview snapshot is cleared before showing the owner-login prompt. A stale in-flight request cannot repopulate the signed-out screen.
+- This mirrors the existing stale-response protections on Users and Groups. The change is source-level only until exact-HEAD Flutter tests pass.
+- The previous run on `1dff2bb42e107a17994cdeeec453dfb42e937840` completed Backend tests and Admin Quality successfully. Flutter formatter, analysis and widget tests passed; the mobile job was superseded during AppAuth manifest validation, and Kotlin compilation was skipped. Android validation remains open.
+- Exact-head workflows for `2961e559e663cbaf81d712f8b08d6fa8718c2fcf` were not yet visible at the last poll. Do not claim tests passed for this new code until fresh exact-head evidence is available.
+- PR #11 remains Draft/open and unmerged. No APK, merge, deployment, migration, production data access/change, or destructive action was performed.
