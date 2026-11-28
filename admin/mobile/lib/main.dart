@@ -136,7 +136,11 @@ class _AdminHomePageState extends State<AdminHomePage>
     if (state == AppLifecycleState.resumed) _load();
   }
 
-  String get _base => _apiBase.replaceFirst(RegExp(r'/+
+  String get _base => _apiBase.endsWith('/')
+      ? _apiBase.substring(0, _apiBase.length - 1)
+      : _apiBase;
+
+  Map<String, String> get _headers => {
         'Authorization': 'Bearer $_token',
         'Content-Type': 'application/json',
       };
