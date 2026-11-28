@@ -382,3 +382,15 @@ This section supersedes any wording in earlier sections (including sections 9, 1
 - At the first CI/status check for this exact commit, Vercel status was pending, no PR-associated workflow runs were returned, and no GitHub Actions success for this commit was available. Recheck CI before treating the change as verified.
 - Next: obtain exact Admin Quality and Admin Mobile Quality results for the current source, add/execute regression coverage for overlapping requests and empty-session transitions where practical, then continue the isolated Preview acceptance work. Keep APK packaging disabled unless the owner explicitly authorizes it.
 - PR #11 remains Draft/open. No merge, deployment, migration, production data access/change, APK build, or account mutation was performed.
+
+
+## 30. Stage 6 — exact-head CI verification — 2026-11-28
+
+- Rechecked PR #11 immediately before this record. It remains Draft/open, unmerged, on branch `barq-admin-foundation-2026-11-23`; exact code HEAD: `abb573a5d30e22487aea2a99febc5962d1e5fb5d`.
+- Backend tests on this exact HEAD passed: workflow run `46093597303`, conclusion `success`.
+- BARQ Admin Quality on this exact HEAD passed: workflow run `46093597315`, job `140819851658`. Its checks included Worker syntax, Admin unit tests, isolated schema/audit immutability, offline schema coexistence, workspace/task idempotency and checkpoint concurrency, read-only Preview preflight, and isolated Preview template validation.
+- Admin Mobile Quality on this exact HEAD passed: workflow run `46093597315`, job `140819851429`. Flutter dependency resolution, formatter diagnostics, Dart analysis, Flutter tests, Android SDK/NDK setup, AppAuth platform wiring validation, and Android debug Kotlin compilation all completed successfully. The workflow did not package an APK.
+- The Cloudflare GitHub check `Workers Builds: siraj-api` failed on this exact HEAD (check run `140820385437`, build ID `0f3d32db-bf55-42d7-9740-3206c57e51ba`). GitHub exposes only the Cloudflare build-dashboard URL and no build error details through the available connector. Cause remains unknown; do not infer a code defect or attempt deployment. The owner/authorized Cloudflare dashboard session must provide the actual build log before diagnosis.
+- These are CI/offline results only. They do not prove live Preview deployment, shared D1 migration, live Google OIDC, live BARQ Brain retrieval/indexing, production availability, or physical-device behavior.
+- Stage 6 remains IN PROGRESS. Outstanding gates include Cloudflare build-log diagnosis, isolated Preview verification for Users/Groups and Brain knowledge, the Stage 5 knowledge freshness/citation/conflict/injection/isolation acceptance carried into this stage, and an isolated end-to-end automatic incident repair demonstration.
+- PR #11 remains Draft/open. No merge, production deployment, D1 migration, production data change, APK packaging, paid resource creation, or account mutation was performed.
