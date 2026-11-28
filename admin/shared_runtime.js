@@ -10,8 +10,10 @@ export function createSharedAdminEnvironment(env) {
     ADMIN_DB: env?.DB ?? null,
     ADMIN_AI: env?.AI ?? null,
     ADMIN_TASK_QUEUE: env?.ADMIN_TASK_QUEUE ?? null,
-    BARQ_ADMIN_TASK_QUEUE_NAME: env?.BARQ_ADMIN_TASK_QUEUE_NAME || "barq-admin-preview-tasks",
-    BARQ_ADMIN_DEAD_LETTER_QUEUE_NAME: env?.BARQ_ADMIN_DEAD_LETTER_QUEUE_NAME || "barq-admin-preview-dlq",
+    // Shared-runtime queue routing must be explicitly configured. In particular,
+    // never inherit the standalone Preview queue names in BARQ's Worker.
+    BARQ_ADMIN_TASK_QUEUE_NAME: env?.BARQ_ADMIN_TASK_QUEUE_NAME || null,
+    BARQ_ADMIN_DEAD_LETTER_QUEUE_NAME: env?.BARQ_ADMIN_DEAD_LETTER_QUEUE_NAME || null,
     BARQ_ADMIN_RUNTIME_MODE: "shared"
   };
 }
@@ -35,7 +37,7 @@ export async function handleSharedAdminQueue(batch, env) {
   const knownQueues = new Set([
     sharedEnv.BARQ_ADMIN_TASK_QUEUE_NAME,
     sharedEnv.BARQ_ADMIN_DEAD_LETTER_QUEUE_NAME
-  ]);
+  ].filter(Boolean));
   if (!knownQueues.has(queueName)) return false;
   await adminWorker.queue(batch, sharedEnv);
   return true;
