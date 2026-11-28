@@ -1,14 +1,16 @@
 name: BARQ Admin shared D1 migrations
 
 on:
-  push:
-    branches:
-      - barq-admin-foundation-2026-11-23
-    paths:
-      - ".github/workflows/barq-admin-shared-d1-migrations.yml"
-      - "admin/migrations/**"
-      - "wrangler.toml"
   workflow_dispatch:
+    inputs:
+      confirm_shared_d1_migration:
+        description: "Explicitly authorize applying the reviewed Admin-only schema to the shared BARQ D1"
+        required: true
+        type: choice
+        options:
+          - "no"
+          - "yes"
+        default: "no"
 
 permissions:
   contents: read
@@ -19,6 +21,7 @@ concurrency:
 
 jobs:
   apply-admin-only-schema:
+    if: inputs.confirm_shared_d1_migration == 'yes'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: barq-admin-preview
