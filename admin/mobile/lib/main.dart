@@ -93,6 +93,9 @@ class _AdminHomePageState extends State<AdminHomePage>
   List<Map<String, dynamic>> _auditEvents = [];
   List<Map<String, dynamic>> _platformUsers = [];
   List<Map<String, dynamic>> _platformGroups = [];
+  Map<String, dynamic> _platformOverview = {};
+  bool _overviewLoading = false;
+  String _overviewError = '';
   final TextEditingController _groupsSearchController = TextEditingController();
   int _groupsTotal = 0;
   int _groupsPage = 1;
@@ -341,6 +344,97 @@ class _AdminHomePageState extends State<AdminHomePage>
         setState(() => _groupsLoading = false);
       }
     }
+  }
+
+  Future<void> _loadPlatformOverview() async {
+    if (_token.isEmpty) {
+      setState(() {
+        _overviewLoading = false;
+        _overviewError = 'سجّل الدخول بحساب المالك لعرض ملخص المنصة';
+      });
+      return;
+    }
+    setState(() {
+      _overviewLoading = true;
+      _overviewError = '';
+    });
+    try {
+      final data = await _getJson('/v1/platform/overview');
+      if (!mounted) return;
+      setState(() {
+        _platformOverview = Map<String, dynamic>.from(data);
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() =>
+          _overviewError = error.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _overviewLoading = false);
+    }
+  }
+
+  Widget _platformOverviewView() {
+    final totals = Map<String, dynamic>.from(
+      _platformOverview['totals'] as Map? ?? {},
+    );
+    final availability = Map<String, dynamic>.from(
+      _platformOverview['availability'] as Map? ?? {},
+    );
+    Widget metric(String title, String value, IconData icon) => Card(
+          child: ListTile(
+            leading: Icon(icon, color: _blue, size: 28),
+            title: Text(title),
+            subtitle: Text(
+              value,
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+            ),
+          ),
+        );
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const Text('إدارة المنصة',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 6),
+        const Text(
+          'ملخص تشغيلي للقراءة فقط من بيانات برق الحالية. لا يعرض محتوى الرسائل أو بيانات الحسابات الخاصة.',
+          style: TextStyle(color: Colors.white60, fontSize: 12),
+        ),
+        const SizedBox(height: 14),
+        if (_overviewLoading) const LinearProgressIndicator(),
+        if (_overviewError.isNotEmpty)
+          _emptyState('تعذر تحميل ملخص المنصة', _overviewError),
+        if (_token.isEmpty)
+          const Text('سجّل الدخول بحساب المالك لعرض ملخص المنصة'),
+        if (_platformOverview.isNotEmpty) ...[
+          metric('إجمالي المستخدمين', '${totals['users'] ?? 0}',
+              Icons.people_outline),
+          metric(
+            'إجمالي المجموعات',
+            availability['groups'] == true
+                ? '${totals['groups'] ?? 0}'
+                : 'غير متاح حاليًا',
+            Icons.groups_outlined,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'آخر تحديث: ${_platformOverview['collectedAt'] ?? '—'}',
+            style: const TextStyle(color: Colors.white54, fontSize: 11),
+          ),
+        ],
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: _overviewLoading ? null : _loadPlatformOverview,
+          icon: const Icon(Icons.refresh),
+          label: const Text('تحديث الملخص'),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'هذه بداية أدوات إدارة المنصة. أي تعديل على الحسابات أو المجموعات أو إعدادات الإنتاج سيظل معطّلًا حتى تُعتمد قواعده وصلاحياته واختباراته.',
+          style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.5),
+        ),
+      ],
+    );
   }
 
   Widget _platformGroupsView() => ListView(
@@ -2131,6 +2225,7 @@ class _AdminHomePageState extends State<AdminHomePage>
                   _auditView(),
                   _platformUsersView(),
                   _platformGroupsView(),
+                  _platformOverviewView(),
                 ],
               ),
       ),
@@ -2153,6 +2248,7 @@ class _AdminHomePageState extends State<AdminHomePage>
           setState(() => _tab = value);
           if (value == 4) _loadPlatformUsers(page: 1);
           if (value == 5) _loadPlatformGroups(page: 1);
+          if (value == 6) _loadPlatformOverview();
         },
         destinations: const [
           NavigationDestination(
@@ -2178,6 +2274,11 @@ class _AdminHomePageState extends State<AdminHomePage>
             icon: Icon(Icons.groups_outlined),
             selectedIcon: Icon(Icons.groups),
             label: 'المجموعات',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.admin_panel_settings_outlined),
+            selectedIcon: Icon(Icons.admin_panel_settings),
+            label: 'إدارة المنصة',
           ),
         ],
       ),
