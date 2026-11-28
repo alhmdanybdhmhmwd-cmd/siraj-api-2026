@@ -1,9 +1,34 @@
 import test from "node:test";
+import worker from "./worker.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, knowledgeProjectScope, normalizeKnowledgeProject, isKnowledgeSourceForProject, knowledgeProjectSqlFilter, escapeKnowledgeLikePattern, validateAdminAccessClaims, normalizeAdminActivationCode, createAdminActivationCode, processAdminDeadLetterMessage, processAdminTaskMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches, validatePlatformUsersQuery, validatePlatformGroupsQuery, maskPlatformUserPhone, decodePlatformUserId, parseAuditDetails } from "./worker.js";
 
 
+
+
+test("platform users and groups endpoints reject unauthenticated requests before querying BARQ data", async () => {
+  let databaseCalls = 0;
+  const env = {
+    ADMIN_DB: {
+      prepare() {
+        databaseCalls += 1;
+        throw new Error("unauthenticated_request_must_not_query_database");
+      }
+    }
+  };
+
+  for (const path of ["/v1/platform/users", "/v1/platform/groups"]) {
+    const result = await worker.fetch(
+      new Request("https://admin.example" + path),
+      env
+    );
+    assert.equal(result.status, 401);
+    assert.deepEqual(await result.json(), { error: "unauthorized" });
+  }
+
+  assert.equal(databaseCalls, 0);
+});
 
 test("BARQ platform user routes are owner-scoped read-only and expose only allowlisted fields", () => {
   const source = readFileSync(new URL("./worker.js", import.meta.url), "utf8");
