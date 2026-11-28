@@ -392,7 +392,9 @@ class _AdminHomePageState extends State<AdminHomePage>
                       const CircleAvatar(child: Icon(Icons.groups_outlined)),
                   title: Text(group['name']?.toString() ?? 'مجموعة برق'),
                   subtitle: Text([
-                    if ((group['description']?.toString() ?? '').trim().isNotEmpty)
+                    if ((group['description']?.toString() ?? '')
+                        .trim()
+                        .isNotEmpty)
                       group['description'].toString(),
                     'المالك: ' +
                         (group['ownerName']?.toString().isNotEmpty == true
