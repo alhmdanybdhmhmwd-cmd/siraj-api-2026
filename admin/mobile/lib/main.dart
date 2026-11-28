@@ -96,6 +96,7 @@ class _AdminHomePageState extends State<AdminHomePage>
   Map<String, dynamic> _platformOverview = {};
   bool _overviewLoading = false;
   String _overviewError = '';
+  int _overviewRequestVersion = 0;
   final TextEditingController _groupsSearchController = TextEditingController();
   int _groupsTotal = 0;
   int _groupsPage = 1;
@@ -347,11 +348,15 @@ class _AdminHomePageState extends State<AdminHomePage>
   }
 
   Future<void> _loadPlatformOverview() async {
+    final requestVersion = ++_overviewRequestVersion;
     if (_token.isEmpty) {
-      setState(() {
-        _overviewLoading = false;
-        _overviewError = 'سجّل الدخول بحساب المالك لعرض ملخص المنصة';
-      });
+      if (mounted) {
+        setState(() {
+          _platformOverview = {};
+          _overviewLoading = false;
+          _overviewError = 'سجّل الدخول بحساب المالك لعرض ملخص المنصة';
+        });
+      }
       return;
     }
     setState(() {
@@ -360,16 +365,18 @@ class _AdminHomePageState extends State<AdminHomePage>
     });
     try {
       final data = await _getJson('/v1/platform/overview');
-      if (!mounted) return;
+      if (!mounted || requestVersion != _overviewRequestVersion) return;
       setState(() {
         _platformOverview = Map<String, dynamic>.from(data);
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || requestVersion != _overviewRequestVersion) return;
       setState(() =>
           _overviewError = error.toString().replaceFirst('Exception: ', ''));
     } finally {
-      if (mounted) setState(() => _overviewLoading = false);
+      if (mounted && requestVersion == _overviewRequestVersion) {
+        setState(() => _overviewLoading = false);
+      }
     }
   }
 
