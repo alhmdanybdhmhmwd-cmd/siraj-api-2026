@@ -565,7 +565,7 @@ export function rankKnowledgeChunks(chunks, query, limit = 6) {
       String(a.source_path || "").localeCompare(String(b.source_path || "")))
     .slice(0, safeLimit);
 }
-async function retrieveKnowledgeForTask(env, workspaceId, query, currentProject) {
+export async function retrieveKnowledgeForTask(env, workspaceId, query, currentProject) {
   const tokens = knowledgeSearchTerms(query);
   const projectFilter = knowledgeProjectSqlFilter(currentProject);
   if (!projectFilter) return [];
