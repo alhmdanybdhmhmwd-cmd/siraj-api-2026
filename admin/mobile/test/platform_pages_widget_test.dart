@@ -21,10 +21,7 @@ void main() {
         .setMockMethodCallHandler(secureStorage, null);
   });
 
-  Future<void> openAdminTab(
-    WidgetTester tester,
-    String label,
-  ) async {
+  Future<void> openAdminTab(WidgetTester tester, String label) async {
     await tester.pumpWidget(const BarqAdminApp());
     await tester.pumpAndSettle();
     await tester.tap(find.text(label).last);
@@ -37,9 +34,15 @@ void main() {
     await openAdminTab(tester, 'المستخدمون');
 
     expect(find.text('المستخدمون'), findsWidgets);
-    expect(find.textContaining('أرقام الهاتف مخفية في القائمة'), findsOneWidget);
+    expect(
+      find.textContaining('أرقام الهاتف مخفية في القائمة'),
+      findsOneWidget,
+    );
     expect(find.text('ابحث بالاسم أو اسم برق أو رقم الهاتف'), findsOneWidget);
-    expect(find.text('سجّل الدخول بحساب المالك لعرض المستخدمين'), findsOneWidget);
+    expect(
+      find.text('سجّل الدخول بحساب المالك لعرض المستخدمين'),
+      findsOneWidget,
+    );
     expect(find.textContaining('كلمة المرور'), findsNothing);
     expect(find.textContaining('الرسائل الخاصة'), findsNothing);
   });
@@ -55,7 +58,10 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('ابحث باسم المجموعة أو وصفها'), findsOneWidget);
-    expect(find.text('سجّل الدخول بحساب المالك لعرض المجموعات'), findsOneWidget);
+    expect(
+      find.text('سجّل الدخول بحساب المالك لعرض المجموعات'),
+      findsOneWidget,
+    );
     expect(find.textContaining('محتوى الرسائل'), findsNothing);
   });
 }
