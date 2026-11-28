@@ -1186,6 +1186,38 @@ async function handle(request, env) {
   }
 
 
+  if (request.method === "GET" && url.pathname === "/v1/platform/overview") {
+    try {
+      const usersRow = await env.ADMIN_DB.prepare(
+        "SELECT COUNT(*) AS total FROM users"
+      ).first();
+      let groupsTotal = null;
+      let groupsAvailable = true;
+      try {
+        const groupsRow = await env.ADMIN_DB.prepare(
+          "SELECT COUNT(*) AS total FROM chat_groups"
+        ).first();
+        groupsTotal = Math.max(0, Number(groupsRow?.total || 0));
+      } catch (_) {
+        groupsAvailable = false;
+      }
+      await audit(env, workspace, actor, "platform.overview.viewed", "platform", "overview", {
+        groupsAvailable
+      });
+      return response({
+        totals: {
+          users: Math.max(0, Number(usersRow?.total || 0)),
+          groups: groupsTotal
+        },
+        availability: { groups: groupsAvailable },
+        collectedAt: new Date().toISOString()
+      }, 200, allowedOrigin);
+    } catch (error) {
+      console.error("BARQ Admin platform overview failed:", error);
+      return response({ error: "platform_overview_unavailable" }, 503, allowedOrigin);
+    }
+  }
+
   if (request.method === "GET" && url.pathname === "/v1/platform/users") {
     const parsed = validatePlatformUsersQuery(url);
     if (!parsed.ok) return response({ error: parsed.error }, 400, allowedOrigin);
