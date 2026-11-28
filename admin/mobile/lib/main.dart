@@ -97,12 +97,14 @@ class _AdminHomePageState extends State<AdminHomePage>
   int _groupsTotal = 0;
   int _groupsPage = 1;
   int _groupsTotalPages = 0;
+  int _groupsRequestVersion = 0;
   bool _groupsLoading = false;
   String _groupsError = '';
   final TextEditingController _usersSearchController = TextEditingController();
   int _usersTotal = 0;
   int _usersPage = 1;
   int _usersTotalPages = 0;
+  int _usersRequestVersion = 0;
   bool _usersLoading = false;
   String _usersError = '';
   int _tab = 0;
@@ -298,6 +300,7 @@ class _AdminHomePageState extends State<AdminHomePage>
   }
 
   Future<void> _loadPlatformGroups({int page = 1}) async {
+    final requestVersion = ++_groupsRequestVersion;
     if (_token.isEmpty) {
       if (mounted)
         setState(
@@ -316,7 +319,7 @@ class _AdminHomePageState extends State<AdminHomePage>
           '&page=' +
           page.toString() +
           '&pageSize=25');
-      if (!mounted) return;
+      if (!mounted || requestVersion != _groupsRequestVersion) return;
       setState(() {
         _platformGroups = (data['groups'] as List? ?? [])
             .whereType<Map>()
@@ -327,11 +330,13 @@ class _AdminHomePageState extends State<AdminHomePage>
         _groupsTotalPages = (data['totalPages'] as num?)?.toInt() ?? 0;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || requestVersion != _groupsRequestVersion) return;
       setState(() =>
           _groupsError = error.toString().replaceFirst('Exception: ', ''));
     } finally {
-      if (mounted) setState(() => _groupsLoading = false);
+      if (mounted && requestVersion == _groupsRequestVersion) {
+        setState(() => _groupsLoading = false);
+      }
     }
   }
 
@@ -414,6 +419,7 @@ class _AdminHomePageState extends State<AdminHomePage>
       );
 
   Future<void> _loadPlatformUsers({int page = 1}) async {
+    final requestVersion = ++_usersRequestVersion;
     if (_token.isEmpty) {
       if (mounted)
         setState(
@@ -434,7 +440,7 @@ class _AdminHomePageState extends State<AdminHomePage>
             page.toString() +
             '&pageSize=25',
       );
-      if (!mounted) return;
+      if (!mounted || requestVersion != _usersRequestVersion) return;
       setState(() {
         _platformUsers = (data['users'] as List? ?? [])
             .whereType<Map>()
@@ -445,12 +451,14 @@ class _AdminHomePageState extends State<AdminHomePage>
         _usersTotalPages = (data['totalPages'] as num?)?.toInt() ?? 0;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || requestVersion != _usersRequestVersion) return;
       setState(() {
         _usersError = error.toString().replaceFirst('Exception: ', '');
       });
     } finally {
-      if (mounted) setState(() => _usersLoading = false);
+      if (mounted && requestVersion == _usersRequestVersion) {
+        setState(() => _usersLoading = false);
+      }
     }
   }
 
