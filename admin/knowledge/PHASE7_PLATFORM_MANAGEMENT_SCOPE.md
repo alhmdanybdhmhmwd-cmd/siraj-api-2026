@@ -22,6 +22,15 @@ Phase 7 must manage the existing BARQ platform rather than create a parallel con
 
 This is source-level implementation. Live Preview, physical-device, and production integration are not verified.
 
+## Implemented health indicators (source-level; CI pending)
+
+The read-only overview now also probes the Admin D1 binding with `SELECT 1` and reports:
+- Admin database probe success/failure.
+- Whether the BARQ Brain AI binding is configured (configuration presence only, not proof of model-service reachability).
+- Runtime mode label (`shared` or `preview`).
+
+The UI labels these precisely and avoids presenting health data while signed out. No secrets, binding values, or private records are returned. This change still requires exact-HEAD CI and isolated Preview verification.
+
 ## Phase 7 work packages
 
 1. **Platform overview:** aggregate service/account/group indicators, timestamps, availability state, and safe error reporting.
