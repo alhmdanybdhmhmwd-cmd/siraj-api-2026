@@ -302,9 +302,12 @@ class _AdminHomePageState extends State<AdminHomePage>
   Future<void> _loadPlatformGroups({int page = 1}) async {
     final requestVersion = ++_groupsRequestVersion;
     if (_token.isEmpty) {
-      if (mounted)
-        setState(
-            () => _groupsError = 'سجّل الدخول بحساب المالك لعرض المجموعات');
+      if (mounted) {
+        setState(() {
+          _groupsLoading = false;
+          _groupsError = 'سجّل الدخول بحساب المالك لعرض المجموعات';
+        });
+      }
       return;
     }
     setState(() {
@@ -421,9 +424,12 @@ class _AdminHomePageState extends State<AdminHomePage>
   Future<void> _loadPlatformUsers({int page = 1}) async {
     final requestVersion = ++_usersRequestVersion;
     if (_token.isEmpty) {
-      if (mounted)
-        setState(
-            () => _usersError = 'سجّل الدخول بحساب المالك لعرض المستخدمين');
+      if (mounted) {
+        setState(() {
+          _usersLoading = false;
+          _usersError = 'سجّل الدخول بحساب المالك لعرض المستخدمين';
+        });
+      }
       return;
     }
     setState(() {
