@@ -14,6 +14,8 @@ test("shared Admin environment maps the existing BARQ DB and AI bindings", () =>
   assert.equal(env.ADMIN_AI, AI);
   assert.equal(env.ADMIN_TASK_QUEUE, ADMIN_TASK_QUEUE);
   assert.equal(env.BARQ_ADMIN_ALLOWED_ORIGIN, "https://admin.example");
+  assert.equal(env.BARQ_ADMIN_TASK_QUEUE_NAME, null);
+  assert.equal(env.BARQ_ADMIN_DEAD_LETTER_QUEUE_NAME, null);
 });
 
 test("shared Admin environment never uses a separate ADMIN_DB fallback", () => {
@@ -69,12 +71,17 @@ test("shared Worker dispatches only the explicitly named Admin queues", async ()
   assert.equal(await handleSharedAdminQueue({ ...batch, queue: "unrelated-queue" }, {}), false);
 });
 
-test("shared Worker uses the default Admin queue names only when not overridden", async () => {
+test("shared Worker refuses standalone Preview queues unless explicitly configured", async () => {
   const acked = [];
   const batch = {
     queue: "barq-admin-preview-dlq",
     messages: [{ body: null, ack() { acked.push(true); }, retry() {} }]
   };
-  assert.equal(await handleSharedAdminQueue(batch, {}), true);
-  assert.deepEqual(acked, [true]);
+  assert.equal(await handleSharedAdminQueue(batch, {}), false);
+  assert.deepEqual(acked, []);
+  assert.equal(await handleSharedAdminQueue({
+    ...batch,
+    queue: "barq-admin-preview-tasks"
+  }, {}), false);
+  assert.deepEqual(acked, []);
 });
