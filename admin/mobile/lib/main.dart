@@ -404,8 +404,6 @@ class _AdminHomePageState extends State<AdminHomePage>
         if (_overviewLoading) const LinearProgressIndicator(),
         if (_overviewError.isNotEmpty)
           _emptyState('تعذر تحميل ملخص المنصة', _overviewError),
-        if (_token.isEmpty)
-          const Text('سجّل الدخول بحساب المالك لعرض ملخص المنصة'),
         if (_platformOverview.isNotEmpty) ...[
           metric('إجمالي المستخدمين', '${totals['users'] ?? 0}',
               Icons.people_outline),
