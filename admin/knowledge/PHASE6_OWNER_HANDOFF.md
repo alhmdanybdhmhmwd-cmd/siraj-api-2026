@@ -107,3 +107,36 @@ For commit `6fec4f629c0ff2857d4c9d997c72895b11b97579`:
 - Added a Groups UI assertion that signed-out state does not display fabricated placeholder group records. This intentionally retriggers the mobile workflow; verify its result on the exact current PR head before counting it as passed.
 - Last observed complete Admin Quality run before the users-unavailable hardening: success on `829521770082ae9ec9094d4252a0f045ab784580`. Backend tests also passed on that SHA. The subsequent `b8c8acf` and `7eef71c` changes require fresh exact-head checks.
 - The mobile workflow cancellation is not a code failure; it is not a pass either. Do not infer Flutter tests, AppAuth wiring, or Kotlin compilation succeeded.
+
+
+## Follow-up checkpoint — 2026-11-28, Phase 7 slice and owner handoff
+
+### Phase 7 implementation slice
+- Added owner-authenticated read-only `GET /v1/platform/overview` with aggregate user/group totals, an explicit group-table availability flag, collection timestamp, and audit event.
+- Added Arabic RTL **إدارة المنصة** screen, owner-gated empty state, loading/error display, and manual refresh. No local caching or write actions.
+- Added backend privacy/auth tests and a mobile owner-gate widget test.
+- Exact implementation commit before the latest UI-only correction: `f21c258e2fe390ae2e28f18e0c3810f4d6b1335e`.
+- Admin Quality passed on that commit: 91 tests, 0 failures. Backend tests and bundle diagnostic passed.
+- The mobile workflow failed only the new overview widget test because the signed-out owner prompt was rendered twice (once inside the shared error state and once as a separate Text). Removed the redundant Text in commit `56ac5c98ce5fd5d619d8f36ea800faffb4acb32f`. This is a focused UI correction; rerun mobile CI on the new exact HEAD before claiming the fix passes.
+
+### External blockers — hand off to owner + BARQ Brain; do not block offline development
+1. **Vercel CI integration rate limit**
+   - Observed status: `Deployment rate limited — retry in 24 hours`.
+   - This is an external provider limit, not a source-code test failure. No deployment was attempted.
+   - Owner/BARQ Brain action: after the cooldown, inspect the Vercel integration/project rate-limit and build logs; verify the correct project/team is connected and retry only a non-production Preview check. Do not promote or deploy production.
+2. **Cloudflare account/zone visibility**
+   - Previously recorded SentinelX integrations `barq-admin-runtime`, `barq-cloudflare-main`, and `barq-cloudflare-preview` did not expose the required account zones; one token was rejected for permissions.
+   - The Cloudflare Workers Build check has repeatedly failed while GitHub exposes only a dashboard/build ID, not actionable provider logs.
+   - Owner/BARQ Brain action: reconnect the correct Cloudflare account integration in the protected integration UI; grant the minimum read/build permissions needed for the intended Preview project; confirm the preview zone/account is visible; then inspect the exact build logs. Never paste API tokens or secrets into chat. Do not change DNS, production workers, production D1, or deploy production during diagnosis.
+3. **Preview acceptance unavailable**
+   - Isolated Preview verification remains pending until the provider integration and isolated resources can be inspected.
+   - Owner/BARQ Brain action: establish separate Preview Worker + D1 + queue resources and synthetic fixtures, then run the acceptance list in section B above. Never point Preview tests at production.
+4. **Physical Android device acceptance**
+   - No APK was packaged and no real-device acceptance was performed in this slice.
+   - Owner/BARQ Brain action at the agreed device-test stage: install only an explicitly approved test build on the target phone, verify sign-in/navigation/offline recovery/performance, and return logs without exposing secrets.
+
+### Next engineering actions
+- Recheck PR #11 head and run the targeted mobile workflow on the corrected overview screen.
+- Add focused tests for the platform overview's successful aggregate rendering and API error state where the test harness can safely mock the authenticated API.
+- Continue offline Phase 7 read-only diagnostics and Phase 5/6 acceptance work without waiting for provider access.
+- Keep PR #11 draft/open. No APK, merge, deployment, migration, production data mutation, or destructive action is authorized.
