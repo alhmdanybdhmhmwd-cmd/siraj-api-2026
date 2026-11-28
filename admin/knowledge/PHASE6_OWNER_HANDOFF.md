@@ -98,3 +98,12 @@ For commit `6fec4f629c0ff2857d4c9d997c72895b11b97579`:
 - No APK build/package is authorized by this handoff.
 - No production deployment, migration, production data mutation, merge, DNS change or paid-resource creation is authorized.
 - Keep this handoff current as checks finish. Always record the exact commit SHA and actual test evidence.
+
+
+## Follow-up engineering notes — 2026-11-28
+
+- The first mobile CI failure on `b82123e01bbd1326658915fff2b8d7227a713dd6` was diagnosed from job logs: Dart formatter required a multiline wrap in the new Groups description condition. This was corrected in `829521770082ae9ec9094d4252a0f045ab784580`. On that exact SHA, Flutter dependency resolution, formatter, and Dart analysis passed; the mobile job was subsequently cancelled during Flutter tests when a newer commit arrived, so full mobile CI remains unproven.
+- Hardened `GET /v1/platform/users`: database/query/audit failures now return a stable `503 { error: "users_unavailable" }` instead of bubbling an unhandled Worker exception. A regression assertion was added in `admin/worker.test.mjs`.
+- Added a Groups UI assertion that signed-out state does not display fabricated placeholder group records. This intentionally retriggers the mobile workflow; verify its result on the exact current PR head before counting it as passed.
+- Last observed complete Admin Quality run before the users-unavailable hardening: success on `829521770082ae9ec9094d4252a0f045ab784580`. Backend tests also passed on that SHA. The subsequent `b8c8acf` and `7eef71c` changes require fresh exact-head checks.
+- The mobile workflow cancellation is not a code failure; it is not a pass either. Do not infer Flutter tests, AppAuth wiring, or Kotlin compilation succeeded.
