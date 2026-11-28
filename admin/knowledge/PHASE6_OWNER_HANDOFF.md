@@ -188,3 +188,22 @@ For commit `6fec4f629c0ff2857d4c9d997c72895b11b97579`:
 - Repair commit: `31983b2b6fc8bddb0e222df0e527d3d49633f883`. GitHub read-back confirms the reconstructed source is saved. Exact-head CI has not yet appeared; **no Flutter formatter/analyzer/widget-test or Android AppAuth/Kotlin pass is claimed for this repair yet**.
 - Next: wait for and inspect exact-head mobile CI. If parsing succeeds, continue through Flutter tests, AppAuth manifest validation, and Kotlin compilation. Do not package an APK.
 - PR #11 remains Draft/open and unmerged. No production deployment, migration, data mutation, or destructive action was performed.
+
+
+## Exact-head verification — 2026-11-28, commit 22dfa2aed3aeddeb8307a3cf198bff91f6723904
+
+- Backend tests: **passed** — run `46153567709`.
+- BARQ Worker Bundle Diagnostics: **passed** — run `46153563501`.
+- BARQ Admin Quality: **passed** — run `46153567713`; both `admin-quality` and `admin-mobile-quality` jobs completed successfully. The Admin job passed Worker syntax, unit tests, isolated schema/audit checks, D1 coexistence, task concurrency, and read-only Preview safety checks.
+- Admin mobile job on this exact SHA: Flutter dependency resolution, Dart formatter, Flutter analysis, widget tests, Android SDK/NDK setup, Gradle setup, AppAuth merged-manifest validation, and Kotlin debug compilation all **passed**. Kotlin compilation did not package an APK.
+- The latest code change on this SHA is a regression assertion for the stable `503 user_unavailable` response when the user-detail lookup/audit path fails. Backend and Admin unit checks passed on the exact SHA.
+- PR #11 remains Draft/open and unmerged. No APK packaging, Preview deployment, production deployment, migration, production data mutation, or destructive action was performed.
+
+## Current phase-six acceptance state
+
+- Source/CI coverage for platform Users and Groups, privacy allowlists, owner authentication, read-only access, and failure responses is passing on the exact current SHA.
+- Knowledge project-scope and prompt-injection unit tests are present and passing within Admin Quality. Full source freshness/reconciliation, semantic rename matching, and end-to-end retrieval acceptance still need additional evidence.
+- Dead-letter recovery unit tests cover unavailable database, missing runtime bindings, and malformed payload behavior. This is not an end-to-end incident repair demonstration.
+- Isolated live Preview acceptance remains blocked by Cloudflare account/zone visibility and missing actionable provider build logs. Keep it pending; do not point tests at production.
+- The complete Android source/CI validation now passes through Kotlin compilation, but no APK was built and no physical-device test was performed.
+- Phase 6 remains **in progress**. Do not close it until the remaining knowledge acceptance and isolated Preview/repair gates are satisfied.
