@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, knowledgeProjectScope, normalizeKnowledgeProject, isKnowledgeSourceForProject, knowledgeProjectSqlFilter, escapeKnowledgeLikePattern, validateAdminAccessClaims, normalizeAdminActivationCode, createAdminActivationCode, processAdminDeadLetterMessage, processAdminTaskMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches, validatePlatformUsersQuery, validatePlatformGroupsQuery, maskPlatformUserPhone, decodePlatformUserId } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, knowledgeProjectScope, normalizeKnowledgeProject, isKnowledgeSourceForProject, knowledgeProjectSqlFilter, escapeKnowledgeLikePattern, validateAdminAccessClaims, normalizeAdminActivationCode, createAdminActivationCode, processAdminDeadLetterMessage, processAdminTaskMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches, validatePlatformUsersQuery, validatePlatformGroupsQuery, maskPlatformUserPhone, decodePlatformUserId, parseAuditDetails } from "./worker.js";
 
 
 
@@ -72,6 +72,14 @@ test("platform users list masks phone numbers and never requires exposing them",
   assert.equal(maskPlatformUserPhone("1234"), "••••");
   assert.equal(maskPlatformUserPhone(null), null);
   assert.equal(maskPlatformUserPhone(""), null);
+});
+
+test("audit details parsing safely handles malformed or non-object legacy values", () => {
+  assert.deepEqual(parseAuditDetails('{"queryLength":4}'), { queryLength: 4 });
+  assert.deepEqual(parseAuditDetails('not-json'), {});
+  assert.deepEqual(parseAuditDetails('null'), {});
+  assert.deepEqual(parseAuditDetails('[]'), {});
+  assert.deepEqual(parseAuditDetails(null), {});
 });
 
 test("idempotency keys are bounded and cannot be silently truncated", () => {
