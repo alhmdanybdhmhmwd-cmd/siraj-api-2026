@@ -1272,19 +1272,24 @@ async function handle(request, env) {
       return response({ error: parsedUserId.error }, 400, allowedOrigin);
     }
     const userId = parsedUserId.value;
-    const user = await env.ADMIN_DB.prepare(`
-      SELECT id, username, display_name, phone FROM users WHERE id = ? LIMIT 1
-    `).bind(userId).first();
-    if (!user) return response({ error: "user_not_found" }, 404, allowedOrigin);
-    await audit(env, workspace, actor, "platform.user.viewed", "user", user.id, {});
-    return response({
-      user: {
-        id: user.id,
-        username: user.username,
-        displayName: user.display_name,
-        phone: user.phone || null
-      }
-    }, 200, allowedOrigin);
+    try {
+      const user = await env.ADMIN_DB.prepare(`
+        SELECT id, username, display_name, phone FROM users WHERE id = ? LIMIT 1
+      `).bind(userId).first();
+      if (!user) return response({ error: "user_not_found" }, 404, allowedOrigin);
+      await audit(env, workspace, actor, "platform.user.viewed", "user", user.id, {});
+      return response({
+        user: {
+          id: user.id,
+          username: user.username,
+          displayName: user.display_name,
+          phone: user.phone || null
+        }
+      }, 200, allowedOrigin);
+    } catch (error) {
+      console.error("BARQ Admin user detail failed:", error);
+      return response({ error: "user_unavailable" }, 503, allowedOrigin);
+    }
   }
 
   if (request.method === "GET" && url.pathname === "/v1/platform/groups") {
