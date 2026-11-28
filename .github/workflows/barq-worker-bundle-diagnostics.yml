@@ -1,0 +1,47 @@
+name: BARQ Worker Bundle Diagnostics
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "wrangler.toml"
+      - "package.json"
+      - "package-lock.json"
+      - "src/**"
+      - "admin/**"
+      - ".github/workflows/barq-worker-bundle-diagnostics.yml"
+  push:
+    branches:
+      - barq-admin-foundation-2026-11-23
+    paths:
+      - "wrangler.toml"
+      - "package.json"
+      - "package-lock.json"
+      - "src/**"
+      - "admin/**"
+      - ".github/workflows/barq-worker-bundle-diagnostics.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: barq-worker-bundle-diagnostics-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Worker dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Build Worker bundle without deploying
+        run: npx --yes wrangler@4 deploy --dry-run --outdir=/tmp/barq-worker-bundle --config=wrangler.toml
+      - name: Verify generated Worker bundle
+        run: |
+          test -d /tmp/barq-worker-bundle
+          find /tmp/barq-worker-bundle -maxdepth 2 -type f -printf '%P %s bytes\\n' | sort

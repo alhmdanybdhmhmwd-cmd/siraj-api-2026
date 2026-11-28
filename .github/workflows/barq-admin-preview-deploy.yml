@@ -1,0 +1,164 @@
+name: BARQ Admin Preview Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_preview_deploy:
+        description: "Explicitly authorize creating/updating the isolated BARQ Admin Preview Worker and Preview D1 schema"
+        required: true
+        type: choice
+        options:
+          - "no"
+          - "yes"
+        default: "no"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: barq-admin-preview-deploy
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    if: github.ref == 'refs/heads/barq-admin-foundation-2026-11-23' && inputs.confirm_preview_deploy == 'yes'
+    runs-on: ubuntu-latest
+    environment: barq-admin-preview
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: barq-admin-foundation-2026-11-23
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Validate Preview-only configuration
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          ADMIN_D1_DATABASE_ID: ${{ vars.ADMIN_D1_DATABASE_ID }}
+          BARQ_GOOGLE_OIDC_CLIENT_ID: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID }}
+          BARQ_ADMIN_OWNER_EMAIL: ${{ vars.BARQ_ADMIN_OWNER_EMAIL }}
+          BARQ_ADMIN_ALLOWED_ORIGIN: ${{ vars.BARQ_ADMIN_ALLOWED_ORIGIN }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for key in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID ADMIN_D1_DATABASE_ID BARQ_GOOGLE_OIDC_CLIENT_ID BARQ_ADMIN_OWNER_EMAIL BARQ_ADMIN_ALLOWED_ORIGIN; do
+            if [ -z "${!key:-}" ]; then
+              missing+=("$key")
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf '::error::Preview deployment is blocked. Configure these values in GitHub Environment "barq-admin-preview": %s\n' "${missing[*]}"
+            exit 1
+          fi
+          case "$BARQ_ADMIN_ALLOWED_ORIGIN" in
+            *REPLACE_WITH*|*'*'*) echo "::error::Allowed origin must be exact; wildcards/placeholders are forbidden."; exit 1 ;;
+          esac
+          case "$ADMIN_D1_DATABASE_ID" in
+            REPLACE_WITH*|'') echo "::error::A dedicated Preview D1 database ID is required."; exit 1 ;;
+          esac
+          echo "Preview configuration is present. No production identifiers are accepted by this workflow."
+
+      - name: Install Wrangler
+        run: npm install --global wrangler@4
+
+      - name: Generate isolated Preview Wrangler config
+        working-directory: admin
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          ADMIN_D1_DATABASE_ID: ${{ vars.ADMIN_D1_DATABASE_ID }}
+          BARQ_GOOGLE_OIDC_CLIENT_ID: ${{ vars.BARQ_GOOGLE_OIDC_CLIENT_ID }}
+          BARQ_ADMIN_OWNER_EMAIL: ${{ vars.BARQ_ADMIN_OWNER_EMAIL }}
+          BARQ_ADMIN_ALLOWED_ORIGIN: ${{ vars.BARQ_ADMIN_ALLOWED_ORIGIN }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          source = Path("wrangler.toml.example").read_text()
+          replacements = {
+              "REPLACE_WITH_ADMIN_APP_ORIGIN": os.environ["BARQ_ADMIN_ALLOWED_ORIGIN"],
+              "REPLACE_WITH_GOOGLE_WEB_OR_ANDROID_CLIENT_ID": os.environ["BARQ_GOOGLE_OIDC_CLIENT_ID"],
+              "REPLACE_WITH_VERIFIED_OWNER_EMAIL": os.environ["BARQ_ADMIN_OWNER_EMAIL"],
+              "REPLACE_WITH_DEDICATED_PREVIEW_D1_DATABASE_ID": os.environ["ADMIN_D1_DATABASE_ID"],
+          }
+          for old, value in replacements.items():
+              escaped = value.replace("\\\\", "\\\\\\\\").replace('"', '\\"')
+              source = source.replace(old, escaped)
+          source = 'account_id = "' + os.environ["CLOUDFLARE_ACCOUNT_ID"] + '"\n' + source
+          if "REPLACE_WITH" in source or "barq-production" in source or "siraj-production" in source:
+              raise SystemExit("Unsafe or incomplete Preview configuration.")
+          Path("wrangler.toml").write_text(source)
+          PY
+
+      - name: Verify dedicated Preview D1 and Queue resources
+        working-directory: admin
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          ADMIN_D1_DATABASE_ID: ${{ vars.ADMIN_D1_DATABASE_ID }}
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 d1 list --json > /tmp/d1-list.json
+          python3 - <<'PY'
+          import json, os
+          rows = json.load(open("/tmp/d1-list.json"))
+          target = [x for x in rows if x.get("uuid") == os.environ["ADMIN_D1_DATABASE_ID"]]
+          if len(target) != 1 or target[0].get("name") != "barq-admin-preview":
+              raise SystemExit("The configured D1 ID is not the dedicated barq-admin-preview database.")
+          PY
+          npx --yes wrangler@4 queues list > /tmp/queues-list.txt
+          grep -q 'barq-admin-preview-tasks' /tmp/queues-list.txt
+          grep -q 'barq-admin-preview-dlq' /tmp/queues-list.txt
+
+      - name: Apply Admin Preview migrations
+        working-directory: admin
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@4 d1 migrations apply barq-admin-preview --remote
+
+      - name: Set server-only JWT secret
+        working-directory: admin
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          jwt_secret="$(openssl rand -hex 32)"
+          printf '%s' "$jwt_secret" | npx --yes wrangler@4 secret put BARQ_ADMIN_JWT_SECRET --name barq-admin-preview
+          unset jwt_secret
+
+      - name: Deploy BARQ Admin Preview Worker
+        working-directory: admin
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@4 deploy --config wrangler.toml 2>&1 | tee /tmp/deploy.log
+
+      - name: Smoke test Preview health endpoint
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          url="$(grep -Eo 'https://[^[:space:]]+workers\.dev' /tmp/deploy.log | tail -n 1)/health"
+          if [ "$url" = "/health" ]; then
+            echo "::error::Could not determine the Preview workers.dev URL from deployment output."
+            exit 1
+          fi
+          for attempt in 1 2 3 4 5; do
+            if curl --fail --silent --show-error "$url" | tee /tmp/health.json; then
+              grep -q '"ok":true' /tmp/health.json
+              echo "Preview health endpoint passed."
+              exit 0
+            fi
+            sleep 8
+          done
+          echo "::error::Preview health check failed."
+          exit 1
+
+      - name: Remove generated configuration
+        if: always()
+        working-directory: admin
+        run: rm -f wrangler.toml

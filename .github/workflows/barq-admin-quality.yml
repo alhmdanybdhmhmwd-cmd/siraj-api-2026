@@ -1,0 +1,424 @@
+name: BARQ Admin Quality
+
+on:
+  pull_request:
+    paths:
+      - "admin/**"
+      - ".github/workflows/barq-admin-quality.yml"
+      - ".github/workflows/barq-admin-preview-preflight.yml"
+  push:
+    branches:
+      - "barq-admin-foundation-2026-11-23"
+    paths:
+      - "admin/**"
+      - ".github/workflows/barq-admin-quality.yml"
+      - ".github/workflows/barq-admin-preview-preflight.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: barq-admin-quality-v2-${{ github.event_name }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  admin-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check Worker syntax
+        working-directory: admin
+        run: npm run check
+      - name: Run Admin unit tests
+        working-directory: admin
+        run: npm test
+      - name: Validate isolated Admin schema and audit immutability
+        run: |
+          python3 - <<'PY'
+          import sqlite3
+          from pathlib import Path
+          db = sqlite3.connect(":memory:")
+          db.executescript(Path("admin/migrations/0001_admin_workspace.sql").read_text())
+          db.executescript(Path("admin/migrations/0002_project_knowledge.sql").read_text())
+          db.executescript(Path("admin/migrations/0003_vision_usage_limits.sql").read_text())
+          db.executescript(Path("admin/migrations/0004_image_generation_limits.sql").read_text())
+          db.executescript(Path("admin/migrations/0005_owner_identity_sessions.sql").read_text())
+          db.execute("INSERT INTO admin_workspaces(id, owner_subject) VALUES ('preserve-check', 'preserve-check')")
+          db.execute("INSERT INTO admin_ai_usage_limits(workspace_id, window_start, request_count) VALUES ('preserve-check', 1, 2)")
+          db.execute("INSERT INTO admin_image_generation_limits(workspace_id, window_start, request_count) VALUES ('preserve-check', 1, 1)")
+          db.executescript(Path("admin/migrations/0006_remove_image_usage_caps.sql").read_text())
+          db.executescript(Path("admin/migrations/0007_brain_conversations.sql").read_text())
+          db.executescript(Path("admin/migrations/0008_owner_activation_codes.sql").read_text())
+          names = {row[0] for row in db.execute(
+              "SELECT name FROM sqlite_master WHERE type IN ('table','trigger')"
+          )}
+          required = {
+              "admin_workspaces", "admin_tasks", "admin_task_checkpoints",
+              "admin_approvals", "admin_audit_events", "admin_project_knowledge",
+              "admin_audit_no_update", "admin_audit_no_delete", "admin_owner_devices",
+              "admin_owner_sessions", "admin_oidc_nonce_uses", "admin_auth_rate_limits",
+              "admin_owner_refresh_token_history", "admin_brain_conversations", "admin_brain_messages", "admin_owner_activation_codes"
+          }
+          missing = required - names
+          assert not missing, f"Missing schema objects: {sorted(missing)}"
+          retained_history_tables = {"admin_ai_usage_limits", "admin_image_generation_limits"}
+          assert retained_history_tables <= names, (
+              "Historical usage tables must remain intact; request-count caps are disabled in application code"
+          )
+          assert db.execute("SELECT request_count FROM admin_ai_usage_limits WHERE workspace_id='preserve-check'").fetchone()[0] == 2
+          assert db.execute("SELECT request_count FROM admin_image_generation_limits WHERE workspace_id='preserve-check'").fetchone()[0] == 1
+          worker_source = Path("admin/worker.js").read_text()
+          assert "admin_ai_usage_limits" not in worker_source
+          assert "admin_image_generation_limits" not in worker_source
+          mobile_docs = Path("admin/mobile/README.md").read_text().lower()
+          assert "no daily, per-minute, or lifetime request-count quota" in mobile_docs
+          db.execute("INSERT INTO admin_workspaces(id, owner_subject) VALUES ('owner:test', 'test')")
+          db.execute("""INSERT INTO admin_audit_events
+              (id, workspace_id, actor_subject, event_type, target_type, target_id)
+              VALUES ('evt', 'owner:test', 'test', 'test', 'test', 'test')""")
+          for statement in (
+              "UPDATE admin_audit_events SET event_type='tampered' WHERE id='evt'",
+              "DELETE FROM admin_audit_events WHERE id='evt'"
+          ):
+              try:
+                  db.execute(statement)
+                  raise AssertionError("Audit event mutation unexpectedly succeeded")
+              except sqlite3.IntegrityError:
+                  pass
+          db.execute("""
+              INSERT INTO admin_owner_devices (id, owner_subject, device_name, platform)
+              VALUES ('device:test', 'test', 'CI device', 'android')
+          """)
+          db.execute("""
+              INSERT INTO admin_owner_sessions
+                (id, owner_subject, device_id, refresh_token_hash, refresh_expires_at)
+              VALUES ('session:test', 'test', 'device:test', 'hash-v1', datetime('now', '+30 days'))
+          """)
+          db.execute("""
+              INSERT INTO admin_owner_refresh_token_history (token_hash, session_id)
+              VALUES ('hash-v1', 'session:test')
+          """)
+          db.execute("""
+              UPDATE admin_owner_sessions SET refresh_token_hash='hash-v2'
+              WHERE id='session:test' AND refresh_token_hash='hash-v1'
+          """)
+          db.execute("""
+              INSERT INTO admin_owner_refresh_token_history (token_hash, session_id)
+              VALUES ('hash-v2', 'session:test')
+          """)
+          history_count = db.execute("""
+              SELECT COUNT(*) FROM admin_owner_refresh_token_history
+              WHERE session_id='session:test'
+          """).fetchone()[0]
+          assert history_count == 2, "Refresh-token history did not retain used hashes"
+          nonce = "a" * 64
+          db.execute("""
+              INSERT INTO admin_oidc_nonce_uses (nonce_hash, owner_subject, expires_at)
+              VALUES (?, 'test', datetime('now', '+10 minutes'))
+          """, (nonce,))
+          try:
+              db.execute("""
+                  INSERT INTO admin_oidc_nonce_uses (nonce_hash, owner_subject, expires_at)
+                  VALUES (?, 'test', datetime('now', '+10 minutes'))
+              """, (nonce,))
+              raise AssertionError("OIDC nonce replay unexpectedly succeeded")
+          except sqlite3.IntegrityError:
+              pass
+          for _ in range(5):
+              row = db.execute("""
+                  INSERT INTO admin_auth_rate_limits (bucket_key, window_start, request_count)
+                  VALUES ('oidc-test', 100, 1)
+                  ON CONFLICT(bucket_key, window_start) DO UPDATE SET
+                    request_count = request_count + 1
+                  WHERE request_count < 5
+                  RETURNING request_count
+              """).fetchone()
+              assert row is not None
+          blocked_auth = db.execute("""
+              INSERT INTO admin_auth_rate_limits (bucket_key, window_start, request_count)
+              VALUES ('oidc-test', 100, 1)
+              ON CONFLICT(bucket_key, window_start) DO UPDATE SET
+                request_count = request_count + 1
+              WHERE request_count < 5
+              RETURNING request_count
+          """).fetchone()
+          assert blocked_auth is None, "Auth rate limit allowed a sixth request"
+          db.execute("""INSERT INTO admin_owner_activation_codes(owner_subject, code_hash, created_by_device) VALUES ('test-owner', 'hash-v1', 'device:test')""")
+          db.execute("""INSERT INTO admin_owner_activation_codes(owner_subject, code_hash, created_by_device) VALUES ('test-owner', 'hash-v2', 'device:test') ON CONFLICT(owner_subject) DO UPDATE SET code_hash=excluded.code_hash""")
+          assert db.execute("SELECT code_hash FROM admin_owner_activation_codes WHERE owner_subject='test-owner'").fetchone()[0] == "hash-v2"
+          print("Admin schema, immutable audit, owner sessions, activation codes, OIDC nonce, refresh history and auth throttling checks passed.")
+          PY
+      - name: Verify Admin schema can coexist with BARQ D1 schema (offline only)
+        run: |
+          python3 - <<'PY'
+          import sqlite3
+          from pathlib import Path
+
+          db = sqlite3.connect(":memory:")
+          db.execute("PRAGMA foreign_keys = ON")
+          # Minimal BARQ-owned base tables required by the checked-in production migrations.
+          db.executescript("""
+            CREATE TABLE users (id TEXT PRIMARY KEY);
+            CREATE TABLE groups (
+              id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+              created_by TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE messages (id TEXT PRIMARY KEY);
+            CREATE TABLE group_members (
+              group_id TEXT NOT NULL, user_id TEXT NOT NULL, PRIMARY KEY (group_id, user_id)
+            );
+            CREATE TABLE group_messages (id TEXT PRIMARY KEY);
+          """)
+
+          for migration in sorted(Path("migrations/production").glob("*.sql")):
+              db.executescript(migration.read_text())
+
+          barq_objects_before = {
+              row[0] for row in db.execute(
+                  "SELECT name FROM sqlite_master WHERE type IN ('table','view')"
+              )
+          }
+          assert {"users", "groups", "messages", "group_members", "group_messages", "chat_groups"} <= barq_objects_before
+
+          for migration in sorted(Path("admin/migrations").glob("*.sql")):
+              db.executescript(migration.read_text())
+
+          all_objects = {
+              row[0] for row in db.execute(
+                  "SELECT name FROM sqlite_master WHERE type IN ('table','view')"
+              )
+          }
+          admin_tables = {
+              row[0] for row in db.execute(
+                  "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+              ) if row[0].startswith("admin_")
+          }
+          assert admin_tables, "No Admin tables were created"
+          assert all(name.startswith("admin_") for name in admin_tables)
+          assert barq_objects_before <= all_objects, "Admin migrations removed or replaced a BARQ table/view"
+          assert {"users", "groups", "messages", "group_members", "group_messages", "chat_groups"} <= all_objects
+          assert not (barq_objects_before & admin_tables), "Admin schema collided with BARQ-owned objects"
+
+          # Admin foreign keys must remain within the Admin namespace.
+          for table in sorted(admin_tables):
+              for row in db.execute(f'PRAGMA foreign_key_list("{table}")'):
+                  target = row[2]
+                  assert target.startswith("admin_"), (
+                      f"{table} unexpectedly references non-Admin table {target}"
+                  )
+
+          print("Offline shared-D1 compatibility passed: BARQ objects remained intact and Admin tables/foreign keys stayed namespaced.")
+          PY
+      - name: Verify Phase 2 workspace, task idempotency and checkpoint concurrency
+        run: |
+          python3 - <<'PY'
+          import sqlite3
+          from pathlib import Path
+          db = sqlite3.connect(":memory:")
+          db.executescript(Path("admin/migrations/0001_admin_workspace.sql").read_text())
+          db.executescript(Path("admin/migrations/0002_project_knowledge.sql").read_text())
+          db.execute("INSERT INTO admin_workspaces(id, owner_subject) VALUES ('owner:a', 'owner-a')")
+          db.execute("INSERT INTO admin_workspaces(id, owner_subject) VALUES ('owner:b', 'owner-b')")
+          first = db.execute("""
+              UPDATE admin_workspaces SET current_project='BARQ', current_phase='phase-2',
+                version=version+1 WHERE id='owner:a' AND version=1
+          """)
+          assert first.rowcount == 1
+          stale = db.execute("""
+              UPDATE admin_workspaces SET current_project='stale', version=version+1
+              WHERE id='owner:a' AND version=1
+          """)
+          assert stale.rowcount == 0, "Stale workspace writer overwrote newer state"
+          assert db.execute("SELECT version, current_phase FROM admin_workspaces WHERE id='owner:a'").fetchone() == (2, 'phase-2')
+          db.execute("""
+              INSERT INTO admin_tasks(id, workspace_id, created_by, title, description, priority, idempotency_key)
+              VALUES ('task-a', 'owner:a', 'owner-a', 'Build BARQ', 'Phase 2', 'high', 'request-key-123')
+          """)
+          try:
+              db.execute("""
+                  INSERT INTO admin_tasks(id, workspace_id, created_by, title, description, priority, idempotency_key)
+                  VALUES ('task-duplicate', 'owner:a', 'owner-a', 'Build BARQ', 'Phase 2', 'high', 'request-key-123')
+              """)
+              raise AssertionError("Duplicate idempotency key unexpectedly created a task")
+          except sqlite3.IntegrityError:
+              pass
+          assert db.execute("""
+              SELECT COUNT(*) FROM admin_tasks WHERE workspace_id='owner:a' AND idempotency_key='request-key-123'
+          """).fetchone()[0] == 1
+          assert db.execute("""
+              SELECT id FROM admin_tasks WHERE id='task-a' AND workspace_id='owner:b'
+          """).fetchone() is None, "Workspace B read a task owned by workspace A"
+          db.execute("""
+              UPDATE admin_tasks SET checkpoint_version=1, last_checkpoint_id='cp-1'
+              WHERE id='task-a' AND workspace_id='owner:a' AND checkpoint_version=0
+          """)
+          inserted = db.execute("""
+              INSERT INTO admin_task_checkpoints
+                (id, task_id, sequence, input_json, output_json, completed_step, next_action, created_by)
+              SELECT 'cp-1', 'task-a', 1, '{}', '{"ok":true}', 'created', 'review', 'owner-a'
+              WHERE EXISTS (SELECT 1 FROM admin_tasks
+                WHERE id='task-a' AND last_checkpoint_id='cp-1' AND checkpoint_version=1)
+          """)
+          assert inserted.rowcount == 1
+          stale = db.execute("""
+              UPDATE admin_tasks SET checkpoint_version=2, last_checkpoint_id='cp-stale'
+              WHERE id='task-a' AND workspace_id='owner:a' AND checkpoint_version=0
+          """)
+          assert stale.rowcount == 0, "Stale checkpoint writer advanced the task"
+          assert db.execute("SELECT COUNT(*) FROM admin_task_checkpoints WHERE task_id='task-a'").fetchone()[0] == 1
+          db.execute("""
+              INSERT INTO admin_project_knowledge
+                (id, workspace_id, source_type, source_path, source_revision, title, content, content_hash, created_by)
+              VALUES ('knowledge-a', 'owner:a', 'repository_file', 'repo/docs/guide.md', 'commit-1',
+                'Guide', 'Original', 'hash-1', 'owner-a')
+          """)
+          db.execute("""
+              INSERT INTO admin_project_knowledge
+                (id, workspace_id, source_type, source_path, source_revision, title, content, content_hash, created_by)
+              VALUES ('knowledge-update', 'owner:a', 'repository_file', 'repo/docs/guide.md', 'commit-1',
+                'Guide updated', 'Updated', 'hash-2', 'owner-a')
+              ON CONFLICT(workspace_id, source_path, source_revision) DO UPDATE SET
+                title=excluded.title, content=excluded.content, content_hash=excluded.content_hash
+          """)
+          assert db.execute("""
+              SELECT COUNT(*), MAX(content) FROM admin_project_knowledge
+              WHERE workspace_id='owner:a' AND source_path='repo/docs/guide.md' AND source_revision='commit-1'
+          """).fetchone() == (1, 'Updated')
+          print("Phase 2 workspace concurrency, task idempotency, checkpoint versioning, workspace isolation and knowledge upsert checks passed.")
+          PY
+      - name: Validate read-only Preview preflight safety
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          workflow = Path(".github/workflows/barq-admin-preview-preflight.yml").read_text()
+          required = [
+              "workflow_dispatch:",
+              "environment: barq-admin-preview",
+              "wrangler@4 d1 list --json",
+              "wrangler@4 queues list",
+              "barq-admin-preview-tasks",
+              "barq-admin-preview-dlq",
+              "No database, queue, secret, Worker, or production resource was changed."
+          ]
+          missing = [item for item in required if item not in workflow]
+          assert not missing, f"Preview preflight is missing required checks: {missing}"
+          forbidden = [
+              "wrangler@4 deploy",
+              "d1 migrations apply",
+              "queues create",
+              "secret put",
+              "wrangler secret"
+          ]
+          present = [item for item in forbidden if item in workflow]
+          assert not present, f"Read-only preflight contains a mutating command: {present}"
+          print("Preview preflight is manual-only, environment-scoped, and read-only.")
+          PY
+      - name: Validate isolated Cloudflare Preview template
+        run: |
+          python3 - <<'PY'
+          import tomllib
+          from pathlib import Path
+          config = tomllib.loads(Path("admin/wrangler.toml.example").read_text())
+          assert config["name"] == "barq-admin-preview"
+          assert config["main"] == "worker.js"
+          assert config["d1_databases"][0]["binding"] == "ADMIN_DB"
+          assert config["d1_databases"][0]["database_id"].startswith("REPLACE_")
+          assert config["d1_databases"][0]["migrations_dir"] == "migrations"
+          assert config["queues"]["producers"][0]["binding"] == "ADMIN_TASK_QUEUE"
+          consumer = config["queues"]["consumers"][0]
+          assert consumer["queue"] == "barq-admin-preview-tasks"
+          assert consumer["max_batch_size"] == 1, "Long-running AI tasks must use isolated queue deliveries"
+          assert consumer["dead_letter_queue"] == "barq-admin-preview-dlq"
+          dlq_consumers = [item for item in config["queues"]["consumers"] if item["queue"] == "barq-admin-preview-dlq"]
+          assert len(dlq_consumers) == 1, "Dead-letter queue must have a dedicated consumer"
+          assert dlq_consumers[0]["max_retries"] == 3
+          worker_source = Path("admin/worker.js").read_text()
+          assert 'batch.queue === (env.BARQ_ADMIN_DEAD_LETTER_QUEUE_NAME || "barq-admin-preview-dlq")' in worker_source
+          assert "task.server_execution.dead_lettered" in worker_source
+          assert "export async function renewAdminTaskLease" in worker_source
+          assert "setInterval(() =>" in worker_source
+          assert "clearInterval(heartbeatTimer)" in worker_source
+          assert "lease_expires_at > CURRENT_TIMESTAMP" in worker_source
+          assert config["ai"]["binding"] == "ADMIN_AI"
+          assert config["observability"]["enabled"] is True
+          assert "REPLACE_WITH" in config["vars"]["BARQ_ADMIN_ALLOWED_ORIGIN"]
+          assert "REPLACE_WITH" in config["vars"]["BARQ_GOOGLE_OIDC_CLIENT_ID"]
+          assert "REPLACE_WITH" in config["vars"]["BARQ_ADMIN_OWNER_EMAIL"]
+          serialized = str(config).lower()
+          assert "barq-production" not in serialized
+          assert "siraj-production" not in serialized
+          print("Admin Preview Wrangler template is valid TOML and isolated from production identifiers.")
+          PY
+
+  admin-mobile-quality:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin/mobile
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.50.1"
+          channel: stable
+          cache: true
+      - name: Resolve Flutter dependencies
+        run: flutter pub get
+      - name: Diagnose exact Dart formatter diff
+        run: |
+          dart format --output=show lib/main.dart > /tmp/main.dart.formatted
+          diff -u lib/main.dart /tmp/main.dart.formatted || true
+          dart format --output=none --set-exit-if-changed lib test
+      - name: Analyze Admin mobile app
+        run: flutter analyze
+      - name: Run Admin mobile tests
+        run: flutter test
+      - uses: android-actions/setup-android@v3
+        timeout-minutes: 15
+        with:
+          packages: "platform-tools platforms;android-36 build-tools;36.0.0"
+      - name: Install Flutter-pinned Android NDK with transient-download retries
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            if sdkmanager --install "ndk;28.2.13676358"; then
+              exit 0
+            fi
+            rm -rf "${ANDROID_HOME}/ndk/28.2.13676358"
+            if [ "$attempt" -lt 3 ]; then
+              echo "NDK download failed; retrying (attempt $((attempt + 1))/3)."
+              sleep 10
+            fi
+          done
+          echo "Unable to install the Flutter-pinned NDK after 3 attempts." >&2
+          exit 1
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Validate Android AppAuth platform wiring without building an APK
+        timeout-minutes: 10
+        run: |
+          test -f android/gradlew
+          grep -Fq 'applicationId = "com.barq.admin"' android/app/build.gradle.kts
+          grep -Fq 'manifestPlaceholders["appAuthRedirectScheme"]' android/app/build.gradle.kts
+          grep -Fq 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
+          ! grep -Fq 'android:taskAffinity=""' android/app/src/main/AndroidManifest.xml
+          sdk_path="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          printf "flutter.sdk=%s\nsdk.dir=%s\n" "$FLUTTER_ROOT" "$sdk_path" > android/local.properties
+          cd android
+          export BARQ_GOOGLE_OIDC_CLIENT_ID="1234567890-test.apps.googleusercontent.com"
+          bash gradlew :app:processDebugManifest --no-daemon --console=plain --stacktrace --info
+          manifest="$(find ../build/app/intermediates -path '*merged_manifest*' -name AndroidManifest.xml -print -quit)"
+          test -n "$manifest"
+          grep -Fq 'com.googleusercontent.apps.1234567890' "$manifest"
+
+      - name: Compile Android debug Kotlin sources without packaging an APK
+        working-directory: admin/mobile/android
+        run: bash gradlew :app:compileDebugKotlin --no-daemon --console=plain
