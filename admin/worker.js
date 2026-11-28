@@ -1188,6 +1188,9 @@ async function handle(request, env) {
 
   if (request.method === "GET" && url.pathname === "/v1/platform/overview") {
     try {
+      const databaseProbe = await env.ADMIN_DB.prepare(
+        "SELECT 1 AS ok"
+      ).first();
       const usersRow = await env.ADMIN_DB.prepare(
         "SELECT COUNT(*) AS total FROM users"
       ).first();
@@ -1210,6 +1213,11 @@ async function handle(request, env) {
           groups: groupsTotal
         },
         availability: { groups: groupsAvailable },
+        health: {
+          database: databaseProbe?.ok === 1,
+          aiBindingConfigured: Boolean(env.ADMIN_AI),
+          runtimeMode: env.BARQ_ADMIN_RUNTIME_MODE === "shared" ? "shared" : "preview"
+        },
         collectedAt: new Date().toISOString()
       }, 200, allowedOrigin);
     } catch (error) {
