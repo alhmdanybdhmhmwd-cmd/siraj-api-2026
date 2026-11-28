@@ -747,6 +747,16 @@ async function ensureWorkspace(env, actor) {
   return id;
 }
 
+export function parseAuditDetails(value) {
+  if (typeof value !== "string" || !value) return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 async function audit(env, workspace, actor, eventType, targetType, targetId, details = {}) {
   await env.ADMIN_DB.prepare(`
     INSERT INTO admin_audit_events
@@ -1609,7 +1619,7 @@ async function handle(request, env) {
       ORDER BY created_at DESC, id DESC LIMIT 100
     `).bind(workspace).all();
     return response({ events: (rows.results || []).map(row => ({
-      ...row, details: JSON.parse(row.details_json), details_json: undefined
+      ...row, details: parseAuditDetails(row.details_json), details_json: undefined
     })) }, 200, allowedOrigin);
   }
 
