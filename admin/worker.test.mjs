@@ -2,7 +2,7 @@ import test from "node:test";
 import worker from "./worker.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, knowledgeProjectScope, normalizeKnowledgeProject, isKnowledgeSourceForProject, knowledgeProjectSqlFilter, escapeKnowledgeLikePattern, validateAdminAccessClaims, normalizeAdminActivationCode, createAdminActivationCode, processAdminDeadLetterMessage, processAdminTaskMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches, validatePlatformUsersQuery, validatePlatformGroupsQuery, maskPlatformUserPhone, decodePlatformUserId, parseAuditDetails } from "./worker.js";
+import { canTransitionTask, canManuallySetTaskStatus, validateTaskInput, validateCheckpointInput, validateApprovalInput, validateApprovalDecision, buildAssistantMessages, buildVisionMessages, validateVisionInput, validateImageGenerationInput, validateGeneratedImage, validateKnowledgeInput, validateKnowledgeListQuery, validateBrainChatInput, knowledgeSearchTerms, rankKnowledgeChunks, retrieveKnowledgeForTask, knowledgeProjectScope, normalizeKnowledgeProject, isKnowledgeSourceForProject, knowledgeProjectSqlFilter, escapeKnowledgeLikePattern, validateAdminAccessClaims, normalizeAdminActivationCode, createAdminActivationCode, processAdminDeadLetterMessage, processAdminTaskMessage, renewAdminTaskLease, validateIdempotencyKey, idempotentTaskMatches, validatePlatformUsersQuery, validatePlatformGroupsQuery, maskPlatformUserPhone, decodePlatformUserId, parseAuditDetails } from "./worker.js";
 
 
 
@@ -1035,3 +1035,58 @@ test("stale worker cannot overwrite a task after a newer lease owner completes",
   assert.equal(aiCalls, 2);
 });
 
+
+
+test("knowledge retrieval enforces project isolation after the scoped SQL query", async () => {
+  const rows = [
+    { source_type: "repository_file", source_path: "admin/worker.js", source_revision: "a".repeat(40), title: "Admin source", content: "shared architecture evidence", updated_at: "2026-11-28" },
+    { source_type: "repository_file", source_path: "owner/repo/admin/worker.js", source_revision: "b".repeat(40), title: "Admin repository source", content: "shared architecture evidence", updated_at: "2026-11-28" },
+    { source_type: "repository_file", source_path: "docs/barq.md", source_revision: "c".repeat(40), title: "BARQ source", content: "shared architecture evidence", updated_at: "2026-11-28" },
+    { source_type: "repository_file", source_path: "owner/repo/docs/admin/guide.md", source_revision: "d".repeat(40), title: "Nested admin documentation", content: "shared architecture evidence", updated_at: "2026-11-28" },
+    { source_type: "repository_file", source_path: "admin/knowledge/BARQ_OWNER_CONTEXT.md", source_revision: "e".repeat(40), title: "Shared owner context", content: "shared architecture evidence", updated_at: "2026-11-28" },
+    { source_type: "repository_file", source_path: "owner/repo/admin/knowledge/BARQ_OWNER_CONTEXT.md", source_revision: "f".repeat(40), title: "Repository shared owner context", content: "shared architecture evidence", updated_at: "2026-11-28" }
+  ];
+  const calls = [];
+  const env = {
+    ADMIN_DB: {
+      prepare(sql) {
+        return {
+          bind(...bindings) {
+            calls.push({ sql, bindings });
+            return { async all() { return { results: rows }; } };
+          }
+        };
+      }
+    }
+  };
+
+  const adminResults = await retrieveKnowledgeForTask(env, "workspace-1", "shared architecture", "BARQ Admin");
+  const barqResults = await retrieveKnowledgeForTask(env, "workspace-1", "shared architecture", "BARQ");
+  const paths = results => new Set(results.map(item => item.source_path));
+
+  assert.deepEqual(paths(adminResults), new Set([
+    "admin/worker.js",
+    "owner/repo/admin/worker.js",
+    "admin/knowledge/BARQ_OWNER_CONTEXT.md",
+    "owner/repo/admin/knowledge/BARQ_OWNER_CONTEXT.md"
+  ]));
+  assert.deepEqual(paths(barqResults), new Set([
+    "docs/barq.md",
+    "owner/repo/docs/admin/guide.md",
+    "admin/knowledge/BARQ_OWNER_CONTEXT.md",
+    "owner/repo/admin/knowledge/BARQ_OWNER_CONTEXT.md"
+  ]));
+  assert.equal(calls.length, 2);
+  for (const call of calls) {
+    assert.match(call.sql, /workspace_id = \?/);
+    assert.match(call.sql, /source_path LIKE 'admin\/%'/);
+    assert.equal(call.bindings[0], "workspace-1");
+  }
+
+  let unknownProjectQueries = 0;
+  const unknown = await retrieveKnowledgeForTask({
+    ADMIN_DB: { prepare() { unknownProjectQueries += 1; throw new Error("must_not_query_unknown_project"); } }
+  }, "workspace-1", "shared architecture", "SPARK");
+  assert.deepEqual(unknown, []);
+  assert.equal(unknownProjectQueries, 0);
+});
