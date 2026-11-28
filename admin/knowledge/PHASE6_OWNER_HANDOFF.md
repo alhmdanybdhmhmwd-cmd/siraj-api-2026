@@ -178,3 +178,13 @@ For commit `6fec4f629c0ff2857d4c9d997c72895b11b97579`:
 - The previous run on `1dff2bb42e107a17994cdeeec453dfb42e937840` completed Backend tests and Admin Quality successfully. Flutter formatter, analysis and widget tests passed; the mobile job was superseded during AppAuth manifest validation, and Kotlin compilation was skipped. Android validation remains open.
 - Exact-head workflows for `2961e559e663cbaf81d712f8b08d6fa8718c2fcf` were not yet visible at the last poll. Do not claim tests passed for this new code until fresh exact-head evidence is available.
 - PR #11 remains Draft/open and unmerged. No APK, merge, deployment, migration, production data access/change, or destructive action was performed.
+
+
+## Mobile source integrity repair — 2026-11-28
+
+- Exact-head run on `f681002a94798ba38e7e3b15931e6dcd420c6910`: Backend tests passed and Admin Quality passed. Admin Mobile Quality failed at the Dart formatter before analysis/tests/Android checks could run.
+- The mobile job log exposed multiple parser errors caused by duplicated/truncated Dart source fragments in `admin/mobile/lib/main.dart`, including stray `), '');` boundaries and repeated method bodies. This was a source-integrity problem, not an Android SDK or AppAuth failure.
+- Reconstructed the file from its single app/class declaration, the latest owner-session invalidation helpers, and the most recent complete state-class implementation. Confirmed the saved file has 3,000 lines, 13 imports, one `_AdminHomePageState` declaration, one `_load()` method, one auth-header getter, and one definition each for the request invalidation/clear helpers.
+- Repair commit: `31983b2b6fc8bddb0e222df0e527d3d49633f883`. GitHub read-back confirms the reconstructed source is saved. Exact-head CI has not yet appeared; **no Flutter formatter/analyzer/widget-test or Android AppAuth/Kotlin pass is claimed for this repair yet**.
+- Next: wait for and inspect exact-head mobile CI. If parsing succeeds, continue through Flutter tests, AppAuth manifest validation, and Kotlin compilation. Do not package an APK.
+- PR #11 remains Draft/open and unmerged. No production deployment, migration, data mutation, or destructive action was performed.
