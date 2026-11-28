@@ -46,7 +46,10 @@ void main() {
     expect(find.text('إجمالي المجموعات'), findsNothing);
     expect(find.text('سلامة الخدمات'), findsNothing);
     expect(find.text('قاعدة بيانات BARQ Admin'), findsNothing);
-    expect(find.textContaining('محتوى الرسائل'), findsNothing);
+    expect(
+      find.textContaining('لا يعرض محتوى الرسائل أو بيانات الحسابات الخاصة'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Users page is reachable and protects account data', (
