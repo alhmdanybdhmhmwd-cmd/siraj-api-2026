@@ -64,7 +64,7 @@ test("dead-letter recovery acknowledges malformed queue payloads without databas
   };
 
   await processAdminDeadLetterMessage(
-    message(actions, { taskId: "../invalid", workspaceId: "workspace-3" }),
+    message(actions, { taskId: "task-missing-workspace" }),
     env
   );
 
