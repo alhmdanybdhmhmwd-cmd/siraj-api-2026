@@ -207,3 +207,14 @@ For commit `6fec4f629c0ff2857d4c9d997c72895b11b97579`:
 - Isolated live Preview acceptance remains blocked by Cloudflare account/zone visibility and missing actionable provider build logs. Keep it pending; do not point tests at production.
 - The complete Android source/CI validation now passes through Kotlin compilation, but no APK was built and no physical-device test was performed.
 - Phase 6 remains **in progress**. Do not close it until the remaining knowledge acceptance and isolated Preview/repair gates are satisfied.
+
+
+## Exact-head verification update — 2026-11-28, commit c604f8a2b2c5c9c408c23466cfde54dd1f2382d0
+
+- Backend tests: **passed** — run `46157387154`, job `auth-tests`; syntax checks, auth tests, migration SQL checks, existing-schema compatibility, read-receipt and private-conversation safety checks all completed successfully.
+- BARQ Admin Quality: **passed** — run `46157387149`; both `admin-quality` and `admin-mobile-quality` completed successfully. Admin unit tests, isolated schema/audit checks, D1 coexistence, task concurrency, read-only Preview safety and isolated Preview template checks passed.
+- Admin mobile exact-head checks: Flutter dependency resolution, Dart formatter, Flutter analysis, widget tests, Android SDK/NDK setup, Gradle setup, AppAuth merged-manifest validation, and Kotlin debug compilation all **passed**. Kotlin compilation did not package an APK.
+- BARQ Worker Bundle Diagnostics: **passed** — run `46157383269`; Worker bundle build and generated-bundle verification completed without deployment.
+- A second Admin Quality run `46157383298` also completed successfully, including the mobile job.
+- This verifies source/CI only. It does not establish Cloudflare live Preview acceptance, physical-device acceptance, or end-to-end incident repair. Knowledge reconciliation/freshness and semantic rename matching remain open.
+- PR #11 remains Draft/open and unmerged. No APK packaging, Preview deployment, production deployment, migration, production data mutation, or destructive action was performed.
