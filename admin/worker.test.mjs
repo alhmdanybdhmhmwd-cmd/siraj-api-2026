@@ -18,7 +18,7 @@ test("platform users and groups endpoints reject unauthenticated requests before
     }
   };
 
-  for (const path of ["/v1/platform/users", "/v1/platform/groups"]) {
+  for (const path of ["/v1/platform/overview", "/v1/platform/users", "/v1/platform/groups"]) {
     const result = await worker.fetch(
       new Request("https://admin.example" + path),
       env
@@ -28,6 +28,20 @@ test("platform users and groups endpoints reject unauthenticated requests before
   }
 
   assert.equal(databaseCalls, 0);
+});
+
+test("platform overview is aggregate-only, owner-audited, and tolerates unavailable group tables", () => {
+  const source = readFileSync(new URL("./worker.js", import.meta.url), "utf8");
+  const start = source.indexOf('if (request.method === "GET" && url.pathname === "/v1/platform/overview")');
+  const end = source.indexOf('if (request.method === "GET" && url.pathname === "/v1/platform/users")');
+  assert.ok(start >= 0 && end > start);
+  const route = source.slice(start, end);
+  assert.match(route, /SELECT COUNT\(\*\) AS total FROM users/);
+  assert.match(route, /SELECT COUNT\(\*\) AS total FROM chat_groups/);
+  assert.match(route, /groupsAvailable/);
+  assert.match(route, /platform\.overview\.viewed/);
+  assert.match(route, /platform_overview_unavailable/);
+  assert.doesNotMatch(route, /SELECT .*phone|password_hash|password_salt|private_messages|group_messages|profile_photos|INSERT INTO|UPDATE |DELETE FROM/);
 });
 
 test("BARQ platform user routes are owner-scoped read-only and expose only allowlisted fields", () => {
