@@ -380,6 +380,9 @@ class _AdminHomePageState extends State<AdminHomePage>
     final availability = Map<String, dynamic>.from(
       _platformOverview['availability'] as Map? ?? {},
     );
+    final health = Map<String, dynamic>.from(
+      _platformOverview['health'] as Map? ?? {},
+    );
     Widget metric(String title, String value, IconData icon) => Card(
           child: ListTile(
             leading: Icon(icon, color: _blue, size: 28),
@@ -418,6 +421,32 @@ class _AdminHomePageState extends State<AdminHomePage>
           Text(
             'آخر تحديث: ${_platformOverview['collectedAt'] ?? '—'}',
             style: const TextStyle(color: Colors.white54, fontSize: 11),
+          ),
+        ],
+        if (_platformOverview.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          const Text('سلامة الخدمات',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          metric(
+            'قاعدة بيانات BARQ Admin',
+            health['database'] == true ? 'متصلة' : 'غير متاحة',
+            Icons.storage_outlined,
+          ),
+          metric(
+            'ربط BARQ Brain',
+            health['aiBindingConfigured'] == true
+                ? 'مهيأ على الخادم'
+                : 'غير مهيأ',
+            Icons.psychology_outlined,
+          ),
+          metric(
+            'بيئة التشغيل',
+            health['runtimeMode'] == 'shared' ? 'مشتركة' : 'معاينة',
+            Icons.cloud_outlined,
+          ),
+          const Text(
+            'حالة ربط BARQ Brain تعني أن إعداد الربط موجود فقط، ولا تثبت وحدها أن خدمة الذكاء الاصطناعي تستجيب.',
+            style: TextStyle(color: Colors.white54, fontSize: 11, height: 1.4),
           ),
         ],
         const SizedBox(height: 12),
