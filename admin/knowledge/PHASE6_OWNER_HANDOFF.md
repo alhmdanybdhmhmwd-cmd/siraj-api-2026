@@ -140,3 +140,14 @@ For commit `6fec4f629c0ff2857d4c9d997c72895b11b97579`:
 - Add focused tests for the platform overview's successful aggregate rendering and API error state where the test harness can safely mock the authenticated API.
 - Continue offline Phase 7 read-only diagnostics and Phase 5/6 acceptance work without waiting for provider access.
 - Keep PR #11 draft/open. No APK, merge, deployment, migration, production data mutation, or destructive action is authorized.
+
+
+## Latest continuation — 2026-11-28
+
+- Diagnosed the failed mobile test on `f21c258`: the signed-out owner prompt was rendered twice. Removed the redundant second widget in `56ac5c9`. The fix has not yet been declared verified.
+- Continued Phase 7 read-only platform work: overview now performs an Admin D1 `SELECT 1` probe and reports database probe state, AI binding configuration presence (not AI service reachability), and runtime mode. The mobile overview presents these indicators only after authenticated data is loaded.
+- Added regression assertions that signed-out users do not see totals or unverified health indicators.
+- Latest recorded source SHA before this handoff update: `2291b4dd40407a4ef78d4e0b92990ef51add4640`. A fresh BARQ Admin Quality run was queued for this SHA; exact-head CI results for the later health-indicator changes are still pending. The earlier run on `7078e111` passed Admin Quality, auth tests, and bundle diagnostics, but its mobile job was cancelled when the newer commit arrived.
+- Vercel's external status remains `Deployment rate limited — retry in 24 hours`. This is recorded for the owner and BARQ Brain; continue code/tests offline.
+- Cloudflare integration/account zone visibility and isolated Preview access remain recorded external blockers. BARQ Brain/owner should reconnect the correct least-privilege Cloudflare integration, inspect provider build logs, and establish separate Preview resources when available. No credentials should be pasted into chat.
+- No APK was packaged, no merge/deploy occurred, and no production resource was changed.
