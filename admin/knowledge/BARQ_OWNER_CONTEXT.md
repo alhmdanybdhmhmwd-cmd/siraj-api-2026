@@ -370,3 +370,15 @@ This section supersedes any wording in earlier sections (including sections 9, 1
 - Unintended APK workflow event: an existing push-triggered preview workflow started on an earlier mobile-source push and produced artifact `barq-admin-s7-debug-apk` (90,039,902 bytes) from older commit `7cc53efe9c28dac6421b4e5fd74978bce5c69cfd`. This was not an owner-approved deliverable build. The artifact was not downloaded, shared, installed, or released. Workflow commit `3f7e0539a73d5cfb0a93b5ec98a884de87f1f0c1` adds a job-level guard requiring manual `workflow_dispatch`; subsequent pushes cannot start that APK job. The artifact remains in GitHub Actions retention until 2026-12-11 unless an owner removes it from Actions. Do not provide or distribute it without explicit approval.
 - PR #11 remains Draft/open. No merge, production deployment, D1 migration, production data change, or account-mutating action was performed.
 - Remaining Stage 6 gates: finish Android AppAuth/Kotlin validation, inspect Cloudflare build logs, run isolated Preview tests for user/group reads and BARQ Brain knowledge acceptance, and implement/prove the incident auto-repair flow end-to-end in a non-production environment.
+
+
+
+## 29. Stage 6 — platform-list loading race follow-up — 2026-11-28
+
+- Continued from the existing draft PR #11 branch; no branch reset or duplicate implementation.
+- Commit `d7f5ff7f764e0a2de81a8b8c1519b235f01ae50c` added independent request-version guards for Users and Groups so stale network responses cannot overwrite newer searches or clear the newer request's loading state.
+- Follow-up review found an edge case in both list loaders: if the owner token became empty while a previous request was in flight, the new request invalidated the old response but returned without clearing the loading indicator. Fixed both empty-token branches to set their respective loading flags to false while showing the owner-login message.
+- Fix committed as `f568a2ace78f3cacf095df74ae95edd9df65f151`. The exact commit diff and fetched file were checked; both guards are present. This is source-level verification only, not a passing test result.
+- At the first CI/status check for this exact commit, Vercel status was pending, no PR-associated workflow runs were returned, and no GitHub Actions success for this commit was available. Recheck CI before treating the change as verified.
+- Next: obtain exact Admin Quality and Admin Mobile Quality results for the current source, add/execute regression coverage for overlapping requests and empty-session transitions where practical, then continue the isolated Preview acceptance work. Keep APK packaging disabled unless the owner explicitly authorizes it.
+- PR #11 remains Draft/open. No merge, deployment, migration, production data access/change, APK build, or account mutation was performed.
