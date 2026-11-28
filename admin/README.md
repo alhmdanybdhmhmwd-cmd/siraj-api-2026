@@ -22,6 +22,10 @@ This directory is a separate Admin service boundary. It is not part of the BARQ 
 - Phase 2 knowledge and project understanding: still in progress; the selected target is the existing BARQ Worker and D1 database through `/admin/*`. Live indexing and retrieval remain blocked until the owner separately approves the additive production migrations and the Admin owner-authentication configuration is safely provisioned and verified. The isolated Preview harness is optional, not a prerequisite for the selected shared-runtime path. See `knowledge/PHASE2_SCOPE.md`.
 - Phase 3 safe development tools: architecture and safety contract started. Heavy repository work and builds are designed to run server-side/CI, not on the owner's phone. No GitHub write runner or autonomous repository-edit capability is claimed live yet. See `knowledge/PHASE3_SCOPE.md`.
 
+## Phase 7 preparation — BARQ platform management
+
+Phase 7 preparation has started alongside the outstanding Phase 5/6 acceptance work. A read-only, owner-authenticated platform overview now provides aggregate user/group totals and an Arabic RTL Admin destination. It does not expose personal records or private content, does not cache totals locally, and does not mutate BARQ data. Scope, work packages, safety rules, and acceptance gates are documented in `knowledge/PHASE7_PLATFORM_MANAGEMENT_SCOPE.md`. This is source-level work only; live Preview and device acceptance remain pending.
+
 ## Shared BARQ runtime integration (implemented in source; not deployed)
 
 The owner selected the existing BARQ backend as the runtime for BARQ Admin: the same Cloudflare Worker and existing BARQ D1 database. The integration is now wired in source: `src/src/index.js` delegates `/admin/*` requests to `admin/shared_runtime.js`, which maps the existing `DB` and `AI` bindings to the Admin handler. The adapter deliberately does not fall back to a separate `ADMIN_DB`. This is not a live deployment or proof that Admin migrations and owner credentials are configured.
