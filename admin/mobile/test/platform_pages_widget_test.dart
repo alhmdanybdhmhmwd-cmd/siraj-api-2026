@@ -62,6 +62,8 @@ void main() {
       find.text('سجّل الدخول بحساب المالك لعرض المجموعات'),
       findsOneWidget,
     );
+    expect(find.text('لا توجد مجموعات'), findsNothing);
+    expect(find.text('مجموعة برق'), findsNothing);
     expect(find.textContaining('محتوى الرسائل'), findsNothing);
   });
 }
